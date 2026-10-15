@@ -1037,7 +1037,7 @@ nav button.active:after {
 .events-pill-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .events-bell { position: relative; display: flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #24324a; }
 .events-count { position: absolute; top: -4px; right: -6px; min-width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--amber); color: #1a140a; font-size: 11px; font-weight: 600; }
-.events-panel { position: absolute; top: 0; right: 0; z-index: 6; display: flex; flex-direction: column; width: min(420px, 100%); max-height: calc(100% - var(--nav-space)); box-sizing: border-box; padding: 14px 16px; border: 1px solid #3a4a63; border-radius: 18px; background: #182233; box-shadow: 0 18px 50px #000b; }
+.events-panel { position: absolute; top: 0; right: 0; z-index: 6; display: flex; flex-direction: column; width: min(420px, 100%); max-height: min(calc(100% - var(--nav-space)), calc(100dvh - var(--nav-space) - 24px)); box-sizing: border-box; padding: 14px 16px; border: 1px solid #3a4a63; border-radius: 18px; background: #182233; box-shadow: 0 18px 50px #000b; }
 .events-head { display: flex; justify-content: space-between; align-items: center; }
 .events-head h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #b7c3d4; }
 .events-list { min-height: 0; overflow-y: auto; }
@@ -1056,7 +1056,6 @@ nav button.active:after {
 
 /* Narrow screens: one column, and the dashboard scrolls like any page. */
 @media (max-width: 639px) {
-  .app-shell.is-home { height: auto; }
   .pulpit-grid { grid-template-columns: minmax(0, 1fr); }
   .mail-card .mail-list { max-height: var(--mail-list-height); }
   .system-alert { flex-direction: column; align-items: stretch; }

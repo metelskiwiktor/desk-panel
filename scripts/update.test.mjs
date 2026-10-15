@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -8,7 +8,16 @@ vi.mock('node:child_process', () => ({ execFileSync: vi.fn(), spawnSync: vi.fn()
 vi.mock('node:fs', () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), renameSync: vi.fn(), rmSync: vi.fn(), writeFileSync: vi.fn() }));
 
 const files = new Map();
-const installed = () => createHash('sha256').update(files.get('package.json')).update(files.get('package-lock.json')).digest('hex');
+const installed = () => createHash('sha256').update(files.get('package-lock.json')).digest('hex');
+const platform = process.platform;
+/** Runs the script as on Windows with the service in `state` ('' = not registered). */
+function onWindows(state) {
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  const base = vi.mocked(spawnSync).getMockImplementation();
+  vi.mocked(spawnSync).mockImplementation((command, args, options) =>
+    command === 'powershell.exe' && args.includes('-Command') ? { status: 0, stdout: `${state}\r\n` } : base(command, args, options));
+}
+const serviceCalls = () => vi.mocked(spawnSync).mock.calls.filter(([command, args]) => command === 'powershell.exe' && args.includes('-Action')).map(([, args]) => args.at(-1));
 
 beforeEach(() => {
   vi.resetModules();
@@ -16,6 +25,7 @@ beforeEach(() => {
   files.set('package.json', '{}');
   files.set('package-lock.json', 'new-lock');
   files.set('node_modules', '');
+  files.set('servy/services.json', JSON.stringify({ services: [{ id: 'desk-panel', name: 'Desk-Panel' }] }));
   files.set('.deployed', createHash('sha256').update('head').update('').digest('hex'));
   vi.mocked(existsSync).mockImplementation(path => files.has(path));
   vi.mocked(readFileSync).mockImplementation(path => files.get(path));
@@ -30,6 +40,7 @@ beforeEach(() => {
   });
   vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('SKIPPED'); });
 });
+afterEach(() => { Object.defineProperty(process, 'platform', { value: platform }); });
 
 it('installs dependencies after a separate pull even when the deployed fingerprint matches', async () => {
   files.set('node_modules/.desk-panel-dependencies', 'old-lock-hash');
@@ -43,5 +54,26 @@ it('reinstalls when node_modules exists without an installation marker', async (
 it('skips an unchanged deployment whose installed dependencies match', async () => {
   files.set('node_modules/.desk-panel-dependencies', installed());
   await expect(import('./update.mjs')).rejects.toThrow('SKIPPED');
+  expect(spawnSync).not.toHaveBeenCalledWith('npm', ['ci'], expect.anything());
+});
+
+it('installs without stopping a service that is not registered yet', async () => {
+  onWindows('');
+  await expect(import('./update.mjs')).rejects.toThrow('INSTALL_REACHED');
+  expect(serviceCalls()).toEqual([]);
+});
+
+it('does not stop an already stopped service before installing', async () => {
+  onWindows('Stopped');
+  await expect(import('./update.mjs')).rejects.toThrow('INSTALL_REACHED');
+  expect(serviceCalls()).toEqual([]);
+});
+
+it('refuses to install while a running service cannot be stopped', async () => {
+  onWindows('Running');
+  const base = vi.mocked(spawnSync).getMockImplementation();
+  vi.mocked(spawnSync).mockImplementation((command, args, options) => args.at(-1) === 'STOP' ? { status: 1 } : base(command, args, options));
+  await expect(import('./update.mjs')).rejects.toThrow('SKIPPED');
+  expect(serviceCalls()).toEqual(['STOP']);
   expect(spawnSync).not.toHaveBeenCalledWith('npm', ['ci'], expect.anything());
 });

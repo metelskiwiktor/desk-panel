@@ -4,13 +4,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { installedMatches, recordInstalled } from './dependencies.mjs';
 
 const BRANCH = 'main';
 const REMOTE = `origin/${BRANCH}`;
 const MARKER = '.deployed';
-// Stored beside the installed dependencies, so a separate pull/setup cannot hide
-// a changed lockfile and removing node_modules also removes the installation proof.
-const DEPENDENCIES_MARKER = 'node_modules/.desk-panel-dependencies';
 const force = process.argv.includes('--force');
 const windows = process.platform === 'win32';
 
@@ -28,6 +26,16 @@ function fail(message, details = []) {
 function service(action) {
   if (!windows) { console.log(`(pomijam ${action} usługi — to nie Windows)`); return true; }
   return run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'servy/desk-panel.ps1', '-Action', action]);
+}
+/**
+ * 'Running', 'Stopped', … ; '' when the service is not registered (before `just install`);
+ * null when unknown (not Windows, or the query failed) — then the service actions decide.
+ */
+function serviceState() {
+  if (!windows) return null;
+  const { name } = JSON.parse(readFileSync('servy/services.json', 'utf8')).services.find(s => s.id === 'desk-panel');
+  const query = spawnSync('powershell.exe', ['-NoProfile', '-Command', `(Get-Service -Name '${name}' -ErrorAction SilentlyContinue).Status`], { encoding: 'utf8' });
+  return query.status === 0 ? String(query.stdout ?? '').trim() : null;
 }
 /** Local files that differ from HEAD: modified, staged, deleted or untracked. */
 const localChanges = () => [...new Set([...lines(git('diff', '--name-only', 'HEAD')), ...lines(git('ls-files', '--others', '--exclude-standard'))])];
@@ -63,20 +71,25 @@ if (incoming) {
 const local = localChanges();
 if (local.length) console.log(`Lokalne niezacommitowane zmiany też zostaną wdrożone:\n  ${local.join('\n  ')}`);
 const target = fingerprint();
-const dependencies = createHash('sha256').update(readFileSync('package.json')).update(readFileSync('package-lock.json')).digest('hex');
-const reinstall = !existsSync(DEPENDENCIES_MARKER) || readFileSync(DEPENDENCIES_MARKER, 'utf8').trim() !== dependencies;
+// The proof lives in node_modules, so a separate pull cannot hide a changed lockfile.
+const reinstall = !installedMatches();
 if (!force && !reinstall && existsSync(MARKER) && readFileSync(MARKER, 'utf8').trim() === target) {
   console.log('\n✔ Usługa już serwuje tę wersję. Nic do zrobienia (--force wymusza ponowne wdrożenie).');
   process.exit(0);
 }
 
-// 2. Dependencies: the running service uses node_modules, so stop it before replacing them.
+// 2. Dependencies: a running service holds node_modules, so stop it before replacing them.
+const state = serviceState();
+const registered = state !== '';
 let stopped = false;
 if (reinstall) {
-  stopped = service('STOP');
-  if (!stopped) fail('Nie udało się zatrzymać usługi przed instalacją zależności.');
+  if (!registered) console.log('Usługa nie jest zarejestrowana (just install) — instaluję zależności bez jej zatrzymywania.');
+  else if (state !== 'Stopped') {
+    stopped = service('STOP');
+    if (!stopped) fail('Nie udało się zatrzymać usługi przed instalacją zależności.');
+  }
   if (!run('npm', ['ci'])) { if (stopped) service('START'); fail('npm ci nie powiodło się.'); }
-  writeFileSync(DEPENDENCIES_MARKER, dependencies + '\n');
+  recordInstalled();
 }
 
 // 3. Verify, then build next to the served dist and swap only on success.
@@ -93,6 +106,7 @@ renameSync('dist.next', 'dist');
 rmSync('dist.old', { recursive: true, force: true });
 
 // 4. Restart and confirm the API answers.
+if (!registered) fail('Zbudowano i zweryfikowano, ale usługa nie jest zarejestrowana. Zarejestruj ją: just install');
 if (!service(stopped ? 'START' : 'RESTART')) fail('Nie udało się zrestartować usługi (just service pokaże stan).');
 if (windows) {
   let healthy = false;

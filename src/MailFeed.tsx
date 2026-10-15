@@ -57,7 +57,7 @@ export function MailFeed({ mail, now, open }: { mail: MailState; now: number; op
     <div className="pulpit-card-head">
       <h2 id="mail-title">Poczta</h2>
       {many && <span className="mail-accounts">{source.accounts.map(a =>
-        <span key={a.email} className={`account-tag ${toneOf(source.accounts, a.email)}`}>{accountLabel(a.email)} {a.unread ?? '—'}</span>)}</span>}
+        <span key={a.email} className={`account-tag ${toneOf(source.accounts, a.email)}`}>{accountLabel(a.email)} {a.unread === null ? '—' : `${a.unread}${a.partial ? '+' : ''}`}</span>)}</span>}
     </div>
     <p className="meta">Nieprzeczytane · ostatnie 30 dni</p>
     {problems.map(a => <p key={a.email} className="mail-problem">{a.email} · {a.message || 'konto niedostępne.'}</p>)}

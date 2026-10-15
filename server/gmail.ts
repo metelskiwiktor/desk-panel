@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import { GoogleAuthError, type GoogleAccount } from './google-oauth';
-import { mailSourceSchema, type MailAction, type MailSource, type MailThread } from '../src/mail-contract';
+import { MAIL_WINDOW_MS, mailSourceSchema, type MailAction, type MailSource, type MailThread } from '../src/mail-contract';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 export const MAIL_QUERY = 'in:inbox is:unread newer_than:30d';
-const MAIL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PER_ACCOUNT = 200;
 const header = z.object({ name: z.string(), value: z.string() });
 const threadList = z.object({ threads: z.array(z.object({ id: z.string(), historyId: z.string() })).optional(), nextPageToken: z.string().optional() });
@@ -107,7 +106,8 @@ export function createMailReader(accounts: Account[], now = Date.now) {
         observedAt: withData.length ? Math.min(...withData.map(s => s.observedAt!)) : null,
         data: withData.length ? all.slice(0, limit) : null, total: all.length, partial: list.some(s => s.partial || s.status !== 'connected'),
         accounts: [...states.entries()].map(([email, s]) => ({ email, status: s.status, observedAt: s.observedAt,
-          unread: s.observedAt === null ? null : recent(s).length, ...(s.message ? { message: s.message } : {}) })),
+          unread: s.observedAt === null ? null : recent(s).length,
+          ...(s.partial ? { partial: true } : {}), ...(s.message ? { message: s.message } : {}) })),
         ...(list.find(s => s.message)?.message ? { message: list.find(s => s.message)!.message } : {}),
       });
     },

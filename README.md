@@ -47,6 +47,15 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |
 
+Usługa Windows czyta dodatkowo opcjonalny plik `%USERPROFILE%\.desk-panel\panel.env`
+(poza Gitem; linie `KLUCZ=wartość`, `#` to komentarz), np. z prywatnymi adresami:
+
+```
+DESK_MAIL_ACCOUNTS=pierwszy@gmail.com,drugi@gmail.com
+```
+
+Zmiany w nim działają po `just service RESTART`. Zobacz [servy/README.md](servy/README.md).
+
 ## Google Calendar
 
 Integracja loguje się na własne konto użytkownika przez OAuth Google.
@@ -101,7 +110,8 @@ nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń
 
 Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych z ostatnich 30 dni (`in:inbox is:unread newer_than:30d`, wszystkie
 karty, bez spamu i kosza) ze wszystkich kont z `DESK_MAIL_ACCOUNTS`, najnowsze na górze.
-Liczniki obejmują pobrane wątki z tego okresu (do 200 na konto), przed podziałem listy na strony.
+Liczniki obejmują pobrane wątki z tego okresu (do 200 na konto), przed podziałem listy na strony;
+gdy Gmail ma ich więcej, licznik ma postać „200+”. Scenariusze stosują to samo 30-dniowe okno.
 Przesunięcie w lewo oznacza wątek jako przeczytany, w prawo przenosi go do Kosza w Gmailu
 (odwracalne przez 30 dni; trwałego usuwania nie ma). Te same akcje są pod przyciskami
 ✓ i kosza oraz w szczegółach wątku. Przez 6 sekund „Cofnij” wykonuje w Gmailu akcję

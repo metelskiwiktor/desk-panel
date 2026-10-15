@@ -9,9 +9,9 @@
       "workingDirectory": "${ProjectRoot}",
       "executable": "C:\\nvm4w\\nodejs\\node.exe",
       "arguments": ["${ProjectRoot}\\node_modules\\tsx\\dist\\cli.mjs", "server/index.ts"],
+      "envFile": "${UserProfile}\\.desk-panel\\panel.env",
       "environment": {
-        "DESK_PORT": "5174",
-        "DESK_MAIL_ACCOUNTS": "metelski.wiktor@gmail.com,wiktoria.wiktoo@gmail.com"
+        "DESK_PORT": "5174"
       }
     }
   ]

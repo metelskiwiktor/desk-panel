@@ -1,4 +1,5 @@
-import { readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +22,15 @@ describe('scenario files', () => {
     expect(() => parseScenario({ quotas: { live: true, name: 'Limity AI', status: 'connected', observedAt: 'now', data: [{ provider: 'Claude', snapshots: [], history: [] }] } }, now))
       .toThrow(/quotas/);
     expect(() => parseScenario({ unknown: {} }, now)).toThrow();
+  });
+  it('applies the same 30-day mail window as Gmail', async () => {
+    const scenario = JSON.parse(readFileSync(join(dir, 'standard.json'), 'utf8'));
+    const [recent] = scenario.mail.data;
+    scenario.mail.data = [recent, { ...recent, id: `${recent.account}:aa01`, threadId: 'aa01', receivedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 }];
+    const file = join(mkdtempSync(join(tmpdir(), 'desk-panel-')), 'old-mail.json');
+    writeFileSync(file, JSON.stringify(scenario));
+    const mail = await createScenarioSources(file).mail(10);
+    expect(mail).toMatchObject({ total: 1, data: [{ id: recent.id }] });
   });
   it('serves the scenario over HTTP like the real server, including failures', async () => {
     const server = createPanelServer(createScenarioSources(join(dir, 'offline.json')), dir).listen(0, '127.0.0.1');

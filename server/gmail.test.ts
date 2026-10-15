@@ -48,6 +48,13 @@ describe('Gmail reader', () => {
     now += 31 * day;
     expect(await reader.read(30)).toMatchObject({ status: 'offline', total: 0, data: [], accounts: [{ unread: 0, observedAt: 100 * day }] });
   });
+  it('marks an account whose unread count is a lower bound because Gmail listed more than were loaded', async () => {
+    const many = Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`a${i.toString(16).padStart(3, '0')}`, [message('A', `T${i}`, 1_000_000 - i)]]));
+    const reader = createMailReader([account('a@gmail.com', many), account('b@gmail.com', { b1: [message('B', 'T', 1_000_000)] })], () => 1_000_000);
+    const result = await reader.read(10);
+    expect(result.accounts).toMatchObject([{ unread: 200, partial: true }, { unread: 1 }]);
+    expect(result.accounts[1]).not.toHaveProperty('partial');
+  });
   it('refreshes a cached login failure immediately after successful consent', async () => {
     const a = account('a@gmail.com', {});
     a.state.fail = new GoogleAuthError('login_required');
