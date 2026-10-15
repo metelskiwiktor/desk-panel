@@ -24,44 +24,76 @@ function renderWith(scenario: ScenarioName = 'standard') {
 }
 const loaded = () => screen.findAllByText(/Potwierdź zakres testów kalendarza/);
 
+const openEvents = async (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(await screen.findByRole('button', { name: /^Zdarzenia panelu:/ }));
+
 describe('interaktywny panel', () => {
   it.each([
-    ['loading', 'Ładowanie danych'],
-    ['unavailable', 'Brak źródła danych'],
-    ['offline', 'Offline · ostatni zapis'],
+    ['loading', /Cezar · ładowanie/],
+    ['unavailable', /Cezar niedostępny/],
+    ['offline', /Offline · ostatni zapis/],
   ] as const)('pokazuje stan %s i nie generuje zdarzeń', async (scenario, label) => {
     renderWith(scenario);
-    expect((await screen.findAllByText(new RegExp(label))).length).toBeGreaterThan(0);
-    expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
-    const counts = screen
-      .getAllByRole('button')
-      .filter((button) => button.textContent?.includes('W kolejce'));
-    expect(counts[0].textContent).toContain('—');
+    expect((await screen.findAllByText(label)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /^Zdarzenia panelu/ })).toBeNull();
+    expect(screen.queryByText(/^0 w toku/)).toBeNull();
   });
   it('nie oznacza danych jako demonstracyjne ani rzeczywiste', async () => {
     renderWith();
     await loaded();
     expect(screen.queryByText(/DEMO|demonstracyjn|DANE RZECZYWISTE/)).toBeNull();
-    expect(screen.getAllByText(/Połączono z Cezarem/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Cezar' })).toBeTruthy();
   });
-  it('otwiera zadanie ze zdarzeń i wraca do pulpitu', async () => {
+  it('pokazuje dzisiejsze spotkania na osi i kolejne dni', async () => {
     const user = userEvent.setup();
     renderWith();
-    await user.click(await screen.findByRole('button', { name: /^Cezar czeka na odpowiedź/ }));
-    expect(
-      screen.getByRole('heading', { name: 'Potwierdź zakres testów kalendarza' }),
-    ).toBeTruthy();
+    const today = await screen.findByRole('region', { name: 'Dziś' });
+    expect(within(today).getByText(/3 spotkania · najbliższe za 12 min/)).toBeTruthy();
+    expect(within(today).getByText('KOLEJNE DNI')).toBeTruthy();
+    await user.click(within(today).getByRole('button', { name: /Planowanie Tabnote/ }));
+    expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
+  });
+  it('otwiera zadanie ze zdarzeń panelu i wraca do pulpitu', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await openEvents(user);
+    const events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
+    await user.click(within(events).getByRole('button', { name: 'Cezar: Cezar czeka na odpowiedź' }));
+    expect(screen.getByRole('heading', { name: 'Potwierdź zakres testów kalendarza' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(
       'http://127.0.0.1:4321/p/tabnote/tasks/decision',
     );
     await user.click(screen.getByRole('button', { name: /Wróć/ }));
-    expect(screen.getByRole('heading', { name: 'Zdarzenia' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
+  });
+  it('podpisuje każde zdarzenie jego źródłem i zwija listę', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await openEvents(user);
+    const events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
+    expect(within(events).getAllByText('Kalendarz').length).toBeGreaterThan(0);
+    expect(within(events).getAllByText('Limity AI').length).toBeGreaterThan(0);
+    await user.click(within(events).getByRole('button', { name: 'Zwiń zdarzenia panelu' }));
+    expect(screen.getByRole('button', { name: /^Zdarzenia panelu:/ })).toBeTruthy();
+  });
+  it('rozwija Cezara tylko gdy coś czeka i pokazuje komputer tylko przy problemie', async () => {
+    renderWith();
+    const cezar = await screen.findByRole('region', { name: 'Cezar' });
+    expect(within(cezar).getByRole('button', { name: /Potwierdź zakres testów kalendarza/ })).toBeTruthy();
+    expect(within(cezar).getByRole('button', { name: /więcej$/ })).toBeTruthy();
+    expect(screen.queryByText('KOMPUTER')).toBeNull();
+    cleanup();
+    renderWith('high-ram');
+    expect(await screen.findByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(await screen.findByText('KOMPUTER')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^PC · RAM \d+%$/ })).toBeTruthy();
   });
   it('otwiera quota z timestampami, resetem i dyskretną historią', async () => {
     const user = userEvent.setup();
     renderWith();
     expect(screen.queryByRole('region', { name: 'Legenda wykresu limitów' })).toBeNull();
-    await user.click(await screen.findByRole('button', { name: /^✳ Claude/ }));
+    const strip = await screen.findByRole('region', { name: 'Limity AI' });
+    await user.click(await within(strip).findByRole('button', { name: /^Claude/ }));
     expect(screen.getByRole('heading', { name: 'Claude · limity konta' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Legenda wykresu limitów' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Historia obserwacji' })).toBeTruthy();
@@ -88,43 +120,40 @@ describe('interaktywny panel', () => {
     expect(within(rules).getByText('Zużycie wyprzedza czas o ponad 5 do 15 p.p.')).toBeTruthy();
     expect(screen.getByText(/Restart serwera i odświeżenie strony zachowują historię/)).toBeTruthy();
     await user.click(nav('Ustawienia'));
-    expect(screen.getByRole('heading', { name: 'Twój układ' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Pulpit' })).toBeTruthy();
     expect(screen.queryByText(/Scenariusze|Rzeczywiste źródła danych/)).toBeNull();
   });
-  it('zmienia widoczność, kolejność, wariant i odtwarza zapis po montażu', async () => {
+  it('ukrywa sekcje i odtwarza zapis po montażu', async () => {
     const user = userEvent.setup();
     const view = renderWith();
     await user.click(nav('Ustawienia'));
-    await user.click(screen.getByRole('checkbox', { name: 'System' }));
-    await user.click(screen.getByRole('button', { name: 'Zdarzenia w górę' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Wariant Cezar' }), 'compact');
+    await user.click(screen.getByRole('checkbox', { name: 'Poczta' }));
     const config = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(config.widgets[1].visible).toBe(false);
-    expect(config.widgets[3].id).toBe('insights');
+    expect(config.widgets.find((w: { id: string }) => w.id === 'mail').visible).toBe(false);
     view.unmount();
     render(<App />);
     await loaded();
-    expect(screen.queryByRole('heading', { name: 'System' })).toBeNull();
-    // Compact Cezar shows just the first task (the additional Insights is still visible).
-    expect(screen.queryByRole('button', { name: /Widok notatki gotowy do przeglądu/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
     await user.click(nav('Ustawienia'));
-    await user.click(screen.getByRole('button', { name: 'Przywróć układ domyślny' }));
+    await user.click(screen.getByRole('button', { name: 'Pokaż wszystkie sekcje' }));
     await user.click(nav('Pulpit'));
-    expect(screen.getByRole('heading', { name: 'System' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Poczta' })).toBeTruthy();
   });
   it('pokazuje brak pomiaru limitów bez fałszywych zdarzeń', async () => {
     renderWith('quota-missing');
-    await waitFor(() => expect(screen.getAllByText('Brak danych')).toHaveLength(4));
+    await waitFor(() => expect(screen.getAllByText('brak pomiaru')).toHaveLength(4));
     expect(screen.queryByText(/Claude.*limit blisko wyczerpania/)).toBeNull();
   });
   it('oznacza nieaktualne zapisy i nie tworzy z nich zdarzeń', async () => {
     renderWith('stale');
     expect((await screen.findAllByText(/Nieaktualn/)).length).toBeGreaterThan(0);
-    expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Zdarzenia panelu/ })).toBeNull();
   });
-  it('pokazuje puste źródła', async () => {
+  it('zwija puste źródła', async () => {
     renderWith('empty');
-    expect(await screen.findByText('Brak nadchodzących wydarzeń.')).toBeTruthy();
+    expect(await screen.findByText('Brak nieprzeczytanych wiadomości.')).toBeTruthy();
+    expect(screen.getByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('bez spotkań')).toBeTruthy();
   });
   it('komunikuje brak możliwości zapisania ustawień', async () => {
     const user = userEvent.setup();
@@ -133,7 +162,7 @@ describe('interaktywny panel', () => {
       throw Error('blocked');
     });
     await user.click(nav('Ustawienia'));
-    await user.click(screen.getByRole('checkbox', { name: 'System' }));
-    expect(screen.getByText(/Nie udało się zapisać\. Układ/)).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: 'Poczta' }));
+    expect(screen.getByText(/Nie udało się zapisać\. Ustawienia/)).toBeTruthy();
   });
 });

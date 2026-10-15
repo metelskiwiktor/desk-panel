@@ -27,8 +27,9 @@ describe('Poczta', () => {
     const rows = within(list).getAllByRole('button', { name: /^(Anna|GitHub|Bank|Jira|Allegro)/ });
     expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['Anna Nowak: Spotkanie w czwartek', 'GitHub: [desk-panel] PR #3: Gmail w panelu',
       'Bank Millennium: Potwierdzenie przelewu', 'Jira: Nowe zadanie przypisane do Ciebie', 'Allegro: Twoja paczka jest w drodze']);
-    expect(within(mailCard()).getByText('owner: 3 · praca: 2')).toBeTruthy();
-    expect(within(rows[1]).getByText(/praca$/)).toBeTruthy();
+    expect(within(mailCard()).getByText('owner 3')).toBeTruthy();
+    expect(within(mailCard()).getByText('praca 2')).toBeTruthy();
+    expect(within(rows[1]).getByText('praca')).toBeTruthy();
   });
   it('swipes left to mark read and right to move to Trash, each undoable in Gmail', async () => {
     vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; isPrimary = true; });

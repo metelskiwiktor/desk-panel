@@ -45,8 +45,7 @@ describe('Cezar integration', () => {
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Real 0/ })[0]).toBeTruthy());
-    const counts = screen.getAllByRole('button').filter(b => b.textContent?.includes('Wymaga odpowiedzi'));
-    expect(counts[0].textContent).toContain('21');
+    expect(within(screen.getByRole('region', { name: 'Cezar' })).getByText(/21 wymaga odpowiedzi/)).toBeTruthy();
     await user.click(screen.getAllByRole('button', { name: /Real 0/ })[0]);
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(data.tasks[0].sourceUrl);
   });
@@ -55,8 +54,7 @@ describe('Cezar integration', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     render(<App />);
     await waitFor(() => expect(screen.getAllByText(/Cezar niedostępny/).length).toBeGreaterThan(0));
-    const card = screen.getByRole('heading', { name: 'Cezar' }).closest('section')!;
-    expect(within(card).getByRole('button', { name: /W toku/ }).textContent).toContain('—');
+    expect(screen.queryByText(/\b0 w toku/)).toBeNull();
   });
   it('preserves the last snapshot after failure and stops polling on unmount', async () => {
     const data = await readCezar('http://127.0.0.1:4321', request());

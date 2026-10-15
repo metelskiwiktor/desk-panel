@@ -1,12 +1,13 @@
 export const widgetNames = {
   cezar: 'Cezar',
-  system: 'System',
-  calendar: 'Kalendarz Google',
+  system: 'Komputer (tylko przy problemie)',
+  calendar: 'Kalendarz · dziś i kolejne dni',
   quotas: 'Limity AI',
-  insights: 'Zdarzenia',
+  insights: 'Zdarzenia panelu',
   mail: 'Poczta',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
+/** Order, displayMode and priority are kept from earlier layouts; the dashboard sizes sections by content. */
 export interface WidgetConfig {
   id: WidgetId;
   visible: boolean;
@@ -96,12 +97,4 @@ export function saveLayout(layout: Layout): boolean {
   } catch {
     return false;
   }
-}
-export function moveWidget(layout: Layout, id: WidgetId, direction: -1 | 1): Layout {
-  const widgets = [...layout.widgets];
-  const index = widgets.findIndex((w) => w.id === id);
-  const target = index + direction;
-  if (index < 0 || target < 0 || target >= widgets.length) return layout;
-  [widgets[index], widgets[target]] = [widgets[target], widgets[index]];
-  return { version: 2, widgets };
 }

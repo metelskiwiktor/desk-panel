@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultLayout, moveWidget, parseLayout, readLayout, saveLayout } from './layout';
+import { defaultLayout, parseLayout, readLayout, saveLayout } from './layout';
 
 afterEach(() => {
   localStorage.clear();
@@ -13,7 +13,8 @@ describe('wersjonowany układ', () => {
     },
   );
   it('zachowuje kolejność, widoczność i wariant po zapisie', () => {
-    const config = moveWidget(defaultLayout(), 'insights', -1);
+    const config = defaultLayout();
+    config.widgets.reverse();
     config.widgets[0].visible = false;
     config.widgets[1].displayMode = 'compact';
     expect(saveLayout(config)).toBe(true);
@@ -55,11 +56,6 @@ describe('wersjonowany układ', () => {
   it('odrzuca w v1 nazwy z prototypu i powtórzone ID', () => {
     expect(parseLayout('{"version":1,"order":["toString"]}')).toEqual(defaultLayout());
     expect(parseLayout('{"version":1,"order":["cezar","cezar"]}')).toEqual(defaultLayout());
-  });
-  it('przestawianie nie przekracza granic', () => {
-    const config = defaultLayout();
-    expect(moveWidget(config, 'cezar', -1)).toBe(config);
-    expect(moveWidget(config, 'mail', 1)).toBe(config);
   });
   it('działa przy zablokowanym localStorage, zwraca błąd zapisu', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
