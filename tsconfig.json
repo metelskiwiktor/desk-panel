@@ -20,6 +20,7 @@
     "src",
     "vite.config.ts",
     "server",
-    "scripts/scenario.ts"
+    "scripts/scenario.ts",
+    "scripts/devices.ts"
   ]
 }

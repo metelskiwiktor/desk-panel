@@ -21,6 +21,10 @@ scenario name="standard":
 screenshots name="standard" *args:
     npm run scenario -- {{name}} --shot {{args}}
 
+# Target screens from devices.json with derived CSS sizes and Chrome DevTools values.
+devices:
+    npx tsx scripts/devices.ts
+
 # Run all tests, typecheck and produce the frontend served by the service.
 check:
     npm test

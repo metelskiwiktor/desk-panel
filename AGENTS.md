@@ -7,9 +7,12 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 - `just setup`: install locked dependencies and Playwright Chromium.
 - `just dev`: run API and Vite during development.
 - `just scenario NAME` / `just screenshots NAME [--pages pulpit,ustawienia]
-  [--size 800x1280]`: run the real UI against `scenarios/NAME.json` (Vite + a
-  scenario API on free ports, never the service port) and take Playwright
-  screenshots into output/screenshots. Use this to check UI changes visually.
+  [--device ID|all] [--scale N|primary|all]`: run the real UI against
+  `scenarios/NAME.json` (Vite + a scenario API on free ports, never the service
+  port) and take Playwright screenshots into output/screenshots. Use this to
+  check UI changes visually on the target screens.
+- `just devices`: target screens from devices.json with derived CSS sizes.
+  Screen sizes live only there; the layout is fluid and never reads it.
 - `just check`: all tests, typecheck and frontend build. Run before publishing.
 - `just update [--force]`: deploy to the service — merges origin/main only when it
   cannot conflict with local work (otherwise lists the files and changes

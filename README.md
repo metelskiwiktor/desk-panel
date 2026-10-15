@@ -175,8 +175,9 @@ ostatniego sukcesu. Świeżość jest sprawdzana względem bieżącego czasu ren
 również gdy pomiar nadejdzie pomiędzy jednosekundowymi tickami zegara interfejsu.
 
 Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Układ kart
-(widoczność, kolejność, wariant) zapisuje się w localStorage. Poniżej 640 CSS px
-siatka przechodzi do jednej kolumny. Brak procentów postępu, ETA i danych dysku.
+(widoczność, kolejność, wariant) zapisuje się w localStorage. Układ jest płynny:
+kolumn jest tyle, ile mieści się przy `--column-min` (najwyżej `--max-columns`, dziś 2),
+a zawartość kart reaguje na szerokość samej karty (container queries), nie ekranu. Brak procentów postępu, ETA i danych dysku.
 
 Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
 demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
@@ -201,9 +202,17 @@ kontraktu są zgłaszane ze ścieżką pola.
 ```powershell
 just scenario offline                                  # UI na scenariuszu, adres w konsoli
 just screenshots standard                              # output/screenshots/standard-*.png
-just screenshots high-ram --pages pulpit,system --size 1080x1920
+just screenshots high-ram --pages pulpit,system --device medialove-14 --scale all
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 ```
+
+Ekrany pochodzą z `devices.json`: rozdzielczość fizyczna, przekątna, lista skalowań
+Windows (pierwsze to główne) i dotyk. Rozmiar CSS, PPI i wartości do Chrome DevTools
+(*Settings → Devices → Add custom device*) są wyliczane — `just devices` je wypisuje.
+`--device <id>|all` (domyślnie pierwsze urządzenie) i `--scale <współczynnik>|primary|all`
+wybierają ekrany; zrzuty mają fizyczną rozdzielczość, np. `standard-pulpit-medialove-14@1.25x.png`.
+UI nie czyta tego pliku do układu — w Ustawieniach karta „Ekran” jedynie pokazuje,
+któremu urządzeniu i skalowaniu odpowiada bieżący ekran.
 
 Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
 prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
@@ -258,7 +267,8 @@ Build sprawdza także kod serwera.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny
-job robi zrzuty wszystkich scenariuszy i stron i dołącza je do przebiegu jako
-artefakt `screenshots-<commit>` (90 dni), więc wygląd panelu można porównać
+job robi zrzuty wszystkich scenariuszy i stron na urządzeniach z `devices.json`
+(główne skalowanie, `standard` na wszystkich) i dołącza je do przebiegu jako
+artefakt `screenshots-<commit>` (30 dni, około 27 MB), więc wygląd panelu można porównać
 między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
 zrzutów najnowszego commita.

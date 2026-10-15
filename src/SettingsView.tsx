@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Check, Layers3, Settings2 } from 'lucide-react';
 import { defaultLayout, moveWidget, widgetNames, type Layout } from './layout';
 import { Card } from './components';
 import { CalendarConnection } from './CalendarConnection';
+import { ScreenCard } from './ScreenCard';
 
 export function SettingsView({
   layout,
@@ -17,6 +18,7 @@ export function SettingsView({
       <Card title="Połączenia" icon={<Layers3 />}>
         <p className="card-intro">CPU i RAM co około 2 sekundy, Cezar co 5 sekund, kalendarz co minutę. Bieżące limity AI co około minutę, bez rozmów z modelem.</p>
       </Card>
+      <ScreenCard />
       <CalendarConnection />
       <Card title="Twój układ" icon={<Settings2 />}>
         <p className="card-intro">

@@ -15,6 +15,11 @@
   --quota-yellow: #e9c261;
   --quota-red: #f2888b;
   --line: #2b3545;
+  /* Layout is fluid: columns follow the space, not device sizes (those live in devices.json). */
+  --column-min: 280px;
+  --max-columns: 2;
+  --gap: clamp(14px, 2.2vw, 20px);
+  --shell-padding: clamp(14px, 3.4vw, 30px);
 }
 * {
   box-sizing: border-box;
@@ -76,8 +81,8 @@ main:focus {
   outline: none;
 }
 .app-shell {
-  max-width: 940px;
-  padding: 0 30px;
+  max-width: 1200px;
+  padding: 0 var(--shell-padding);
   margin: auto;
 }
 header {
@@ -185,11 +190,13 @@ header {
 }
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
-  gap: 20px;
+  /* As many columns as fit at --column-min, never more than --max-columns. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(var(--column-min), (100% - (var(--max-columns) - 1) * var(--gap)) / var(--max-columns))), 1fr));
+  gap: var(--gap);
   align-items: stretch;
 }
 .widget {
+  container-type: inline-size;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -201,7 +208,7 @@ header {
   background: linear-gradient(125deg, #1b2331, #18202d);
   border: 1px solid #303b4c;
   border-radius: 15px;
-  padding: 22px;
+  padding: clamp(16px, 5cqi, 22px);
   box-shadow: 0 8px 25px #00000012;
   min-width: 0;
   flex: 1;
@@ -909,16 +916,8 @@ nav button.active:after {
     padding-bottom: 40px;
   }
 }
-@media (max-width: 720px) {
-  .app-shell {
-    padding: 0 22px;
-  }
-  .card {
-    padding: 18px;
-  }
-  .dashboard-grid {
-    gap: 16px;
-  }
+/* Card internals respond to the card's own width, wherever it is placed. */
+@container (max-width: 380px) {
   .row-end {
     flex-direction: column;
     align-items: flex-end;
@@ -939,31 +938,14 @@ nav button.active:after {
   h2 {
     font-size: 17px;
   }
+}
+@media (max-width: 720px) {
   .service-status {
     flex-direction: column;
     gap: 6px;
   }
 }
-@media (max-width: 639px) {
-  .dashboard-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .widget-cezar {
-    grid-column: auto;
-  }
-  .clock-area h1 {
-    font-size: 68px;
-  }
-  .clock-decoration {
-    display: none;
-  }
-  .card {
-    padding: 22px;
-  }
-  .clock-area {
-    padding-top: 18px;
-    padding-bottom: 30px;
-  }
+@container (max-width: 300px) {
   .task-counts strong {
     font-size: 28px;
   }
@@ -992,6 +974,18 @@ nav button.active:after {
   .event-row {
     padding: 18px 12px;
   }
+}
+@media (max-width: 639px) {
+  .clock-area h1 {
+    font-size: 68px;
+  }
+  .clock-decoration {
+    display: none;
+  }
+  .clock-area {
+    padding-top: 18px;
+    padding-bottom: 30px;
+  }
   .app-footer {
     font-size: 8px;
   }
@@ -1018,12 +1012,6 @@ nav button.active:after {
   }
 }
 @media (max-width: 380px) {
-  .app-shell {
-    padding: 0 14px;
-  }
-  .card {
-    padding: 16px;
-  }
   .task-counts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
