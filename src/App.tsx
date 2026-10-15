@@ -3,19 +3,20 @@ import {
   ArrowLeft,
   ArrowUpRight,
   CalendarDays,
-  ChevronRight,
   Clock3,
   Cpu,
   House,
   Layers3,
   ListTodo,
+  ListChecks,
   MemoryStick,
   Monitor,
   Settings2,
-  Sparkles,
 } from 'lucide-react';
 import { createDemo, type DemoCase } from './demo';
-import { deriveInsights } from './insights';
+import { useActivityLog } from './useActivityLog';
+import { ActivityFeed } from './ActivityFeed';
+import { EventRulesView } from './EventRulesView';
 import { readLayout, saveLayout, type Layout, type WidgetId } from './layout';
 import { MAX_AGE, fresh, orderedTasks, sourceLabel, taskLabels, type Detail } from './model';
 import { time, stamp, date, number, allDayDate } from './format';
@@ -28,6 +29,7 @@ import {
   Sparkline,
   QuotaWindow,
   QuotaCard,
+  QuotaLegend,
   SourceLink,
 } from './components';
 import { useCezar } from './useCezar';
@@ -36,12 +38,13 @@ import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
 import { SettingsView } from './SettingsView';
 
-type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'settings';
+type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
   home: 'Pulpit',
   tasks: 'Zadania',
   calendar: 'Kalendarz',
   system: 'System',
+  events: 'Zdarzenia',
   settings: 'Ustawienia',
 };
 const navIcons = {
@@ -49,6 +52,7 @@ const navIcons = {
   tasks: ListTodo,
   calendar: CalendarDays,
   system: Monitor,
+  events: ListChecks,
   settings: Settings2,
 };
 export function App({ initialLive = true }: { initialLive?: boolean }) {
@@ -98,7 +102,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
     .sort((a, b) => a.startAt - b.startAt);
   const samples = data.system.data ?? [];
   const latest = samples.at(-1);
-  const insights = deriveInsights(data, now);
+  const activity = useActivityLog(data, now, live ? 'live' : `demo:${scenario}`);
   const summary = (
     <div className="task-counts">
       {(['running', 'queue', 'needs-input', 'review'] as const).map((status) => (
@@ -268,28 +272,8 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
         );
       case 'insights':
         return (
-          <Card title="Insights" eyebrow="TERAZ ISTOTNE" icon={<Sparkles size={21} />}>
-            <p className="card-intro">{live ? 'Sygnały z rzeczywistych danych panelu' : 'Sygnały z danych DEMO'}</p>
-            {insights.length ? (
-              insights.map((fact) => (
-                <button
-                  key={fact.id}
-                  className={`insight row ${fact.tone}`}
-                  onClick={() => open(fact.target)}
-                >
-                  <span className="insight-dot" />
-                  <span className="row-body">
-                    <span className="row-title">{fact.title}</span>
-                    <span className="meta">{fact.context}</span>
-                  </span>
-                  <ChevronRight size={16} />
-                </button>
-              ))
-            ) : (
-              <Empty>Brak aktualnych sygnałów wymagających uwagi.</Empty>
-            )}
-            <p className="source-note">Reguły deterministyczne · maks. 3 fakty</p>
-          </Card>
+          <ActivityFeed entries={activity.entries} live={live} open={open} dismiss={activity.dismiss}
+            restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} />
         );
     }
   }
@@ -390,6 +374,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
               snapshot={s}
               now={now}
               sourceConnected={fresh(data.quotas, now, MAX_AGE.quotas)}
+              showPaceDetails
             />
             <dl>
               <dt>Zaobserwowano</dt>
@@ -399,6 +384,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
             </dl>
           </div>
         ))}
+        <QuotaLegend />
         <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={live ? 60000 : undefined} />
         <h3>{live ? 'Ostatni odczyt' : 'Historia obserwacji'}</h3>
         <p className="meta">Bez interpolacji i szacowania wartości po resecie.</p>
@@ -549,6 +535,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                     </p>
                   </>
                 )}
+                {page === 'events' && <EventRulesView />}
                 {page === 'settings' && (
                   <SettingsView
                     layout={layout}

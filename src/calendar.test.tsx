@@ -53,7 +53,7 @@ describe('Google Calendar', () => {
     const now = Date.now();
     const data = createDemo(now, 'empty');
     data.calendar = { status: 'connected', observedAt: now, data: [{ id: 'day', title: 'Cały dzień', startAt: now, endAt: now + 86400_000, allDay: true, description: '' }] };
-    expect(deriveInsights(data, now).some(i => i.id === 'event:day')).toBe(false);
+    expect(deriveInsights(data, now).some(i => i.target.kind === 'event' && i.target.id === 'day')).toBe(false);
   });
   it('polls independently, retains data on local-server failure and cancels future reads', async () => {
     vi.useFakeTimers();

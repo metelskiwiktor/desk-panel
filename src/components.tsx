@@ -13,6 +13,7 @@ import {
   type Task,
 } from './model';
 import { time, stamp, date, allDayDate, preciseStamp } from './format';
+import { quotaPace, quotaPaceLabels, quotaResetIn, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
 
 export function SourceNote<T>({
   source,
@@ -156,31 +157,39 @@ export function QuotaWindow({
   snapshot,
   now,
   sourceConnected,
+  showPaceDetails = false,
 }: {
   snapshot: QuotaSnapshot;
   now: number;
   sourceConnected: boolean;
+  showPaceDetails?: boolean;
 }) {
   const measuredState = quotaState(snapshot, now);
   const state = !sourceConnected && measuredState === 'fresh' ? 'stale' : measuredState;
+  const pace = state === 'fresh' ? quotaPace(snapshot, now) : null;
+  const elapsed = pace ? Math.round(pace.elapsedPercent) : null;
+  const excess = pace ? snapshot.usedPercent! - pace.elapsedPercent : 0;
+  const pp = (value: number) => Math.max(0, value).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div className="quota-window">
       <div className="quota-label">
         <span>Okno {snapshot.window}</span>
-        <strong className={state === 'fresh' && snapshot.usedPercent! >= 90 ? 'amber-text' : ''}>
+        <strong>
           {state === 'unavailable' ? 'Brak danych' : `${snapshot.usedPercent}%`}
         </strong>
       </div>
       {state !== 'unavailable' && (
         <div
-          className={`meter ${snapshot.usedPercent! >= 90 ? 'amber' : ''} ${state === 'stale' ? 'muted-meter' : ''}`}
+          className={`meter quota-meter ${pace ? `quota-pace-${pace.tone}` : 'muted-meter'}`}
           role="meter"
           aria-label={`Użycie limitu ${snapshot.window}`}
           aria-valuenow={snapshot.usedPercent!}
           aria-valuemin={0}
           aria-valuemax={100}
+          aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${elapsed}%. ${quotaPaceLabels[pace.tone]}. Reset za ${quotaResetIn(snapshot.resetAt!, now)}.` : `${snapshot.usedPercent}% · nieaktualna obserwacja`}
         >
           <span style={{ width: `${snapshot.usedPercent}%` }} />
+          {pace && <i className="quota-time-marker" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
         </div>
       )}
       <span className={`meta ${state !== 'fresh' ? 'warning' : ''}`}>
@@ -188,11 +197,31 @@ export function QuotaWindow({
           ? 'Nie zarejestrowano pomiaru'
           : state === 'stale'
             ? 'Nieaktualne · ostatnia obserwacja'
-            : 'wykorzystania limitu konta'}
+            : `Czas okna: ${elapsed}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}`}
       </span>
-      {snapshot.source && snapshot.observedAt !== null && <span className="meta">Obserwacja {stamp(snapshot.observedAt)} · reset {snapshot.resetAt === null ? 'nieznany' : stamp(snapshot.resetAt)}</span>}
+      {showPaceDetails && pace && <div className="quota-pace-details">
+        <span className="meta">{pace.tone === 'green' ? 'Zielony' : pace.tone === 'yellow' ? 'Żółty' : 'Czerwony'} · zużycie {pp(Math.abs(excess))} p.p. {excess < 0 ? 'poniżej' : 'powyżej'} upływu czasu</span>
+        {pace.tone === 'green' ? <span className="meta">Do progu żółtego: {pp(QUOTA_PACE_TOLERANCE - excess)} p.p.</span>
+          : pace.tone === 'yellow' ? <>
+            <span className="meta">Ponad próg żółtego: {pp(excess - QUOTA_PACE_TOLERANCE)} p.p.</span>
+            <span className="meta">Do progu czerwonego: {pp(QUOTA_PACE_WARNING - excess)} p.p.</span>
+          </> : <span className="meta">Ponad próg czerwonego: {pp(excess - QUOTA_PACE_WARNING)} p.p.</span>}
+      </div>}
+      {state !== 'fresh' && snapshot.source && snapshot.observedAt !== null && <span className="meta">Obserwacja {stamp(snapshot.observedAt)} · reset {snapshot.resetAt === null ? 'nieznany' : stamp(snapshot.resetAt)}</span>}
     </div>
   );
+}
+export function QuotaLegend() {
+  return <section className="quota-legend" aria-label="Legenda wykresu limitów">
+    <h3>Jak czytać wykres</h3>
+    <p className="meta">Wypełnienie pokazuje wykorzystany limit. Jasna kreska ze strzałką oznacza upływ czasu w oknie 5h lub 7d, obliczony z terminu resetu. Po godzinie okna 5h wskazuje 20%.</p>
+    <ul>
+      <li><span className="quota-legend-swatch quota-pace-green" aria-hidden="true" /><span>Zielony — zużycie poniżej kreski lub do {QUOTA_PACE_TOLERANCE} punktów procentowych ponad nią.</span></li>
+      <li><span className="quota-legend-swatch quota-pace-yellow" aria-hidden="true" /><span>Żółty — zużycie wyprzedza czas o ponad {QUOTA_PACE_TOLERANCE} do {QUOTA_PACE_WARNING} punktów procentowych.</span></li>
+      <li><span className="quota-legend-swatch quota-pace-red" aria-hidden="true" /><span>Czerwony — zużycie wyprzedza czas o ponad {QUOTA_PACE_WARNING} punktów procentowych.</span></li>
+    </ul>
+    <p className="meta">Kolor porównuje zużycie z równomiernym tempem do resetu. Zielony nie gwarantuje dostępności limitu. Nieaktualny odczyt jest szary, bez kreski czasu. Po resecie czekamy na nowy pomiar.</p>
+  </section>;
 }
 export function QuotaCard({
   account,

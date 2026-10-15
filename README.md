@@ -85,7 +85,7 @@ współdzieli równoległe żądania i przechowuje cache tylko w pamięci. Po b�
 ponawia po 15 sekundach, zachowując ostatnią agendę i jej czas. 403/404 i brak
 klienta OAuth pokazują brak dostępu, a nie pusty kalendarz. Surowe błędy GoogleAuth
 i tokeny nigdy nie trafiają do odpowiedzi lub logów. Stary zapis nie tworzy
-bieżących Insights. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń.
+nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń.
 
 ## Rzeczywiste dane Cezara
 
@@ -132,7 +132,7 @@ ani procesu. Historia w pamięci jest ograniczona do 150 próbek / 5 minut.
 Po przerwie >10 s (np. uśpienie lub brak czytelników) zbiera nową bazę i zaczyna
 nową historię. Błąd lub cofnięcie liczników nie daje fikcyjnego 0%; poprzedni
 odczyt zachowuje swój timestamp i oznaczenie braku pomiaru. Świeżość systemu
-wynosi 15 s. Wysoki RAM zasila istniejącą deterministyczną regułę Insights.
+wynosi 15 s. Wysoki RAM zasila regułę zdarzeń panelu.
 Endpoint jest lokalny, read-only; nie zbiera danych dysku.
 
 ## Limity AI
@@ -150,7 +150,17 @@ Po odczycie proces Codexa jest zamykany; bez czytelników odczyty ustają.
 Nie jest uruchamiany nowy task Cezara. Polling nie generuje tokenów modelu;
 same endpointy kont mogą mieć niezależny limit częstotliwości zapytań.
 
-Timestamp pomiaru i reset są widoczne. Brak okna to null, nie 0%. Błąd zachowuje
+Pasek pokazuje zużycie, jasna kreska ze strzałką — upływ czasu w nominalnym oknie
+5h/7d wyliczony z terminu resetu. Pod paskiem jest procent czasu i odliczanie do
+resetu. Kolor porównuje zużycie z upływem czasu: zielony do 5 p.p. ponad czas
+(także poniżej), żółty ponad 5 do 15 p.p., czerwony ponad 15 p.p.
+Legenda jest tylko w szczegółach konta, razem z dokładnymi datami obserwacji i resetu.
+Szczegóły pokazują też różnicę zużycie–czas w p.p., odległość od progu kolejnego
+koloru oraz przekroczenie progu żółtego/czerwonego (dwa miejsca po przecinku).
+Stare/offline odczyty są szare i nie pokazują kreski ani bieżącego odliczania;
+reset nie zeruje zużycia bez nowego pomiaru. Kolor opisuje tempo, nie dostępność limitu.
+
+Timestamp pomiaru i reset są widoczne w szczegółach. Brak okna to null, nie 0%. Błąd zachowuje
 ostatni odczyt z jego pierwotną datą. Wiek >120 s (dwie minuty)
 lub brak/miniony reset wyłącza bieżące alerty. Claude po
 błędzie ma 5-minutowy backoff. To aktualny odczyt; nie łączymy historii różnych
@@ -173,9 +183,36 @@ scenariusze DEMO: pusto, offline, brak danych, ładowanie, stale i wysokie quota
 Po odświeżeniu strony tryb rzeczywisty wraca jako domyślny.
 
 W trybie DEMO limity AI są przykładami. Null oznacza brak pomiaru;
-historia to dyskretne obserwacje. Insights korzystają z tych samych źródeł co
-karty. Offline lub stare dane nie tworzą bieżących alertów. W trybie rzeczywistym
+historia to dyskretne obserwacje. Zdarzenia korzystają z tych samych źródeł co
+karty. Offline lub stare dane nie tworzą nowych alertów. W trybie rzeczywistym
 wszystkie karty korzystają z podłączonych źródeł.
+
+## Zdarzenia
+
+Zakładka „Zdarzenia” w dolnej nawigacji opisuje aktualne reguły w krótkiej tabeli:
+warunek utworzenia oraz kiedy dany wpis może pojawić się ponownie. Pokazuje też
+zasady zapisu historii i usuwania. Progi i czasy są współdzielone z detekcją zdarzeń.
+
+Karta zastępuje Insights listą przewijaną pionowo (bez osobnego „Zobacz wszystkie”).
+Przesunięcie wpisu w lewo lub prawo usuwa go; przycisk × jest alternatywą dla gestu,
+a „Cofnij” działa przez sześć sekund. Dotknięcie wpisu otwiera szczegóły źródła.
+Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwierają szczegółów.
+
+Lista przechowuje ostatnie 100 wykrytych zdarzeń z godziną wykrycia i opisem z tego
+momentu. Zapisuje je lokalnie w przeglądarce, również po usunięciu warunku alertu
+lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle. DEMO ma osobną
+historię w pamięci, resetowaną przy zmianie scenariusza; nie modyfikuje historii live.
+Zablokowany/uszkodzony localStorage nie blokuje pulpitu.
+
+Reguły: Cezar wymaga odpowiedzi; zadania zakończone w ostatnich 10 minutach;
+spotkania w ciągu 15 minut; RAM ≥90% przez ciągłą minutę. Limity AI tworzą osobne
+zdarzenia dla konta i okna: żółte tempo (>5 p.p.), czerwone (>15 p.p.), zużycie ≥90%.
+Każdy próg limitu zgłaszany jest najwyżej raz w danym oknie resetu, także po
+usunięciu wpisu i odświeżeniu strony; eskalacja do czerwonego tworzy nowy wpis,
+spadek z czerwonego do żółtego nie ostrzega ponownie. Pytania i RAM mogą zgłosić
+nowy epizod po potwierdzonym ustąpieniu warunku. Nieaktualne źródło nie potwierdza
+ustąpienia. Pamięć deduplikacji jest ograniczona do ostatnich 2000 jednorazowych
+sygnałów i 1000 aktywnych warunków.
 
 ## Weryfikacja
 
@@ -185,7 +222,7 @@ npm test
 npm run build
 ```
 
-Testy obejmują dotychczasowy interfejs DEMO, layout, Insights oraz integrację:
+Testy obejmują interfejs DEMO, layout, reguły i historię zdarzeń, gesty oraz integrację:
 paginację, autorytatywne liczniki, failed w grupie pytań, niepełne coverage,
 błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez DEMO
 fallbacku. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,

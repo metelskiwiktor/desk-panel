@@ -11,6 +11,9 @@
   --muted: #99a8be;
   --blue: #81aeef;
   --amber: #eac082;
+  --quota-green: #75d49b;
+  --quota-yellow: #e9c261;
+  --quota-red: #f2888b;
   --line: #2b3545;
 }
 * {
@@ -566,6 +569,38 @@ header {
 .meter.muted-meter > span {
   background: #7c889a;
 }
+.quota-pace-green { --quota-pace-color: var(--quota-green); }
+.quota-pace-yellow { --quota-pace-color: var(--quota-yellow); }
+.quota-pace-red { --quota-pace-color: var(--quota-red); }
+.quota-meter {
+  position: relative;
+  overflow: visible;
+  margin-top: 14px;
+  margin-bottom: 10px;
+}
+.quota-meter:not(.muted-meter) > span { background: var(--quota-pace-color); }
+.quota-time-marker {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 13px;
+  background: #e9edf5;
+  transform: translateX(-1px);
+}
+.quota-time-marker::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: -3px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid #e9edf5;
+}
+.quota-legend { margin: 20px 0; }
+.quota-pace-details { margin-top: 8px; }
+.quota-legend ul { list-style: none; padding: 0; font-size: 12px; color: #b0bed3; }
+.quota-legend li { display: flex; align-items: baseline; gap: 8px; margin: 10px 0; }
+.quota-legend-swatch { flex: 0 0 14px; height: 5px; border-radius: 3px; background: var(--quota-pace-color); }
 .card-intro {
   font-size: 13px;
   color: #b0bed3;
@@ -596,6 +631,42 @@ header {
 .insight.green .insight-dot {
   background: #8ac6a9;
 }
+.insight.red .insight-dot { background: var(--quota-red); }
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #52637d transparent;
+}
+.activity-swipe { position: relative; overflow: hidden; border-bottom: 1px solid #303a4b; }
+.activity-swipe:last-child { border-bottom: 0; }
+.activity-swipe-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #f2888b; background: #35232c; }
+.activity-row { position: relative; display: flex; align-items: center; background: #192230; transition: transform 160ms ease-out; }
+.activity-swipe.dragging .activity-row { transition: none; }
+.activity-row > .insight { min-width: 0; flex: 1; border-bottom: 0; touch-action: pan-y; user-select: none; }
+.activity-row .row-title { overflow-wrap: anywhere; }
+.activity-row .meta { overflow-wrap: anywhere; }
+.activity-time { margin-top: 5px; }
+.activity-remove { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; flex: 0 0 44px; padding: 0; border: 0; background: transparent; color: #99a8be; border-radius: 6px; }
+.activity-remove:hover { background: #29364a; }
+.activity-undo { min-height: 44px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 12px; color: #b0bed3; }
+.activity-undo:empty { min-height: 0; }
+.event-rules-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; line-height: 1.7; }
+.event-rules-table th, .event-rules-table td { padding: 12px 8px; border-bottom: 1px solid #303a4b; text-align: left; vertical-align: top; overflow-wrap: anywhere; hyphens: auto; }
+.event-rules-table th { font-weight: 500; }
+.event-rules-table thead th { color: #c3cee0; }
+.event-rules-table td { color: #b0bed3; }
+.event-rules-table th:first-child { width: 26%; padding-left: 0; }
+.event-rules-table tr > :last-child { padding-right: 0; }
+.event-rules-table tbody tr:last-child > * { border-bottom: 0; }
+.event-rules-notes { margin-top: 24px; }
+.event-rules-notes h3 { margin-bottom: 10px; }
+.event-rules-notes p + p { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .activity-row { transition: none; } }
 .insight > svg {
   margin-top: 5px;
   flex-shrink: 0;
@@ -806,7 +877,7 @@ nav {
   width: calc(100% - 40px);
   max-width: 880px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   padding: 7px;
   background: #182230f5;
   backdrop-filter: blur(14px);

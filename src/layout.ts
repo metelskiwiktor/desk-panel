@@ -3,7 +3,7 @@ export const widgetNames = {
   system: 'System',
   calendar: 'Kalendarz Google',
   quotas: 'Limity AI',
-  insights: 'Insights',
+  insights: 'Zdarzenia',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 export interface WidgetConfig {

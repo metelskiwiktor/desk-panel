@@ -5,9 +5,12 @@ import { MAX_AGE, MINUTE, quotaState, safeUrl } from './model';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime();
 describe('Insights: fakty z tych samych źródeł', () => {
-  it('priorytetyzuje odpowiedź, spotkanie i świeży limit; maksymalnie 3', () => {
+  it('priorytetyzuje odpowiedź i spotkanie, zachowuje wszystkie sygnały dla dziennika', () => {
     const facts = deriveInsights(createDemo(now), now);
-    expect(facts.map((f) => f.id)).toEqual(['task:decision', 'event:planning', 'quota:Claude']);
+    expect(facts[0].id).toBe('task:decision');
+    expect(facts[1].id).toBe(`event:planning:${now + 12 * MINUTE}`);
+    expect(facts.some(f => f.id.startsWith('quota:Claude:5h:'))).toBe(true);
+    expect(facts.length).toBeGreaterThan(3);
     expect(facts[1].title).toContain('12 min');
   });
   it.each(['empty', 'loading', 'unavailable', 'offline', 'stale'] as const)(
@@ -21,18 +24,21 @@ describe('Insights: fakty z tych samych źródeł', () => {
     data.tasks.data![0].status = 'running';
     expect(deriveInsights(data, now).some((f) => f.id === 'task:decision')).toBe(false);
   });
-  it('deduplikuje zadania oraz okna tego samego konta', () => {
+  it('deduplikuje zadania i zachowuje osobne okna tego samego konta', () => {
     const data = createDemo(now);
     data.tasks.data!.push(data.tasks.data![0]);
     data.quotas.data![0].snapshots[1].usedPercent = 96;
     const facts = deriveInsights(data, now);
-    expect(facts.map((f) => f.id)).toEqual(['task:decision', 'event:planning', 'quota:Claude']);
-    expect(facts[2].context).toBe('5h: 92% limitu · 7d: 96% limitu');
+    expect(facts.filter(f => f.id === 'task:decision')).toHaveLength(1);
+    const quota = facts.filter(f => f.id.startsWith('quota:Claude:'));
+    expect(quota).toHaveLength(2);
+    expect(quota[0].context).toContain('5h: 92% limitu');
+    expect(quota[1].context).toContain('7d: 96% limitu');
   });
   it.each([89.9, 90, 100])('próg quota >=90 dla %s', (value) => {
     const data = createDemo(now);
     data.quotas.data![0].snapshots[0].usedPercent = value;
-    expect(deriveInsights(data, now).some((f) => f.id === 'quota:Claude')).toBe(value >= 90);
+    expect(deriveInsights(data, now).some((f) => f.id.startsWith('quota:Claude:5h:'))).toBe(value >= 90);
   });
   it.each(['expired', 'old', 'null', 'future', 'reset-missing'] as const)(
     'tłumi sygnał quota: %s',
@@ -44,7 +50,7 @@ describe('Insights: fakty z tych samych źródeł', () => {
       if (kind === 'null') quota.usedPercent = null;
       if (kind === 'future') quota.observedAt = now + 1;
       if (kind === 'reset-missing') quota.resetAt = null;
-      expect(deriveInsights(data, now).some((f) => f.id === 'quota:Claude')).toBe(false);
+      expect(deriveInsights(data, now).some((f) => f.id.startsWith('quota:Claude:5h:') || f.id.startsWith('quota-pace:Claude:5h:'))).toBe(false);
     },
   );
   it('próg spotkania: od teraz do 15 min włącznie; najbliższe najpierw', () => {
@@ -59,10 +65,10 @@ describe('Insights: fakty z tych samych źródeł', () => {
       [15 * MINUTE + 1, false],
     ] as const) {
       event.startAt = now + delta;
-      expect(deriveInsights(data, now).some((f) => f.id === 'event:planning')).toBe(expected);
+      expect(deriveInsights(data, now).some((f) => f.id.startsWith('event:planning:'))).toBe(expected);
     }
   });
-  it('wybiera tylko najnowsze ukończone zadanie z ostatnich 10 min, bez przyszłych', () => {
+  it('zbiera wszystkie ukończone zadania z ostatnich 10 min, bez przyszłych', () => {
     const data = createDemo(now);
     data.calendar.data = [];
     data.quotas.data = [];
@@ -72,7 +78,7 @@ describe('Insights: fakty z tych samych źródeł', () => {
       { ...done, id: 'older', completedAt: now - 9 * MINUTE },
       { ...done, id: 'future', completedAt: now + 1 },
     ];
-    expect(deriveInsights(data, now).map((f) => f.id)).toEqual(['task:done-1']);
+    expect(deriveInsights(data, now).map((f) => f.target)).toEqual([{ kind: 'task', id: 'done-1' }, { kind: 'task', id: 'older' }]);
     data.tasks.data.forEach((t) => {
       t.completedAt = now - 10 * MINUTE - 1;
     });

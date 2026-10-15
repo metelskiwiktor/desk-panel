@@ -27,7 +27,7 @@ describe('interaktywny panel', () => {
     await user.selectOptions(screen.getByLabelText('Zestaw danych'), scenario);
     await user.click(nav('Pulpit'));
     expect(screen.getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
-    expect(screen.getByText('Brak aktualnych sygnałów wymagających uwagi.')).toBeTruthy();
+    expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
     const counts = screen
       .getAllByRole('button')
       .filter((button) => button.textContent?.includes('W kolejce'));
@@ -37,19 +37,21 @@ describe('interaktywny panel', () => {
     const user = userEvent.setup();
     render(<App initialLive={false} />);
     expect(screen.getAllByText(/Dane demonstracyjne/).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: /Cezar czeka na odpowiedź/ }));
+    await user.click(screen.getByRole('button', { name: /^Cezar czeka na odpowiedź/ }));
     expect(
       screen.getByRole('heading', { name: 'Potwierdź zakres testów kalendarza' }),
     ).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Otwórz źródło/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: /Wróć/ }));
-    expect(screen.getByRole('heading', { name: 'Insights' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Zdarzenia' })).toBeTruthy();
   });
   it('otwiera quota z timestampami, resetem i dyskretną historią', async () => {
     const user = userEvent.setup();
     render(<App initialLive={false} />);
+    expect(screen.queryByRole('region', { name: 'Legenda wykresu limitów' })).toBeNull();
     await user.click(screen.getByRole('button', { name: /^✳ Claude/ }));
     expect(screen.getByRole('heading', { name: 'Claude · limity konta' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Legenda wykresu limitów' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Historia obserwacji' })).toBeTruthy();
     expect(screen.getAllByText('Reset według źródła')).toHaveLength(2);
     expect(screen.getByText('75% limitu')).toBeTruthy();
@@ -65,6 +67,13 @@ describe('interaktywny panel', () => {
     expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
     await user.click(nav('System'));
     expect(screen.getByText(/Backend Windows nie jest podłączony/)).toBeTruthy();
+    await user.click(nav('Zdarzenia'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Zdarzenia' })).toBeTruthy();
+    const rules = screen.getByRole('table', { name: 'Aktualne reguły tworzenia zdarzeń' });
+    expect(within(rules).getAllByRole('row')).toHaveLength(8);
+    expect(within(rules).getByRole('columnheader', { name: 'Kiedy ponownie' })).toBeTruthy();
+    expect(within(rules).getByText('Zużycie wyprzedza czas o ponad 5 do 15 p.p.')).toBeTruthy();
+    expect(screen.getByText(/Restart serwera i odświeżenie strony zachowują historię/)).toBeTruthy();
     await user.click(nav('Ustawienia'));
     expect(screen.getByRole('heading', { name: 'Twój układ' })).toBeTruthy();
   });
@@ -73,7 +82,7 @@ describe('interaktywny panel', () => {
     const view = render(<App initialLive={false} />);
     await user.click(nav('Ustawienia'));
     await user.click(screen.getByRole('checkbox', { name: 'System' }));
-    await user.click(screen.getByRole('button', { name: 'Insights w górę' }));
+    await user.click(screen.getByRole('button', { name: 'Zdarzenia w górę' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Wariant Cezar' }), 'compact');
     const config = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
     expect(config.widgets[1].visible).toBe(false);
@@ -95,12 +104,12 @@ describe('interaktywny panel', () => {
     await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'quota-missing');
     await user.click(nav('Pulpit'));
     expect(screen.getAllByText('Brak danych')).toHaveLength(4);
-    expect(screen.queryByText('Claude: limit blisko wyczerpania')).toBeNull();
+    expect(screen.queryByText(/Claude.*limit blisko wyczerpania/)).toBeNull();
     await user.click(nav('Ustawienia'));
     await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'stale');
     await user.click(nav('Pulpit'));
     expect(screen.getAllByText(/Nieaktualne/).length).toBeGreaterThan(0);
-    expect(screen.getByText('Brak aktualnych sygnałów wymagających uwagi.')).toBeTruthy();
+    expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
     await user.click(nav('Ustawienia'));
     await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'empty');
     await user.click(nav('Pulpit'));

@@ -1,4 +1,6 @@
 import { fresh, MAX_AGE, MINUTE, quotaState, type DashboardData, type Detail } from './model';
+import { quotaPace, quotaResetIn } from './quota-pace';
+import { EVENT_RULES } from './event-rules';
 
 export interface Insight {
   id: string;
@@ -6,9 +8,9 @@ export interface Insight {
   title: string;
   context: string;
   target: Detail;
-  tone: 'amber' | 'blue' | 'green';
+  tone: 'amber' | 'blue' | 'green' | 'red';
 }
-/** Pure recomputation suppresses resolved conditions. IDs deduplicate source facts. */
+/** Fresh conditions only; the event journal records their occurrences separately. */
 export function deriveInsights(data: DashboardData, now: number): Insight[] {
   const facts: Insight[] = [];
   if (fresh(data.tasks, now, MAX_AGE.tasks)) {
@@ -29,26 +31,26 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
           t.status === 'done' &&
           t.completedAt !== undefined &&
           t.completedAt <= now &&
-          now - t.completedAt <= 10 * MINUTE,
+          now - t.completedAt <= EVENT_RULES.completedWithinMinutes * MINUTE,
       )
-      .sort((a, b) => b.completedAt! - a.completedAt!)[0];
-    if (completed)
+      .sort((a, b) => b.completedAt! - a.completedAt!);
+    for (const task of completed)
       facts.push({
-        id: `task:${completed.id}`,
+        id: `task-done:${task.id}:${task.completedAt}`,
         priority: 40,
         title: 'Zadanie zostało zakończone',
-        context: completed.title,
-        target: { kind: 'task', id: completed.id },
+        context: task.title,
+        target: { kind: 'task', id: task.id },
         tone: 'green',
       });
   }
   if (fresh(data.calendar, now, MAX_AGE.calendar)) {
-    const event = (data.calendar.data ?? [])
-      .filter((e) => !e.allDay && e.startAt >= now && e.startAt - now <= 15 * MINUTE)
-      .sort((a, b) => a.startAt - b.startAt)[0];
-    if (event)
+    const events = (data.calendar.data ?? [])
+      .filter((e) => !e.allDay && e.startAt >= now && e.startAt - now <= EVENT_RULES.meetingWithinMinutes * MINUTE)
+      .sort((a, b) => a.startAt - b.startAt);
+    for (const event of events)
       facts.push({
-        id: `event:${event.id}`,
+        id: `event:${event.id}:${event.startAt}`,
         priority: 90,
         title: `Spotkanie za ${Math.ceil((event.startAt - now) / MINUTE)} min`,
         context: event.title,
@@ -58,18 +60,31 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
   }
   if (fresh(data.quotas, now, MAX_AGE.quotas)) {
     for (const account of data.quotas.data ?? []) {
-      const high = account.snapshots.filter(
-        (s) => quotaState(s, now) === 'fresh' && s.usedPercent! >= 90,
-      );
-      if (high.length)
-        facts.push({
-          id: `quota:${account.provider}`,
-          priority: 80,
-          title: `${account.provider}: limit blisko wyczerpania`,
-          context: high.map((s) => `${s.window}: ${s.usedPercent}% limitu`).join(' · '),
-          target: { kind: 'quota', provider: account.provider },
-          tone: 'amber',
-        });
+      for (const snapshot of account.snapshots) {
+        if (quotaState(snapshot, now) !== 'fresh') continue;
+        const pace = quotaPace(snapshot, now)!;
+        const context = `${snapshot.window}: ${snapshot.usedPercent}% limitu · reset za ${quotaResetIn(snapshot.resetAt!, now)}`;
+        if (pace.tone !== 'green') {
+          const excess = snapshot.usedPercent! - pace.elapsedPercent;
+          facts.push({
+            id: `quota-pace:${account.provider}:${snapshot.window}:${snapshot.resetAt}:${pace.tone}`,
+            priority: pace.tone === 'red' ? 85 : 60,
+            title: `${account.provider} · ${snapshot.window}: ${pace.tone === 'red' ? 'wysokie tempo zużycia' : 'zużycie wyprzedza czas'}`,
+            context: `+${excess.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} p.p. względem czasu · ${context}`,
+            target: { kind: 'quota', provider: account.provider },
+            tone: pace.tone === 'red' ? 'red' : 'amber',
+          });
+        }
+        if (snapshot.usedPercent! >= EVENT_RULES.quotaHighPercent)
+          facts.push({
+            id: `quota:${account.provider}:${snapshot.window}:${snapshot.resetAt}`,
+            priority: 80,
+            title: `${account.provider} · ${snapshot.window}: limit blisko wyczerpania`,
+            context,
+            target: { kind: 'quota', provider: account.provider },
+            tone: 'amber',
+          });
+      }
     }
   }
   if (fresh(data.system, now, MAX_AGE.system)) {
@@ -81,15 +96,15 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
     let start = last?.at ?? now;
     let next = start;
     for (const s of samples.slice().reverse()) {
-      if (s.ramTotalGb <= 0 || s.ramUsedGb / s.ramTotalGb < 0.9 || next - s.at > 30_000) break;
+      if (s.ramTotalGb <= 0 || s.ramUsedGb / s.ramTotalGb < EVENT_RULES.ramHighPercent / 100 || next - s.at > 30_000) break;
       start = s.at;
       next = s.at;
     }
-    if (last && now - last.at <= 30_000 && last.at - start >= MINUTE)
+    if (last && now - last.at <= 30_000 && last.at - start >= EVENT_RULES.ramForMinutes * MINUTE)
       facts.push({
         id: 'system:ram',
         priority: 70,
-        title: 'RAM powyżej 90% przez minutę',
+        title: `RAM ≥${EVENT_RULES.ramHighPercent}% przez ${EVENT_RULES.ramForMinutes} minutę`,
         context: `${last.ramUsedGb.toLocaleString('pl-PL')} z ${last.ramTotalGb} ${data.system.live ? 'GiB' : 'GB'}`,
         target: { kind: 'system' },
         tone: 'amber',
@@ -101,5 +116,5 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
         .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))
         .map((f) => [f.id, f]),
     ).values(),
-  ].slice(0, 3);
+  ];
 }
