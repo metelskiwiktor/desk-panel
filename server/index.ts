@@ -10,5 +10,7 @@ if (cezar.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(
 }
 const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
-const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, env: process.env });
+// Gmail accounts shown in the mail list; the calendar account by default.
+const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
+const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env });
 createPanelServer(sources, root).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));

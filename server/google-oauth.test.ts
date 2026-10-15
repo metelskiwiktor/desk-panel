@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { OAuth2Client, LoginTicket } from 'google-auth-library';
-import { createCalendarOAuth } from './calendar-oauth';
+import { createGoogleAccount, type GoogleService } from './google-oauth';
 import { readPrivate, writePrivate } from './private-store';
 
 vi.mock('./private-store', () => ({ readPrivate: vi.fn(async () => { throw new Error('missing'); }), writePrivate: vi.fn(async () => {}) }));
@@ -16,15 +16,16 @@ afterEach(async () => {
     return rm(path, { recursive: true, force: true });
   }));
 });
-async function setup(type: 'installed' | 'web' = 'installed') {
+async function setup(type: 'installed' | 'web' = 'installed', services: GoogleService[] = ['calendar']) {
   const dir = await mkdtemp(join(tmpdir(), 'desk-oauth-test-'));
   dirs.push(dir);
   const clientFile = join(dir, 'client.json');
   await writeFile(clientFile, JSON.stringify({ [type]: { client_id: 'test.apps.googleusercontent.com', client_secret: 'test-oauth-secret' } }));
-  return createCalendarOAuth({ clientFile, tokenFile: join(dir, 'token'), email: 'owner@gmail.com', redirectUri: 'http://127.0.0.1:5174/api/calendar/callback' });
+  return createGoogleAccount({ clientFile, tokenFile: join(dir, 'token'), email: 'owner@gmail.com', services, redirectUri: 'http://127.0.0.1:5174/api/calendar/callback' });
 }
-function mockExchange(email: string) {
-  vi.spyOn(OAuth2Client.prototype, 'getToken').mockResolvedValue({ tokens: { id_token: 'fake-id', refresh_token: 'fake-refresh', scope: 'openid email https://www.googleapis.com/auth/calendar.readonly' }, res: null } as never);
+const CALENDAR = 'https://www.googleapis.com/auth/calendar.readonly', GMAIL = 'https://www.googleapis.com/auth/gmail.modify';
+function mockExchange(email: string, scope = `openid email ${CALENDAR}`) {
+  vi.spyOn(OAuth2Client.prototype, 'getToken').mockResolvedValue({ tokens: { id_token: 'fake-id', refresh_token: 'fake-refresh', scope }, res: null } as never);
   vi.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockResolvedValue(new LoginTicket('header', { email, email_verified: true, iss: 'https://accounts.google.com', aud: 'test.apps.googleusercontent.com', sub: 'test', iat: 1, exp: 9999999999 }) as never);
 }
 describe('Google OAuth', () => {
@@ -68,8 +69,33 @@ describe('Google OAuth', () => {
     mockExchange('owner@gmail.com');
     const query = new URLSearchParams({ state: url.searchParams.get('state')!, code: 'code' });
     await auth.finish(query);
-    expect(writePrivate).toHaveBeenCalledWith(expect.any(String), { email: 'owner@gmail.com', clientId: 'test.apps.googleusercontent.com', refreshToken: 'fake-refresh' });
+    expect(writePrivate).toHaveBeenCalledWith(expect.any(String), { email: 'owner@gmail.com', clientId: 'test.apps.googleusercontent.com', refreshToken: 'fake-refresh', scopes: ['openid', 'email', CALENDAR] });
     expect(await auth.status()).toMatchObject({ status: 'connected', email: 'owner@gmail.com' });
     await expect(auth.finish(query)).rejects.toMatchObject({ reason: 'invalid_callback' });
+  });
+  it('asks for every service of the account and refuses a consent with an unticked permission', async () => {
+    const auth = await setup('installed', ['calendar', 'mail']);
+    const url = new URL(await auth.begin());
+    expect(url.searchParams.get('scope')).toContain('gmail.modify');
+    expect(url.searchParams.get('scope')).not.toContain('mail.google.com');
+    mockExchange('owner@gmail.com', `openid email ${CALENDAR}`);
+    await expect(auth.finish(new URLSearchParams({ state: url.searchParams.get('state')!, code: 'code' }))).rejects.toMatchObject({ reason: 'scopes_missing' });
+    expect(writePrivate).not.toHaveBeenCalled();
+  });
+  it('keeps a calendar-only token from before Gmail working for the calendar and asks to reconnect for mail', async () => {
+    const auth = await setup('installed', ['calendar', 'mail']);
+    vi.mocked(readPrivate).mockResolvedValueOnce({ clientId: 'test.apps.googleusercontent.com', email: 'owner@gmail.com', refreshToken: 'fake-restored' });
+    expect(await auth.status()).toMatchObject({ status: 'unavailable', reason: 'scopes_missing', missing: ['mail'] });
+    await expect(auth.request('mail', 'https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX')).rejects.toMatchObject({ reason: 'scopes_missing' });
+    const call = vi.spyOn(OAuth2Client.prototype, 'request').mockResolvedValue({ data: { ok: true } } as never);
+    expect(await auth.request('calendar', 'https://www.googleapis.com/calendar/v3/calendars/x')).toEqual({ ok: true });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+  it('connects a mail-only account once Gmail consent is granted', async () => {
+    const auth = await setup('installed', ['mail']);
+    const url = new URL(await auth.begin());
+    mockExchange('owner@gmail.com', `openid email ${GMAIL}`);
+    await auth.finish(new URLSearchParams({ state: url.searchParams.get('state')!, code: 'code' }));
+    expect(await auth.status()).toMatchObject({ status: 'connected', missing: [] });
   });
 });

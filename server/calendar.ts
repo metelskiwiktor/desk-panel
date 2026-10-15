@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 import { calendarSourceSchema, type CalendarSource } from '../src/calendar-contract';
-import { CalendarAuthError } from './calendar-oauth';
+import { GoogleAuthError } from './google-oauth';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const moment = z.object({ date: date.optional(), dateTime: z.iso.datetime({ offset: true }).optional() })
@@ -67,8 +67,8 @@ export function createCalendarReader(calendarId: string, request: Request, now =
         const failure = error as { code?: string; response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } } };
         const status = failure.response?.status;
         const disabled = failure.response?.data?.error?.errors?.some(e => e.reason === 'accessNotConfigured');
-        const unavailable = error instanceof CalendarAuthError || status === 401 || status === 403 || status === 404;
-        const message = error instanceof CalendarAuthError ? (error.reason === 'client_missing' || error.reason === 'invalid_client'
+        const unavailable = error instanceof GoogleAuthError || status === 401 || status === 403 || status === 404;
+        const message = error instanceof GoogleAuthError ? (error.reason === 'client_missing' || error.reason === 'invalid_client'
           ? 'Dodaj klienta OAuth Google, a następnie zaloguj się w Ustawieniach.' : 'Zaloguj się przez Google w Ustawieniach panelu.')
           : disabled ? 'Włącz Google Calendar API w projekcie klienta OAuth.'
           : status === 403 || status === 404 ? 'Sprawdź zgodę Google i identyfikator kalendarza.'

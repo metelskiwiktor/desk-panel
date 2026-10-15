@@ -71,6 +71,7 @@ export type Detail =
   | { kind: 'task'; id: string }
   | { kind: 'event'; id: string }
   | { kind: 'quota'; provider: Provider }
+  | { kind: 'mail'; id: string }
   | { kind: 'system' };
 export const MINUTE = 60_000;
 export const MAX_AGE = {
@@ -78,6 +79,7 @@ export const MAX_AGE = {
   calendar: 5 * MINUTE,
   quotas: 2 * MINUTE,
   system: 15_000,
+  mail: 2 * MINUTE,
 };
 export function fresh<T>(source: Source<T>, now: number, maxAge: number): boolean {
   return (

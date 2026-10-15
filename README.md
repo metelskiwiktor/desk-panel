@@ -36,6 +36,7 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_CEZAR_URL` | `http://127.0.0.1:4321` | Lokalny serwer Cezara; HTTP loopback, bez credentials |
 | `DESK_PORT` | `5174` | Port serwera Desk Panelu; przy zmianie w development zmień również proxy Vite |
 | `DESK_CALENDAR_ID` | `metelski.wiktor@gmail.com` | Konto Google i jego główny kalendarz; login jest sprawdzany |
+| `DESK_MAIL_ACCOUNTS` | konto z `DESK_CALENDAR_ID` | Konta Gmail na liście poczty, rozdzielone przecinkami (np. `a@gmail.com,b@gmail.com`) |
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |
 
@@ -45,17 +46,18 @@ Integracja loguje się na własne konto użytkownika przez OAuth Google.
 Nie używa klucza Google Play ani konta usługi i nie wymaga udostępniania kalendarza.
 Jednorazowe przygotowanie w Google Cloud:
 
-1. Włącz Google Calendar API w projekcie (np. `tabnote-cli`).
+1. Włącz Google Calendar API i Gmail API w projekcie (np. `tabnote-cli`).
 2. W Google Auth Platform skonfiguruj Audience External; w trybie Testing dodaj
-   swoje konto jako użytkownika testowego.
+   wszystkie swoje konta (kalendarz i poczta) jako użytkowników testowych. W Data Access
+   dodaj zakresy `calendar.readonly` i `gmail.modify`.
 3. Utwórz klienta OAuth typu **Aplikacja komputerowa / Desktop app**. Obsługiwany
    jest też klient **Web**: dodaj w Google Cloud Authorized redirect URI dokładnie
    `http://127.0.0.1:5174/api/calendar/callback` (dostosuj port przy `DESK_PORT`).
 4. Pobierz JSON i zapisz jako `~/.desk-panel/google-oauth-client.json` lub wskaż
    jego lokalną ścieżkę przez `DESK_GOOGLE_OAUTH_CLIENT_FILE`.
-5. W Desk Panel → Ustawienia → Twoje konto Google kliknij „Połącz przez Google”,
-   następnie „Otwórz logowanie Google”. Wybierz `metelski.wiktor@gmail.com` i udziel
-   zgody na odczyt. Użyj zwykłej przeglądarki Chrome/Edge, jeśli Google odrzuci
+5. W Desk Panel → Ustawienia → Konta Google kliknij przy każdym koncie „Połącz przez Google”,
+   następnie „Otwórz logowanie Google”. Wybierz właściwe konto i zaznacz wszystkie
+   uprawnienia (zgoda z odznaczonym uprawnieniem jest odrzucana). Użyj zwykłej przeglądarki Chrome/Edge, jeśli Google odrzuci
    logowanie w przeglądarce osadzonej. Agenda odświeży się automatycznie.
 
 Google w trybie Testing może ograniczać trwałość zgody; jeśli dostęp wygaśnie,
@@ -67,8 +69,9 @@ oraz openid/email do sprawdzenia tożsamości zalogowanego użytkownika. OAuth m
 PKCE, losowy state, jednorazowy callback i dziesięciominutowy limit logowania.
 Callback działa wyłącznie na `http://127.0.0.1:5174/api/calendar/callback`
 (port zmienia się wraz z `DESK_PORT`). Połączenie z innym kontem jest odrzucane.
-Refresh token zapisuje się atomowo poza repo w
-`~/.desk-panel/calendar-token.dpapi`, zaszyfrowany DPAPI dla bieżącego użytkownika
+Refresh token każdego konta zapisuje się atomowo poza repo — konto kalendarza w
+`~/.desk-panel/calendar-token.dpapi`, pozostałe w `~/.desk-panel/google-<email>.dpapi` —
+razem z listą przyznanych zakresów, zaszyfrowany DPAPI dla bieżącego użytkownika
 Windows. Tokeny i klient OAuth nigdy nie trafiają do przeglądarki. Bez Windows
 bezpieczny zapis jest niedostępny; aplikacja zgłasza ten stan zamiast zapisać token jawnie.
 
@@ -86,6 +89,24 @@ ponawia po 15 sekundach, zachowując ostatnią agendę i jej czas. 403/404 i bra
 klienta OAuth pokazują brak dostępu, a nie pusty kalendarz. Surowe błędy GoogleAuth
 i tokeny nigdy nie trafiają do odpowiedzi lub logów. Stary zapis nie tworzy
 nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń.
+
+## Poczta (Gmail)
+
+Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych (`in:inbox is:unread`, wszystkie
+karty, bez spamu i kosza) ze wszystkich kont z `DESK_MAIL_ACCOUNTS`, najnowsze na górze.
+Przesunięcie w lewo oznacza wątek jako przeczytany, w prawo przenosi go do Kosza w Gmailu
+(odwracalne przez 30 dni; trwałego usuwania nie ma). Te same akcje są pod przyciskami
+✓ i kosza oraz w szczegółach wątku. Przez 6 sekund „Cofnij” wykonuje w Gmailu akcję
+odwrotną (nieprzeczytane / przywróć z kosza). Gdy Gmail odmówi, wątek wraca na listę.
+
+Lista przewija się wewnątrz karty o stałej wysokości (`--mail-list-height`), a kolejne
+porcje po 30 wątków doczytuje się przy przewijaniu. Backend czyta tylko metadane (nadawca,
+temat, podgląd Gmaila, data), nigdy treści ani załączników; niezmienione wątki (ten sam
+`historyId`) bierze z pamięci. Odczyt co 30 s; po błędzie zostaje ostatnia lista i jej czas.
+
+Zakres `gmail.modify` pozwala czytać, zmieniać etykiety i przenosić do kosza. Konto
+kalendarza połączone przed dodaniem poczty dalej pokazuje kalendarz, a w Ustawieniach
+prosi o ponowne połączenie, żeby dodać Gmail.
 
 ## Rzeczywiste dane Cezara
 
@@ -112,8 +133,8 @@ Odczytuje wszystkie projekty zarejestrowane w działającym Cezarze.
   Brak odczytu to kreski, nigdy zera. Runtime JSON jest walidowany na obu granicach.
 
 Serwer nasłuchuje tylko na 127.0.0.1, sprawdza Host i nie otwiera CORS.
-Odczyty to GET do konkretnych projekcji; rozpoczęcie OAuth to POST z kontrolą
-Origin (ochrona CSRF). Nie pozwala na ogólne proxy lub akcje tasków.
+Odczyty to GET do konkretnych projekcji; rozpoczęcie OAuth i akcje poczty to POST
+z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Nie pozwala na ogólne proxy lub akcje tasków.
 Private api-client Cezara nie jest publikowany: integracja waliduje dokumentowany
 podzbiór kontraktu bez importów do sąsiedniego checkoutu.
 

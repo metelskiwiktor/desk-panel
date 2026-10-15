@@ -2,9 +2,10 @@ import { join } from 'node:path';
 import { createScenarioSources, loadScenario } from '../server/scenario';
 import { jsonRoutes } from '../server/sources';
 import type { DashboardData, Source } from './model';
+import { mailActionSchema } from './mail-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
-export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing';
+export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many';
 export const scenarioFile = (name: ScenarioName) => join(process.cwd(), 'scenarios', `${name}.json`);
 
 /** What a UI hook holds when the endpoint fails or never answers. */
@@ -28,11 +29,19 @@ export function createFixture(now: number, name: ScenarioName = 'standard'): Das
 
 /** `fetch` replacement answering the panel API from a scenario file, as the scenario server does. */
 export function scenarioFetch(name: ScenarioName): typeof fetch {
-  const routes = jsonRoutes(createScenarioSources(scenarioFile(name)));
-  return (async (input: string | URL | Request) => {
-    const route = routes[new URL(String(input), 'http://127.0.0.1').pathname];
-    if (!route) return new Response('', { status: 404 });
-    try { return Response.json(await route()); }
-    catch (error) { return new Response('', { status: (error as { status?: number }).status ?? 502 }); }
+  const sources = createScenarioSources(scenarioFile(name));
+  const routes = jsonRoutes(sources);
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input), 'http://127.0.0.1');
+    try {
+      if (init?.method === 'POST' && url.pathname === '/api/mail/action') {
+        const { account, threadId, action } = mailActionSchema.parse(JSON.parse(String(init.body)));
+        await sources.mailAction(account, threadId, action);
+        return Response.json({ ok: true });
+      }
+      const route = routes[url.pathname];
+      if (!route || init?.method === 'POST') return new Response('', { status: 404 });
+      return Response.json(await route(url));
+    } catch (error) { return new Response('', { status: (error as { status?: number }).status ?? 502 }); }
   }) as typeof fetch;
 }
