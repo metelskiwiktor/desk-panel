@@ -1,9 +1,12 @@
+import { usePollingEnabled } from './polling';
 import { useEffect, useState } from 'react';
 import { systemSourceSchema, type SystemSource } from './system-contract';
 
 export function useSystem() {
   const [source, setSource] = useState<SystemSource & { loadedAt?: number }>({ name: 'Komputer', live: true, status: 'loading', observedAt: null, data: null });
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -24,6 +27,6 @@ export function useSystem() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, []);
+  }, [pollingEnabled]);
   return source;
 }

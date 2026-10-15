@@ -1,9 +1,12 @@
+import { usePollingEnabled } from './polling';
 import { useEffect, useState } from 'react';
 import { quotaSourceSchema, type QuotaSource } from './quota-contract';
 
 export function useQuotas() {
   const [source, setSource] = useState<QuotaSource & { loadedAt?: number }>({ live: true, name: 'Zapisane limity AI', status: 'loading', observedAt: null, data: null });
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -24,6 +27,6 @@ export function useQuotas() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, []);
+  }, [pollingEnabled]);
   return source;
 }

@@ -33,6 +33,8 @@ W Ustawieniach „Otwórz podgląd pionowy” osadza niezmieniony panel w osobny
 o wymiarach głównego ekranu z `devices.json`. Podgląd przewija się bez automatycznego
 pomniejszania, a powiększenie przeglądarki działa jak zwykle. Jego style dotyczą tylko
 zewnętrznej warstwy; dashboard używa tego samego układu co na docelowym ekranie.
+Ukryty panel zachowuje stronę i stan, ale wstrzymuje odpytywanie API i anuluje
+trwające odczyty. Po zamknięciu podglądu odczyty wznawiają się od razu.
 Limity AI są zawsze bezpośrednio pod kartami. Wysokość kart wynika z zawartości,
 a długie listy poczty przewijają się wewnątrz karty.
 

@@ -1,3 +1,4 @@
+import { usePollingEnabled } from './polling';
 import { useEffect, useState } from 'react';
 import { cezarSchema, type CezarSnapshot } from './cezar-contract';
 import type { Source, Task } from './model';
@@ -5,7 +6,9 @@ import type { Source, Task } from './model';
 export function useCezar() {
   const [source, setSource] = useState<Source<Task[]>>({ status: 'loading', data: null, observedAt: null, live: true });
   const [snapshot, setSnapshot] = useState<CezarSnapshot | null>(null);
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -29,6 +32,6 @@ export function useCezar() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, []);
+  }, [pollingEnabled]);
   return { source, snapshot };
 }

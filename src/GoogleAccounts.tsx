@@ -1,3 +1,4 @@
+import { usePollingEnabled } from './polling';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { CalendarDays } from 'lucide-react';
@@ -19,7 +20,9 @@ export function GoogleAccounts() {
   const [authorization, setAuthorization] = useState<{ email: string; url: string }>();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState<string>();
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -36,7 +39,7 @@ export function GoogleAccounts() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, []);
+  }, [pollingEnabled]);
   async function begin(email: string) {
     setBusy(email); setMessage(''); setAuthorization(undefined);
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { App } from './App';
 import { devices, viewportsOf } from './devices';
+import { PollingContext } from './polling';
 
 const EXIT_MESSAGE = 'desk-panel:close-preview';
 const FRAME_PARAM = 'panel-preview';
@@ -9,7 +10,7 @@ const target = viewportsOf(Object.keys(devices)[0])[0];
 /**
  * Preview owns the viewport. The embedded dashboard receives no layout overrides.
  * The host dashboard stays mounted underneath (hidden), so closing returns to the same
- * page with pending undo intact; its API reads are served from the backend caches.
+ * page with pending undo intact. Its polling is paused until the preview closes.
  */
 export function TabletPreview() {
   const embedded = window.parent !== window && new URLSearchParams(window.location.search).get(FRAME_PARAM) === '1';
@@ -24,7 +25,9 @@ export function TabletPreview() {
     return () => window.removeEventListener('message', receive);
   }, [enabled]);
   if (embedded) return <App tabletPreview onTabletPreviewChange={() => window.parent.postMessage(EXIT_MESSAGE, window.location.origin)} />;
-  const host = <div hidden={enabled}><App onTabletPreviewChange={() => setEnabled(true)} /></div>;
+  const host = <div hidden={enabled}><PollingContext.Provider value={!enabled}>
+    <App onTabletPreviewChange={() => setEnabled(true)} />
+  </PollingContext.Provider></div>;
   if (!enabled) return host;
   const url = new URL(window.location.href);
   url.searchParams.set(FRAME_PARAM, '1');
