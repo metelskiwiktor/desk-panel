@@ -26,6 +26,11 @@ check:
     npm test
     npm run build
 
+# Bring origin/main in (stops on any conflict with local work), test, build and restart
+# the service with it, uncommitted local changes included. Pass --force to redeploy.
+update *args:
+    node scripts/update.mjs {{args}}
+
 # Manage the Windows service: STATUS, START, STOP, RESTART; RUN runs in foreground.
 service action="STATUS":
     & ./servy/desk-panel.ps1 -Action '{{action}}'

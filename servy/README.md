@@ -17,8 +17,21 @@ i rotację logów (10 MB, do 5 plików). Serwuje zbudowany `dist` na
 http://127.0.0.1:5174, także bez otwartej sesji terminala.
 
 `just service` pokazuje stan, `just service RESTART` restartuje, a
-`just service STOP` zatrzymuje. Po zmianach kodu użyj `just check`, potem
-`just service RESTART`. Instalator nie uruchamia dodatkowych serwerów Cezara ani
+`just service STOP` zatrzymuje. Zmiany wdrażasz przez `just update`:
+
+1. Pobiera `origin/main`. Jeśli zdalne zmiany dotykają plików zmienionych lokalnie
+   albo lokalne commity konfliktują ze zdalnymi, nic nie zaciąga — wypisuje pliki.
+   W przeciwnym razie scala (lokalne niezacommitowane zmiany zostają na miejscu).
+2. Gdy nic się nie zmieniło od ostatniego wdrożenia (commit + lokalne zmiany),
+   kończy bez restartu. `just update --force` wdraża mimo to.
+3. Przy zmianie `package-lock.json` zatrzymuje usługę i robi `npm ci`.
+4. Testy, typecheck i build do `dist.next`; dopiero po sukcesie podmienia `dist`.
+   Przy błędzie usługa dalej serwuje poprzedni frontend.
+5. Restartuje usługę (okno UAC) i sprawdza, czy API odpowiada.
+
+Wdrażane jest to, co jest w katalogu — razem z niezacommitowanymi zmianami.
+Usługa uruchamia serwer z plików źródłowych, więc jej restart z innego powodu
+(awaria, reboot) też użyje bieżącego kodu serwera. Instalator nie uruchamia dodatkowych serwerów Cezara ani
 adaptera — panel toleruje ich późniejszy start.
 
 Logi: `servy/logs/Desk-Panel/stdout.log` i `stderr.log` (ignorowane przez Git).

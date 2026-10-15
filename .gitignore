@@ -11,3 +11,6 @@ servy/registrations/
 *.dpapi
 client_secret*.json
 google-oauth-client.json
+dist.next/
+dist.old/
+.deployed

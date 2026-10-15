@@ -11,6 +11,11 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   scenario API on free ports, never the service port) and take Playwright
   screenshots into output/screenshots. Use this to check UI changes visually.
 - `just check`: all tests, typecheck and frontend build. Run before publishing.
+- `just update [--force]`: deploy to the service — merges origin/main only when it
+  cannot conflict with local work (otherwise lists the files and changes
+  nothing), runs tests and build, swaps dist and restarts. Uncommitted local
+  changes are deployed too; an unchanged version is skipped. Restart may show a
+  UAC prompt the user must confirm.
 - `just service`: Windows service status. `just service RESTART` applies changes
   after a successful build. Never run another listener while the service runs.
 - `just install`: first-time Servy registration; may need Windows credentials
