@@ -1,0 +1,15 @@
+{
+  "projectRoot": "..",
+  "pathPrefix": ["C:\\nvm4w\\nodejs", "${UserProfile}\\.local\\bin"],
+  "services": [
+    {
+      "id": "desk-panel",
+      "name": "Desk-Panel",
+      "script": "servy/desk-panel.ps1",
+      "workingDirectory": "${ProjectRoot}",
+      "executable": "C:\\nvm4w\\nodejs\\node.exe",
+      "arguments": ["${ProjectRoot}\\node_modules\\tsx\\dist\\cli.mjs", "server/index.ts"],
+      "environment": {"DESK_PORT": "5174"}
+    }
+  ]
+}

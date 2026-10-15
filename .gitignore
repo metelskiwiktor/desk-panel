@@ -1,0 +1,13 @@
+node_modules/
+dist/
+output/
+.playwright-cli/
+.env
+.env.*
+!.env.example
+*.log
+servy/logs/
+servy/registrations/
+*.dpapi
+client_secret*.json
+google-oauth-client.json
