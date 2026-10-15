@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ActivityFeed } from './ActivityFeed';
 import { useActivityLog } from './useActivityLog';
-import { createDemo } from './demo';
+import { createFixture } from './test-fixtures';
 import { emptyActivityLog, recordActivity, type ActivityEntry } from './activity-log';
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
@@ -13,7 +13,7 @@ const entry: ActivityEntry = { id:'1', detectedAt:now, title:'Przykładowy alert
 it('opens details by tap/keyboard, removes by button, and provides undo without a separate view', async () => {
   const user = userEvent.setup();
   const open=vi.fn(), dismiss=vi.fn(), restore=vi.fn();
-  render(<ActivityFeed entries={[entry]} live open={open} dismiss={dismiss} restore={restore} canUndo storageError={false} />);
+  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={restore} canUndo storageError={false} />);
   await user.click(screen.getByRole('button',{name:/^Przykładowy alert/}));
   expect(open).toHaveBeenCalledWith(entry.target);
   await user.click(screen.getByRole('button',{name:'Usuń zdarzenie: Przykładowy alert'}));
@@ -26,7 +26,7 @@ it('opens details by tap/keyboard, removes by button, and provides undo without 
 it('distinguishes horizontal dismissals in either direction from vertical scrolling and short drags', () => {
   vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId=1; isPrimary=true; });
   const open=vi.fn(), dismiss=vi.fn();
-  render(<ActivityFeed entries={[entry]} live open={open} dismiss={dismiss} restore={()=>{}} canUndo={false} storageError={false} />);
+  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={()=>{}} canUndo={false} storageError={false} />);
   const button = screen.getByRole('button',{name:/^Przykładowy alert/});
   function drag(x:number,y:number,cancel=false) {
     fireEvent.pointerDown(button,{clientX:150,clientY:100,button:0});
@@ -46,10 +46,10 @@ it('distinguishes horizontal dismissals in either direction from vertical scroll
   expect(open).not.toHaveBeenCalled();
 });
 
-it('persists dismissal across remounts, permits undo for six seconds and isolates demo scenarios', () => {
+it('persists dismissal across remounts and permits undo for six seconds', () => {
   vi.useFakeTimers();
-  const data=createDemo(now);
-  const first = renderHook(() => useActivityLog(data,now,'live'));
+  const data=createFixture(now);
+  const first = renderHook(() => useActivityLog(data,now));
   const count=first.result.current.entries.length;
   act(()=>first.result.current.dismiss(first.result.current.entries[0]));
   expect(first.result.current.entries).toHaveLength(count-1);
@@ -59,19 +59,15 @@ it('persists dismissal across remounts, permits undo for six seconds and isolate
   act(()=>vi.advanceTimersByTime(6001));
   expect(first.result.current.canUndo).toBe(false);
   first.unmount();
-  const second = renderHook(({scope})=>useActivityLog(data,now,scope),{initialProps:{scope:'live'}});
-  expect(second.result.current.entries).toHaveLength(count-1);
-  second.rerender({scope:'demo:standard'});
-  expect(second.result.current.entries).toHaveLength(count);
-  second.rerender({scope:'live'});
+  const second = renderHook(()=>useActivityLog(data,now));
   expect(second.result.current.entries).toHaveLength(count-1);
 });
 
 it('degrades to an in-memory list when storage is unavailable', () => {
   vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw Error('blocked');});
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw Error('blocked');});
-  const data=createDemo(now);
-  const view=renderHook(()=>useActivityLog(data,now,'live'));
+  const data=createFixture(now);
+  const view=renderHook(()=>useActivityLog(data,now));
   expect(view.result.current.storageError).toBe(true);
   expect(view.result.current.entries.length).toBeGreaterThan(0);
   act(()=>view.result.current.dismiss(view.result.current.entries[0]));

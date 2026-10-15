@@ -93,7 +93,8 @@ export function sourceLabel<T>(source: Source<T>, now: number, maxAge: number): 
   if (source.status === 'offline' && source.data === null) return `${source.name || 'Cezar'} niedostępny`;
   if (source.status === 'unavailable' || source.data === null) return 'Brak źródła danych';
   if (source.status === 'offline') return 'Offline · ostatni zapis';
-  return fresh(source, now, maxAge) ? (source.live ? (source.partial ? 'Dane częściowe' : source.name ? `Połączono · ${source.name}` : 'Połączono z Cezarem') : 'Zapis DEMO') : 'Nieaktualny zapis';
+  if (!fresh(source, now, maxAge)) return 'Nieaktualny zapis';
+  return source.partial ? 'Dane częściowe' : source.name ? `Połączono · ${source.name}` : 'Połączono z Cezarem';
 }
 export type QuotaState = 'fresh' | 'stale' | 'unavailable';
 export function quotaState(snapshot: QuotaSnapshot, now: number): QuotaState {

@@ -1,0 +1,32 @@
+{
+  "description": "Brak źródeł: Cezar nie odpowiada, reszta zgłasza unavailable.",
+  "cezar": {
+    "$error": 502
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "unavailable",
+    "observedAt": null,
+    "data": null
+  },
+  "calendarConnection": {
+    "status": "connected",
+    "email": "owner@gmail.com"
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "unavailable",
+    "observedAt": null,
+    "data": null
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "unavailable",
+    "observedAt": null,
+    "data": null
+  }
+}

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { systemSourceSchema, type SystemSource } from './system-contract';
 
-export function useSystem(enabled: boolean) {
+export function useSystem() {
   const [source, setSource] = useState<SystemSource & { loadedAt?: number }>({ name: 'Komputer', live: true, status: 'loading', observedAt: null, data: null });
   useEffect(() => {
-    if (!enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -25,6 +24,6 @@ export function useSystem(enabled: boolean) {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [enabled]);
+  }, []);
   return source;
 }

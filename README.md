@@ -167,7 +167,7 @@ błędzie ma 5-minutowy backoff. To aktualny odczyt; nie łączymy historii ró�
 loginów. Historyczny endpoint `/panel/v1/quotas` i taskowe snapshoty nadal działają
 bez odpytywania providera i nie są modyfikowane przez live polling.
 
-## Interfejs i DEMO
+## Interfejs
 
 Stopki kart pokazują częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty
@@ -178,14 +178,36 @@ Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Ukła
 (widoczność, kolejność, wariant) zapisuje się w localStorage. Poniżej 640 CSS px
 siatka przechodzi do jednej kolumny. Brak procentów postępu, ETA i danych dysku.
 
-W Ustawieniach można wyłączyć rzeczywiste dane Cezara, kalendarza i komputera i sprawdzać istniejące
-scenariusze DEMO: pusto, offline, brak danych, ładowanie, stale i wysokie quota/RAM.
-Po odświeżeniu strony tryb rzeczywisty wraca jako domyślny.
+Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
+demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
+Zdarzenia korzystają z tych samych źródeł co karty. Offline lub stare dane nie
+tworzą nowych alertów.
 
-W trybie DEMO limity AI są przykładami. Null oznacza brak pomiaru;
-historia to dyskretne obserwacje. Zdarzenia korzystają z tych samych źródeł co
-karty. Offline lub stare dane nie tworzą nowych alertów. W trybie rzeczywistym
-wszystkie karty korzystają z podłączonych źródeł.
+## Scenariusze i zrzuty ekranu
+
+UI czyta wyłącznie lokalne API (`/api/*`), walidowane schematami z `src/*-contract.ts`.
+Serwer składa je z interfejsu `PanelSources` (`server/sources.ts`), który ma dwie
+implementacje: `server/real-sources.ts` (usługa: Cezar, Google, komputer, adapter
+limitów) i `server/scenario.ts` (plik JSON). UI nie wie, która odpowiada.
+
+Scenariusz w `scenarios/*.json` zawiera po jednej odpowiedzi na endpoint (`cezar`,
+`calendar`, `calendarConnection`, `system`, `quotas`) dokładnie w kształcie API.
+Czasy zapisuje się względem chwili zapytania: `"now"`, `"now-20m"`, `"now+1h30m"`
+(ms, s, m, h, d). Zamiast odpowiedzi endpoint może mieć `{ "$error": 502 }` albo
+`{ "$pending": true }` (ładowanie bez końca); brakujący endpoint odpowiada 503.
+Plik jest czytany przy każdym zapytaniu, więc zmiany widać od razu, a błędy
+kontraktu są zgłaszane ze ścieżką pola.
+
+```powershell
+just scenario offline                                  # UI na scenariuszu, adres w konsoli
+just screenshots standard                              # output/screenshots/standard-*.png
+just screenshots high-ram --pages pulpit,system --size 1080x1920
+npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
+```
+
+Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
+prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
+`server/scenario.test.ts` sprawdza, że każdy z nich spełnia kontrakty.
 
 ## Zdarzenia
 
@@ -200,8 +222,7 @@ Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwieraj
 
 Lista przechowuje ostatnie 100 wykrytych zdarzeń z godziną wykrycia i opisem z tego
 momentu. Zapisuje je lokalnie w przeglądarce, również po usunięciu warunku alertu
-lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle. DEMO ma osobną
-historię w pamięci, resetowaną przy zmianie scenariusza; nie modyfikuje historii live.
+lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle.
 Zablokowany/uszkodzony localStorage nie blokuje pulpitu.
 
 Reguły: Cezar wymaga odpowiedzi; zadania zakończone w ostatnich 10 minutach;
@@ -226,10 +247,18 @@ npm test
 npm run build
 ```
 
-Testy obejmują interfejs DEMO, layout, reguły i historię zdarzeń, gesty oraz integrację:
+Testy obejmują interfejs (na scenariuszach z `scenarios/` podawanych przez
+to samo API co serwer scenariuszy), layout, reguły i historię zdarzeń, gesty oraz integrację:
 paginację, autorytatywne liczniki, failed w grupie pytań, niepełne coverage,
-błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez DEMO
-fallbacku. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,
+błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez
+zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
+
+CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
+`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny
+job robi zrzuty wszystkich scenariuszy i stron i dołącza je do przebiegu jako
+artefakt `screenshots-<commit>` (90 dni), więc wygląd panelu można porównać
+między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
+zrzutów najnowszego commita.

@@ -27,7 +27,7 @@ it('retains actual cached observations during disconnection and stops polling', 
   const value = { live:true,name:'Zapisane limity AI',status:'connected',observedAt:Date.now(),data:[] };
   const request = vi.fn().mockResolvedValueOnce(Response.json(value)).mockRejectedValue(new Error('offline'));
   vi.stubGlobal('fetch',request);
-  const view = renderHook(() => useQuotas(true));
+  const view = renderHook(() => useQuotas());
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(view.result.current.status).toBe('connected');
   await act(async () => { await vi.advanceTimersByTimeAsync(15000); });

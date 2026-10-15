@@ -1,0 +1,89 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Same as `just check`. Windows runs too: the service lives there and the DPAPI test only runs on win32.
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  # Every scenario × every page, kept as a run artifact so UI changes can be compared between commits.
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      TZ: Europe/Warsaw
+      # On PRs github.sha is a temporary merge commit; name and shoot the real head commit instead.
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Take screenshots
+        run: |
+          for file in scenarios/*.json; do
+            npm run --silent scenario -- "$(basename "$file" .json)" --shot
+          done
+      - uses: actions/upload-artifact@v7
+        id: upload
+        with:
+          name: screenshots-${{ env.COMMIT }}
+          path: output/screenshots/
+          if-no-files-found: error
+          retention-days: 90
+      # One comment per PR, updated on every push, linking the latest screenshots.
+      - name: Link screenshots on the PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v9
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        with:
+          script: |
+            const marker = '<!-- desk-panel-screenshots -->';
+            const sha = process.env.COMMIT.slice(0, 7);
+            const body = [
+              marker,
+              `📸 **Zrzuty ekranu dla \`${sha}\`** — [pobierz ZIP](${process.env.ARTIFACT_URL})`,
+              '',
+              'Wszystkie scenariusze z `scenarios/` × wszystkie strony, 800×1280. Artefakt jest przechowywany 90 dni; zrzuty wcześniejszych commitów są w ich przebiegach w zakładce Checks.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });

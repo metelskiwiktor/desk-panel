@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { CalendarDays } from 'lucide-react';
 import { Card } from './components';
-
-const connectionSchema = z.object({ status: z.enum(['connected', 'unavailable']), email: z.string(), reason: z.string().optional() });
+import { calendarConnectionSchema as connectionSchema } from './calendar-contract';
 export function CalendarConnection() {
   const [connection, setConnection] = useState<z.infer<typeof connectionSchema> | null>(null);
   const [authorizationUrl, setAuthorizationUrl] = useState<string>();

@@ -1,0 +1,41 @@
+{
+  "description": "Wszystkie źródła połączone, ale bez danych.",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 0,
+      "queue": 0,
+      "needs-input": 0,
+      "review": 0
+    },
+    "tasks": []
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": []
+  },
+  "calendarConnection": {
+    "status": "connected",
+    "email": "owner@gmail.com"
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": []
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": []
+  }
+}

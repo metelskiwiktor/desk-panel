@@ -53,12 +53,12 @@ function ActivityRow({ entry, open, dismiss }: {
   </li>;
 }
 
-export function ActivityFeed({ entries, live, open, dismiss, restore, canUndo, storageError }: {
-  entries: ActivityEntry[]; live: boolean; open: (target: Detail) => void;
+export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storageError }: {
+  entries: ActivityEntry[]; open: (target: Detail) => void;
   dismiss: (entry: ActivityEntry) => void; restore: () => void; canUndo: boolean; storageError: boolean;
 }) {
-  return <Card title="Zdarzenia" eyebrow={live ? 'OSTATNIO WYKRYTE' : 'ZDARZENIA DEMO'} icon={<Sparkles size={21} />}>
-    <p className="card-intro">{live ? 'Zdarzenia wykryte podczas działania panelu.' : 'Zdarzenia z danych DEMO.'} Przesuń wpis w bok, aby usunąć.</p>
+  return <Card title="Zdarzenia" eyebrow="OSTATNIO WYKRYTE" icon={<Sparkles size={21} />}>
+    <p className="card-intro">Zdarzenia wykryte podczas działania panelu. Przesuń wpis w bok, aby usunąć.</p>
     {entries.length ? <ul className="activity-list" aria-label="Lista zdarzeń">
       {entries.map(entry => <ActivityRow key={entry.id} entry={entry} open={open} dismiss={dismiss} />)}
     </ul> : <Empty>Brak zapisanych zdarzeń.</Empty>}

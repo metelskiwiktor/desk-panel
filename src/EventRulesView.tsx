@@ -27,7 +27,7 @@ export function EventRulesView() {
       <h3>Historia i usuwanie</h3>
       <p className="meta">Ostatnie {ACTIVITY_LIMIT} wpisów zapisujemy w tej przeglądarce. Restart serwera i odświeżenie strony zachowują historię oraz pamięć zgłoszonych alertów.</p>
       <p className="meta">Przesunięcie wpisu w bok usuwa go. „Cofnij” działa przez {EVENT_RULES.undoSeconds} sekund. Usunięcie wpisu nie ponawia alertu.</p>
-      <p className="meta">Panel wykrywa zdarzenia tylko podczas działania. Stare dane i utrata połączenia nie tworzą nowych wpisów ani nie potwierdzają ustąpienia problemu. DEMO ma oddzielną historię.</p>
+      <p className="meta">Panel wykrywa zdarzenia tylko podczas działania. Stare dane i utrata połączenia nie tworzą nowych wpisów ani nie potwierdzają ustąpienia problemu.</p>
     </div>
   </Card>;
 }

@@ -58,7 +58,7 @@ describe('system measurements', () => {
     const value = { live: true, name: 'Komputer', status: 'connected', observedAt: Date.now(), data: [{ at: Date.now(), cpuPercent: 12, ramUsedGb: 5, ramTotalGb: 16 }] };
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json(value)).mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', fetcher);
-    const view = renderHook(() => useSystem(true));
+    const view = renderHook(() => useSystem());
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(view.result.current.status).toBe('connected');
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });

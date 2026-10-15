@@ -1,12 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { ACTIVITY_LIMIT, ACTIVITY_STORAGE_KEY, dismissActivity, emptyActivityLog, readActivityLog, recordActivity, restoreActivity, saveActivityLog } from './activity-log';
-import { createDemo } from './demo';
+import { createFixture } from './test-fixtures';
 import { MINUTE } from './model';
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 const now = Date.parse('2026-10-15T10:00:00Z');
 function quotaData(usedPercent = 26) {
-  const data = createDemo(now, 'empty');
+  const data = createFixture(now, 'empty');
   data.quotas.data = [{ provider: 'Claude', history: [], snapshots: [{ window:'5h',usedPercent, observedAt:now, resetAt:now+240*MINUTE }] }];
   return data;
 }
@@ -52,9 +52,9 @@ it('keeps 90% warnings even when pace is green, and never records old/offline/mi
   expect(recordActivity(emptyActivityLog(), data, now).entries).toHaveLength(0);
 });
 it('retains historical entries during outages, bounds the journal and rejects broken storage', () => {
-  const data = createDemo(now);
+  const data = createFixture(now);
   let log = recordActivity(emptyActivityLog(), data, now);
-  expect(recordActivity(log, createDemo(now, 'offline'), now)).toBe(log);
+  expect(recordActivity(log, createFixture(now, 'offline'), now)).toBe(log);
   data.tasks.data = Array.from({length:120}, (_,i) => ({ ...data.tasks.data![0], id:`question-${i}` }));
   log = recordActivity(log, data, now);
   expect(log.entries).toHaveLength(ACTIVITY_LIMIT);
@@ -64,13 +64,13 @@ it('retains historical entries during outages, bounds the journal and rejects br
   expect(saveActivityLog(log)).toBe(false);
 });
 it('rearms task questions only on confirmed resolution, preserving partial/offline uncertainty', () => {
-  const data = createDemo(now, 'empty');
-  data.tasks.data = [createDemo(now).tasks.data![0]];
+  const data = createFixture(now, 'empty');
+  data.tasks.data = [createFixture(now).tasks.data![0]];
   let log = recordActivity(emptyActivityLog(), data, now);
   data.tasks.data = [];
   data.tasks.partial = true;
   log = recordActivity(log, data, now);
-  data.tasks.data = [createDemo(now).tasks.data![0]];
+  data.tasks.data = [createFixture(now).tasks.data![0]];
   expect(recordActivity(log, data, now).entries).toHaveLength(1);
   data.tasks.data[0].status = 'running';
   log = recordActivity(log, data, now);
@@ -79,7 +79,7 @@ it('rearms task questions only on confirmed resolution, preserving partial/offli
   expect(log.entries).toHaveLength(2);
 });
 it('rearms RAM after a real low sample, not after an offline or short-history gap', () => {
-  const data = createDemo(now, 'ram');
+  const data = createFixture(now, 'high-ram');
   let log = recordActivity(emptyActivityLog(), data, now);
   expect(log.entries).toHaveLength(1);
   data.system.status = 'offline';

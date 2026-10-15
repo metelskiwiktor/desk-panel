@@ -1,0 +1,216 @@
+{
+  "description": "Cezar nie odpowiada; pozostałe źródła offline z ostatnim zapisem sprzed 20 minut.",
+  "cezar": {
+    "$error": 502
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "offline",
+    "observedAt": "now-20m",
+    "data": [
+      {
+        "id": "planning",
+        "title": "Planowanie Tabnote",
+        "startAt": "now+12m",
+        "endAt": "now+42m",
+        "location": "Biurko · sesja robocza",
+        "description": "Priorytety, regresje i zakres kolejnej iteracji.",
+        "allDay": false
+      },
+      {
+        "id": "design",
+        "title": "Przegląd interfejsu",
+        "startAt": "now+90m",
+        "endAt": "now+2h",
+        "description": "Czytelność panelu na ekranie pionowym.",
+        "allDay": false
+      },
+      {
+        "id": "focus",
+        "title": "Czas na pracę własną",
+        "startAt": "now+3h",
+        "endAt": "now+4h",
+        "description": "Blok skupienia.",
+        "allDay": false
+      }
+    ]
+  },
+  "calendarConnection": {
+    "status": "connected",
+    "email": "owner@gmail.com"
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "offline",
+    "observedAt": "now-20m",
+    "data": [
+      {
+        "at": "now-22m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1310s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1300s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1290s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1280s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1270s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-21m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1250s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1240s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1230s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1220s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1210s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20m",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "offline",
+    "observedAt": "now-20m",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 92,
+            "observedAt": "now-20m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 61,
+            "observedAt": "now-20m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 75,
+            "observedAt": "now-50m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 58,
+            "observedAt": "now-50m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 38,
+            "observedAt": "now-20m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 24,
+            "observedAt": "now-20m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 30,
+            "observedAt": "now-40m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 22,
+            "observedAt": "now-40m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      }
+    ]
+  }
+}

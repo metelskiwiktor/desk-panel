@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { quotaSourceSchema, type QuotaSource } from './quota-contract';
 
-export function useQuotas(enabled: boolean) {
+export function useQuotas() {
   const [source, setSource] = useState<QuotaSource & { loadedAt?: number }>({ live: true, name: 'Zapisane limity AI', status: 'loading', observedAt: null, data: null });
   useEffect(() => {
-    if (!enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -25,6 +24,6 @@ export function useQuotas(enabled: boolean) {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [enabled]);
+  }, []);
   return source;
 }

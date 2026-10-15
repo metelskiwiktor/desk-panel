@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { cezarSchema, type CezarSnapshot } from './cezar-contract';
 import type { Source, Task } from './model';
 
-export function useCezar(enabled: boolean) {
+export function useCezar() {
   const [source, setSource] = useState<Source<Task[]>>({ status: 'loading', data: null, observedAt: null, live: true });
   const [snapshot, setSnapshot] = useState<CezarSnapshot | null>(null);
   useEffect(() => {
-    if (!enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -30,6 +29,6 @@ export function useCezar(enabled: boolean) {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [enabled]);
+  }, []);
   return { source, snapshot };
 }

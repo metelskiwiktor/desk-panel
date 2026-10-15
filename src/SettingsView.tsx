@@ -1,34 +1,23 @@
-import { ArrowDown, ArrowUp, Check, Layers3, Settings2, Sparkles } from 'lucide-react';
-import { demoCases, type DemoCase } from './demo';
+import { ArrowDown, ArrowUp, Check, Layers3, Settings2 } from 'lucide-react';
 import { defaultLayout, moveWidget, widgetNames, type Layout } from './layout';
 import { Card } from './components';
 import { CalendarConnection } from './CalendarConnection';
 
 export function SettingsView({
-  live,
-  setLive,
   layout,
   configure,
   storageError,
-  scenario,
-  refresh,
 }: {
-  live: boolean;
-  setLive: (value: boolean) => void;
   layout: Layout;
   configure: (next: Layout) => void;
   storageError: boolean;
-  scenario: DemoCase;
-  refresh: (next: DemoCase) => void;
 }) {
   return (
     <div className="settings-stack">
       <Card title="Połączenia" icon={<Layers3 />}>
         <p className="card-intro">CPU i RAM co około 2 sekundy, Cezar co 5 sekund, kalendarz co minutę. Bieżące limity AI co około minutę, bez rozmów z modelem.</p>
-        <label className="visibility-toggle"><input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />Rzeczywiste źródła danych</label>
-        <p className="meta">Po wyłączeniu możesz sprawdzać scenariusze demonstracyjne.</p>
       </Card>
-      {live && <CalendarConnection />}
+      <CalendarConnection />
       <Card title="Twój układ" icon={<Settings2 />}>
         <p className="card-intro">
           Widoczność, kolejność i gęstość kart. Ustawienia są zapisywane tylko w tej przeglądarce.
@@ -111,29 +100,6 @@ export function SettingsView({
           wymagające odpowiedzi mają wyróżnienie.
         </p>
       </Card>
-      <Card title="Scenariusze DEMO" icon={<Sparkles />}>
-        <p className="card-intro">
-          Zmieniaj przykładowy stan źródeł. To symulacja, a nie odczyt usług. Zapisy starzeją się
-          naturalnie od chwili wczytania.
-        </p>
-        <label className="field-label" htmlFor="demo-case">
-          Zestaw danych
-        </label>
-        <select
-          id="demo-case"
-          value={scenario}
-          onChange={(e) => refresh(e.target.value as DemoCase)}
-        >
-          {Object.entries(demoCases).map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <button className="button" onClick={() => refresh(scenario)}>
-          Wczytaj ponownie dane DEMO
-        </button>
-      </Card>
       <Card title="Źródła danych" icon={<Layers3 />}>
         <p className="card-intro">
           Wszystkie źródła są podłączone przez lokalny serwer. Adapter odczytuje bieżące limity z loginów CLI; nie uruchamia generowania odpowiedzi.
@@ -146,7 +112,6 @@ export function SettingsView({
         ].map((label) => (
           <div className="connection-row" key={label}>
             <span>{label}</span>
-            <span className="badge">{live ? 'Tryb rzeczywisty' : 'DEMO'}</span>
           </div>
         ))}
       </Card>
