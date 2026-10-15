@@ -183,6 +183,32 @@ demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
 Zdarzenia korzystają z tych samych źródeł co karty. Offline lub stare dane nie
 tworzą nowych alertów.
 
+## Scenariusze i zrzuty ekranu
+
+UI czyta wyłącznie lokalne API (`/api/*`), walidowane schematami z `src/*-contract.ts`.
+Serwer składa je z interfejsu `PanelSources` (`server/sources.ts`), który ma dwie
+implementacje: `server/real-sources.ts` (usługa: Cezar, Google, komputer, adapter
+limitów) i `server/scenario.ts` (plik JSON). UI nie wie, która odpowiada.
+
+Scenariusz w `scenarios/*.json` zawiera po jednej odpowiedzi na endpoint (`cezar`,
+`calendar`, `calendarConnection`, `system`, `quotas`) dokładnie w kształcie API.
+Czasy zapisuje się względem chwili zapytania: `"now"`, `"now-20m"`, `"now+1h30m"`
+(ms, s, m, h, d). Zamiast odpowiedzi endpoint może mieć `{ "$error": 502 }` albo
+`{ "$pending": true }` (ładowanie bez końca); brakujący endpoint odpowiada 503.
+Plik jest czytany przy każdym zapytaniu, więc zmiany widać od razu, a błędy
+kontraktu są zgłaszane ze ścieżką pola.
+
+```powershell
+just scenario offline                                  # UI na scenariuszu, adres w konsoli
+just screenshots standard                              # output/screenshots/standard-*.png
+just screenshots high-ram --pages pulpit,system --size 1080x1920
+npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
+```
+
+Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
+prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
+`server/scenario.test.ts` sprawdza, że każdy z nich spełnia kontrakty.
+
 ## Zdarzenia
 
 Zakładka „Zdarzenia” w dolnej nawigacji opisuje aktualne reguły w krótkiej tabeli:
@@ -221,8 +247,8 @@ npm test
 npm run build
 ```
 
-Testy obejmują interfejs (na danych testowych z `src/test-fixtures.ts`
-podawanych przez zaślepione lokalne API), layout, reguły i historię zdarzeń, gesty oraz integrację:
+Testy obejmują interfejs (na scenariuszach z `scenarios/` podawanych przez
+to samo API co serwer scenariuszy), layout, reguły i historię zdarzeń, gesty oraz integrację:
 paginację, autorytatywne liczniki, failed w grupie pytań, niepełne coverage,
 błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez
 zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,

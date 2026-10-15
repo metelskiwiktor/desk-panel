@@ -3,8 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { STORAGE_KEY } from './layout';
-import type { DashboardData, QuotaSnapshot } from './model';
-import { createFixture, type FixtureCase } from './test-fixtures';
+import { scenarioFetch, type ScenarioName } from './test-fixtures';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime();
 beforeEach(() => {
@@ -19,37 +18,8 @@ afterEach(() => {
 });
 const nav = (name: string) => within(screen.getByRole('navigation')).getByRole('button', { name });
 
-/** Serves fixture data through the same local API contracts the real server uses. */
-function stubApi(data: DashboardData) {
-  const pending = () => new Promise<Response>(() => {});
-  const observation = (s: QuotaSnapshot) => ({ ...s, stale: false, source: null });
-  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
-    switch (String(input)) {
-      case '/api/cezar': {
-        const { status, data: tasks, observedAt } = data.tasks;
-        if (status === 'loading') return pending();
-        if (status !== 'connected' || !tasks || observedAt === null) return new Response('', { status: 502 });
-        const count = (s: string) => tasks.filter((t) => t.status === s).length;
-        return Response.json({ observedAt, tasks, partial: false, scheduled: 0,
-          counts: { running: count('running'), queue: count('queue'), 'needs-input': count('needs-input'), review: count('review') } });
-      }
-      case '/api/calendar':
-        return data.calendar.status === 'loading' ? pending() : Response.json({ ...data.calendar, live: true, name: 'Google Calendar',
-          calendarId: 'owner@gmail.com', data: data.calendar.data?.map((e) => ({ allDay: false, ...e })) ?? null });
-      case '/api/system':
-        return data.system.status === 'loading' ? pending() : Response.json({ ...data.system, live: true, name: 'Komputer' });
-      case '/api/quotas':
-        return data.quotas.status === 'loading' ? pending() : Response.json({ ...data.quotas, live: true, name: 'Limity AI',
-          data: data.quotas.data?.map((a) => ({ ...a, snapshots: a.snapshots.map(observation), history: a.history.map(observation) })) ?? null });
-      case '/api/calendar/connection':
-        return Response.json({ status: 'connected', email: 'owner@gmail.com' });
-      default:
-        return new Response('', { status: 404 });
-    }
-  }));
-}
-function renderWith(scenario: FixtureCase = 'standard') {
-  stubApi(createFixture(now, scenario));
+function renderWith(scenario: ScenarioName = 'standard') {
+  vi.stubGlobal('fetch', vi.fn(scenarioFetch(scenario)));
   return render(<App />);
 }
 const loaded = () => screen.findAllByText(/Potwierdź zakres testów kalendarza/);

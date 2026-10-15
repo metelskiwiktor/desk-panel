@@ -79,7 +79,7 @@ it('rearms task questions only on confirmed resolution, preserving partial/offli
   expect(log.entries).toHaveLength(2);
 });
 it('rearms RAM after a real low sample, not after an offline or short-history gap', () => {
-  const data = createFixture(now, 'ram');
+  const data = createFixture(now, 'high-ram');
   let log = recordActivity(emptyActivityLog(), data, now);
   expect(log.entries).toHaveLength(1);
   data.system.status = 'offline';

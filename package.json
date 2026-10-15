@@ -12,7 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "server": "tsx server/index.ts",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "scenario": "tsx scripts/scenario.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.8",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^26.0.0",
+    "playwright": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "~5.7.2",
     "vite": "^6.0.5",

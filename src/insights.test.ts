@@ -85,18 +85,18 @@ describe('Insights: fakty z tych samych źródeł', () => {
     expect(deriveInsights(data, now)).toEqual([]);
   });
   it('RAM wymaga ciągłej minuty i świeżej próbki, nie tylko wysokiej wartości', () => {
-    const data = createFixture(now, 'ram');
+    const data = createFixture(now, 'high-ram');
     expect(deriveInsights(data, now).map((f) => f.id)).toEqual(['system:ram']);
     data.system.data = data.system.data!.slice(-6);
     expect(deriveInsights(data, now)).toEqual([]); // only 50 s
-    data.system.data = createFixture(now, 'ram').system.data!.filter((_, i) => i < 5 || i > 9);
+    data.system.data = createFixture(now, 'high-ram').system.data!.filter((_, i) => i < 5 || i > 9);
     expect(deriveInsights(data, now)).toEqual([]); // gap > 30 s
   });
   it('RAM poniżej progu przerywa serię; stare źródło nie generuje faktu', () => {
-    const data = createFixture(now, 'ram');
+    const data = createFixture(now, 'high-ram');
     data.system.data!.at(-2)!.ramUsedGb = 20;
     expect(deriveInsights(data, now)).toEqual([]);
-    const old = createFixture(now, 'ram');
+    const old = createFixture(now, 'high-ram');
     old.system.observedAt = now - MAX_AGE.system - 1;
     expect(deriveInsights(old, now)).toEqual([]);
   });

@@ -1,0 +1,335 @@
+{
+  "description": "Limity AI bez pomiaru (usedPercent = null).",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 3,
+      "queue": 2,
+      "needs-input": 1,
+      "review": 4
+    },
+    "tasks": [
+      {
+        "id": "decision",
+        "title": "Potwierdź zakres testów kalendarza",
+        "project": "Tabnote",
+        "status": "needs-input",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/decision",
+        "description": "Wybrać zakres regresji przed dalszą implementacją."
+      },
+      {
+        "id": "review-1",
+        "title": "Widok notatki gotowy do przeglądu",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-1",
+        "title": "Poprawa wyszukiwania po etykietach",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-2",
+        "title": "Porządki w filtrach",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-3",
+        "title": "Regresje widoku tablicy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-4",
+        "title": "Walidacja scenariuszy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-4",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-2",
+        "title": "Testy selektorów zadań",
+        "project": "Cezar",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-3",
+        "title": "Dostępność paska nawigacji",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-1",
+        "title": "Przegląd kontraktów źródeł",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-2",
+        "title": "Sprawdzenie pustych stanów",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "done-1",
+        "title": "Aktualizacja opisów testów",
+        "project": "Tabnote",
+        "status": "done",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/done-1",
+        "description": "Zadanie w trakcie pracy.",
+        "completedAt": "now-4m"
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "planning",
+        "title": "Planowanie Tabnote",
+        "startAt": "now+12m",
+        "endAt": "now+42m",
+        "location": "Biurko · sesja robocza",
+        "description": "Priorytety, regresje i zakres kolejnej iteracji.",
+        "allDay": false
+      },
+      {
+        "id": "design",
+        "title": "Przegląd interfejsu",
+        "startAt": "now+90m",
+        "endAt": "now+2h",
+        "description": "Czytelność panelu na ekranie pionowym.",
+        "allDay": false
+      },
+      {
+        "id": "focus",
+        "title": "Czas na pracę własną",
+        "startAt": "now+3h",
+        "endAt": "now+4h",
+        "description": "Blok skupienia.",
+        "allDay": false
+      }
+    ]
+  },
+  "calendarConnection": {
+    "status": "connected",
+    "email": "owner@gmail.com"
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now-2m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-110s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-100s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-90s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-80s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-70s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-50s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-40s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-30s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-10s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": null,
+            "observedAt": "now",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": null,
+            "observedAt": "now",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 75,
+            "observedAt": "now-50m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 58,
+            "observedAt": "now-50m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": null,
+            "observedAt": "now",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": null,
+            "observedAt": "now",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 30,
+            "observedAt": "now-40m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 22,
+            "observedAt": "now-40m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      }
+    ]
+  }
+}

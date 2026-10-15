@@ -1,0 +1,32 @@
+{
+  "description": "Źródła jeszcze się ładują; Cezar nie odpowiada.",
+  "cezar": {
+    "$pending": true
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "loading",
+    "observedAt": null,
+    "data": null
+  },
+  "calendarConnection": {
+    "status": "connected",
+    "email": "owner@gmail.com"
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "loading",
+    "observedAt": null,
+    "data": null
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "loading",
+    "observedAt": null,
+    "data": null
+  }
+}

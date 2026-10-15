@@ -13,3 +13,7 @@ export const calendarSourceSchema = z.object({
   calendarId: z.string(), timeZone: z.string().optional(),
 });
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
+export const calendarConnectionSchema = z.object({
+  status: z.enum(['connected', 'unavailable']), email: z.string(), reason: z.string().optional(),
+});
+export type CalendarConnection = z.infer<typeof calendarConnectionSchema>;
