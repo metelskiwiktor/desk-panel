@@ -260,4 +260,5 @@ CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny
 job robi zrzuty wszystkich scenariuszy i stron i dołącza je do przebiegu jako
 artefakt `screenshots-<commit>` (90 dni), więc wygląd panelu można porównać
-między commitami.
+między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
+zrzutów najnowszego commita.
