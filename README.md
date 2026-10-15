@@ -190,15 +190,29 @@ bez odpytywania providera i nie są modyfikowane przez live polling.
 
 ## Interfejs
 
-Stopki kart pokazują częstotliwość odświeżania, czas danych i osobno czas ostatniego
+Pulpit mieści się na ekranie bez przewijania, a sekcje zajmują tyle miejsca, ile mają treści:
+
+- u góry godzina, data i jedna linia stanu (PC z CPU/RAM, Cezar, Gmail);
+- „Dziś”: pozostałe spotkania na osi od bieżącej godziny (co najmniej 6 h, nakładające się
+  obok siebie, linia „teraz”), wydarzenia całodniowe, a pod osią kolejne dni pogrupowane po
+  dniu — kolejne dni bez wydarzeń zwijają się do jednej linii „wolne · N dni”; bez spotkań
+  oś znika;
+- Cezar pokazuje listę tylko, gdy coś czeka na odpowiedź lub przegląd; inaczej jedna linia;
+- Poczta zajmuje resztę wysokości, skrzynki mają różne kolory;
+- limity AI: dla każdego okna pasek zużycia, kreska upływu czasu, procent i reset;
+- karta Komputer pojawia się tylko, gdy CPU lub RAM przekroczy 90%;
+- zdarzenia panelu unoszą się w prawym górnym rogu: zwinięte pokazują liczbę i najnowsze
+  z etykietą źródła (Kalendarz, Cezar, Limity AI, Komputer), nowe rozwijają listę na 10 s.
+
+Poniżej 640 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona.
+
+Gdy źródło nie jest świeże, sekcja pokazuje częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty
 ostatniego sukcesu. Świeżość jest sprawdzana względem bieżącego czasu renderu,
 również gdy pomiar nadejdzie pomiędzy jednosekundowymi tickami zegara interfejsu.
 
-Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Układ kart
-(widoczność, kolejność, wariant) zapisuje się w localStorage. Układ jest płynny:
-kolumn jest tyle, ile mieści się przy `--column-min` (najwyżej `--max-columns`, dziś 2),
-a zawartość kart reaguje na szerokość samej karty (container queries), nie ekranu. Brak procentów postępu, ETA i danych dysku.
+Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Widoczność sekcji
+Pulpitu zapisuje się w localStorage (Ustawienia → Pulpit). Brak procentów postępu, ETA i danych dysku.
 
 Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
 demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
@@ -245,7 +259,7 @@ Zakładka „Zdarzenia” w dolnej nawigacji opisuje aktualne reguły w krótkie
 warunek utworzenia oraz kiedy dany wpis może pojawić się ponownie. Pokazuje też
 zasady zapisu historii i usuwania. Progi i czasy są współdzielone z detekcją zdarzeń.
 
-Karta zastępuje Insights listą przewijaną pionowo (bez osobnego „Zobacz wszystkie”).
+Lista zdarzeń panelu rozwija się z „pigułki” na Pulpicie i przewija pionowo.
 Przesunięcie wpisu w lewo lub prawo usuwa go; przycisk × jest alternatywą dla gestu,
 a „Cofnij” działa przez sześć sekund. Dotknięcie wpisu otwiera szczegóły źródła.
 Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwierają szczegółów.

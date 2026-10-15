@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   CalendarDays,
-  Clock3,
   Cpu,
   House,
   Layers3,
@@ -20,7 +19,7 @@ import { useActivityLog } from './useActivityLog';
 import { ActivityFeed } from './ActivityFeed';
 import { EventRulesView } from './EventRulesView';
 import { readLayout, saveLayout, type Layout, type WidgetId } from './layout';
-import { MAX_AGE, fresh, orderedTasks, sourceLabel, taskLabels, type Detail } from './model';
+import { MAX_AGE, fresh, orderedTasks, taskLabels, type Detail } from './model';
 import { time, stamp, date, number, allDayDate } from './format';
 import {
   SourceNote,
@@ -30,7 +29,6 @@ import {
   EventRow,
   Sparkline,
   QuotaWindow,
-  QuotaCard,
   QuotaLegend,
   SourceLink,
 } from './components';
@@ -39,8 +37,8 @@ import { useCalendar } from './useCalendar';
 import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
 import { SettingsView } from './SettingsView';
+import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
-import { MailFeed } from './MailFeed';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -163,118 +161,21 @@ export function App() {
       <SourceNote source={data.system} now={now} maxAge={MAX_AGE.system} refreshEveryMs={2000} />
     </>
   );
-  function renderWidget(id: WidgetId, compact: boolean) {
-    switch (id) {
-      case 'cezar':
-        return (
-          <Card
-            title="Cezar"
-            eyebrow="WORKSPACE"
-            icon={<Layers3 size={22} />}
-            action={
-              <button
-                className="icon-button"
-                aria-label="Wszystkie zadania"
-                onClick={() => navigate('tasks')}
-              >
-                <ArrowUpRight size={22} />
-              </button>
-            }
-            className="cezar-card"
-          >
-            {summary}
-            <div className="task-list">
-              {activeTasks.length ? (
-                activeTasks
-                  .slice(0, compact ? 1 : 3)
-                  .map((task) => <TaskRow key={task.id} task={task} open={open} />)
-              ) : (
-                <Empty>
-                  {data.tasks.status === 'loading'
-                    ? 'Ładowanie zadań…'
-                    : 'Brak zadań do pokazania.'}
-                </Empty>
-              )}
-            </div>
-            <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />
-            {cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-            {!!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
-          </Card>
-        );
-      case 'system':
-        return (
-          <Card
-            title="System"
-            eyebrow="KOMPUTER"
-            icon={<Monitor size={21} />}
-            action={
-              <button
-                className="icon-button"
-                aria-label="Szczegóły systemu"
-                onClick={() => open({ kind: 'system' })}
-              >
-                <ArrowUpRight size={21} />
-              </button>
-            }
-          >
-            {systemContent}
-          </Card>
-        );
-      case 'calendar':
-        return (
-          <Card title="Kalendarz Google" eyebrow="AGENDA" icon={<CalendarDays size={21} />}>
-            <p className="meta">{calendar.calendarId || 'Łączenie z Google…'} · najbliższe 7 dni</p>
-            {events.length ? (
-              events
-                .slice(0, compact ? 1 : 3)
-                .map((event, i) => (
-                  <EventRow key={event.id} event={event} first={i === 0} open={open} />
-                ))
-            ) : (
-              <Empty>
-                {data.calendar.status === 'loading'
-                  ? 'Ładowanie wydarzeń…'
-                  : data.calendar.status === 'connected' ? 'Brak nadchodzących wydarzeń.' : 'Kalendarz jest niedostępny.'}
-              </Empty>
-            )}
-            <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={60000} />
-            {data.calendar.partial && <p className="warning">Agenda częściowa — osiągnięto limit odczytu.</p>}
-          </Card>
-        );
-      case 'quotas':
-        return (
-          <Card title="Limity AI" eyebrow="BIEŻĄCE LIMITY · ODCZYT BEZ MODELU" icon={<Layers3 size={21} />}>
-            {data.quotas.data?.length ? (
-              data.quotas.data.map((account) => (
-                <QuotaCard
-                  key={account.provider}
-                  account={account}
-                  now={now}
-                  open={open}
-                  sourceConnected={
-                    fresh(data.quotas, now, MAX_AGE.quotas)
-                  }
-                />
-              ))
-            ) : (
-              <Empty>
-                {data.quotas.status === 'loading'
-                  ? 'Ładowanie limitów…'
-                  : 'Brak snapshotów limitów.'}
-              </Empty>
-            )}
-            <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
-          </Card>
-        );
-      case 'mail':
-        return <MailFeed mail={mail} now={now} open={open} compact={compact} />;
-      case 'insights':
-        return (
-          <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
-            restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} />
-        );
-    }
-  }
+  const systemCard = (
+    <Card
+      title="System"
+      eyebrow="KOMPUTER"
+      icon={<Monitor size={21} />}
+      action={
+        <button className="icon-button" aria-label="Szczegóły systemu" onClick={() => open({ kind: 'system' })}>
+          <ArrowUpRight size={21} />
+        </button>
+      }
+    >
+      {systemContent}
+    </Card>
+  );
+  const visible = (id: WidgetId) => layout.widgets.find((w) => w.id === id)?.visible ?? true;
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')
@@ -438,30 +339,14 @@ export function App() {
     );
   }
   return (
-    <div className="app-shell">
-      <header>
-        <div className="brand">
-          <span className="brand-icon">
-            <Layers3 size={24} />
-          </span>
-          <span>
-            Desk Panel<span className="brand-sub">LOKALNY PANEL ROBOCZY</span>
-          </span>
+    <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`}>
+      <header className="top-bar">
+        <div className="top-clock">
+          <time dateTime={new Date(now).toISOString()}>{time(now)}</time>
+          <span className="clock-seconds">{new Date(now).getSeconds().toString().padStart(2, '0')}</span>
+          <span className="today">{date(now)}</span>
         </div>
-        <div className="service-status">
-          <span>
-            <i
-              className={`dot ${sourceLabel(data.system, now, MAX_AGE.system) === 'Połączono · Komputer' ? 'green-dot' : 'amber-dot'}`}
-            />
-            PC · {sourceLabel(data.system, now, MAX_AGE.system)}
-          </span>
-          <span>
-            <i
-              className={`dot ${sourceLabel(data.tasks, now, MAX_AGE.tasks) === 'Połączono z Cezarem' ? 'green-dot' : 'amber-dot'}`}
-            />
-            Cezar · {sourceLabel(data.tasks, now, MAX_AGE.tasks)}
-          </span>
-        </div>
+        <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
       </header>
       <main ref={main} tabIndex={-1} id="main-content">
         {detail ? (
@@ -476,37 +361,11 @@ export function App() {
           <>
             {page === 'home' ? (
               <>
-                <div className="clock-area">
-                  <div>
-                    <p className="eyebrow">PULPIT / CZAS LOKALNY</p>
-                    <h1>
-                      <time dateTime={new Date(now).toISOString()}>{time(now)}</time>
-                      <span className="clock-seconds">
-                        {new Date(now).getSeconds().toString().padStart(2, '0')}
-                      </span>
-                    </h1>
-                    <p className="today">{date(now)}</p>
-                  </div>
-                  <div className="clock-decoration">
-                    <Clock3 size={28} />
-                    <span>CZAS LOKALNY</span>
-                  </div>
-                </div>
-                <div className="dashboard-grid">
-                  {layout.widgets
-                    .filter((w) => w.visible)
-                    .map((w) => (
-                      <div
-                        key={w.id}
-                        className={`widget widget-${w.id} mode-${w.displayMode}`}
-                        data-priority={w.priority}
-                      >
-                        {renderWidget(w.id, w.displayMode === 'compact')}
-                      </div>
-                    ))}
-                </div>
-                {layout.widgets.every((w) => !w.visible) && (
-                  <Empty>Wszystkie karty są ukryte. Włącz je w Ustawieniach.</Empty>
+                <Dashboard data={data} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
+                  showTasks={() => navigate('tasks')} visible={visible} />
+                {visible('insights') && (
+                  <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
+                    restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} />
                 )}
               </>
             ) : (
@@ -548,7 +407,7 @@ export function App() {
                 )}
                 {page === 'system' && (
                   <>
-                    {renderWidget('system', false)}
+                    {systemCard}
                     <p className="footnote">
                       CPU i RAM całego komputera · lokalny pomiar co około 2 sekundy. Historia zeruje się po dłuższej przerwie.
                     </p>
@@ -567,9 +426,11 @@ export function App() {
           </>
         )}
       </main>
-      <footer className="app-footer">
-        DESK PANEL <span>Limity AI bez wywołań modelu</span>
-      </footer>
+      {page !== 'home' && (
+        <footer className="app-footer">
+          DESK PANEL <span>Limity AI bez wywołań modelu</span>
+        </footer>
+      )}
       <nav aria-label="Główna nawigacja">
         {(Object.keys(pageNames) as Page[]).map((id) => {
           const Icon = navIcons[id];

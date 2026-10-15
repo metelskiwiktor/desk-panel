@@ -14,7 +14,8 @@ it('opens details by tap/keyboard, removes by button, and provides undo without 
   const user = userEvent.setup();
   const open=vi.fn(), dismiss=vi.fn(), restore=vi.fn();
   render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={restore} canUndo storageError={false} />);
-  await user.click(screen.getByRole('button',{name:/^Przykładowy alert/}));
+  await user.click(screen.getByRole('button',{name:'Zdarzenia panelu: 1, najnowsze: Przykładowy alert'}));
+  await user.click(screen.getByRole('button',{name:'Limity AI: Przykładowy alert'}));
   expect(open).toHaveBeenCalledWith(entry.target);
   await user.click(screen.getByRole('button',{name:'Usuń zdarzenie: Przykładowy alert'}));
   expect(dismiss).toHaveBeenCalledWith(entry);
@@ -27,7 +28,8 @@ it('distinguishes horizontal dismissals in either direction from vertical scroll
   vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId=1; isPrimary=true; });
   const open=vi.fn(), dismiss=vi.fn();
   render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={()=>{}} canUndo={false} storageError={false} />);
-  const button = screen.getByRole('button',{name:/^Przykładowy alert/});
+  fireEvent.click(screen.getByRole('button',{name:/^Zdarzenia panelu:/}));
+  const button = screen.getByRole('button',{name:'Limity AI: Przykładowy alert'});
   function drag(x:number,y:number,cancel=false) {
     fireEvent.pointerDown(button,{clientX:150,clientY:100,button:0});
     fireEvent.pointerMove(button,{clientX:150+x,clientY:100+y});
@@ -72,4 +74,17 @@ it('degrades to an in-memory list when storage is unavailable', () => {
   expect(view.result.current.entries.length).toBeGreaterThan(0);
   act(()=>view.result.current.dismiss(view.result.current.entries[0]));
   expect(view.result.current.entries.length).toBe(recordActivity(emptyActivityLog(),data,now).entries.length-1);
+});
+
+it('opens for an event detected after start-up and folds back on its own', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(now);
+  const props = { open: vi.fn(), dismiss: vi.fn(), restore: () => {}, canUndo: false, storageError: false };
+  const view = render(<ActivityFeed entries={[entry]} {...props} />);
+  expect(screen.queryByRole('region',{name:'Zdarzenia panelu'})).toBeNull();
+  act(() => { vi.advanceTimersByTime(6000); });
+  view.rerender(<ActivityFeed entries={[{ ...entry, id: '2', title: 'Nowy alert' }, entry]} {...props} />);
+  expect(screen.getByRole('region',{name:'Zdarzenia panelu'})).toBeTruthy();
+  act(() => { vi.advanceTimersByTime(10_000); });
+  expect(screen.getByRole('button',{name:'Zdarzenia panelu: 2, najnowsze: Nowy alert'})).toBeTruthy();
 });

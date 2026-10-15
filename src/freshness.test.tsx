@@ -23,8 +23,8 @@ it('does not call new system data stale while the one-second UI clock is between
   render(<App />);
   vi.setSystemTime(start+100);
   await act(async () => {deliver!(Response.json({live:true,name:'Komputer',status:'connected',observedAt:start+50,data:[{at:start+50,cpuPercent:10,ramUsedGb:4,ramTotalGb:16}]}));});
-  expect(screen.getAllByText(/Połączono · Komputer/).length).toBeGreaterThan(0);
-  expect(screen.queryByText(/Nieaktualny zapis/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'PC · CPU 10% · RAM 25%' })).toBeTruthy();
+  expect(screen.queryByText(/PC · brak pomiaru/)).toBeNull();
 });
 it('accepts live AI readings up to the two-minute threshold', () => {
   const now = Date.now();
