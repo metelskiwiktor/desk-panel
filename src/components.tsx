@@ -28,7 +28,7 @@ export function SourceNote<T>({
 }) {
   return (
     <><p
-      className={`source-note ${!sourceLabel(source, now, maxAge).startsWith('Połączono') && sourceLabel(source, now, maxAge) !== 'Zapis DEMO' ? 'warning' : ''}`}
+      className={`source-note ${!sourceLabel(source, now, maxAge).startsWith('Połączono') ? 'warning' : ''}`}
     >
       <span className="dot" />
       {sourceLabel(source, now, maxAge)}

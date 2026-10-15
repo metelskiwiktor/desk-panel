@@ -38,25 +38,23 @@ describe('Cezar integration', () => {
     await expect(readCezar('http://localhost:4321', request({ bad: true }))).rejects.toThrow();
     await expect(readCezar('http://localhost:4321', request({ expired: true }))).rejects.toThrow();
   });
-  it('defaults to real tasks, opens the matching source, and keeps demo tasks out of the real list', async () => {
+  it('shows Cezar tasks with authoritative counts and opens the matching source', async () => {
     const data = await readCezar('http://127.0.0.1:4321', request());
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(data)));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Real 0/ })[0]).toBeTruthy());
-    expect(screen.queryByText('Potwierdź zakres testów kalendarza')).toBeNull();
     const counts = screen.getAllByRole('button').filter(b => b.textContent?.includes('Wymaga odpowiedzi'));
     expect(counts[0].textContent).toContain('21');
     await user.click(screen.getAllByRole('button', { name: /Real 0/ })[0]);
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(data.tasks[0].sourceUrl);
   });
-  it('shows connection failure without fake zero counts or demo fallback', async () => {
+  it('shows connection failure without fake zero counts', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 502 })));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     render(<App />);
     await waitFor(() => expect(screen.getAllByText(/Cezar niedostępny/).length).toBeGreaterThan(0));
-    expect(screen.queryByText('Potwierdź zakres testów kalendarza')).toBeNull();
     const card = screen.getByRole('heading', { name: 'Cezar' }).closest('section')!;
     expect(within(card).getByRole('button', { name: /W toku/ }).textContent).toContain('—');
   });
@@ -65,7 +63,7 @@ describe('Cezar integration', () => {
     vi.useFakeTimers();
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json(data)).mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', fetcher);
-    const view = renderHook(() => useCezar(true));
+    const view = renderHook(() => useCezar());
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(view.result.current.source.status).toBe('connected');
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });

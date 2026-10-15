@@ -1,55 +1,97 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { STORAGE_KEY } from './layout';
+import type { DashboardData, QuotaSnapshot } from './model';
+import { createFixture, type FixtureCase } from './test-fixtures';
 
+const now = new Date('2026-10-14T10:00:00Z').getTime();
 beforeEach(() => {
   localStorage.clear();
-  vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-14T10:00:00Z').getTime());
+  vi.spyOn(Date, 'now').mockReturnValue(now);
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 const nav = (name: string) => within(screen.getByRole('navigation')).getByRole('button', { name });
+
+/** Serves fixture data through the same local API contracts the real server uses. */
+function stubApi(data: DashboardData) {
+  const pending = () => new Promise<Response>(() => {});
+  const observation = (s: QuotaSnapshot) => ({ ...s, stale: false, source: null });
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+    switch (String(input)) {
+      case '/api/cezar': {
+        const { status, data: tasks, observedAt } = data.tasks;
+        if (status === 'loading') return pending();
+        if (status !== 'connected' || !tasks || observedAt === null) return new Response('', { status: 502 });
+        const count = (s: string) => tasks.filter((t) => t.status === s).length;
+        return Response.json({ observedAt, tasks, partial: false, scheduled: 0,
+          counts: { running: count('running'), queue: count('queue'), 'needs-input': count('needs-input'), review: count('review') } });
+      }
+      case '/api/calendar':
+        return data.calendar.status === 'loading' ? pending() : Response.json({ ...data.calendar, live: true, name: 'Google Calendar',
+          calendarId: 'owner@gmail.com', data: data.calendar.data?.map((e) => ({ allDay: false, ...e })) ?? null });
+      case '/api/system':
+        return data.system.status === 'loading' ? pending() : Response.json({ ...data.system, live: true, name: 'Komputer' });
+      case '/api/quotas':
+        return data.quotas.status === 'loading' ? pending() : Response.json({ ...data.quotas, live: true, name: 'Limity AI',
+          data: data.quotas.data?.map((a) => ({ ...a, snapshots: a.snapshots.map(observation), history: a.history.map(observation) })) ?? null });
+      case '/api/calendar/connection':
+        return Response.json({ status: 'connected', email: 'owner@gmail.com' });
+      default:
+        return new Response('', { status: 404 });
+    }
+  }));
+}
+function renderWith(scenario: FixtureCase = 'standard') {
+  stubApi(createFixture(now, scenario));
+  return render(<App />);
+}
+const loaded = () => screen.findAllByText(/Potwierdź zakres testów kalendarza/);
 
 describe('interaktywny panel', () => {
   it.each([
     ['loading', 'Ładowanie danych'],
     ['unavailable', 'Brak źródła danych'],
     ['offline', 'Offline · ostatni zapis'],
-  ])('pokazuje stan %s i nie generuje Insights', async (scenario, label) => {
-    const user = userEvent.setup();
-    render(<App initialLive={false} />);
-    await user.click(nav('Ustawienia'));
-    await user.selectOptions(screen.getByLabelText('Zestaw danych'), scenario);
-    await user.click(nav('Pulpit'));
-    expect(screen.getAllByText(new RegExp(label)).length).toBeGreaterThan(0);
+  ] as const)('pokazuje stan %s i nie generuje zdarzeń', async (scenario, label) => {
+    renderWith(scenario);
+    expect((await screen.findAllByText(new RegExp(label))).length).toBeGreaterThan(0);
     expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
     const counts = screen
       .getAllByRole('button')
       .filter((button) => button.textContent?.includes('W kolejce'));
-    expect(counts[0].textContent).toContain(scenario === 'offline' ? '2' : '—');
+    expect(counts[0].textContent).toContain('—');
   });
-  it('oznacza DEMO, otwiera zadanie z Insights i wraca do pulpitu', async () => {
+  it('nie oznacza danych jako demonstracyjne ani rzeczywiste', async () => {
+    renderWith();
+    await loaded();
+    expect(screen.queryByText(/DEMO|demonstracyjn|DANE RZECZYWISTE/)).toBeNull();
+    expect(screen.getAllByText(/Połączono z Cezarem/).length).toBeGreaterThan(0);
+  });
+  it('otwiera zadanie ze zdarzeń i wraca do pulpitu', async () => {
     const user = userEvent.setup();
-    render(<App initialLive={false} />);
-    expect(screen.getAllByText(/Dane demonstracyjne/).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: /^Cezar czeka na odpowiedź/ }));
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: /^Cezar czeka na odpowiedź/ }));
     expect(
       screen.getByRole('heading', { name: 'Potwierdź zakres testów kalendarza' }),
     ).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Otwórz źródło/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(
+      'http://127.0.0.1:4321/p/tabnote/tasks/decision',
+    );
     await user.click(screen.getByRole('button', { name: /Wróć/ }));
     expect(screen.getByRole('heading', { name: 'Zdarzenia' })).toBeTruthy();
   });
   it('otwiera quota z timestampami, resetem i dyskretną historią', async () => {
     const user = userEvent.setup();
-    render(<App initialLive={false} />);
+    renderWith();
     expect(screen.queryByRole('region', { name: 'Legenda wykresu limitów' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /^✳ Claude/ }));
+    await user.click(await screen.findByRole('button', { name: /^✳ Claude/ }));
     expect(screen.getByRole('heading', { name: 'Claude · limity konta' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Legenda wykresu limitów' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Historia obserwacji' })).toBeTruthy();
@@ -58,15 +100,16 @@ describe('interaktywny panel', () => {
   });
   it('wszystkie zakładki działają; agenda prowadzi do szczegółów', async () => {
     const user = userEvent.setup();
-    render(<App initialLive={false} />);
+    renderWith();
+    await loaded();
     await user.click(nav('Zadania'));
-    expect(screen.getByRole('heading', { name: 'Wszystkie zadania' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Aktywne zadania Cezara' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Aktualizacja opisów testów/ })).toBeTruthy();
     await user.click(nav('Kalendarz'));
     await user.click(screen.getByRole('button', { name: /Planowanie Tabnote/ }));
     expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
     await user.click(nav('System'));
-    expect(screen.getByText(/Backend Windows nie jest podłączony/)).toBeTruthy();
+    expect(screen.getByText(/lokalny pomiar co około 2 sekundy/)).toBeTruthy();
     await user.click(nav('Zdarzenia'));
     expect(screen.getByRole('heading', { level: 1, name: 'Zdarzenia' })).toBeTruthy();
     const rules = screen.getByRole('table', { name: 'Aktualne reguły tworzenia zdarzeń' });
@@ -76,10 +119,11 @@ describe('interaktywny panel', () => {
     expect(screen.getByText(/Restart serwera i odświeżenie strony zachowują historię/)).toBeTruthy();
     await user.click(nav('Ustawienia'));
     expect(screen.getByRole('heading', { name: 'Twój układ' })).toBeTruthy();
+    expect(screen.queryByText(/Scenariusze|Rzeczywiste źródła danych/)).toBeNull();
   });
   it('zmienia widoczność, kolejność, wariant i odtwarza zapis po montażu', async () => {
     const user = userEvent.setup();
-    const view = render(<App initialLive={false} />);
+    const view = renderWith();
     await user.click(nav('Ustawienia'));
     await user.click(screen.getByRole('checkbox', { name: 'System' }));
     await user.click(screen.getByRole('button', { name: 'Zdarzenia w górę' }));
@@ -88,7 +132,8 @@ describe('interaktywny panel', () => {
     expect(config.widgets[1].visible).toBe(false);
     expect(config.widgets[3].id).toBe('insights');
     view.unmount();
-    render(<App initialLive={false} />);
+    render(<App />);
+    await loaded();
     expect(screen.queryByRole('heading', { name: 'System' })).toBeNull();
     // Compact Cezar shows just the first task (the additional Insights is still visible).
     expect(screen.queryByRole('button', { name: /Widok notatki gotowy do przeglądu/ })).toBeNull();
@@ -97,32 +142,28 @@ describe('interaktywny panel', () => {
     await user.click(nav('Pulpit'));
     expect(screen.getByRole('heading', { name: 'System' })).toBeTruthy();
   });
-  it('umożliwia sprawdzenie null, stale i pustych stanów bez fałszywych Insights', async () => {
-    const user = userEvent.setup();
-    render(<App initialLive={false} />);
-    await user.click(nav('Ustawienia'));
-    await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'quota-missing');
-    await user.click(nav('Pulpit'));
-    expect(screen.getAllByText('Brak danych')).toHaveLength(4);
+  it('pokazuje brak pomiaru limitów bez fałszywych zdarzeń', async () => {
+    renderWith('quota-missing');
+    await waitFor(() => expect(screen.getAllByText('Brak danych')).toHaveLength(4));
     expect(screen.queryByText(/Claude.*limit blisko wyczerpania/)).toBeNull();
-    await user.click(nav('Ustawienia'));
-    await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'stale');
-    await user.click(nav('Pulpit'));
-    expect(screen.getAllByText(/Nieaktualne/).length).toBeGreaterThan(0);
+  });
+  it('oznacza nieaktualne zapisy i nie tworzy z nich zdarzeń', async () => {
+    renderWith('stale');
+    expect((await screen.findAllByText(/Nieaktualn/)).length).toBeGreaterThan(0);
     expect(screen.getByText('Brak zapisanych zdarzeń.')).toBeTruthy();
-    await user.click(nav('Ustawienia'));
-    await user.selectOptions(screen.getByLabelText('Zestaw danych'), 'empty');
-    await user.click(nav('Pulpit'));
-    expect(screen.getByText('Brak nadchodzących wydarzeń.')).toBeTruthy();
+  });
+  it('pokazuje puste źródła', async () => {
+    renderWith('empty');
+    expect(await screen.findByText('Brak nadchodzących wydarzeń.')).toBeTruthy();
   });
   it('komunikuje brak możliwości zapisania ustawień', async () => {
     const user = userEvent.setup();
-    render(<App initialLive={false} />);
+    renderWith();
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw Error('blocked');
     });
     await user.click(nav('Ustawienia'));
     await user.click(screen.getByRole('checkbox', { name: 'System' }));
-    expect(screen.getByRole('status').textContent).toContain('Nie udało się zapisać');
+    expect(screen.getByText(/Nie udało się zapisać\. Układ/)).toBeTruthy();
   });
 });

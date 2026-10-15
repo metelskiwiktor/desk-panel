@@ -141,23 +141,6 @@ header {
 .amber-dot {
   background: var(--amber);
 }
-.demo-banner {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 44px;
-  color: #a8b8d1;
-  font-size: 11px;
-}
-.demo-chip {
-  color: #b4cdf1;
-  letter-spacing: 1.4px;
-  font-size: 9px;
-  border: 1px solid #3a4b65;
-  padding: 3px 6px;
-  border-radius: 4px;
-  font-weight: 700;
-}
 .clock-area {
   display: flex;
   justify-content: space-between;
@@ -854,10 +837,7 @@ select {
   font-size: 13px;
   line-height: 1.7;
 }
-.connection-row .badge {
-  flex-shrink: 0;
-}
-.demo-footer {
+.app-footer {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -866,7 +846,7 @@ select {
   letter-spacing: 1px;
   color: #8a9bb4;
 }
-.demo-footer span {
+.app-footer span {
   letter-spacing: 0.4px;
 }
 nav {
@@ -963,9 +943,6 @@ nav button.active:after {
     flex-direction: column;
     gap: 6px;
   }
-  .demo-explanation {
-    display: none;
-  }
 }
 @media (max-width: 639px) {
   .dashboard-grid {
@@ -1015,7 +992,7 @@ nav button.active:after {
   .event-row {
     padding: 18px 12px;
   }
-  .demo-footer {
+  .app-footer {
     font-size: 8px;
   }
   .brand {

@@ -13,7 +13,6 @@ import {
   Monitor,
   Settings2,
 } from 'lucide-react';
-import { createDemo, type DemoCase } from './demo';
 import { useActivityLog } from './useActivityLog';
 import { ActivityFeed } from './ActivityFeed';
 import { EventRulesView } from './EventRulesView';
@@ -55,17 +54,14 @@ const navIcons = {
   events: ListChecks,
   settings: Settings2,
 };
-export function App({ initialLive = true }: { initialLive?: boolean }) {
-  const [live, setLive] = useState(initialLive);
-  const cezar = useCezar(live);
-  const calendar = useCalendar(live);
-  const system = useSystem(live);
-  const quotas = useQuotas(live);
+export function App() {
+  const cezar = useCezar();
+  const calendar = useCalendar();
+  const system = useSystem();
+  const quotas = useQuotas();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
   const now = Math.max(clockNow, Date.now());
-  const [scenario, setScenario] = useState<DemoCase>('standard');
-  const [demoData, setData] = useState(() => createDemo(Date.now()));
   const [layout, setLayout] = useState(readLayout);
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
@@ -88,13 +84,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
     setLayout(next);
     setStorageError(!saveLayout(next));
   };
-  const refresh = (next: DemoCase) => {
-    const at = Date.now();
-    setScenario(next);
-    setNow(at);
-    setData(createDemo(at, next));
-  };
-  const data = live ? { ...demoData, tasks: cezar.source, calendar, system, quotas } : demoData;
+  const data = { tasks: cezar.source, calendar, system, quotas };
   const tasks = orderedTasks(data.tasks.data ?? []);
   const activeTasks = tasks.filter((task) => task.status !== 'done');
   const events = [...(data.calendar.data ?? [])]
@@ -102,13 +92,13 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
     .sort((a, b) => a.startAt - b.startAt);
   const samples = data.system.data ?? [];
   const latest = samples.at(-1);
-  const activity = useActivityLog(data, now, live ? 'live' : `demo:${scenario}`);
+  const activity = useActivityLog(data, now);
   const summary = (
     <div className="task-counts">
       {(['running', 'queue', 'needs-input', 'review'] as const).map((status) => (
         <button key={status} className={status} onClick={() => navigate('tasks')}>
           <strong>
-            {data.tasks.data === null ? '—' : (live ? cezar.snapshot?.counts[status] ?? '—' : tasks.filter((t) => t.status === status).length)}
+            {data.tasks.data === null ? '—' : cezar.snapshot?.counts[status] ?? '—'}
           </strong>
           <span>{taskLabels[status]}</span>
         </button>
@@ -134,7 +124,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
               values={samples.map((s) => s.cpuPercent)}
               label="Ostatnie próbki CPU w procentach"
             />
-            <span className="meta">{live ? `Ostatnie ${samples.length} próbek · co około 2 s` : `Ostatnie ${samples.length} próbek · co 10 s (DEMO)`}</span>
+            <span className="meta">Ostatnie {samples.length} próbek · co około 2 s</span>
           </div>
           <div className="metric">
             <div className="metric-heading">
@@ -153,7 +143,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
               label="Ostatnie próbki wykorzystania RAM w procentach"
             />
             <span className="meta">
-                {number(latest.ramUsedGb)} {live ? 'GiB' : 'GB'} / {number(latest.ramTotalGb)} {live ? 'GiB' : 'GB'}
+                {number(latest.ramUsedGb)} GiB / {number(latest.ramTotalGb)} GiB
             </span>
           </div>
         </>
@@ -164,7 +154,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
             : 'Brak próbek CPU i RAM.'}
         </Empty>
       )}
-      <SourceNote source={data.system} now={now} maxAge={MAX_AGE.system} refreshEveryMs={live ? 2000 : undefined} />
+      <SourceNote source={data.system} now={now} maxAge={MAX_AGE.system} refreshEveryMs={2000} />
     </>
   );
   function renderWidget(id: WidgetId, compact: boolean) {
@@ -173,7 +163,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
         return (
           <Card
             title="Cezar"
-            eyebrow={live ? 'WORKSPACE · DANE RZECZYWISTE' : 'WORKSPACE DEMO'}
+            eyebrow="WORKSPACE"
             icon={<Layers3 size={22} />}
             action={
               <button
@@ -200,16 +190,16 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                 </Empty>
               )}
             </div>
-            <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={live ? 5000 : undefined} />
-            {live && cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-            {live && !!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
+            <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />
+            {cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
+            {!!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
           </Card>
         );
       case 'system':
         return (
           <Card
             title="System"
-            eyebrow={live ? 'KOMPUTER · DANE RZECZYWISTE' : 'KOMPUTER DEMO'}
+            eyebrow="KOMPUTER"
             icon={<Monitor size={21} />}
             action={
               <button
@@ -226,8 +216,8 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
         );
       case 'calendar':
         return (
-          <Card title="Kalendarz Google" eyebrow={live ? 'AGENDA · DANE RZECZYWISTE' : 'AGENDA DEMO'} icon={<CalendarDays size={21} />}>
-            {live && <p className="meta">{calendar.calendarId || 'Łączenie z Google…'} · najbliższe 7 dni</p>}
+          <Card title="Kalendarz Google" eyebrow="AGENDA" icon={<CalendarDays size={21} />}>
+            <p className="meta">{calendar.calendarId || 'Łączenie z Google…'} · najbliższe 7 dni</p>
             {events.length ? (
               events
                 .slice(0, compact ? 1 : 3)
@@ -241,13 +231,13 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                   : data.calendar.status === 'connected' ? 'Brak nadchodzących wydarzeń.' : 'Kalendarz jest niedostępny.'}
               </Empty>
             )}
-            <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={live ? 60000 : undefined} />
+            <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={60000} />
             {data.calendar.partial && <p className="warning">Agenda częściowa — osiągnięto limit odczytu.</p>}
           </Card>
         );
       case 'quotas':
         return (
-          <Card title="Limity AI" eyebrow={live ? 'BIEŻĄCE LIMITY · ODCZYT BEZ MODELU' : 'SNAPSHOTY DEMO'} icon={<Layers3 size={21} />}>
+          <Card title="Limity AI" eyebrow="BIEŻĄCE LIMITY · ODCZYT BEZ MODELU" icon={<Layers3 size={21} />}>
             {data.quotas.data?.length ? (
               data.quotas.data.map((account) => (
                 <QuotaCard
@@ -267,12 +257,12 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                   : 'Brak snapshotów limitów.'}
               </Empty>
             )}
-            <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={live ? 60000 : undefined} />
+            <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
           </Card>
         );
       case 'insights':
         return (
-          <ActivityFeed entries={activity.entries} live={live} open={open} dismiss={activity.dismiss}
+          <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
             restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} />
         );
     }
@@ -283,7 +273,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
       return (
         <Card title="CPU i pamięć RAM" icon={<Monitor />}>
           <p className="card-intro">
-            {live ? 'CPU całego komputera — średnia zajętość wszystkich rdzeni. RAM to zajęta pamięć fizyczna. Historia obejmuje do 5 minut rzeczywistych próbek.' : 'Zapis demonstracyjny, bez połączenia z komputerem. Wykresy pokazują procent wykorzystania, od 0 do 100%.'}
+            CPU całego komputera — średnia zajętość wszystkich rdzeni. RAM to zajęta pamięć fizyczna. Historia obejmuje do 5 minut próbek.
           </p>
           {systemContent}
           {samples.length > 0 && (
@@ -296,7 +286,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                   <div className="snapshot" key={s.at}>
                     <span>{stamp(s.at)}</span>
                     <span>
-                      CPU {number(s.cpuPercent)}% · RAM {number(s.ramUsedGb)} / {number(s.ramTotalGb)} {live ? 'GiB' : 'GB'}
+                      CPU {number(s.cpuPercent)}% · RAM {number(s.ramUsedGb)} / {number(s.ramTotalGb)} GiB
                     </span>
                   </div>
                 ))}
@@ -334,9 +324,9 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
               </>
             )}
           </dl>
-          <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={live ? 5000 : undefined} />
-            {live && cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-            {live && !!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
+          <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />
+            {cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
+            {!!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
           <SourceLink url={task.sourceUrl} />
         </Card>
       ) : (
@@ -353,7 +343,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
           <p>{event.allDay && event.startDate && event.endDate ? allDayDate(event.startDate, event.endDate) : `${date(event.startAt)}${new Date(event.startAt).toDateString() !== new Date(event.endAt).toDateString() ? ` — ${date(event.endAt)}` : ''}`}</p>
           <p className="detail-copy">{event.description}</p>
           {event.location && <p>{event.location}</p>}
-          <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={live ? 60000 : undefined} />
+          <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={60000} />
           <SourceLink url={event.sourceUrl} />
         </Card>
       ) : (
@@ -367,7 +357,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
           Procent wykorzystania limitu konta w oknie 5h lub 7d. Snapshoty są oddzielnymi
           obserwacjami.
         </p>
-        {live && <p className="meta">Bieżący odczyt limitów kont zalogowanych w lokalnych CLI. Odświeżanie co około minutę nie uruchamia rozmów z modelem. Przy błędzie pozostaje ostatni pomiar z oznaczeniem nieaktualności.</p>}
+        <p className="meta">Bieżący odczyt limitów kont zalogowanych w lokalnych CLI. Odświeżanie co około minutę nie uruchamia rozmów z modelem. Przy błędzie pozostaje ostatni pomiar z oznaczeniem nieaktualności.</p>
         {account.snapshots.map((s) => (
           <div className="quota-detail" key={s.window}>
             <QuotaWindow
@@ -385,8 +375,8 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
           </div>
         ))}
         <QuotaLegend />
-        <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={live ? 60000 : undefined} />
-        <h3>{live ? 'Ostatni odczyt' : 'Historia obserwacji'}</h3>
+        <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
+        <h3>{account.history.length ? 'Historia obserwacji' : 'Ostatni odczyt'}</h3>
         <p className="meta">Bez interpolacji i szacowania wartości po resecie.</p>
         {[...account.snapshots, ...account.history]
           .sort((a, b) => (b.observedAt ?? 0) - (a.observedAt ?? 0))
@@ -420,30 +410,18 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
         <div className="service-status">
           <span>
             <i
-              className={`dot ${['Zapis DEMO', 'Połączono · Komputer'].includes(sourceLabel(data.system, now, MAX_AGE.system)) ? 'green-dot' : 'amber-dot'}`}
+              className={`dot ${sourceLabel(data.system, now, MAX_AGE.system) === 'Połączono · Komputer' ? 'green-dot' : 'amber-dot'}`}
             />
-            PC ·{' '}
-            {sourceLabel(data.system, now, MAX_AGE.system) === 'Zapis DEMO'
-              ? 'DEMO'
-              : sourceLabel(data.system, now, MAX_AGE.system)}
+            PC · {sourceLabel(data.system, now, MAX_AGE.system)}
           </span>
           <span>
             <i
-              className={`dot ${['Zapis DEMO', 'Połączono z Cezarem'].includes(sourceLabel(data.tasks, now, MAX_AGE.tasks)) ? 'green-dot' : 'amber-dot'}`}
+              className={`dot ${sourceLabel(data.tasks, now, MAX_AGE.tasks) === 'Połączono z Cezarem' ? 'green-dot' : 'amber-dot'}`}
             />
-            Cezar ·{' '}
-            {sourceLabel(data.tasks, now, MAX_AGE.tasks) === 'Zapis DEMO'
-              ? 'DEMO'
-              : sourceLabel(data.tasks, now, MAX_AGE.tasks)}
+            Cezar · {sourceLabel(data.tasks, now, MAX_AGE.tasks)}
           </span>
         </div>
       </header>
-      <div className="demo-banner">
-        <span className="demo-chip">{live ? 'DANE RZECZYWISTE' : 'DEMO'}</span>
-        <span>
-          {live ? 'Cezar · kalendarz · komputer · bieżące limity AI' : 'Dane demonstracyjne'}
-        </span>
-      </div>
       <main ref={main} tabIndex={-1} id="main-content">
         {detail ? (
           <>
@@ -497,7 +475,7 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                   <h1>{pageNames[page]}</h1>
                 </div>
                 {page === 'tasks' && (
-                  <Card title={live ? 'Aktywne zadania Cezara' : 'Wszystkie zadania'} icon={<ListTodo />}>
+                  <Card title="Aktywne zadania Cezara" icon={<ListTodo />}>
                     {summary}
                     {tasks.length ? (
                       tasks.map((task) => <TaskRow key={task.id} task={task} open={open} />)
@@ -506,9 +484,9 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                         {data.tasks.status === 'loading' ? 'Ładowanie zadań…' : 'Brak zadań.'}
                       </Empty>
                     )}
-                    <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={live ? 5000 : undefined} />
-            {live && cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-            {live && !!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
+                    <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />
+            {cezar.snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
+            {!!cezar.snapshot?.scheduled && <p className="meta">Zaplanowane wznowienia: {cezar.snapshot.scheduled}</p>}
                   </Card>
                 )}
                 {page === 'calendar' && (
@@ -524,14 +502,14 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                           : data.calendar.status === 'connected' ? 'Brak nadchodzących wydarzeń.' : 'Kalendarz jest niedostępny.'}
                       </Empty>
                     )}
-                    <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={live ? 60000 : undefined} />
+                    <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={60000} />
                   </Card>
                 )}
                 {page === 'system' && (
                   <>
                     {renderWidget('system', false)}
                     <p className="footnote">
-                      {live ? 'CPU i RAM całego komputera · lokalny pomiar co około 2 sekundy. Historia zeruje się po dłuższej przerwie.' : 'CPU i RAM z fixture DEMO. Backend Windows nie jest podłączony.'}
+                      CPU i RAM całego komputera · lokalny pomiar co około 2 sekundy. Historia zeruje się po dłuższej przerwie.
                     </p>
                   </>
                 )}
@@ -541,10 +519,6 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
                     layout={layout}
                     configure={configure}
                     storageError={storageError}
-                    live={live}
-                    setLive={setLive}
-                    scenario={scenario}
-                    refresh={refresh}
                   />
                 )}
               </>
@@ -552,8 +526,8 @@ export function App({ initialLive = true }: { initialLive?: boolean }) {
           </>
         )}
       </main>
-      <footer className="demo-footer">
-        DESK PANEL <span>{live ? 'Rzeczywiste dane · limity AI bez wywołań modelu' : 'Dane demonstracyjne'}</span>
+      <footer className="app-footer">
+        DESK PANEL <span>Limity AI bez wywołań modelu</span>
       </footer>
       <nav aria-label="Główna nawigacja">
         {(Object.keys(pageNames) as Page[]).map((id) => {

@@ -7,7 +7,8 @@ import {
   type QuotaSnapshot,
 } from './model';
 
-export const demoCases = {
+/** Deterministic dashboard data for tests; never imported by the app. */
+export const fixtureCases = {
   standard: 'Dzień pracy',
   empty: 'Puste źródła',
   stale: 'Nieaktualne zapisy',
@@ -17,8 +18,8 @@ export const demoCases = {
   ram: 'Wysokie użycie RAM',
   'quota-missing': 'Quota bez pomiaru',
 } as const;
-export type DemoCase = keyof typeof demoCases;
-export function createDemo(now: number, scenario: DemoCase = 'standard'): DashboardData {
+export type FixtureCase = keyof typeof fixtureCases;
+export function createFixture(now: number, scenario: FixtureCase = 'standard'): DashboardData {
   const source = <T>(data: T): Source<T> => ({ status: 'connected', observedAt: now, data });
   const task = (
     id: string,
@@ -34,10 +35,11 @@ export function createDemo(now: number, scenario: DemoCase = 'standard'): Dashbo
     status,
     startedAt: status === 'queue' ? undefined : now - 24 * MINUTE,
     checkedAt: now,
+    sourceUrl: `http://127.0.0.1:4321/p/tabnote/tasks/${id}`,
     description:
       status === 'needs-input'
-        ? 'Przykładowa decyzja: wybrać zakres regresji przed dalszą implementacją. To scenariusz DEMO, odpowiedź nie jest wysyłana do Cezara.'
-        : 'Przykładowe zadanie pokazujące stan pracy. Dane nie pochodzą z produkcyjnych logów ani aktywnego workspace.',
+        ? 'Wybrać zakres regresji przed dalszą implementacją.'
+        : 'Zadanie w trakcie pracy.',
   });
   const tasks = [
     task('decision', 'Potwierdź zakres testów kalendarza', 'needs-input'),
@@ -71,21 +73,21 @@ export function createDemo(now: number, scenario: DemoCase = 'standard'): Dashbo
         startAt: now + 12 * MINUTE,
         endAt: now + 42 * MINUTE,
         location: 'Biurko · sesja robocza',
-        description: 'Agenda DEMO: priorytety, regresje i zakres kolejnej iteracji.',
+        description: 'Priorytety, regresje i zakres kolejnej iteracji.',
       },
       {
         id: 'design',
         title: 'Przegląd interfejsu',
         startAt: now + 90 * MINUTE,
         endAt: now + 120 * MINUTE,
-        description: 'Agenda DEMO: czytelność panelu na ekranie pionowym.',
+        description: 'Czytelność panelu na ekranie pionowym.',
       },
       {
         id: 'focus',
         title: 'Czas na pracę własną',
         startAt: now + 180 * MINUTE,
         endAt: now + 240 * MINUTE,
-        description: 'Przykładowy blok skupienia.',
+        description: 'Blok skupienia.',
       },
     ]),
     quotas: source([

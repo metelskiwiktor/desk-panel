@@ -6,7 +6,7 @@ import { createCalendarReader, projectEvents } from '../server/calendar';
 import { useCalendar } from './useCalendar';
 import { allDayDate } from './format';
 import { deriveInsights } from './insights';
-import { createDemo } from './demo';
+import { createFixture } from './test-fixtures';
 
 const timed = { id: 'timed', summary: 'Spotkanie', start: { dateTime: '2026-03-29T10:00:00+02:00' }, end: { dateTime: '2026-03-29T11:00:00+02:00' }, htmlLink: 'https://calendar.google.com/event?eid=real' };
 const allDay = { id: 'day', summary: 'Dzień', start: { date: '2026-03-29' }, end: { date: '2026-03-30' } };
@@ -51,7 +51,7 @@ describe('Google Calendar', () => {
   it('rejects malformed event boundaries and avoids all-day meeting reminders', () => {
     expect(() => projectEvents({ items: [{ ...timed, start: { dateTime: 'invalid' } }] }, 'UTC')).toThrow();
     const now = Date.now();
-    const data = createDemo(now, 'empty');
+    const data = createFixture(now, 'empty');
     data.calendar = { status: 'connected', observedAt: now, data: [{ id: 'day', title: 'Cały dzień', startAt: now, endAt: now + 86400_000, allDay: true, description: '' }] };
     expect(deriveInsights(data, now).some(i => i.target.kind === 'event' && i.target.id === 'day')).toBe(false);
   });
@@ -60,7 +60,7 @@ describe('Google Calendar', () => {
     const source = { status: 'connected', live: true, name: 'Google Calendar', calendarId: 'owner@gmail.com', observedAt: Date.now(), data: [] };
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json(source)).mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', fetcher);
-    const view = renderHook(() => useCalendar(true));
+    const view = renderHook(() => useCalendar());
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(view.result.current.status).toBe('connected');
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
@@ -69,7 +69,7 @@ describe('Google Calendar', () => {
     await vi.advanceTimersByTimeAsync(60000);
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
-  it('renders real calendar rows and their source detail without demo events', async () => {
+  it('renders calendar rows and their source detail', async () => {
     const at = Date.now();
     const source = { status: 'connected', live: true, name: 'Google Calendar', calendarId: 'owner@gmail.com', observedAt: at,
       data: [{ id: 'real', title: 'Rzeczywiste wydarzenie', description: 'Opis z Google', startAt: at + 3600_000, endAt: at + 7200_000, allDay: false, sourceUrl: 'https://calendar.google.com/event?eid=real' }] };
@@ -80,7 +80,6 @@ describe('Google Calendar', () => {
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Rzeczywiste wydarzenie/ })).toBeTruthy());
-    expect(screen.queryByText('Planowanie Tabnote')).toBeNull();
     await user.click(screen.getByRole('button', { name: /Rzeczywiste wydarzenie/ }));
     expect(screen.getByText('Opis z Google')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(source.data[0].sourceUrl);

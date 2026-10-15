@@ -167,7 +167,7 @@ błędzie ma 5-minutowy backoff. To aktualny odczyt; nie łączymy historii ró�
 loginów. Historyczny endpoint `/panel/v1/quotas` i taskowe snapshoty nadal działają
 bez odpytywania providera i nie są modyfikowane przez live polling.
 
-## Interfejs i DEMO
+## Interfejs
 
 Stopki kart pokazują częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty
@@ -178,14 +178,10 @@ Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Ukła
 (widoczność, kolejność, wariant) zapisuje się w localStorage. Poniżej 640 CSS px
 siatka przechodzi do jednej kolumny. Brak procentów postępu, ETA i danych dysku.
 
-W Ustawieniach można wyłączyć rzeczywiste dane Cezara, kalendarza i komputera i sprawdzać istniejące
-scenariusze DEMO: pusto, offline, brak danych, ładowanie, stale i wysokie quota/RAM.
-Po odświeżeniu strony tryb rzeczywisty wraca jako domyślny.
-
-W trybie DEMO limity AI są przykładami. Null oznacza brak pomiaru;
-historia to dyskretne obserwacje. Zdarzenia korzystają z tych samych źródeł co
-karty. Offline lub stare dane nie tworzą nowych alertów. W trybie rzeczywistym
-wszystkie karty korzystają z podłączonych źródeł.
+Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
+demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
+Zdarzenia korzystają z tych samych źródeł co karty. Offline lub stare dane nie
+tworzą nowych alertów.
 
 ## Zdarzenia
 
@@ -200,8 +196,7 @@ Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwieraj
 
 Lista przechowuje ostatnie 100 wykrytych zdarzeń z godziną wykrycia i opisem z tego
 momentu. Zapisuje je lokalnie w przeglądarce, również po usunięciu warunku alertu
-lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle. DEMO ma osobną
-historię w pamięci, resetowaną przy zmianie scenariusza; nie modyfikuje historii live.
+lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle.
 Zablokowany/uszkodzony localStorage nie blokuje pulpitu.
 
 Reguły: Cezar wymaga odpowiedzi; zadania zakończone w ostatnich 10 minutach;
@@ -226,10 +221,11 @@ npm test
 npm run build
 ```
 
-Testy obejmują interfejs DEMO, layout, reguły i historię zdarzeń, gesty oraz integrację:
+Testy obejmują interfejs (na danych testowych z `src/test-fixtures.ts`
+podawanych przez zaślepione lokalne API), layout, reguły i historię zdarzeń, gesty oraz integrację:
 paginację, autorytatywne liczniki, failed w grupie pytań, niepełne coverage,
-błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez DEMO
-fallbacku. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,
+błędny JSON, wygasły snapshot, rzeczywiste wiersze i linki oraz awarię bez
+zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odrzucone zaproszenia,
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
