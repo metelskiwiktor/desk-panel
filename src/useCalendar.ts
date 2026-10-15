@@ -1,9 +1,12 @@
+import { usePollingEnabled } from './polling';
 import { useEffect, useState } from 'react';
 import { calendarSourceSchema, type CalendarSource } from './calendar-contract';
 
 export function useCalendar() {
   const [source, setSource] = useState<CalendarSource & { loadedAt?: number }>({ name: 'Google Calendar', calendarId: '', live: true, status: 'loading', observedAt: null, data: null });
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -24,6 +27,6 @@ export function useCalendar() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, []);
+  }, [pollingEnabled]);
   return source;
 }

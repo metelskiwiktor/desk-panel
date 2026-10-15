@@ -14,8 +14,9 @@ if ($Action -eq 'RUN') {
         $prefix=@($context.Data.pathPrefix | ForEach-Object { Expand-ServicePath $_ $context }) -join ';'
         $env:PATH="$prefix;$env:PATH"
     }
-    if ($definition.envFile) {
-        $file=Expand-ServicePath $definition.envFile $context
+    # Optional private settings outside Git (e.g. DESK_MAIL_ACCOUNTS); a missing file is skipped.
+    $file=if ($definition.envFile) { Expand-ServicePath $definition.envFile $context }
+    if ($file -and (Test-Path -LiteralPath $file)) {
         foreach ($line in Get-Content -LiteralPath $file) {
             $entry=$line.Trim()
             if ($entry -and !$entry.StartsWith('#') -and $entry.Contains('=')) {

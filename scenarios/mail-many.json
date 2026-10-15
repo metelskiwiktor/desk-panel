@@ -897,7 +897,8 @@
         "email": "praca@gmail.com",
         "status": "connected",
         "observedAt": "now",
-        "unread": 32
+        "unread": 32,
+        "partial": true
       }
     ],
     "total": 64

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
-import { mailSourceSchema } from '../src/mail-contract';
+import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { SourceError, type PanelSources } from './sources';
@@ -81,7 +81,9 @@ export function createScenarioSources(file: string): PanelSources {
     googleAccounts: () => serve('googleAccounts'),
     async mail(limit) {
       const source = await serve('mail');
-      const all = source.data?.filter(t => !handled.has(t.id)) ?? null;
+      // Same rolling window as Gmail, so a scenario cannot show what the service would not.
+      const cutoff = Date.now() - MAIL_WINDOW_MS;
+      const all = source.data?.filter(t => t.receivedAt >= cutoff && !handled.has(t.id)) ?? null;
       return { ...source, data: all && all.slice(0, limit), total: all?.length ?? 0 };
     },
     async mailAction(account, threadId, action) {

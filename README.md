@@ -29,6 +29,15 @@ usługę. Szczegóły i logi opisano w [servy/README.md](servy/README.md).
 `just` wyświetla krótki zestaw komend; `just check` uruchamia testy i build,
 a `just service RESTART` przeładowuje działający serwer po zmianach.
 
+W Ustawieniach „Otwórz podgląd pionowy” osadza niezmieniony panel w osobnym obszarze
+o wymiarach głównego ekranu z `devices.json`. Podgląd przewija się bez automatycznego
+pomniejszania, a powiększenie przeglądarki działa jak zwykle. Jego style dotyczą tylko
+zewnętrznej warstwy; dashboard używa tego samego układu co na docelowym ekranie.
+Ukryty panel zachowuje stronę i stan, ale wstrzymuje odpytywanie API i anuluje
+trwające odczyty. Po zamknięciu podglądu odczyty wznawiają się od razu.
+Limity AI są zawsze bezpośrednio pod kartami. Wysokość kart wynika z zawartości,
+a długie listy poczty przewijają się wewnątrz karty.
+
 Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 
 | Zmienna | Domyślnie | Znaczenie |
@@ -39,6 +48,15 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_MAIL_ACCOUNTS` | konto z `DESK_CALENDAR_ID` | Konta Gmail na liście poczty, rozdzielone przecinkami (np. `a@gmail.com,b@gmail.com`) |
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |
+
+Usługa Windows czyta dodatkowo opcjonalny plik `%USERPROFILE%\.desk-panel\panel.env`
+(poza Gitem; linie `KLUCZ=wartość`, `#` to komentarz), np. z prywatnymi adresami:
+
+```
+DESK_MAIL_ACCOUNTS=pierwszy@gmail.com,drugi@gmail.com
+```
+
+Zmiany w nim działają po `just service RESTART`. Zobacz [servy/README.md](servy/README.md).
 
 ## Google Calendar
 
@@ -92,8 +110,10 @@ nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń
 
 ## Poczta (Gmail)
 
-Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych (`in:inbox is:unread`, wszystkie
+Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych z ostatnich 30 dni (`in:inbox is:unread newer_than:30d`, wszystkie
 karty, bez spamu i kosza) ze wszystkich kont z `DESK_MAIL_ACCOUNTS`, najnowsze na górze.
+Liczniki obejmują pobrane wątki z tego okresu (do 200 na konto), przed podziałem listy na strony;
+gdy Gmail ma ich więcej, licznik ma postać „200+”. Scenariusze stosują to samo 30-dniowe okno.
 Przesunięcie w lewo oznacza wątek jako przeczytany, w prawo przenosi go do Kosza w Gmailu
 (odwracalne przez 30 dni; trwałego usuwania nie ma). Te same akcje są pod przyciskami
 ✓ i kosza oraz w szczegółach wątku. Przez 6 sekund „Cofnij” wykonuje w Gmailu akcję

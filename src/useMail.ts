@@ -1,3 +1,4 @@
+import { usePollingEnabled } from './polling';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAIL_PAGE, mailSourceSchema, type MailAction, type MailSource, type MailThread } from './mail-contract';
 import { EVENT_RULES } from './event-rules';
@@ -19,7 +20,9 @@ export function useMail() {
   const [error, setError] = useState('');
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
+  const pollingEnabled = usePollingEnabled();
   useEffect(() => {
+    if (!pollingEnabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -44,7 +47,7 @@ export function useMail() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [limit, reload]);
+  }, [limit, reload, pollingEnabled]);
   const act = useCallback(async (thread: MailThread, action: 'read' | 'trash') => {
     setError('');
     setHidden(previous => new Set(previous).add(thread.id));

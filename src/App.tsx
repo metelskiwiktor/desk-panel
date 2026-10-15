@@ -39,6 +39,7 @@ import { useQuotas } from './useQuotas';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
+import { usePollingEnabled } from './polling';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -57,7 +58,8 @@ const navIcons = {
   events: ListChecks,
   settings: Settings2,
 };
-export function App() {
+export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPreview?: boolean; onTabletPreviewChange?: () => void } = {}) {
+  const pollingEnabled = usePollingEnabled();
   const cezar = useCezar();
   const calendar = useCalendar();
   const system = useSystem();
@@ -72,9 +74,11 @@ export function App() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
+    if (!pollingEnabled) return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [pollingEnabled]);
   useEffect(() => {
     main.current?.focus();
     window.scrollTo?.(0, 0);
@@ -416,6 +420,8 @@ export function App() {
                 {page === 'events' && <EventRulesView />}
                 {page === 'settings' && (
                   <SettingsView
+                    tabletPreview={tabletPreview}
+                    onTabletPreviewChange={onTabletPreviewChange}
                     layout={layout}
                     configure={configure}
                     storageError={storageError}

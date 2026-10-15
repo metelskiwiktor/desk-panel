@@ -8,10 +8,14 @@ export function SettingsView({
   layout,
   configure,
   storageError,
+  tabletPreview,
+  onTabletPreviewChange,
 }: {
   layout: Layout;
   configure: (next: Layout) => void;
   storageError: boolean;
+  tabletPreview?: boolean;
+  onTabletPreviewChange?: () => void;
 }) {
   return (
     <div className="settings-stack">
@@ -19,6 +23,12 @@ export function SettingsView({
         <p className="card-intro">CPU i RAM co około 2 sekundy, Cezar co 5 sekund, kalendarz co minutę. Bieżące limity AI co około minutę, bez rozmów z modelem.</p>
       </Card>
       <ScreenCard />
+      <Card title="Podgląd pionowy" icon={<Settings2 />}>
+        <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
+        <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>
+          {tabletPreview ? 'Zamknij podgląd pionowy' : 'Otwórz podgląd pionowy'}
+        </button>
+      </Card>
       <GoogleAccounts />
       <Card title="Pulpit" icon={<Settings2 />}>
         <p className="card-intro">

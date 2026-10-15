@@ -4,6 +4,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { installedMatches, recordInstalled } from './dependencies.mjs';
 
 const BRANCH = 'main';
 const REMOTE = `origin/${BRANCH}`;
@@ -25,6 +26,16 @@ function fail(message, details = []) {
 function service(action) {
   if (!windows) { console.log(`(pomijam ${action} usługi — to nie Windows)`); return true; }
   return run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'servy/desk-panel.ps1', '-Action', action]);
+}
+/**
+ * 'Running', 'Stopped', … ; '' when the service is not registered (before `just install`);
+ * null when unknown (not Windows, or the query failed) — then the service actions decide.
+ */
+function serviceState() {
+  if (!windows) return null;
+  const { name } = JSON.parse(readFileSync('servy/services.json', 'utf8')).services.find(s => s.id === 'desk-panel');
+  const query = spawnSync('powershell.exe', ['-NoProfile', '-Command', `(Get-Service -Name '${name}' -ErrorAction SilentlyContinue).Status`], { encoding: 'utf8' });
+  return query.status === 0 ? String(query.stdout ?? '').trim() : null;
 }
 /** Local files that differ from HEAD: modified, staged, deleted or untracked. */
 const localChanges = () => [...new Set([...lines(git('diff', '--name-only', 'HEAD')), ...lines(git('ls-files', '--others', '--exclude-standard'))])];
@@ -60,18 +71,25 @@ if (incoming) {
 const local = localChanges();
 if (local.length) console.log(`Lokalne niezacommitowane zmiany też zostaną wdrożone:\n  ${local.join('\n  ')}`);
 const target = fingerprint();
-if (!force && existsSync(MARKER) && readFileSync(MARKER, 'utf8').trim() === target) {
+// The proof lives in node_modules, so a separate pull cannot hide a changed lockfile.
+const reinstall = !installedMatches();
+if (!force && !reinstall && existsSync(MARKER) && readFileSync(MARKER, 'utf8').trim() === target) {
   console.log('\n✔ Usługa już serwuje tę wersję. Nic do zrobienia (--force wymusza ponowne wdrożenie).');
   process.exit(0);
 }
 
-// 2. Dependencies: the running service uses node_modules, so stop it before replacing them.
-const lockChanged = incoming && lines(git('diff', '--name-only', before, 'HEAD')).includes('package-lock.json');
-const reinstall = lockChanged || local.includes('package-lock.json') || !existsSync('node_modules');
+// 2. Dependencies: a running service holds node_modules, so stop it before replacing them.
+const state = serviceState();
+const registered = state !== '';
 let stopped = false;
 if (reinstall) {
-  stopped = service('STOP');
+  if (!registered) console.log('Usługa nie jest zarejestrowana (just install) — instaluję zależności bez jej zatrzymywania.');
+  else if (state !== 'Stopped') {
+    stopped = service('STOP');
+    if (!stopped) fail('Nie udało się zatrzymać usługi przed instalacją zależności.');
+  }
   if (!run('npm', ['ci'])) { if (stopped) service('START'); fail('npm ci nie powiodło się.'); }
+  recordInstalled();
 }
 
 // 3. Verify, then build next to the served dist and swap only on success.
@@ -88,8 +106,8 @@ renameSync('dist.next', 'dist');
 rmSync('dist.old', { recursive: true, force: true });
 
 // 4. Restart and confirm the API answers.
+if (!registered) fail('Zbudowano i zweryfikowano, ale usługa nie jest zarejestrowana. Zarejestruj ją: just install');
 if (!service(stopped ? 'START' : 'RESTART')) fail('Nie udało się zrestartować usługi (just service pokaże stan).');
-writeFileSync(MARKER, target + '\n');
 if (windows) {
   let healthy = false;
   for (let i = 0; i < 20 && !healthy; i++) {
@@ -98,4 +116,5 @@ if (windows) {
   }
   if (!healthy) fail('Usługa nie odpowiada na http://127.0.0.1:5174 po restarcie. Sprawdź servy/logs/Desk-Panel/stderr.log.');
 }
+writeFileSync(MARKER, target + '\n');
 console.log(`\n✔ Wdrożono ${git('rev-parse', '--short', 'HEAD')}${local.length ? ` + ${local.length} lokalnych zmian` : ''}.`);

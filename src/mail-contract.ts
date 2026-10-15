@@ -9,8 +9,10 @@ export const mailThreadSchema = z.object({
 });
 export const mailAccountSchema = z.object({
   email: z.string(), status, observedAt: z.number().finite().nullable(),
-  /** Unread inbox conversations according to Gmail, independent of how many are listed. */
+  /** Loaded unread inbox conversations from the last 30 days, before UI pagination (up to 200 per account). */
   unread: z.number().int().nonnegative().nullable(), message: z.string().optional(),
+  /** Gmail listed more than were loaded, so `unread` is a lower bound. */
+  partial: z.boolean().optional(),
 });
 export const mailSourceSchema = z.object({
   live: z.literal(true), name: z.literal('Gmail'), status,
@@ -21,6 +23,8 @@ export const mailSourceSchema = z.object({
 });
 export type MailThread = z.infer<typeof mailThreadSchema>;
 export type MailSource = z.infer<typeof mailSourceSchema>;
+/** Only unread conversations received within this rolling window are shown (Gmail query `newer_than:30d`). */
+export const MAIL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 /** Conversations requested per scroll step. */
 export const MAIL_PAGE = 30;
 export const mailActions = ['read', 'unread', 'trash', 'untrash'] as const;

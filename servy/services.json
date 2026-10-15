@@ -9,7 +9,10 @@
       "workingDirectory": "${ProjectRoot}",
       "executable": "C:\\nvm4w\\nodejs\\node.exe",
       "arguments": ["${ProjectRoot}\\node_modules\\tsx\\dist\\cli.mjs", "server/index.ts"],
-      "environment": {"DESK_PORT": "5174"}
+      "envFile": "${UserProfile}\\.desk-panel\\panel.env",
+      "environment": {
+        "DESK_PORT": "5174"
+      }
     }
   ]
 }

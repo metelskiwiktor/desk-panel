@@ -5,6 +5,12 @@ zależności od skryptów w sąsiednich projektach. Manifest `services.json` okr
 Node.js, port i katalog aplikacji; ścieżki projektu są rozwiązywane względem niego.
 Na innym komputerze dostosuj ścieżkę Node.js, jeśli nie używasz nvm4w.
 
+Prywatne ustawienia (np. adresy e-mail) nie trafiają do manifestu. Przy każdym starcie
+usługa czyta opcjonalny `%USERPROFILE%\.desk-panel\panel.env` (`envFile` w manifeście;
+brak pliku jest pomijany) — linie `KLUCZ=wartość`, np.
+`DESK_MAIL_ACCOUNTS=pierwszy@gmail.com,drugi@gmail.com`. Wartości z `environment`
+w manifeście mają pierwszeństwo. Po zmianie: `just service RESTART`.
+
 Z katalogu projektu: `just install` (lub po buildzie `./servy/register.ps1 -Start`).
 Skrypt poprosi o podniesienie uprawnień Windows. Nowa usługa wymaga hasła konta
 Windows, nie PIN-u: wpisz je wyłącznie w systemowym oknie poświadczeń.
@@ -24,10 +30,14 @@ http://127.0.0.1:5174, także bez otwartej sesji terminala.
    W przeciwnym razie scala (lokalne niezacommitowane zmiany zostają na miejscu).
 2. Gdy nic się nie zmieniło od ostatniego wdrożenia (commit + lokalne zmiany),
    kończy bez restartu. `just update --force` wdraża mimo to.
-3. Przy zmianie `package-lock.json` zatrzymuje usługę i robi `npm ci`.
+3. Gdy `package-lock.json` różni się od zainstalowanego (znacznik
+   `node_modules/.desk-panel-dependencies`, zapisywany też przez `just setup`) albo
+   znacznika brak, robi `npm ci`. Działającą usługę najpierw zatrzymuje — jeśli się
+   nie da, przerywa bez instalacji. Zatrzymaną lub jeszcze niezarejestrowaną pomija.
 4. Testy, typecheck i build do `dist.next`; dopiero po sukcesie podmienia `dist`.
    Przy błędzie usługa dalej serwuje poprzedni frontend.
-5. Restartuje usługę (okno UAC) i sprawdza, czy API odpowiada.
+5. Restartuje usługę (okno UAC) i sprawdza, czy API odpowiada. Niezarejestrowana
+   usługa kończy się komunikatem `just install`.
 
 Wdrażane jest to, co jest w katalogu — razem z niezacommitowanymi zmianami.
 Usługa uruchamia serwer z plików źródłowych, więc jej restart z innego powodu

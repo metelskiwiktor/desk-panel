@@ -7,6 +7,7 @@ default:
 # Install exactly the locked dependencies and Playwright's Chromium.
 setup:
     npm ci
+    node scripts/dependencies.mjs
     npx playwright install chromium
 
 # Start API and Vite for development.
