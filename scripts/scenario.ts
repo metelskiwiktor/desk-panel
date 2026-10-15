@@ -1,7 +1,8 @@
 // Runs the real UI (Vite) against a scenario API, optionally taking Playwright screenshots.
 //   npm run scenario -- standard                       → serve until Ctrl+C
 //   npm run scenario -- offline --shot                 → output/screenshots/offline-*.png
-//   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --size 1080x1920
+//   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device waveshare-11.6 --scale all
+// Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -9,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { chromium, type Browser } from 'playwright';
 import { createPanelServer } from '../server/app';
 import { createScenarioSources, loadScenario } from '../server/scenario';
+import { devices, viewportsOf, type Viewport } from '../src/devices';
 
 const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', ustawienia: 'Ustawienia' } as const;
 type PageName = keyof typeof PAGES;
@@ -16,7 +18,8 @@ type PageName = keyof typeof PAGES;
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   shot: { type: 'boolean', default: false },
   pages: { type: 'string', default: Object.keys(PAGES).join(',') },
-  size: { type: 'string', default: '800x1280' },
+  device: { type: 'string', default: Object.keys(devices)[0] },
+  scale: { type: 'string', default: 'primary' },
   out: { type: 'string', default: 'output/screenshots' },
 } });
 const name = positionals[0] ?? 'standard';
@@ -41,26 +44,39 @@ if (!values.shot) {
   const pages = values.pages.split(',').map(p => p.trim()) as PageName[];
   const unknown = pages.filter(p => !(p in PAGES));
   if (unknown.length) { console.error(`Nieznane strony: ${unknown.join(', ')}. Dostępne: ${Object.keys(PAGES).join(', ')}`); process.exit(1); }
-  const [width, height] = values.size.split('x').map(Number);
+  const targets = selectViewports(values.device, values.scale);
   mkdirSync(values.out, { recursive: true });
   const browser = await launchChromium();
   try {
-    const page = await browser.newPage({ viewport: { width, height } });
-    page.on('pageerror', error => console.error(`Błąd strony: ${error.message}`));
-    page.on('console', message => { if (message.type() === 'error') console.error(`Konsola: ${message.text()}`); });
-    await page.goto(url);
-    await page.waitForTimeout(1500);
-    for (const target of pages) {
-      await page.getByRole('navigation').getByRole('button', { name: PAGES[target] }).click();
-      await page.waitForTimeout(600);
-      const path = join(values.out, `${label}-${target}.png`);
-      await page.screenshot({ path, fullPage: true });
-      console.log(path);
+    for (const target of targets) {
+      // Same model as DevTools device mode: CSS viewport × Windows scaling, so images are physical-resolution.
+      const page = await browser.newPage({ viewport: { width: target.width, height: target.height }, deviceScaleFactor: target.scale, hasTouch: target.device.touch });
+      page.on('pageerror', error => console.error(`Błąd strony: ${error.message}`));
+      page.on('console', message => { if (message.type() === 'error') console.error(`Konsola: ${message.text()}`); });
+      await page.goto(url);
+      await page.waitForTimeout(1500);
+      for (const pageName of pages) {
+        await page.getByRole('navigation').getByRole('button', { name: PAGES[pageName] }).click();
+        await page.waitForTimeout(600);
+        const path = join(values.out, `${label}-${pageName}-${target.label}.png`);
+        await page.screenshot({ path, fullPage: true });
+        console.log(path);
+      }
+      await page.close();
     }
   } finally {
     await browser.close();
     await stop();
   }
+}
+
+function selectViewports(device: string, scale: string): Viewport[] {
+  const all = (device === 'all' ? Object.keys(devices) : [device]).flatMap(viewportsOf);
+  if (scale === 'all') return all;
+  if (scale === 'primary') return all.filter(v => v.primary);
+  const chosen = all.filter(v => v.scale === Number(scale));
+  if (!chosen.length) throw new Error(`Skalowanie ${scale} nie jest skonfigurowane dla ${device} w devices.json.`);
+  return chosen;
 }
 
 /** Playwright's own Chromium, or a preinstalled one (DESK_CHROMIUM, cloud sandboxes). */
