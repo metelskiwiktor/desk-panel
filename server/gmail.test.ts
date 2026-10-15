@@ -29,6 +29,61 @@ function account(email: string, threads: Record<string, ReturnType<typeof messag
 }
 
 describe('Gmail reader', () => {
+  it('requests the last 30 days and excludes older unread messages and cached data as it ages', async () => {
+    const day = 24 * 60 * 60 * 1000;
+    let now = 100 * day;
+    const a = account('a@gmail.com', {
+      aa1: [message('A', 'Recent', now - day)],
+      aa2: [message('B', 'Boundary', now - 30 * day)],
+      aa3: [message('C', 'Old unread', now - 31 * day), message('C', 'Recent read', now, false)],
+    });
+    const reader = createMailReader([a], () => now);
+    const first = await reader.read(1);
+    expect(a.request).toHaveBeenCalledWith('mail', `${BASE}/threads`, { params: { q: 'in:inbox is:unread newer_than:30d', maxResults: '100' } });
+    expect(first).toMatchObject({ total: 2, accounts: [{ unread: 2 }] });
+    expect(first.data?.map(t => t.threadId)).toEqual(['aa1']);
+    now += 1; // No refresh: the boundary item must expire even out of cache.
+    expect(await reader.read(30)).toMatchObject({ total: 1, accounts: [{ unread: 1 }] });
+    a.state.fail = new Error('network');
+    now += 31 * day;
+    expect(await reader.read(30)).toMatchObject({ status: 'offline', total: 0, data: [], accounts: [{ unread: 0, observedAt: 100 * day }] });
+  });
+  it('refreshes a cached login failure immediately after successful consent', async () => {
+    const a = account('a@gmail.com', {});
+    a.state.fail = new GoogleAuthError('login_required');
+    const reader = createMailReader([a], () => 1_000_000);
+    expect((await reader.read(10)).accounts[0].status).toBe('unavailable');
+    a.state.fail = undefined;
+    reader.invalidate();
+    expect((await reader.read(10)).accounts[0]).toMatchObject({ status: 'connected', unread: 0 });
+  });
+  it('backs off quota errors per account without losing observations or asking for login', async () => {
+    let now = 1_000_000;
+    const a = account('a@gmail.com', {});
+    const b = account('b@gmail.com', {});
+    const reader = createMailReader([a, b], () => now);
+    await reader.read(10);
+    a.state.fail = { response: { status: 403, data: { error: { errors: [{ reason: 'rateLimitExceeded' }] } } } };
+    now += 30_000;
+    const failed = await reader.read(10);
+    expect(failed.accounts[0]).toMatchObject({ status: 'offline', observedAt: 1_000_000, message: expect.stringContaining('Gmail ograniczył') });
+    const calls = a.request.mock.calls.length;
+    const otherCalls = b.request.mock.calls.length;
+    now += 30_000;
+    reader.invalidate(); // Logging in again must not bypass Google's quota backoff.
+    await reader.read(10);
+    expect(a.request).toHaveBeenCalledTimes(calls);
+    expect(b.request.mock.calls.length).toBeGreaterThan(otherCalls);
+    now += 30_000;
+    await reader.read(10); // Second failure waits two minutes.
+    const secondCalls = a.request.mock.calls.length;
+    now += 60_000;
+    await reader.read(10);
+    expect(a.request).toHaveBeenCalledTimes(secondCalls);
+    a.state.fail = undefined;
+    now += 60_000;
+    expect((await reader.read(10)).accounts[0]).toMatchObject({ status: 'connected', observedAt: now });
+  });
   it('parses senders and keeps only the display name', () => {
     expect(sender('"Anna Nowak" <anna@x.pl>')).toBe('Anna Nowak');
     expect(sender('<noreply@x.pl>')).toBe('noreply@x.pl');

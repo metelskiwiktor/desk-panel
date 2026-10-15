@@ -9,7 +9,7 @@ export const mailThreadSchema = z.object({
 });
 export const mailAccountSchema = z.object({
   email: z.string(), status, observedAt: z.number().finite().nullable(),
-  /** Unread inbox conversations according to Gmail, independent of how many are listed. */
+  /** Loaded unread inbox conversations from the last 30 days, before UI pagination (up to 200 per account). */
   unread: z.number().int().nonnegative().nullable(), message: z.string().optional(),
 });
 export const mailSourceSchema = z.object({

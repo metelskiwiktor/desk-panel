@@ -953,11 +953,12 @@ nav button.active:after {
 .status-chip.bad { border-color: #6b3a3d; color: #ffd6d7; }
 .status-chip.bad i { background: var(--quota-red); }
 
-/* ── Dashboard: fills the screen between the top bar and the navigation, no page scroll ── */
-.app-shell.is-home { height: 100dvh; display: flex; flex-direction: column; }
-.app-shell.is-home main { position: relative; flex: 1; min-height: 0; padding-bottom: var(--nav-space); }
-.pulpit { height: 100%; display: flex; flex-direction: column; gap: var(--gap); }
-.pulpit-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 35%) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+/* Content determines dashboard height; quotas follow the cards even on a quiet day.
+   Long lists scroll inside bounded cards, without reserving an empty screen below. */
+.app-shell.is-home { min-height: 100dvh; display: flex; flex-direction: column; }
+.app-shell.is-home main { position: relative; min-height: 0; padding-bottom: var(--nav-space); }
+.pulpit { display: flex; flex-direction: column; gap: var(--gap); }
+.pulpit-grid { min-height: 0; display: grid; grid-template-columns: minmax(240px, 35%) minmax(0, 1fr); gap: var(--gap); align-items: start; }
 /* A column stretches only when it has something to fill the height with (meetings, a mail list). */
 .pulpit-grid > .fill { align-self: stretch; }
 .pulpit-grid.single { grid-template-columns: minmax(0, 1fr); }
@@ -976,7 +977,7 @@ nav button.active:after {
 
 .today-card { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; }
 .all-day { margin-top: 6px; padding: 8px 10px; border-radius: 10px; border: 0; background: #172235; color: #e6ebf3; text-align: left; font-size: 13px; }
-.day-axis { position: relative; flex: 1 1 340px; min-height: 240px; max-height: 640px; margin: 14px 0 8px; }
+.day-axis { position: relative; flex: none; height: clamp(260px, 35dvh, 480px); margin: 14px 0 8px; }
 .day-hour { position: absolute; left: 0; right: 0; border-top: 1px solid #1a2433; }
 .day-hour span { position: absolute; top: -8px; left: 0; padding-right: 6px; background: #111824; font-family: ui-monospace, 'Cascadia Mono', monospace; font-size: 11px; color: #6f7d92; }
 .day-block { position: absolute; min-height: 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; overflow: hidden; padding: 6px 10px; border: 0; border-radius: 10px; background: #1c2b44; color: #eef3fb; text-align: left; font-size: 12px; }
@@ -1009,7 +1010,7 @@ nav button.active:after {
 .link-button { padding: 10px 0 0; border: 0; background: none; color: var(--blue); font-size: 13px; }
 
 .mail-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.mail-card .mail-list { flex: 1; min-height: 0; max-height: none; }
+.mail-card .mail-list { min-height: 0; max-height: clamp(260px, 45dvh, 640px); }
 .mail-accounts { display: flex; flex-wrap: wrap; gap: 6px; }
 .account-tag { padding: 2px 8px; border-radius: 999px; font-size: 11px; white-space: nowrap; }
 .account-0 { background: #1c2b44; color: #a9c6f2; }
@@ -1045,6 +1046,13 @@ nav button.active:after {
 .source-event { background: #1c2b44; color: #a9c6f2; }
 .source-task { background: #3a2f1c; color: #f3d9ab; }
 .source-quota, .source-system { background: #3a1f24; color: #ffc2c4; }
+
+/* The preview shell only provides a viewport; it never styles the dashboard. */
+.device-preview { height: 100dvh; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.device-preview-toolbar { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
+.device-preview-toolbar > span { color: var(--muted); font-size: 13px; }
+.device-preview-window { flex: 1; min-height: 0; overflow: auto; }
+.device-preview-window iframe { display: block; margin: 0 auto; border: 0; max-width: none; }
 
 /* Narrow screens: one column, and the dashboard scrolls like any page. */
 @media (max-width: 639px) {

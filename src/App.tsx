@@ -57,7 +57,7 @@ const navIcons = {
   events: ListChecks,
   settings: Settings2,
 };
-export function App() {
+export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPreview?: boolean; onTabletPreviewChange?: () => void } = {}) {
   const cezar = useCezar();
   const calendar = useCalendar();
   const system = useSystem();
@@ -416,6 +416,8 @@ export function App() {
                 {page === 'events' && <EventRulesView />}
                 {page === 'settings' && (
                   <SettingsView
+                    tabletPreview={tabletPreview}
+                    onTabletPreviewChange={onTabletPreviewChange}
                     layout={layout}
                     configure={configure}
                     storageError={storageError}

@@ -29,6 +29,13 @@ usługę. Szczegóły i logi opisano w [servy/README.md](servy/README.md).
 `just` wyświetla krótki zestaw komend; `just check` uruchamia testy i build,
 a `just service RESTART` przeładowuje działający serwer po zmianach.
 
+W Ustawieniach „Otwórz podgląd pionowy” osadza niezmieniony panel w osobnym obszarze
+o wymiarach głównego ekranu z `devices.json`. Podgląd przewija się bez automatycznego
+pomniejszania, a powiększenie przeglądarki działa jak zwykle. Jego style dotyczą tylko
+zewnętrznej warstwy; dashboard używa tego samego układu co na docelowym ekranie.
+Limity AI są zawsze bezpośrednio pod kartami. Wysokość kart wynika z zawartości,
+a długie listy poczty przewijają się wewnątrz karty.
+
 Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 
 | Zmienna | Domyślnie | Znaczenie |
@@ -92,8 +99,9 @@ nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń
 
 ## Poczta (Gmail)
 
-Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych (`in:inbox is:unread`, wszystkie
+Karta „Poczta” pokazuje nieprzeczytane wątki z Odebranych z ostatnich 30 dni (`in:inbox is:unread newer_than:30d`, wszystkie
 karty, bez spamu i kosza) ze wszystkich kont z `DESK_MAIL_ACCOUNTS`, najnowsze na górze.
+Liczniki obejmują pobrane wątki z tego okresu (do 200 na konto), przed podziałem listy na strony.
 Przesunięcie w lewo oznacza wątek jako przeczytany, w prawo przenosi go do Kosza w Gmailu
 (odwracalne przez 30 dni; trwałego usuwania nie ma). Te same akcje są pod przyciskami
 ✓ i kosza oraz w szczegółach wątku. Przez 6 sekund „Cofnij” wykonuje w Gmailu akcję

@@ -57,6 +57,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       try {
         if (!account) throw new GoogleAuthError('invalid_callback');
         await account.finish(params);
+        mail.invalidate();
         return { ok: true, message: `Połączono ${account.email.replace(/[<>&"']/g, '')}. Możesz wrócić do Desk Panelu.` };
       } catch (error) {
         const email = account?.email.replace(/[<>&"']/g, '') ?? '';

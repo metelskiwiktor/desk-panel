@@ -158,7 +158,7 @@ function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; ope
 
 /**
  * The dashboard sizes itself to its content and the screen: the Komputer card only appears on a
- * problem, Cezar folds to one line when nothing waits for you, and Poczta takes the remaining height.
+ * problem, Cezar folds to one line when nothing waits for you, and long mail lists scroll locally.
  */
 export function Dashboard({ data, snapshot, mail, now, open, showTasks, visible }: {
   data: DashboardData; snapshot: CezarSnapshot | null; mail: MailState; now: number;

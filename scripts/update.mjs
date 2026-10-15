@@ -8,6 +8,9 @@ import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'nod
 const BRANCH = 'main';
 const REMOTE = `origin/${BRANCH}`;
 const MARKER = '.deployed';
+// Stored beside the installed dependencies, so a separate pull/setup cannot hide
+// a changed lockfile and removing node_modules also removes the installation proof.
+const DEPENDENCIES_MARKER = 'node_modules/.desk-panel-dependencies';
 const force = process.argv.includes('--force');
 const windows = process.platform === 'win32';
 
@@ -60,18 +63,20 @@ if (incoming) {
 const local = localChanges();
 if (local.length) console.log(`Lokalne niezacommitowane zmiany też zostaną wdrożone:\n  ${local.join('\n  ')}`);
 const target = fingerprint();
-if (!force && existsSync(MARKER) && readFileSync(MARKER, 'utf8').trim() === target) {
+const dependencies = createHash('sha256').update(readFileSync('package.json')).update(readFileSync('package-lock.json')).digest('hex');
+const reinstall = !existsSync(DEPENDENCIES_MARKER) || readFileSync(DEPENDENCIES_MARKER, 'utf8').trim() !== dependencies;
+if (!force && !reinstall && existsSync(MARKER) && readFileSync(MARKER, 'utf8').trim() === target) {
   console.log('\n✔ Usługa już serwuje tę wersję. Nic do zrobienia (--force wymusza ponowne wdrożenie).');
   process.exit(0);
 }
 
 // 2. Dependencies: the running service uses node_modules, so stop it before replacing them.
-const lockChanged = incoming && lines(git('diff', '--name-only', before, 'HEAD')).includes('package-lock.json');
-const reinstall = lockChanged || local.includes('package-lock.json') || !existsSync('node_modules');
 let stopped = false;
 if (reinstall) {
   stopped = service('STOP');
+  if (!stopped) fail('Nie udało się zatrzymać usługi przed instalacją zależności.');
   if (!run('npm', ['ci'])) { if (stopped) service('START'); fail('npm ci nie powiodło się.'); }
+  writeFileSync(DEPENDENCIES_MARKER, dependencies + '\n');
 }
 
 // 3. Verify, then build next to the served dist and swap only on success.
@@ -89,7 +94,6 @@ rmSync('dist.old', { recursive: true, force: true });
 
 // 4. Restart and confirm the API answers.
 if (!service(stopped ? 'START' : 'RESTART')) fail('Nie udało się zrestartować usługi (just service pokaże stan).');
-writeFileSync(MARKER, target + '\n');
 if (windows) {
   let healthy = false;
   for (let i = 0; i < 20 && !healthy; i++) {
@@ -98,4 +102,5 @@ if (windows) {
   }
   if (!healthy) fail('Usługa nie odpowiada na http://127.0.0.1:5174 po restarcie. Sprawdź servy/logs/Desk-Panel/stderr.log.');
 }
+writeFileSync(MARKER, target + '\n');
 console.log(`\n✔ Wdrożono ${git('rev-parse', '--short', 'HEAD')}${local.length ? ` + ${local.length} lokalnych zmian` : ''}.`);

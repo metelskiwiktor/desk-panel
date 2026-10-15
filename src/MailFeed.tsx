@@ -59,6 +59,7 @@ export function MailFeed({ mail, now, open }: { mail: MailState; now: number; op
       {many && <span className="mail-accounts">{source.accounts.map(a =>
         <span key={a.email} className={`account-tag ${toneOf(source.accounts, a.email)}`}>{accountLabel(a.email)} {a.unread ?? '—'}</span>)}</span>}
     </div>
+    <p className="meta">Nieprzeczytane · ostatnie 30 dni</p>
     {problems.map(a => <p key={a.email} className="mail-problem">{a.email} · {a.message || 'konto niedostępne.'}</p>)}
     {threads?.length ? <ul className="activity-list mail-list" aria-label="Nieprzeczytane wiadomości">
       {threads.map(thread => <MailRow key={thread.id} thread={thread} open={open} act={act} tone={many ? toneOf(source.accounts, thread.account) : null} />)}
