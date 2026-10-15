@@ -255,3 +255,9 @@ zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odr
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
+
+CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
+`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny
+job robi zrzuty wszystkich scenariuszy i stron i dołącza je do przebiegu jako
+artefakt `screenshots-<commit>` (90 dni), więc wygląd panelu można porównać
+między commitami.

@@ -1,0 +1,59 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Same as `just check`. Windows runs too: the service lives there and the DPAPI test only runs on win32.
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  # Every scenario × every page, kept as a run artifact so UI changes can be compared between commits.
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: Europe/Warsaw
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Take screenshots
+        run: |
+          for file in scenarios/*.json; do
+            npm run --silent scenario -- "$(basename "$file" .json)" --shot
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-${{ github.sha }}
+          path: output/screenshots/
+          if-no-files-found: error
+          retention-days: 90
