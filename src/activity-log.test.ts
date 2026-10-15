@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { ACTIVITY_LIMIT, dismissActivity, emptyActivityLog, readActivityLog, recordActivity, restoreActivity, saveActivityLog } from './activity-log';
+import { ACTIVITY_LIMIT, ACTIVITY_STORAGE_KEY, dismissActivity, emptyActivityLog, readActivityLog, recordActivity, restoreActivity, saveActivityLog } from './activity-log';
 import { createDemo } from './demo';
 import { MINUTE } from './model';
 
@@ -91,4 +91,78 @@ it('rearms RAM after a real low sample, not after an offline or short-history ga
   log = recordActivity(log, data, now);
   data.system.data = original;
   expect(recordActivity(log, data, now+1).entries).toHaveLength(2);
+});
+
+it('deduplicates Codex 7d yellow despite reset-time corrections across a minute boundary and reload', () => {
+  const data = quotaData(7);
+  const account = data.quotas.data![0];
+  account.provider = 'Codex';
+  const snapshot = account.snapshots[0];
+  snapshot.window = '7d';
+  snapshot.resetAt = now + (7 * 24 * 60 - 180) * MINUTE - 500;
+  const firstReset = snapshot.resetAt;
+  let log = recordActivity(emptyActivityLog(), data, now);
+  expect(log.entries).toHaveLength(1);
+  expect(log.entries[0].tone).toBe('amber');
+  snapshot.resetAt += 1000;
+  log = recordActivity(log, data, now + MINUTE);
+  expect(log.entries).toHaveLength(1);
+  log = dismissActivity(log, log.entries[0].id);
+  saveActivityLog(log);
+  snapshot.resetAt = firstReset - 1000;
+  log = recordActivity(readActivityLog(), data, now + MINUTE);
+  expect(log.entries).toHaveLength(0);
+  snapshot.usedPercent = 20;
+  log = recordActivity(log, data, now + MINUTE);
+  expect(log.entries).toHaveLength(1);
+  expect(log.entries[0].tone).toBe('red');
+  snapshot.usedPercent = 7;
+  snapshot.resetAt = firstReset + 7 * 24 * 60 * MINUTE;
+  snapshot.observedAt = firstReset;
+  data.quotas.observedAt = firstReset;
+  expect(recordActivity(log, data, firstReset).entries).toHaveLength(2);
+});
+
+it('deduplicates 90% alerts under reset jitter without merging providers or window lengths', () => {
+  const data = quotaData(92);
+  data.quotas.data![0].snapshots[0].resetAt = now + MINUTE;
+  let log = recordActivity(emptyActivityLog(), data, now);
+  data.quotas.data![0].snapshots[0].resetAt! += 1000;
+  log = recordActivity(log, data, now);
+  expect(log.entries).toHaveLength(1);
+  data.quotas.data![0].provider = 'Codex';
+  log = recordActivity(log, data, now);
+  expect(log.entries).toHaveLength(2);
+  data.quotas.data![0].snapshots[0].window = '7d';
+  expect(recordActivity(log, data, now).entries).toHaveLength(3);
+});
+
+it('cleans only evidenced legacy quota duplicates, keeping original detection and other events', () => {
+  const data = quotaData();
+  const log = recordActivity(emptyActivityLog(), data, now);
+  const original = log.entries[0];
+  const firstKey = log.seen[0];
+  const resetAt = data.quotas.data![0].snapshots[0].resetAt!;
+  const duplicateKey = firstKey.replace(String(resetAt), String(resetAt + 1000));
+  const { signalKey: _key, ...legacy } = original as typeof original & { signalKey?: string };
+  localStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify({ ...log,
+    seen: [firstKey, duplicateKey],
+    entries: [{ ...legacy, id: 'duplicate', detectedAt: now + MINUTE }, legacy,
+      { ...legacy, id:'unrelated', title:'Inny wpis', target:{kind:'system'} }],
+  }));
+  const loaded = readActivityLog();
+  expect(loaded.entries.map(entry => entry.id)).toEqual([original.id, 'unrelated']);
+  expect(loaded.entries[0].detectedAt).toBe(now);
+});
+
+it('does not merge a new live reset with an already expired reset even inside the tolerance', () => {
+  const data = quotaData(92);
+  const snapshot = data.quotas.data![0].snapshots[0];
+  snapshot.resetAt = now + 1000;
+  let log = recordActivity(emptyActivityLog(), data, now);
+  snapshot.resetAt = now + MINUTE;
+  log = recordActivity(log, data, now + 2000);
+  expect(log.entries).toHaveLength(2);
+  saveActivityLog(log);
+  expect(readActivityLog().entries).toHaveLength(2);
 });

@@ -209,7 +209,11 @@ spotkania w ciągu 15 minut; RAM ≥90% przez ciągłą minutę. Limity AI tworz
 zdarzenia dla konta i okna: żółte tempo (>5 p.p.), czerwone (>15 p.p.), zużycie ≥90%.
 Każdy próg limitu zgłaszany jest najwyżej raz w danym oknie resetu, także po
 usunięciu wpisu i odświeżeniu strony; eskalacja do czerwonego tworzy nowy wpis,
-spadek z czerwonego do żółtego nie ostrzega ponownie. Pytania i RAM mogą zgłosić
+spadek z czerwonego do żółtego nie ostrzega ponownie. Porównanie terminu resetu
+toleruje korekty do 5 minut względem pierwotnego zgłoszenia (bez zaokrąglania do
+przedziałów). Wygasłe okno nie blokuje nowego. Przy wczytywaniu historii scalane
+są potwierdzone duplikaty quota, z zachowaniem pierwszej godziny wykrycia.
+Pytania i RAM mogą zgłosić
 nowy epizod po potwierdzonym ustąpieniu warunku. Nieaktualne źródło nie potwierdza
 ustąpienia. Pamięć deduplikacji jest ograniczona do ostatnich 2000 jednorazowych
 sygnałów i 1000 aktywnych warunków.
