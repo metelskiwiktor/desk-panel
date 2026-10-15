@@ -38,8 +38,12 @@ jobs:
     timeout-minutes: 15
     env:
       TZ: Europe/Warsaw
+      # On PRs github.sha is a temporary merge commit; name and shoot the real head commit instead.
+      COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -53,7 +57,7 @@ jobs:
           done
       - uses: actions/upload-artifact@v7
         with:
-          name: screenshots-${{ github.sha }}
+          name: screenshots-${{ env.COMMIT }}
           path: output/screenshots/
           if-no-files-found: error
           retention-days: 90
