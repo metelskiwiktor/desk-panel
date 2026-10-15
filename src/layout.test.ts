@@ -41,7 +41,16 @@ describe('wersjonowany układ', () => {
       ['system', false],
       ['calendar', false],
       ['quotas', false],
+      ['mail', false],
     ]);
+  });
+  it('dopisuje karty dodane po zapisaniu układu, zachowując kolejność użytkownika', () => {
+    const saved = { version: 2, widgets: defaultLayout().widgets.filter((w) => w.id !== 'mail').reverse() };
+    saved.widgets[0] = { ...saved.widgets[0], visible: false };
+    const layout = parseLayout(JSON.stringify(saved));
+    expect(layout.widgets.map((w) => w.id)).toEqual(['insights', 'quotas', 'calendar', 'system', 'cezar', 'mail']);
+    expect(layout.widgets[0].visible).toBe(false);
+    expect(layout.widgets.at(-1)!.visible).toBe(true);
   });
   it('odrzuca w v1 nazwy z prototypu i powtórzone ID', () => {
     expect(parseLayout('{"version":1,"order":["toString"]}')).toEqual(defaultLayout());
@@ -50,7 +59,7 @@ describe('wersjonowany układ', () => {
   it('przestawianie nie przekracza granic', () => {
     const config = defaultLayout();
     expect(moveWidget(config, 'cezar', -1)).toBe(config);
-    expect(moveWidget(config, 'insights', 1)).toBe(config);
+    expect(moveWidget(config, 'mail', 1)).toBe(config);
   });
   it('działa przy zablokowanym localStorage, zwraca błąd zapisu', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {

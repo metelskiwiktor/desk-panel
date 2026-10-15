@@ -156,9 +156,102 @@
       }
     ]
   },
-  "calendarConnection": {
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
     "status": "connected",
-    "email": "owner@gmail.com"
+    "observedAt": "now-20m",
+    "data": [
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d401",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d401",
+        "from": "Anna Nowak",
+        "subject": "Spotkanie w czwartek",
+        "snippet": "Cześć, czy możemy przesunąć spotkanie na 15:00? Mam konflikt w kalendarzu.",
+        "receivedAt": "now-20m-6m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d401"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d402",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d402",
+        "from": "GitHub",
+        "subject": "[desk-panel] PR #3: Gmail w panelu",
+        "snippet": "metelskiwiktor requested your review on this pull request.",
+        "receivedAt": "now-20m-25m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d402"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d403",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d403",
+        "from": "Bank Millennium",
+        "subject": "Potwierdzenie przelewu",
+        "snippet": "Przelew na kwotę 120,00 zł został zrealizowany.",
+        "receivedAt": "now-20m-1h10m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d403"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d404",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d404",
+        "from": "Jira",
+        "subject": "Nowe zadanie przypisane do Ciebie",
+        "snippet": "DESK-42 Przegląd układu na ekranie pionowym.",
+        "receivedAt": "now-20m-3h",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d405",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d405",
+        "from": "Allegro",
+        "subject": "Twoja paczka jest w drodze",
+        "snippet": "Przesyłka zostanie dostarczona jutro do paczkomatu.",
+        "receivedAt": "now-20m-1d2h",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d405"
+      }
+    ],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now-20m",
+        "unread": 3
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now-20m",
+        "unread": 2
+      }
+    ],
+    "total": 5
   },
   "system": {
     "live": true,

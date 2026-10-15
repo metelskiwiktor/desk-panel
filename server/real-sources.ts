@@ -3,19 +3,28 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCezar } from './cezar';
 import { createCalendarReader } from './calendar';
-import { createCalendarOAuth, CalendarAuthError } from './calendar-oauth';
+import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
+import { createMailReader } from './gmail';
 import { createSystemReader } from './system';
 import { createQuotaReader } from './quotas';
-import type { PanelSources } from './sources';
+import { SourceError, type PanelSources } from './sources';
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; env: NodeJS.ProcessEnv }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
   const { calendarId, env } = options;
-  const oauth = createCalendarOAuth({ email: calendarId,
-    clientFile: env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(homedir(), '.desk-panel', 'google-oauth-client.json'),
-    tokenFile: join(homedir(), '.desk-panel', 'calendar-token.dpapi'),
-    redirectUri: `http://127.0.0.1:${options.port}/api/calendar/callback`,
-  });
-  const readCalendar = createCalendarReader(calendarId, oauth.request);
+  const dir = join(homedir(), '.desk-panel');
+  const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
+  // One callback for every account: it is the redirect URI registered with the OAuth client.
+  const redirectUri = `http://127.0.0.1:${options.port}/api/calendar/callback`;
+  const emails = [...new Set([calendarId, ...options.mailAccounts])];
+  const accounts = emails.map(email => createGoogleAccount({ email, clientFile, redirectUri,
+    // The calendar account keeps its original token file, so existing sign-ins survive the upgrade.
+    tokenFile: join(dir, email === calendarId ? 'calendar-token.dpapi' : `google-${email.replace(/[^a-z0-9@._-]/gi, '_')}.dpapi`),
+    services: [...(email === calendarId ? ['calendar'] : []), ...(options.mailAccounts.includes(email) ? ['mail'] : [])] as GoogleService[],
+  }));
+  const calendarAccount = accounts[0];
+  const readCalendar = createCalendarReader(calendarId, (path, params) =>
+    calendarAccount.request('calendar', `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}${path}`, { params }));
+  const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
   const readSystem = createSystemReader();
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   let pending: ReturnType<typeof readCezar> | undefined;
@@ -30,17 +39,30 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       return cache!;
     },
     calendar: () => readCalendar(),
-    calendarConnection: () => oauth.status(),
+    mail: limit => mail.read(limit),
+    async mailAction(account, threadId, action) {
+      try { await mail.act(account, threadId, action); }
+      catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : 502); }
+    },
+    googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
-    calendarConnect: () => oauth.begin(),
-    async calendarCallback(params) {
+    async googleConnect(email) {
+      const account = accounts.find(a => a.email === email);
+      if (!account) throw new SourceError(404);
+      return account.begin();
+    },
+    async googleCallback(params) {
+      const account = accounts.find(a => a.owns(params));
       try {
-        await oauth.finish(params);
-        return { ok: true, message: 'Kalendarz połączony. Możesz wrócić do Desk Panelu.' };
+        if (!account) throw new GoogleAuthError('invalid_callback');
+        await account.finish(params);
+        return { ok: true, message: `Połączono ${account.email.replace(/[<>&"']/g, '')}. Możesz wrócić do Desk Panelu.` };
       } catch (error) {
-        if (error instanceof CalendarAuthError && error.reason === 'wrong_account') return { ok: false, message: `Wybrano inne konto. Zaloguj się na ${calendarId.replace(/[<>&"']/g, '')}.` };
-        if (error instanceof CalendarAuthError && error.reason === 'storage_failed') return { ok: false, message: 'Nie udało się bezpiecznie zapisać połączenia na tym komputerze.' };
+        const email = account?.email.replace(/[<>&"']/g, '') ?? '';
+        if (error instanceof GoogleAuthError && error.reason === 'wrong_account') return { ok: false, message: `Wybrano inne konto. Zaloguj się na ${email}.` };
+        if (error instanceof GoogleAuthError && error.reason === 'scopes_missing') return { ok: false, message: 'Zaznacz wszystkie uprawnienia na ekranie zgody Google i spróbuj ponownie.' };
+        if (error instanceof GoogleAuthError && error.reason === 'storage_failed') return { ok: false, message: 'Nie udało się bezpiecznie zapisać połączenia na tym komputerze.' };
         return { ok: false, message: 'Nie udało się połączyć. Wróć do panelu i rozpocznij logowanie ponownie.' };
       }
     },

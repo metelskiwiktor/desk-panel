@@ -1,8 +1,20 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
+import type { IncomingMessage } from 'node:http';
+import { z } from 'zod';
+import { mailActionSchema } from '../src/mail-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
 
+/** Small JSON request bodies only (actions), validated by the caller's schema. */
+async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
+  let body = '';
+  for await (const chunk of req) { body += chunk; if (body.length > 4096) throw new SourceError(413); }
+  const parsed = schema.safeParse(JSON.parse(body || 'null'));
+  if (!parsed.success) throw new SourceError(400);
+  return parsed.data;
+}
+const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
@@ -13,12 +25,24 @@ export function createPanelServer(sources: PanelSources, root: string) {
     if (!host || !/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)) { res.writeHead(403).end(); return; }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
-    if (req.method === 'POST' && url.pathname === '/api/calendar/connect') {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action')) {
+      // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== `http://${host}`) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
-      try { res.end(JSON.stringify({ authorizationUrl: await sources.calendarConnect() })); }
-      catch { res.writeHead(409).end(JSON.stringify({ error: 'Dodaj plik klienta OAuth Google.' })); }
+      try {
+        if (url.pathname === '/api/google/connect') {
+          const { email } = await readJson(req, connectSchema);
+          res.end(JSON.stringify({ authorizationUrl: await sources.googleConnect(email) }));
+        } else {
+          const { account, threadId, action } = await readJson(req, mailActionSchema);
+          await sources.mailAction(account, threadId, action);
+          res.end(JSON.stringify({ ok: true }));
+        }
+      } catch (error) {
+        const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' ? 409 : 502;
+        res.writeHead(status).end(JSON.stringify({ error: status === 409 ? 'Dodaj plik klienta OAuth Google.' : 'Nie udało się wykonać akcji.' }));
+      }
       return;
     }
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
@@ -26,16 +50,16 @@ export function createPanelServer(sources: PanelSources, root: string) {
     if (route) {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
-      try { res.end(JSON.stringify(await route())); }
+      try { res.end(JSON.stringify(await route(url))); }
       catch (error) { res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać danych źródła.' })); }
       return;
     }
     if (url.pathname === '/api/calendar/callback') {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Referrer-Policy', 'no-referrer');
-      const { ok, message } = await sources.calendarCallback(url.searchParams);
+      const { ok, message } = await sources.googleCallback(url.searchParams);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.writeHead(ok ? 200 : 400).end(`<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Desk Panel · Google</title><body style="background:#10151f;color:#eee;font:20px system-ui;padding:40px"><h1>Google Calendar</h1><p>${message}</p><a style="color:#8bf" href="/">Wróć do panelu</a></body></html>`);
+      res.writeHead(ok ? 200 : 400).end(`<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Desk Panel · Google</title><body style="background:#10151f;color:#eee;font:20px system-ui;padding:40px"><h1>Konto Google</h1><p>${message}</p><a style="color:#8bf" href="/">Wróć do panelu</a></body></html>`);
       return;
     }
     if (url.pathname.startsWith('/api/')) { res.writeHead(404).end(); return; }

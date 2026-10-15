@@ -4,6 +4,7 @@ export const widgetNames = {
   calendar: 'Kalendarz Google',
   quotas: 'Limity AI',
   insights: 'Zdarzenia',
+  mail: 'Poczta',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 export interface WidgetConfig {
@@ -52,8 +53,7 @@ export function parseLayout(raw: string | null): Layout {
         ],
       };
     }
-    if (parsed.version !== 2 || !Array.isArray(parsed.widgets) || parsed.widgets.length !== 5)
-      return defaultLayout();
+    if (parsed.version !== 2 || !Array.isArray(parsed.widgets)) return defaultLayout();
     const valid = parsed.widgets.every(
       (w: WidgetConfig) =>
         w &&
@@ -62,16 +62,21 @@ export function parseLayout(raw: string | null): Layout {
         ['compact', 'expanded'].includes(w.displayMode) &&
         ['normal', 'high'].includes(w.priority),
     );
-    if (!valid || new Set(parsed.widgets.map((w: WidgetConfig) => w.id)).size !== 5)
+    if (!valid || new Set(parsed.widgets.map((w: WidgetConfig) => w.id)).size !== parsed.widgets.length)
       return defaultLayout();
+    // Cards added after the layout was saved are appended, visible, keeping the user's order.
+    const saved = new Set(parsed.widgets.map((w: WidgetConfig) => w.id));
     return {
       version: 2,
-      widgets: parsed.widgets.map((w: WidgetConfig) => ({
-        id: w.id,
-        visible: w.visible,
-        displayMode: w.displayMode,
-        priority: w.priority,
-      })),
+      widgets: [
+        ...parsed.widgets.map((w: WidgetConfig) => ({
+          id: w.id,
+          visible: w.visible,
+          displayMode: w.displayMode,
+          priority: w.priority,
+        })),
+        ...defaultLayout().widgets.filter((w) => !saved.has(w.id)),
+      ],
     };
   } catch {
     return defaultLayout();

@@ -11,9 +11,27 @@
     "observedAt": null,
     "data": null
   },
-  "calendarConnection": {
-    "status": "connected",
-    "email": "owner@gmail.com"
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "$pending": true
   },
   "system": {
     "live": true,

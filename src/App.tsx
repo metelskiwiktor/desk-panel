@@ -11,6 +11,9 @@ import {
   ListChecks,
   MemoryStick,
   Monitor,
+  Mail,
+  MailOpen,
+  Trash2,
   Settings2,
 } from 'lucide-react';
 import { useActivityLog } from './useActivityLog';
@@ -36,6 +39,8 @@ import { useCalendar } from './useCalendar';
 import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
 import { SettingsView } from './SettingsView';
+import { useMail } from './useMail';
+import { MailFeed } from './MailFeed';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -59,6 +64,7 @@ export function App() {
   const calendar = useCalendar();
   const system = useSystem();
   const quotas = useQuotas();
+  const mail = useMail();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
   const now = Math.max(clockNow, Date.now());
@@ -260,6 +266,8 @@ export function App() {
             <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
           </Card>
         );
+      case 'mail':
+        return <MailFeed mail={mail} now={now} open={open} compact={compact} />;
       case 'insights':
         return (
           <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
@@ -331,6 +339,39 @@ export function App() {
         </Card>
       ) : (
         <Empty>Zadanie jest niedostępne.</Empty>
+      );
+    }
+    if (detail.kind === 'mail') {
+      const thread = mail.threads?.find((t) => t.id === detail.id);
+      return thread ? (
+        <Card title={thread.subject} icon={<Mail />}>
+          <p className="detail-copy">{thread.snippet}</p>
+          <dl>
+            <dt>Od</dt>
+            <dd>{thread.from}</dd>
+            <dt>Skrzynka</dt>
+            <dd>{thread.account}</dd>
+            <dt>Otrzymano</dt>
+            <dd>{stamp(thread.receivedAt)}</dd>
+            {thread.messages > 1 && (
+              <>
+                <dt>Wiadomości w wątku</dt>
+                <dd>{thread.messages}</dd>
+              </>
+            )}
+          </dl>
+          <div className="detail-actions">
+            <button className="button" onClick={() => { void mail.act(thread, 'read'); setDetail(null); }}>
+              <MailOpen size={18} /> Oznacz jako przeczytane
+            </button>
+            <button className="button" onClick={() => { void mail.act(thread, 'trash'); setDetail(null); }}>
+              <Trash2 size={18} /> Do kosza
+            </button>
+          </div>
+          <SourceLink url={thread.sourceUrl} />
+        </Card>
+      ) : (
+        <Empty>Wiadomość jest już przeczytana albo usunięta.</Empty>
       );
     }
     if (detail.kind === 'event') {

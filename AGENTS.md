@@ -29,5 +29,6 @@ defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
 lives only in scenarios/ — add a file there instead of branching in the UI. Contract schemas validate provider data. Preserve
 real observation timestamps on failures. Quota reads must never send model prompts
-or start agent turns. Do not commit .env, OAuth clients, tokens, logs, screenshots,
+or start agent turns. Gmail uses `gmail.modify` only: metadata reads, read/unread
+and Trash/untrash — never message bodies, sending or permanent deletion. Do not commit .env, OAuth clients, tokens, logs, screenshots,
 node_modules or dist. Do not print credentials in tool output.

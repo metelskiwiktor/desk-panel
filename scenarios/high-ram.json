@@ -20,9 +20,46 @@
     "observedAt": "now",
     "data": []
   },
-  "calendarConnection": {
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
     "status": "connected",
-    "email": "owner@gmail.com"
+    "observedAt": "now",
+    "data": [],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 0
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 0
+      }
+    ],
+    "total": 0
   },
   "system": {
     "live": true,

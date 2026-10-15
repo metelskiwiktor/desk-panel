@@ -1,0 +1,1077 @@
+{
+  "description": "Standardowy dzień z 64 nieprzeczytanymi wątkami w dwóch skrzynkach (przewijanie listy poczty).",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 3,
+      "queue": 2,
+      "needs-input": 1,
+      "review": 4
+    },
+    "tasks": [
+      {
+        "id": "decision",
+        "title": "Potwierdź zakres testów kalendarza",
+        "project": "Tabnote",
+        "status": "needs-input",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/decision",
+        "description": "Wybrać zakres regresji przed dalszą implementacją."
+      },
+      {
+        "id": "review-1",
+        "title": "Widok notatki gotowy do przeglądu",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-1",
+        "title": "Poprawa wyszukiwania po etykietach",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-2",
+        "title": "Porządki w filtrach",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-3",
+        "title": "Regresje widoku tablicy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-4",
+        "title": "Walidacja scenariuszy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-4",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-2",
+        "title": "Testy selektorów zadań",
+        "project": "Cezar",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-3",
+        "title": "Dostępność paska nawigacji",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-1",
+        "title": "Przegląd kontraktów źródeł",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-2",
+        "title": "Sprawdzenie pustych stanów",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "done-1",
+        "title": "Aktualizacja opisów testów",
+        "project": "Tabnote",
+        "status": "done",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/done-1",
+        "description": "Zadanie w trakcie pracy.",
+        "completedAt": "now-4m"
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "planning",
+        "title": "Planowanie Tabnote",
+        "startAt": "now+12m",
+        "endAt": "now+42m",
+        "location": "Biurko · sesja robocza",
+        "description": "Priorytety, regresje i zakres kolejnej iteracji.",
+        "allDay": false
+      },
+      {
+        "id": "design",
+        "title": "Przegląd interfejsu",
+        "startAt": "now+90m",
+        "endAt": "now+2h",
+        "description": "Czytelność panelu na ekranie pionowym.",
+        "allDay": false
+      },
+      {
+        "id": "focus",
+        "title": "Czas na pracę własną",
+        "startAt": "now+3h",
+        "endAt": "now+4h",
+        "description": "Blok skupienia.",
+        "allDay": false
+      }
+    ]
+  },
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e000",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e000",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 1: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-17m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e000"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e001",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e001",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 2: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-34m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e001"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e002",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e002",
+        "from": "Jira",
+        "subject": "Wiadomość nr 3: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-51m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e002"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e003",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e003",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 4: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-68m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e003"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e004",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e004",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 5: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-85m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e004"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e005",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e005",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 6: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-102m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e005"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e006",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e006",
+        "from": "Google",
+        "subject": "Wiadomość nr 7: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-119m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e006"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e007",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e007",
+        "from": "Notion",
+        "subject": "Wiadomość nr 8: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-136m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e007"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e008",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e008",
+        "from": "Slack",
+        "subject": "Wiadomość nr 9: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-153m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e008"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e009",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e009",
+        "from": "Figma",
+        "subject": "Wiadomość nr 10: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-170m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e009"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e00a",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e00a",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 11: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-187m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e00a"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e00b",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e00b",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 12: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-204m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e00b"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e00c",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e00c",
+        "from": "Jira",
+        "subject": "Wiadomość nr 13: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-221m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e00c"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e00d",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e00d",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 14: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-238m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e00d"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e00e",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e00e",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 15: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-255m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e00e"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e00f",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e00f",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 16: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-272m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e00f"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e010",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e010",
+        "from": "Google",
+        "subject": "Wiadomość nr 17: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-289m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e010"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e011",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e011",
+        "from": "Notion",
+        "subject": "Wiadomość nr 18: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-306m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e011"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e012",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e012",
+        "from": "Slack",
+        "subject": "Wiadomość nr 19: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-323m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e012"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e013",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e013",
+        "from": "Figma",
+        "subject": "Wiadomość nr 20: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-340m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e013"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e014",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e014",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 21: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-357m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e014"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e015",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e015",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 22: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-374m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e015"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e016",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e016",
+        "from": "Jira",
+        "subject": "Wiadomość nr 23: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-391m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e016"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e017",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e017",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 24: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-408m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e017"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e018",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e018",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 25: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-425m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e018"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e019",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e019",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 26: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-442m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e019"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e01a",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e01a",
+        "from": "Google",
+        "subject": "Wiadomość nr 27: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-459m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e01a"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e01b",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e01b",
+        "from": "Notion",
+        "subject": "Wiadomość nr 28: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-476m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e01b"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e01c",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e01c",
+        "from": "Slack",
+        "subject": "Wiadomość nr 29: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-493m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e01c"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e01d",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e01d",
+        "from": "Figma",
+        "subject": "Wiadomość nr 30: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-510m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e01d"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e01e",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e01e",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 31: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-527m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e01e"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e01f",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e01f",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 32: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-544m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e01f"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e020",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e020",
+        "from": "Jira",
+        "subject": "Wiadomość nr 33: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-561m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e020"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e021",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e021",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 34: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-578m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e021"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e022",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e022",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 35: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-595m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e022"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e023",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e023",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 36: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-612m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e023"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e024",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e024",
+        "from": "Google",
+        "subject": "Wiadomość nr 37: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-629m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e024"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e025",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e025",
+        "from": "Notion",
+        "subject": "Wiadomość nr 38: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-646m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e025"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e026",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e026",
+        "from": "Slack",
+        "subject": "Wiadomość nr 39: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-663m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e026"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e027",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e027",
+        "from": "Figma",
+        "subject": "Wiadomość nr 40: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-680m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e027"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e028",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e028",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 41: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-697m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e028"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e029",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e029",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 42: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-714m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e029"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e02a",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e02a",
+        "from": "Jira",
+        "subject": "Wiadomość nr 43: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-731m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e02a"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e02b",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e02b",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 44: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-748m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e02b"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e02c",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e02c",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 45: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-765m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e02c"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e02d",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e02d",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 46: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-782m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e02d"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e02e",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e02e",
+        "from": "Google",
+        "subject": "Wiadomość nr 47: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-799m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e02e"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e02f",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e02f",
+        "from": "Notion",
+        "subject": "Wiadomość nr 48: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-816m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e02f"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e030",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e030",
+        "from": "Slack",
+        "subject": "Wiadomość nr 49: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-833m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e030"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e031",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e031",
+        "from": "Figma",
+        "subject": "Wiadomość nr 50: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-850m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e031"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e032",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e032",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 51: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-867m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e032"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e033",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e033",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 52: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-884m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e033"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e034",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e034",
+        "from": "Jira",
+        "subject": "Wiadomość nr 53: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-901m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e034"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e035",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e035",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 54: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-918m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e035"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e036",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e036",
+        "from": "Bank Millennium",
+        "subject": "Wiadomość nr 55: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-935m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e036"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e037",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e037",
+        "from": "LinkedIn",
+        "subject": "Wiadomość nr 56: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-952m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e037"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e038",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e038",
+        "from": "Google",
+        "subject": "Wiadomość nr 57: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-969m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e038"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e039",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e039",
+        "from": "Notion",
+        "subject": "Wiadomość nr 58: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-986m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e039"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e03a",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e03a",
+        "from": "Slack",
+        "subject": "Wiadomość nr 59: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1003m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e03a"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e03b",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e03b",
+        "from": "Figma",
+        "subject": "Wiadomość nr 60: Zaproszenie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1020m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e03b"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e03c",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e03c",
+        "from": "Anna Nowak",
+        "subject": "Wiadomość nr 61: Raport tygodniowy",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1037m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e03c"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e03d",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e03d",
+        "from": "GitHub",
+        "subject": "Wiadomość nr 62: Przypomnienie",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1054m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e03d"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3e03e",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3e03e",
+        "from": "Jira",
+        "subject": "Wiadomość nr 63: Nowy komentarz",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1071m",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3e03e"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3e03f",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3e03f",
+        "from": "Allegro",
+        "subject": "Wiadomość nr 64: Faktura",
+        "snippet": "Krótki podgląd treści wiadomości, który pokazuje Gmail na liście.",
+        "receivedAt": "now-1088m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3e03f"
+      }
+    ],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 32
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 32
+      }
+    ],
+    "total": 64
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now-2m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-110s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-100s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-90s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-80s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-70s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-50s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-40s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-30s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-10s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 92,
+            "observedAt": "now",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 61,
+            "observedAt": "now",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 75,
+            "observedAt": "now-50m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 58,
+            "observedAt": "now-50m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 38,
+            "observedAt": "now",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 24,
+            "observedAt": "now",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 30,
+            "observedAt": "now-40m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 22,
+            "observedAt": "now-40m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      }
+    ]
+  }
+}

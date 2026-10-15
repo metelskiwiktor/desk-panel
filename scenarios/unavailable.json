@@ -11,9 +11,49 @@
     "observedAt": null,
     "data": null
   },
-  "calendarConnection": {
-    "status": "connected",
-    "email": "owner@gmail.com"
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "unavailable",
+    "observedAt": null,
+    "data": null,
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "unavailable",
+        "observedAt": null,
+        "unread": null,
+        "message": "Zaloguj się przez Google w Ustawieniach."
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "unavailable",
+        "observedAt": null,
+        "unread": null,
+        "message": "Zaloguj się przez Google w Ustawieniach."
+      }
+    ],
+    "total": 0,
+    "message": "Zaloguj się przez Google w Ustawieniach."
   },
   "system": {
     "live": true,

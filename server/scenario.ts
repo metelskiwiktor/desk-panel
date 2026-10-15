@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { cezarSchema } from '../src/cezar-contract';
-import { calendarConnectionSchema, calendarSourceSchema } from '../src/calendar-contract';
+import { calendarSourceSchema } from '../src/calendar-contract';
+import { googleAccountsSchema } from '../src/google-contract';
+import { mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { SourceError, type PanelSources } from './sources';
@@ -23,7 +25,9 @@ export const scenarioSchema = z.object({
   description: z.string().optional(),
   cezar: endpoint(cezarSchema),
   calendar: endpoint(calendarSourceSchema),
-  calendarConnection: endpoint(calendarConnectionSchema),
+  googleAccounts: endpoint(googleAccountsSchema),
+  /** All listed conversations; the server applies `limit` and the actions taken in this session. */
+  mail: endpoint(mailSourceSchema),
   system: endpoint(systemSourceSchema),
   quotas: endpoint(quotaSourceSchema),
 }).strict();
@@ -59,8 +63,12 @@ export function loadScenario(file: string, now = Date.now()): Scenario {
   catch (error) { throw new Error(`Invalid scenario ${file}:\n${error instanceof Error ? error.message : error}`); }
 }
 
-/** Serves a scenario file; it is re-read on every request so edits apply live. */
+/**
+ * Serves a scenario file; it is re-read on every request so edits apply live.
+ * Mail actions are remembered in memory, so swiping behaves like Gmail until restart.
+ */
 export function createScenarioSources(file: string): PanelSources {
+  const handled = new Set<string>();
   async function serve<K extends ScenarioEndpoint>(key: K) {
     const value = loadScenario(file)[key];
     if ('$error' in value) throw new SourceError(value.$error);
@@ -70,10 +78,20 @@ export function createScenarioSources(file: string): PanelSources {
   return {
     cezar: () => serve('cezar'),
     calendar: () => serve('calendar'),
-    calendarConnection: () => serve('calendarConnection'),
+    googleAccounts: () => serve('googleAccounts'),
+    async mail(limit) {
+      const source = await serve('mail');
+      const all = source.data?.filter(t => !handled.has(t.id)) ?? null;
+      return { ...source, data: all && all.slice(0, limit), total: all?.length ?? 0 };
+    },
+    async mailAction(account, threadId, action) {
+      const id = `${account}:${threadId}`;
+      if (!(await serve('mail')).data?.some(t => t.id === id)) throw new SourceError(404);
+      if (action === 'read' || action === 'trash') handled.add(id); else handled.delete(id);
+    },
     system: () => serve('system'),
     quotas: () => serve('quotas'),
-    calendarConnect: async () => { throw new SourceError(409); },
-    calendarCallback: async () => ({ ok: false, message: 'Scenariusz nie obsługuje logowania Google.' }),
+    googleConnect: async () => { throw new SourceError(409); },
+    googleCallback: async () => ({ ok: false, message: 'Scenariusz nie obsługuje logowania Google.' }),
   };
 }
