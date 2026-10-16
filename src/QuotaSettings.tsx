@@ -26,11 +26,11 @@ const resultLabels:Record<string,string>={completed:'Wykonano i potwierdzono',co
   reserved:'Próba rozpoczęta',window_active:'Okno już aktywne',settings_changed:'Pominięto po zmianie ustawień'};
 const reasonLabels:Record<string,string>={claude_turn_timeout:'Claude nie zakończył odpowiedzi w limicie czasu',claude_total_timeout:'Przekroczono łączny limit czasu Claude',
   claude_startup_unverified:'Nie potwierdzono startu Claude CLI',claude_quota_unverified:'Nie potwierdzono quota po próbie',claude_account_changed:'Zmieniło się konto Claude w trakcie',
-  claude_history_audit_failed:'Próba zostawiła ślad w historii Claude',turn_not_completed:'Codex nie zakończył tury',unexpected_tool_activity:'Codex próbował użyć narzędzia',
+  claude_history_audit_failed:'Próba zostawiła ślad w historii Claude',turn_not_completed:'CLI nie zakończyło tury',unexpected_tool_activity:'CLI użyło narzędzia lub wykonało więcej niż jedną turę',gemini_model_not_allowed:'Model spoza grupy Gemini Models',
   cli_timeout:'CLI przekroczyło limit czasu',cli_not_installed:'Brak CLI',cli_execution_failed:'CLI zakończyło się błędem',subscription_auth_required:'Wymagane logowanie subskrypcją',
   custom_cli_config_unsupported:'Niestandardowa konfiguracja CLI blokuje warmup',execution_failed:'Nieznany błąd wykonania'};
 const describeReason=(reason?:string)=>reason ? `${reasonLabels[reason] || 'Błąd'} (${reason})` : undefined;
-const providerName=(provider:WarmupProvider)=>provider==='Codex' ? 'ChatGPT / Codex' : provider;
+const providerName=(provider:WarmupProvider)=>provider==='Codex' ? 'ChatGPT / Codex' : provider==='Gemini' ? 'Gemini (Antigravity)' : provider;
 const COOLDOWN_MS=5*3600000;
 
 /** One shared read for the settings forms and the history card, refreshed while settings are open. */
@@ -70,9 +70,9 @@ function WarmupForm({provider,settings,last,save}:{provider:WarmupProvider;setti
   }}>
     <fieldset disabled={busy}><legend>{providerName(provider)}</legend>
       <label className="visibility-toggle"><input type="checkbox" checked={value.enabled} onChange={e=>edit({...value,enabled:e.target.checked})}/>Włącz warmup po zamknięciu okna 5h</label>
-      <label>Model{provider==='Claude' ? <input value="Haiku" readOnly/> : <input placeholder="Model dostępny w Twoim Codex CLI" pattern="[a-zA-Z0-9_.\-]{1,100}" required={value.enabled} value={value.model || ''} onChange={e=>edit({...value,model:e.target.value || undefined})}/>}</label>
+      <label>Model{provider==='Claude' ? <input value="Haiku" readOnly/> : <input placeholder={provider==='Gemini' ? 'gemini-3.8-flash-low' : 'Model dostępny w Twoim Codex CLI'} pattern="[a-zA-Z0-9_.\-]{1,100}" required={value.enabled} value={value.model || ''} onChange={e=>edit({...value,model:e.target.value || undefined})}/>}</label>
       <p className="meta">Prompt: {provider==='Claude' ? 'Reply with exactly [losowy kod]. Do not use tools.' : 'Reply only OK. Do not use tools.'}</p>
-      <p className="meta">{provider==='Claude' ? 'Krótki prompt jest stały; losowy kod pozwala potwierdzić, że Claude odpowiedział. Narzędzia są wyłączone.' : 'Krótki prompt jest stały; wykonanie potwierdza zakończona tura Codex CLI. Narzędzia są wyłączone.'}</p>
+      <p className="meta">{provider==='Claude' ? 'Krótki prompt jest stały; losowy kod pozwala potwierdzić, że Claude odpowiedział. Narzędzia są wyłączone.' : provider==='Gemini' ? 'Dotyczy tylko grupy Gemini Models (okno gemini-5h), nie Argon ani Claude i GPT. Wykonanie potwierdza jedna zwykła tura agy.' : 'Krótki prompt jest stały; wykonanie potwierdza zakończona tura Codex CLI. Narzędzia są wyłączone.'}</p>
       {settings.configurationError && <p className="warning">Popraw ustawienia warmupu i zapisz.</p>}
       {last && <p className="meta">Ostatnia próba: {new Date(last.at).toLocaleString('pl-PL')} · {resultLabels[last.result] || 'Pominięto próbę'}{last.reason ? ` · ${describeReason(last.reason)}` : ''}</p>}
       {nextAllowed && <p className="meta">Następna możliwa próba: {nextAllowed.toLocaleString('pl-PL')} (5h odstępu od ostatniej)</p>}
@@ -87,7 +87,7 @@ export function WarmupSettingsCard({warmup}:{warmup:WarmupState}) {
     <p className="card-intro">Domyślnie wyłączony. Co 30 sekund sprawdza, czy okno 5h jest zamknięte i nie ma aktywnej sesji CLI. Wtedy sam wyśle krótki prompt z istniejącej subskrypcji, aby rozpocząć kolejne okno. Zużywa quota i nie zwiększa limitu.</p>
     <p className="meta">Działa przez całą dobę, bez ustalania godziny. Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywny proces CLI blokuje próbę, również gdy jest bezczynny. Nieznane quota blokują warmup. Minimum 5h między próbami chroni przed duplikatami, także po błędzie. Wyłączenie zatrzymuje przyszłe próby; rozpoczęta próba może się dokończyć.</p>
     {error && !status ? <p role="alert">Ustawienia warmupu niedostępne. Wymagany jest aktualny adapter. <button className="button" onClick={warmup.retry}>Ponów odczyt</button></p> : !status ? <p role="status">Odczyt ustawień…</p> :
-      (['Claude','Codex'] as const).map(provider=><WarmupForm key={provider} provider={provider} settings={status.settings[provider]} last={status.last[provider]} save={value=>warmup.save(provider,value)}/>)}
+      (['Claude','Codex','Gemini'] as const).flatMap(provider=>status.settings[provider] ? [[provider,status.settings[provider]!] as const] : []).map(([provider,settings])=><WarmupForm key={provider} provider={provider} settings={settings} last={status.last[provider]} save={value=>warmup.save(provider,value)}/>)}
   </Card>;
 }
 

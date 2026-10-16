@@ -89,3 +89,15 @@ it('explains an HTTP 429 pause with the next attempt time instead of a bare "nie
   render(<App/>);
   expect((await screen.findAllByText(/limit zapytań dostawcy · kolejna próba \d\d:\d\d · ostatnia obserwacja/)).length).toBe(2);
 });
+it('offers a Gemini warmup limited to the Gemini Models group and saves its flash model',async()=>{
+  const request=vi.fn(scenarioFetch('quota-settings'));vi.stubGlobal('fetch',request);const user=userEvent.setup();render(<Warmup/>);
+  const gemini=await screen.findByRole('group',{name:'Gemini (Antigravity)'});
+  expect((within(gemini).getByLabelText('Model') as HTMLInputElement).value).toBe('gemini-3.8-flash-low');
+  expect(within(gemini).getByText(/tylko grupy Gemini Models.*nie Argon/)).toBeTruthy();
+  await user.click(within(gemini).getByRole('checkbox'));await user.click(within(gemini).getByRole('button',{name:'Zapisz warmup Gemini'}));
+  await screen.findByText(/Zapisano/);
+  const post=request.mock.calls.find(([,init])=>init?.method==='POST')!;
+  expect(String(post[0])).toBe('/api/quotas/warmup/Gemini');expect(JSON.parse(String(post[1]!.body))).toEqual({enabled:true,model:'gemini-3.8-flash-low'});
+  const argon=await request('/api/quotas/warmup/Gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true,model:'gemini-4-argon-low'})}).catch(()=>null);
+  expect(argon===null || !argon.ok).toBe(true);
+});

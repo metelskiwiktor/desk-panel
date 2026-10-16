@@ -476,6 +476,10 @@
       },
       "Codex": {
         "enabled": false
+      },
+      "Gemini": {
+        "enabled": false,
+        "model": "gemini-3.8-flash-low"
       }
     },
     "last": {
