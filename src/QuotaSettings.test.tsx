@@ -78,3 +78,14 @@ it('says when the adapter is too old to keep history instead of claiming there w
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json(status)));render(<Warmup/>);
   expect(await screen.findByText(/nie zapisuje historii/)).toBeTruthy();expect(screen.queryByText('Brak prób warmupu.')).toBeNull();
 });
+it('explains an HTTP 429 pause with the next attempt time instead of a bare "nieaktualne"',async()=>{
+  const base=scenarioFetch('quota-settings'),retryAt=Date.now()+20*60000;
+  vi.stubGlobal('fetch',vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
+    const response=await base(url,init);if(String(url)!=='/api/quotas')return response;
+    const body=await response.json();
+    for(const snapshot of body.data.find((a:{provider:string})=>a.provider==='Claude').snapshots)Object.assign(snapshot,{state:'stale',stale:true,reason:'http_429',retryAt,usedPercent:2,observedAt:Date.now()-900000,resetAt:Date.now()+3*3600000});
+    return Response.json(body);
+  }));
+  render(<App/>);
+  expect((await screen.findAllByText(/limit zapytań dostawcy · kolejna próba \d\d:\d\d · ostatnia obserwacja/)).length).toBe(2);
+});

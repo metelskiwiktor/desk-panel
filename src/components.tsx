@@ -208,6 +208,7 @@ export function QuotaWindow({
           </> : <span className="meta">Ponad próg czerwonego: {pp(excess - QUOTA_PACE_WARNING)} p.p.</span>}
       </div>}
       {snapshot.reason && <span className="meta" title={snapshot.reason}>{quotaReason(snapshot.reason)}</span>}
+      {snapshot.retryAt && <span className="meta">Kolejna próba odczytu po {stamp(snapshot.retryAt)}</span>}
       {snapshot.attemptedAt && <span className="meta">Próba {stamp(snapshot.attemptedAt)}</span>}
       {snapshot.state && state === 'fresh' && snapshot.observedAt !== null && <span className="meta">Odczyt {stamp(snapshot.observedAt)}</span>}
       {state !== 'fresh' && snapshot.source && snapshot.observedAt !== null && <span className="meta">Obserwacja {stamp(snapshot.observedAt)} · reset {snapshot.resetAt === null ? 'nieznany' : stamp(snapshot.resetAt)}</span>}

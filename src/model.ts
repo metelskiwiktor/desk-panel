@@ -44,6 +44,7 @@ export interface QuotaSnapshot {
   state?: 'fresh'|'stale'|'unavailable'|'auth_required';
   reason?: string|null;
   attemptedAt?: number;
+  retryAt?: number;
   usedPercent: number | null;
   observedAt: number | null;
   resetAt: number | null;

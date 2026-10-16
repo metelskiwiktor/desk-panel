@@ -141,7 +141,7 @@ function QuotaBar({ snapshot, now, connected }: { snapshot: QuotaSnapshot; now: 
       {pace && <i className="quota-tick" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
     </span>
     <strong className="quota-value">{state === 'unavailable' ? '—' : `${Number(snapshot.usedPercent!.toFixed(1))}%`}</strong>
-    <span className="quota-sub">{snapshot.state === 'auth_required' ? 'wymaga logowania' : pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? snapshot.reason ? quotaReason(snapshot.reason) : 'brak pomiaru' : state === 'fresh' ? snapshot.resetAt ? `reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'reset nieznany' : 'nieaktualne · ostatnia obserwacja'}{snapshot.state && snapshot.observedAt !== null && ` · odczyt ${time(snapshot.observedAt)}`}</span>
+    <span className="quota-sub">{snapshot.state === 'auth_required' ? 'wymaga logowania' : pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? snapshot.reason ? quotaReason(snapshot.reason) : 'brak pomiaru' : state === 'fresh' ? snapshot.resetAt ? `reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'reset nieznany' : snapshot.reason === 'http_429' ? `limit zapytań dostawcy${snapshot.retryAt ? ` · kolejna próba ${time(snapshot.retryAt)}` : ''} · ostatnia obserwacja` : 'nieaktualne · ostatnia obserwacja'}{snapshot.state && snapshot.observedAt !== null && ` · odczyt ${time(snapshot.observedAt)}`}</span>
   </div>;
 }
 
