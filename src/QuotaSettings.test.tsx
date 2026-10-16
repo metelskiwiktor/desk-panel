@@ -1,5 +1,5 @@
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
-import { cleanup,render,screen,within,waitFor,renderHook,act,fireEvent } from '@testing-library/react';
+import { cleanup,render,screen,within,waitFor,renderHook,act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { WarmupSettingsCard } from './QuotaSettings';
@@ -31,21 +31,28 @@ it('reports browser storage failure while applying visibility in the current ses
   const {result}=renderHook(()=>useQuotaVisibility());act(()=>result.current.set({hiddenProviders:['Codex'],hiddenAgyGroups:[]}));
   expect(result.current.value.hiddenProviders).toEqual(['Codex']);expect(result.current.error).toBe(true);
 });
-it('loads disabled defaults and persists enable/time plus disable through the settings endpoint only',async()=>{
+it('loads disabled automatic reset defaults and persists enable/disable without a daily time or execution',async()=>{
   const request=vi.fn(scenarioFetch('quota-settings'));vi.stubGlobal('fetch',request);const user=userEvent.setup();render(<WarmupSettingsCard/>);
   const claude=await screen.findByRole('group',{name:'Claude'});
   expect((within(claude).getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
   expect((within(claude).getByLabelText('Model') as HTMLInputElement).readOnly).toBe(true);
-  await user.click(within(claude).getByRole('checkbox'));fireEvent.change(within(claude).getByLabelText('Godzina (Europe/Warsaw)'),{target:{value:'07:30'}});
+  expect(screen.queryByLabelText(/Godzina/)).toBeNull();
+  expect(screen.getByText(/Co 30 sekund/)).toBeTruthy();
+  await user.click(within(claude).getByRole('checkbox'));
   await screen.findByText(/Niezapisane zmiany/);await user.click(within(claude).getByRole('button',{name:'Zapisz warmup Claude'}));
   await screen.findByText(/Zapisano/);
   const post=request.mock.calls.find(([,init])=>init?.method==='POST')!;
-  expect(String(post[0])).toBe('/api/quotas/warmup/Claude');expect(JSON.parse(String(post[1]!.body))).toEqual({enabled:true,time:'07:30',model:'haiku'});
+  expect(String(post[0])).toBe('/api/quotas/warmup/Claude');expect(JSON.parse(String(post[1]!.body))).toEqual({enabled:true,model:'haiku'});
   expect(request.mock.calls.some(([url])=>String(url).includes('execute'))).toBe(false);
   await user.click(within(claude).getByRole('checkbox'));await user.click(within(claude).getByRole('button',{name:'Zapisz warmup Claude'}));
   await waitFor(()=>expect(JSON.parse(String(request.mock.calls.filter(([,init])=>init?.method==='POST').at(-1)![1]!.body)).enabled).toBe(false));
 });
 it('shows an unavailable adapter and never invents an enabled state',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:503})));render(<WarmupSettingsCard/>);
+  expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.queryByRole('checkbox')).toBeNull();
+});
+it('rejects a legacy daily scheduler instead of presenting it as automatic reset warmup',async()=>{
+  const legacy=await (await scenarioFetch('quota-settings')('/api/quotas/warmup')).json();delete legacy.mode;
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json(legacy)));render(<WarmupSettingsCard/>);
   expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.queryByRole('checkbox')).toBeNull();
 });

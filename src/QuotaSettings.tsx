@@ -25,16 +25,15 @@ export function QuotaVisibilitySettings({accounts,value,change,error}:{accounts:
 function WarmupForm({provider,settings,last,save}:{provider:WarmupProvider;settings:WarmupSettings;last:WarmupStatus['last'][string];save:(value:WarmupSettings)=>Promise<void>}) {
   const [value,setValue]=useState(settings),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const edit=(next:WarmupSettings)=>{setValue(next);setMessage('Niezapisane zmiany. Zapisz, aby je zastosować.');};
-  useEffect(()=>setValue(settings),[settings.enabled,settings.time,settings.model]);
+  useEffect(()=>setValue(settings),[settings.enabled,settings.model]);
   return <form className="warmup-form" onSubmit={async e=>{
     e.preventDefault();setBusy(true);setMessage('');
-    try{await save(value);setMessage('Zapisano. Harmonogram obowiązuje bez restartu usługi.');}
+    try{await save(value);setMessage('Zapisano. Automat działa bez restartu usługi.');}
     catch{setMessage('Nie udało się zapisać. Sprawdź połączenie z aktualnym adapterem.');}
     finally{setBusy(false);}
   }}>
     <fieldset disabled={busy}><legend>{provider === 'Codex' ? 'ChatGPT / Codex' : provider}</legend>
-      <label className="visibility-toggle"><input type="checkbox" checked={value.enabled} onChange={e=>edit({...value,enabled:e.target.checked})}/>Włącz codzienny warmup</label>
-      <label>Godzina (Europe/Warsaw)<input type="time" required value={value.time} onChange={e=>edit({...value,time:e.target.value})}/></label>
+      <label className="visibility-toggle"><input type="checkbox" checked={value.enabled} onChange={e=>edit({...value,enabled:e.target.checked})}/>Włącz warmup po zamknięciu okna 5h</label>
       <label>Model{provider==='Claude' ? <input value="Haiku" readOnly/> : <input placeholder="Model dostępny w Twoim Codex CLI" pattern="[a-zA-Z0-9_.\-]{1,100}" required={value.enabled} value={value.model || ''} onChange={e=>edit({...value,model:e.target.value || undefined})}/>}</label>
       <p className="meta">Prompt: {provider==='Claude' ? 'Reply with exactly [losowy kod]. Do not use tools.' : 'Reply only OK. Do not use tools.'}</p>
       <p className="meta">Krótki prompt jest stały; losowy kod Claude pozwala potwierdzić wykonanie. Narzędzia są wyłączone.</p>
@@ -57,11 +56,11 @@ export function WarmupSettingsCard() {
     return()=>{stopped=true;clearTimeout(timeout);controller.abort();};
   },[retry,pollingEnabled]);
   return <Card title="Warmup AI" icon={<Settings2 />}>
-    <p className="card-intro">Domyślnie wyłączony. Raz dziennie wyśle krótki prompt z istniejącej subskrypcji, jeśli okno 5h jest nieaktywne. Zużywa quota i nie zwiększa limitu.</p>
-    <p className="meta">Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywne sesje, nieznane quota i blokada kolejnych prób mogą pominąć warmup. Wyłączenie zatrzymuje przyszłe próby; rozpoczęta próba może się dokończyć.</p>
+    <p className="card-intro">Domyślnie wyłączony. Co 30 sekund sprawdza, czy okno 5h jest zamknięte i nie ma aktywnej sesji CLI. Wtedy sam wyśle krótki prompt z istniejącej subskrypcji, aby rozpocząć kolejne okno. Zużywa quota i nie zwiększa limitu.</p>
+    <p className="meta">Działa przez całą dobę, bez ustalania godziny. Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywny proces CLI blokuje próbę, również gdy jest bezczynny. Nieznane quota blokują warmup. Minimum 5h między próbami chroni przed duplikatami, także po błędzie. Wyłączenie zatrzymuje przyszłe próby; rozpoczęta próba może się dokończyć.</p>
     {error ? <p role="alert">Ustawienia warmupu niedostępne. Wymagany jest aktualny adapter. <button className="button" onClick={()=>{setError(false);setRetry(n=>n+1);}}>Ponów odczyt</button></p> : !status ? <p role="status">Odczyt ustawień…</p> :
       (['Claude','Codex'] as const).map(provider=><WarmupForm key={provider} provider={provider} settings={status.settings[provider]} last={status.last[provider]} save={async value=>{
-        const response=await fetch(`/api/quotas/warmup/${provider}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:value.enabled,time:value.time,...(value.model ? {model:value.model} : {})}),signal:AbortSignal.timeout(12000)});
+        const response=await fetch(`/api/quotas/warmup/${provider}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:value.enabled,...(value.model ? {model:value.model} : {})}),signal:AbortSignal.timeout(12000)});
         if(!response.ok)throw new Error();setStatus(warmupStatusSchema.parse(await response.json()));
       }}/>)}
   </Card>;

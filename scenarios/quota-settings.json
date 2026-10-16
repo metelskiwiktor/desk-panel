@@ -472,15 +472,15 @@
     "settings": {
       "Claude": {
         "enabled": false,
-        "time": "06:00",
         "model": "haiku"
       },
       "Codex": {
-        "enabled": false,
-        "time": "06:00"
+        "enabled": false
       }
     },
     "last": {},
-    "warning": "Warmup consumes quota."
+    "warning": "Warmup consumes quota.",
+    "mode": "on_reset",
+    "pollIntervalSeconds": 30
   }
 }

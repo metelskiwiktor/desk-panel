@@ -349,13 +349,19 @@ Grupy są dynamiczne, bez listy modeli w kodzie. Wybór zapisuje się w tej
 przeglądarce, obejmuje pulpit i szczegóły, nie zmienia pomiarów. Nowe grupy są
 domyślnie widoczne; ukryte grupy pozostają w ustawieniach, aby dało się je przywrócić.
 
-W **Ustawienia → Warmup AI** są osobne przełączniki Claude/Codex, godzina
-`Europe/Warsaw` (domyślnie 06:00) i model. Claude używa Haiku; Codex wymaga
+W **Ustawienia → Warmup AI** są osobne przełączniki automatu Claude/Codex i model.
+Automat sprawdza stan co 30 s przez całą dobę: po potwierdzeniu zamkniętego okna
+5h i braku aktywnej sesji CLI sam wysyła krótki warmup. Nie ustawia się godziny;
+działa po kolejnych resetach, nie raz dziennie. Claude używa Haiku; Codex wymaga
 podania modelu dostępnego w CLI. Krótkie, stałe prompty są pokazane w formularzu.
 Przełącznik zaczyna obowiązywać po „Zapisz”; ustawienia trafiają przez backend
 do owner-auth API adaptera, bez ujawniania klucza w przeglądarce. Zapis jest trwały,
 działa bez restartu, nie uruchamia promptu i nie zeruje cooldownu. Już rozpoczęta
 próba może się dokończyć. Stary/niedostępny adapter oznacza jawny brak ustawień.
+Panel wymaga deklaracji `mode: on_reset` w statusie adaptera. Dawne pole `time`
+jest ignorowane przez nowy adapter; zachowane są opt-in, model i cooldown.
+Aktywny proces CLI (również bezczynny), brak wiarygodnych quota lub cooldown
+mogą opóźnić próbę. Zmiana samego czasu zapisanego resetu nie uruchamia warmupu.
 
 Warmup jest kontrolowany w adapterze, domyślnie wyłączony. Nie jest
 częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`
