@@ -1060,3 +1060,7 @@ nav button.active:after {
   .mail-card .mail-list { max-height: var(--mail-list-height); }
   .system-alert { flex-direction: column; align-items: stretch; }
 }
+
+.quota-dynamic .quota-window-label { grid-column: 1 / -1; font-family: inherit; overflow-wrap: anywhere; }
+.quota-dynamic .quota-track { grid-column: 1 / 3; }
+.quota-dynamic .quota-sub { grid-column: 1 / -1; }

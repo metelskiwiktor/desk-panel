@@ -1,0 +1,456 @@
+{
+  "description": "Quota v2: Claude reauthentication, partial Codex, dynamic Antigravity groups.",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 3,
+      "queue": 2,
+      "needs-input": 1,
+      "review": 4
+    },
+    "tasks": [
+      {
+        "id": "decision",
+        "title": "Potwierdź zakres testów kalendarza",
+        "project": "Tabnote",
+        "status": "needs-input",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/decision",
+        "description": "Wybrać zakres regresji przed dalszą implementacją."
+      },
+      {
+        "id": "review-1",
+        "title": "Widok notatki gotowy do przeglądu",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-1",
+        "title": "Poprawa wyszukiwania po etykietach",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-2",
+        "title": "Porządki w filtrach",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-3",
+        "title": "Regresje widoku tablicy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "review-4",
+        "title": "Walidacja scenariuszy",
+        "project": "Tabnote",
+        "status": "review",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/review-4",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-2",
+        "title": "Testy selektorów zadań",
+        "project": "Cezar",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "running-3",
+        "title": "Dostępność paska nawigacji",
+        "project": "Tabnote",
+        "status": "running",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-3",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-1",
+        "title": "Przegląd kontraktów źródeł",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-1",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "queue-2",
+        "title": "Sprawdzenie pustych stanów",
+        "project": "Desk Panel",
+        "status": "queue",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/queue-2",
+        "description": "Zadanie w trakcie pracy."
+      },
+      {
+        "id": "done-1",
+        "title": "Aktualizacja opisów testów",
+        "project": "Tabnote",
+        "status": "done",
+        "startedAt": "now-24m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/done-1",
+        "description": "Zadanie w trakcie pracy.",
+        "completedAt": "now-4m"
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "planning",
+        "title": "Planowanie Tabnote",
+        "startAt": "now+12m",
+        "endAt": "now+42m",
+        "location": "Biurko · sesja robocza",
+        "description": "Priorytety, regresje i zakres kolejnej iteracji.",
+        "allDay": false
+      },
+      {
+        "id": "design",
+        "title": "Przegląd interfejsu",
+        "startAt": "now+90m",
+        "endAt": "now+2h",
+        "description": "Czytelność panelu na ekranie pionowym.",
+        "allDay": false
+      },
+      {
+        "id": "focus",
+        "title": "Czas na pracę własną",
+        "startAt": "now+3h",
+        "endAt": "now+4h",
+        "description": "Blok skupienia.",
+        "allDay": false
+      }
+    ]
+  },
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d401",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d401",
+        "from": "Anna Nowak",
+        "subject": "Spotkanie w czwartek",
+        "snippet": "Cześć, czy możemy przesunąć spotkanie na 15:00? Mam konflikt w kalendarzu.",
+        "receivedAt": "now-6m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d401"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d402",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d402",
+        "from": "GitHub",
+        "subject": "[desk-panel] PR #3: Gmail w panelu",
+        "snippet": "metelskiwiktor requested your review on this pull request.",
+        "receivedAt": "now-25m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d402"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d403",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d403",
+        "from": "Bank Millennium",
+        "subject": "Potwierdzenie przelewu",
+        "snippet": "Przelew na kwotę 120,00 zł został zrealizowany.",
+        "receivedAt": "now-1h10m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d403"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d404",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d404",
+        "from": "Jira",
+        "subject": "Nowe zadanie przypisane do Ciebie",
+        "snippet": "DESK-42 Przegląd układu na ekranie pionowym.",
+        "receivedAt": "now-3h",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d405",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d405",
+        "from": "Allegro",
+        "subject": "Twoja paczka jest w drodze",
+        "snippet": "Przesyłka zostanie dostarczona jutro do paczkomatu.",
+        "receivedAt": "now-1d2h",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d405"
+      }
+    ],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 3
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 2
+      }
+    ],
+    "total": 5
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now-2m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-110s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-100s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-90s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-80s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-70s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-50s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-40s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-30s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-10s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "mode": "live",
+    "status": "connected",
+    "observedAt": "now-10s",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": null,
+            "state": "auth_required",
+            "reason": "claude_login_expired",
+            "observedAt": null,
+            "resetAt": null,
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          },
+          {
+            "window": "7d",
+            "usedPercent": 26,
+            "state": "stale",
+            "reason": "http_401",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": true,
+            "freshForMs": 120000
+          }
+        ],
+        "history": []
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 12,
+            "state": "stale",
+            "reason": "window_not_reported",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": true,
+            "freshForMs": 120000
+          },
+          {
+            "window": "7d",
+            "usedPercent": 17,
+            "state": "fresh",
+            "reason": null,
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          }
+        ],
+        "history": []
+      },
+      {
+        "provider": "AGY",
+        "snapshots": [
+          {
+            "window": "gemini-5h",
+            "usedPercent": 24,
+            "state": "fresh",
+            "reason": null,
+            "model": "Gemini Models",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          },
+          {
+            "window": "gemini-weekly",
+            "usedPercent": 38,
+            "state": "fresh",
+            "reason": null,
+            "model": "Gemini Models",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          },
+          {
+            "window": "future-limit",
+            "usedPercent": 75,
+            "state": "fresh",
+            "reason": null,
+            "model": "Future Model",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          }
+        ],
+        "history": []
+      }
+    ]
+  }
+}

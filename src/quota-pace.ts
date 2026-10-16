@@ -10,7 +10,7 @@ export const quotaPaceLabels = {
 
 /** The reset anchors the nominal window; no usage is predicted after it. */
 export function quotaPace(snapshot: QuotaSnapshot, now: number) {
-  if (quotaState(snapshot, now) !== 'fresh') return null;
+  if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !['5h','7d'].includes(snapshot.window)) return null;
   const duration = (snapshot.window === '5h' ? 300 : 7 * 24 * 60) * MINUTE;
   const elapsedPercent = Math.max(0, Math.min(100, ((duration - (snapshot.resetAt! - now)) * 100) / duration));
   const excess = snapshot.usedPercent! - elapsedPercent;

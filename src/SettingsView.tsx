@@ -70,7 +70,7 @@ export function SettingsView({
         </p>
         {[
           'Cezar · workspace i zadania',
-          'Claude / Codex · bieżące limity CLI',
+          'Claude / Codex / AGY · bieżące limity CLI',
           'Google Calendar · Twoje konto, tylko odczyt',
           'Windows · lokalny backend CPU i RAM',
         ].map((label) => (

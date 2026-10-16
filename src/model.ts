@@ -36,9 +36,14 @@ export interface CalendarEvent {
   startDate?: string;
   endDate?: string;
 }
-export type Provider = 'Claude' | 'Codex';
+export type Provider = 'Claude' | 'Codex' | 'AGY';
 export interface QuotaSnapshot {
-  window: '5h' | '7d';
+  window: string;
+  model?: string;
+  label?: string;
+  state?: 'fresh'|'stale'|'unavailable'|'auth_required';
+  reason?: string|null;
+  attemptedAt?: number;
   usedPercent: number | null;
   observedAt: number | null;
   resetAt: number | null;
@@ -48,6 +53,9 @@ export interface QuotaSnapshot {
 }
 export interface QuotaAccount {
   provider: Provider;
+  accountId?: string|null;
+  reason?: string|null;
+  attemptedAt?: number;
   snapshots: QuotaSnapshot[];
   history: QuotaSnapshot[];
 }
@@ -108,12 +116,10 @@ export function quotaState(snapshot: QuotaSnapshot, now: number): QuotaState {
   )
     return 'unavailable';
   if (
-    snapshot.stale || snapshot.observedAt === null || !Number.isFinite(snapshot.observedAt) ||
+    (snapshot.state !== undefined && snapshot.state !== 'fresh') || snapshot.stale || snapshot.observedAt === null || !Number.isFinite(snapshot.observedAt) ||
     snapshot.observedAt > now ||
     now - snapshot.observedAt > (snapshot.freshForMs ?? (snapshot.source ? 60_000 : MAX_AGE.quotas)) ||
-    snapshot.resetAt === null ||
-    !Number.isFinite(snapshot.resetAt) ||
-    snapshot.resetAt <= now
+    (snapshot.resetAt === null ? snapshot.state === undefined : !Number.isFinite(snapshot.resetAt) || snapshot.resetAt <= now)
   )
     return 'stale';
   return 'fresh';

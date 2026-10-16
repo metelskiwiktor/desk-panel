@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react';
-import { Empty, SourceNote, Sparkline } from './components';
+import { Empty, SourceNote, Sparkline, quotaReason } from './components';
 import { time } from './format';
 import { todayAgenda, upcomingDays } from './agenda';
 import { MAX_AGE, fresh, orderedTasks, quotaState, taskLabels, type DashboardData, type Detail, type QuotaSnapshot, type SystemSample, type Task } from './model';
@@ -132,15 +132,15 @@ function QuotaBar({ snapshot, now, connected }: { snapshot: QuotaSnapshot; now: 
   const measured = quotaState(snapshot, now);
   const state = !connected && measured === 'fresh' ? 'stale' : measured;
   const pace = state === 'fresh' ? quotaPace(snapshot, now) : null;
-  return <div className={`quota-bar ${pace ? `quota-pace-${pace.tone}` : 'quota-muted'}`}>
-    <span className="quota-window-label">{snapshot.window}</span>
-    <span className="quota-track" role="meter" aria-label={`Użycie limitu ${snapshot.window}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot.usedPercent ?? 0}
+  return <div className={`quota-bar ${snapshot.model ? 'quota-dynamic' : ''} ${pace ? `quota-pace-${pace.tone}` : 'quota-muted'}`}>
+    <span className="quota-window-label">{snapshot.model ? `${snapshot.model} · ${snapshot.label || snapshot.window}` : snapshot.window}</span>
+    <span className="quota-track" role="meter" aria-label={`Użycie limitu ${snapshot.window}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot.usedPercent ?? undefined}
       aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${Math.round(pace.elapsedPercent)}%. ${quotaPaceLabels[pace.tone]}.` : 'Brak aktualnego pomiaru'}>
       {state !== 'unavailable' && <span className="quota-fill" style={{ width: `${snapshot.usedPercent}%` }} />}
       {pace && <i className="quota-tick" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
     </span>
-    <strong className="quota-value">{state === 'unavailable' ? '—' : `${snapshot.usedPercent}%`}</strong>
-    <span className="quota-sub">{pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? 'brak pomiaru' : 'nieaktualne · ostatnia obserwacja'}</span>
+    <strong className="quota-value">{state === 'unavailable' ? '—' : `${Number(snapshot.usedPercent!.toFixed(1))}%`}</strong>
+    <span className="quota-sub">{snapshot.state === 'auth_required' ? 'wymaga logowania' : pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? snapshot.reason ? quotaReason(snapshot.reason) : 'brak pomiaru' : state === 'fresh' ? snapshot.resetAt ? `reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'reset nieznany' : 'nieaktualne · ostatnia obserwacja'}{snapshot.state && snapshot.observedAt !== null && ` · odczyt ${time(snapshot.observedAt)}`}</span>
   </div>;
 }
 
@@ -150,7 +150,8 @@ function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; ope
   return <section className="pulpit-card quota-strip" aria-label="Limity AI">
     {accounts?.length ? accounts.map(a => <button key={a.provider} className="quota-provider" onClick={() => open({ kind: 'quota', provider: a.provider })}>
       <strong>{a.provider}</strong>
-      {a.snapshots.map(s => <QuotaBar key={s.window} snapshot={s} now={now} connected={connected} />)}
+      {!a.snapshots.length && <span className="quota-sub">{a.reason ? quotaReason(a.reason) : "Brak pomiaru"}</span>}
+      {a.snapshots.map(s => <QuotaBar key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} connected={connected} />)}
     </button>) : <Empty>{data.quotas.status === 'loading' ? 'Ładowanie limitów…' : 'Brak limitów AI.'}</Empty>}
     {!connected && <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />}
   </section>;

@@ -327,3 +327,29 @@ job robi zrzuty wszystkich scenariuszy i stron na urządzeniach z `devices.json`
 artefakt `screenshots-<commit>` (30 dni, około 27 MB), więc wygląd panelu można porównać
 między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
 zrzutów najnowszego commita.
+
+
+## Monitoring limitów AI (kontrakt V2)
+
+Panel odczytuje `/panel/v2/quotas/live` z cezar-adapter przez istniejący prywatny
+owner key. Po 404 wspiera starszy `/panel/v1/quotas/live`; przy innych błędach
+zachowuje poprzednie dane jako offline. Wdrożenie: adapter przed panelem;
+konfiguracja portu i usług nie zmienia się. Cezar nie wymaga aktualizacji.
+
+Claude i Codex pokazują niezależne 5h/7d. Brak okna, wymagane logowanie i zachowany
+stary pomiar mają osobne oznaczenia; reset nie tworzy sztucznego 0%. Panel pokazuje
+czas pomiaru i próby, a szczegóły wyjaśniają powód. Świeża quota z nieznanym resetem
+nadal jest pomiarem: nie rysujemy wtedy kreski tempa. AGY pokazuje dynamiczne
+grupy/modelowe buckety subskrypcji, bez utożsamiania ich z Gemini API lub Vertex.
+AGY bez wiarygodnego identyfikatora konta nie zachowuje historycznych grup po błędzie.
+
+Warmup jest konfigurowany i kontrolowany w adapterze, domyślnie wyłączony. Nie jest
+częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`
+i `npm run quota:warmup -- Codex --dry-run` w katalogu istniejącej instalacji
+adaptera. Wymaga jego prywatnej konfiguracji; skrypt nie startuje nowej usługi.
+Opt-in, limity bezpieczeństwa i świadomie niewspierany warmup Claude opisuje
+[dokumentacja adaptera](https://github.com/metelskiwiktor/cezar-adapter/blob/feat/quota-monitoring-warmup/docs/quota-monitoring.md).
+
+Weryfikacja: `just check`; `just screenshots quota-telemetry --pages pulpit
+--device all --scale primary` sprawdza reauthentication, częściowy Codex i dynamiczne
+AGY w istniejącym układzie. Screenshotów ani wyników lokalnych testów nie commitujemy.

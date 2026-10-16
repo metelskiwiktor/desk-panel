@@ -62,6 +62,7 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
   }
   if (fresh(data.quotas, now, MAX_AGE.quotas)) {
     for (const account of data.quotas.data ?? []) {
+      if (account.provider === 'AGY') continue; // Group windows have no inferred nominal pacing.
       for (const snapshot of account.snapshots) {
         if (quotaState(snapshot, now) !== 'fresh') continue;
         const pace = quotaPace(snapshot, now)!;
