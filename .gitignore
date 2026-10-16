@@ -14,3 +14,6 @@ google-oauth-client.json
 dist.next/
 dist.old/
 .deployed
+
+# Local agent working directory (may hold launch keys)
+.ai/
