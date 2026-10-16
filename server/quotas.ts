@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { quotaSourceSchema, type QuotaSource } from '../src/quota-contract';
 
 const observation = z.object({ window: z.string().min(1).max(120), model:z.string().max(160).optional(), label:z.string().max(200).optional(), state:z.enum(['fresh','stale','unavailable','auth_required']).optional(), reason:z.string().nullable().optional(), attemptedAt:z.iso.datetime().optional(), retryAt:z.iso.datetime().optional(), usedPercent: z.number().min(0).max(100).nullable(),
-  observedAt: z.iso.datetime().nullable(), resetAt: z.iso.datetime().nullable(), stale: z.boolean(), source: z.string().nullable(), freshForMs:z.number().int().positive().max(120000).optional() });
+  observedAt: z.iso.datetime().nullable(), resetAt: z.iso.datetime().nullable(), stale: z.boolean(), source: z.string().nullable(), freshForMs:z.number().int().positive().max(300000).optional() });
 const projection = z.object({ version: z.union([z.literal(1),z.literal(2)]), asOf: z.iso.datetime(), availability: z.enum(['available','unavailable']),
   accounts: z.array(z.object({ provider: z.enum(['Claude','Codex','AGY']), accountId:z.string().nullable().optional(), reason:z.string().nullable().optional(), attemptedAt:z.iso.datetime().optional(), snapshots: z.array(observation).max(200), history: z.array(observation).max(100) })).max(3) });
 export function createQuotaReader(envFile: string, request: typeof fetch = fetch, now = Date.now) {
