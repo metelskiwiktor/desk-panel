@@ -347,8 +347,8 @@ Warmup jest konfigurowany i kontrolowany w adapterze, domyślnie wyłączony. Ni
 częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`
 i `npm run quota:warmup -- Codex --dry-run` w katalogu istniejącej instalacji
 adaptera. Wymaga jego prywatnej konfiguracji; skrypt nie startuje nowej usługi.
-Opt-in, limity bezpieczeństwa i świadomie niewspierany warmup Claude opisuje
-[dokumentacja adaptera](https://github.com/metelskiwiktor/cezar-adapter/blob/feat/quota-monitoring-warmup/docs/quota-monitoring.md).
+Opt-in, limity bezpieczeństwa i natywny warmup Claude na Windows przez ConPTY opisuje
+[dokumentacja adaptera](https://github.com/metelskiwiktor/cezar-adapter/blob/feat/claude-warmup-windows/docs/claude-warmup-windows.md).
 
 Weryfikacja: `just check`; `just screenshots quota-telemetry --pages pulpit
 --device all --scale primary` sprawdza reauthentication, częściowy Codex i dynamiczne
