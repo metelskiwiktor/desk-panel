@@ -8,10 +8,28 @@ export const quotaPaceLabels = {
   red: 'Zużycie znacznie wyprzedza czas',
 };
 
+export function normalizeQuotaWindow(window: string): '5h' | '7d' | null {
+  if (window === '5h' || window.endsWith('-5h') || window.includes('5h')) return '5h';
+  if (window === '7d' || window.endsWith('weekly') || window.includes('weekly') || window.includes('7d')) return '7d';
+  return null;
+}
+
+export function sortSnapshots(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
+  return [...snapshots].sort((a, b) => {
+    if (a.model !== b.model) return 0;
+    const normA = normalizeQuotaWindow(a.window);
+    const normB = normalizeQuotaWindow(b.window);
+    if (normA === '5h' && normB !== '5h') return -1;
+    if (normA !== '5h' && normB === '5h') return 1;
+    return 0;
+  });
+}
+
 /** The reset anchors the nominal window; no usage is predicted after it. */
 export function quotaPace(snapshot: QuotaSnapshot, now: number) {
-  if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !['5h','7d'].includes(snapshot.window)) return null;
-  const duration = (snapshot.window === '5h' ? 300 : 7 * 24 * 60) * MINUTE;
+  const norm = normalizeQuotaWindow(snapshot.window);
+  if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !norm) return null;
+  const duration = (norm === '5h' ? 300 : 7 * 24 * 60) * MINUTE;
   const elapsedPercent = Math.max(0, Math.min(100, ((duration - (snapshot.resetAt! - now)) * 100) / duration));
   const excess = snapshot.usedPercent! - elapsedPercent;
   // Avoid moving an exact boundary across a colour due to floating-point noise.

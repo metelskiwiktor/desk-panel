@@ -41,6 +41,7 @@ import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
 import { usePollingEnabled } from './polling';
+import { sortSnapshots } from './quota-pace';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -300,12 +301,12 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     }
     const account = data.quotas.data?.find((a) => a.provider === detail.provider);
     return account ? (
-      <Card title={`${account.provider} · limity konta`} icon={<Layers3 />}>
+      <Card title={`${account.provider === 'AGY' ? 'Gemini & Modele CLI · limity konta' : `${account.provider} · limity konta`}`} icon={<Layers3 />}>
         <p className="card-intro">
           Procent wykorzystania limitu konta lub grupy modeli. Każde okno jest oddzielną obserwacją.
         </p>
         <p className="meta">Bieżący odczyt limitów kont zalogowanych w lokalnych CLI. Odświeżanie co około minutę nie uruchamia rozmów z modelem. Przy błędzie pozostaje ostatni pomiar z oznaczeniem nieaktualności.</p>
-        {account.snapshots.map((s) => (
+        {sortSnapshots(account.snapshots).map((s) => (
           <div className="quota-detail" key={`${s.model || ""}:${s.window}`}>
             <QuotaWindow
               snapshot={s}
@@ -321,8 +322,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             </dl>
           </div>
         ))}
-        {account.provider !== 'AGY' && <QuotaLegend />}
-        {account.provider === 'AGY' && <p className="meta">Limity subskrypcji Antigravity; modele w grupie dzielą limit. To nie są kwoty Gemini Developer API ani Vertex AI.</p>}
+        <QuotaLegend />
+        {account.provider === 'AGY' && <p className="meta">Limity subskrypcji Gemini / Antigravity; modele w grupie dzielą limit. To nie są kwoty Gemini Developer API ani Vertex AI.</p>}
         <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
         <h3>{account.history.length ? 'Historia obserwacji' : 'Ostatni odczyt'}</h3>
         <p className="meta">Bez interpolacji i szacowania wartości po resecie.</p>

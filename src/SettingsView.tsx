@@ -3,7 +3,7 @@ import { defaultLayout, widgetNames, type Layout } from './layout';
 import { Card } from './components';
 import { GoogleAccounts } from './GoogleAccounts';
 import { ScreenCard } from './ScreenCard';
-import { QuotaVisibilitySettings, WarmupSettingsCard } from './QuotaSettings';
+import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
 import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
 
@@ -24,6 +24,7 @@ export function SettingsView({
   quotaAccounts?:QuotaAccount[]|null;
   quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
 }) {
+  const warmup = useWarmupStatus();
   return (
     <div className="settings-stack">
       <Card title="Połączenia" icon={<Layers3 />}>
@@ -31,7 +32,7 @@ export function SettingsView({
       </Card>
       <ScreenCard />
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
-      <WarmupSettingsCard />
+      <WarmupSettingsCard warmup={warmup} />
       <Card title="Podgląd pionowy" icon={<Settings2 />}>
         <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
         <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>
@@ -88,6 +89,7 @@ export function SettingsView({
           </div>
         ))}
       </Card>
+      <WarmupHistoryCard warmup={warmup} />
     </div>
   );
 }

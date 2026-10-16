@@ -13,7 +13,7 @@ import {
   type Task,
 } from './model';
 import { time, stamp, date, allDayDate, preciseStamp } from './format';
-import { quotaPace, quotaPaceLabels, quotaResetIn, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
+import { quotaPace, quotaPaceLabels, quotaResetIn, sortSnapshots, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
 
 export function SourceNote<T>({
   source,
@@ -250,7 +250,7 @@ export function QuotaCard({
         <ChevronRight size={17} />
       </span>
       {account.snapshots.length ? (
-        account.snapshots.map((s) => (
+        sortSnapshots(account.snapshots).map((s) => (
           <QuotaWindow key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} sourceConnected={sourceConnected} />
         ))
       ) : (

@@ -7,7 +7,15 @@ export const warmupSettingsSchema=z.object({enabled:z.boolean(),
 export const warmupEditSchema=warmupSettingsSchema.omit({configurationError:true}).strict();
 export const warmupEditFor=(provider:WarmupProvider)=>warmupEditSchema.refine(value=>provider==='Claude' ? value.model==='haiku' : !value.enabled || !!value.model,'Nieprawidłowy model warmupu');
 export type WarmupSettings=z.infer<typeof warmupSettingsSchema>;
+const quotaPointSchema=z.object({usedPercent:z.number().nullable(),resetAt:z.string().nullable()});
+/** One prompt the adapter sent (or tried to send). Optional: older adapters do not keep history. */
+export const warmupHistoryEntrySchema=z.object({id:z.string(),provider:warmupProviderSchema,trigger:z.enum(['auto','manual']),
+  startedAt:z.string(),finishedAt:z.string(),durationMs:z.number().nonnegative(),model:z.string().nullable(),result:z.string(),reason:z.string().optional(),
+  prompt:z.string().optional(),response:z.string().optional(),
+  usage:z.object({inputTokens:z.number(),cachedInputTokens:z.number().nullable(),outputTokens:z.number()}).optional(),
+  quotaBefore:quotaPointSchema.optional(),quotaAfter:quotaPointSchema.optional(),windowEffect:z.enum(['started','already_active']).optional()});
+export type WarmupHistoryEntry=z.infer<typeof warmupHistoryEntrySchema>;
 export const warmupStatusSchema=z.object({mode:z.literal('on_reset'),pollIntervalSeconds:z.literal(30),settings:z.object({Claude:warmupSettingsSchema,Codex:warmupSettingsSchema}),
   last:z.record(z.string(),z.object({at:z.string(),result:z.string(),reason:z.string().optional()}).optional()),
-  warning:z.string()});
+  history:z.array(warmupHistoryEntrySchema).optional(),warning:z.string()});
 export type WarmupStatus=z.infer<typeof warmupStatusSchema>;

@@ -478,9 +478,58 @@
         "enabled": false
       }
     },
-    "last": {},
+    "last": {
+      "Claude": {
+        "at": "2026-10-16T19:12:37.225Z",
+        "result": "failed_no_retry",
+        "reason": "claude_turn_timeout"
+      }
+    },
     "warning": "Warmup consumes quota.",
     "mode": "on_reset",
-    "pollIntervalSeconds": 30
+    "pollIntervalSeconds": 30,
+    "history": [
+      {
+        "id": "2f1c9a1e-6a35-4c1e-9b7f-0d6f4b1f2a01",
+        "provider": "Codex",
+        "trigger": "auto",
+        "startedAt": "2026-10-16T21:30:04.120Z",
+        "finishedAt": "2026-10-16T21:30:11.870Z",
+        "durationMs": 7750,
+        "model": "gpt-6-luna",
+        "result": "completed",
+        "prompt": "Reply only OK. Do not use tools.",
+        "response": "OK",
+        "usage": {
+          "inputTokens": 8121,
+          "cachedInputTokens": 6400,
+          "outputTokens": 5
+        },
+        "quotaBefore": {
+          "usedPercent": 100,
+          "resetAt": "2026-10-16T21:29:40.000Z"
+        },
+        "quotaAfter": {
+          "usedPercent": 1,
+          "resetAt": "2026-10-17T02:30:05.000Z"
+        }
+      },
+      {
+        "id": "7b0e4d2c-1f9a-4c55-8e3d-5a2b9c6e7f02",
+        "provider": "Claude",
+        "trigger": "manual",
+        "startedAt": "2026-10-16T19:12:37.225Z",
+        "finishedAt": "2026-10-16T19:13:21.402Z",
+        "durationMs": 44177,
+        "model": "haiku",
+        "result": "failed_no_retry",
+        "reason": "claude_turn_timeout",
+        "prompt": "Reply with exactly WARMUP_3f9a0c51d2e7. Do not use tools.",
+        "quotaBefore": {
+          "usedPercent": 42,
+          "resetAt": "2026-10-16T21:00:00.000Z"
+        }
+      }
+    ]
   }
 }
