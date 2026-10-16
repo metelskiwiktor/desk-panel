@@ -18,6 +18,8 @@ it('compares usage to elapsed time in both windows, including colour boundaries'
   const weekly = { ...snapshot, window: '7d' as const, usedPercent: 30 };
   expect(quotaPace({ ...weekly, resetAt: now + 6 * 24 * 60 * MINUTE }, now)?.tone).toBe('red');
   expect(quotaPace({ ...weekly, resetAt: now + 5 * 60 * MINUTE }, now)?.tone).toBe('green');
+  expect(quotaPace({ ...snapshot, window: 'gemini-5h' }, now)).toMatchObject({ elapsedPercent: 20, tone: 'green' });
+  expect(quotaPace({ ...snapshot, window: 'gemini-weekly', usedPercent: 30, resetAt: now + 6 * 24 * 60 * MINUTE }, now)?.tone).toBe('red');
 });
 
 it('bounds elapsed time and withholds pace for missing, expired and stale observations', () => {

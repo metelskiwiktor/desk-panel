@@ -327,3 +327,51 @@ job robi zrzuty wszystkich scenariuszy i stron na urządzeniach z `devices.json`
 artefakt `screenshots-<commit>` (30 dni, około 27 MB), więc wygląd panelu można porównać
 między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
 zrzutów najnowszego commita.
+
+
+## Monitoring limitów AI (kontrakt V2)
+
+Panel odczytuje `/panel/v2/quotas/live` z cezar-adapter przez istniejący prywatny
+owner key. Po 404 wspiera starszy `/panel/v1/quotas/live`; przy innych błędach
+zachowuje poprzednie dane jako offline. Wdrożenie: adapter przed panelem;
+konfiguracja portu i usług nie zmienia się. Cezar nie wymaga aktualizacji.
+
+Claude i Codex pokazują niezależne 5h/7d. Brak okna, wymagane logowanie i zachowany
+stary pomiar mają osobne oznaczenia; reset nie tworzy sztucznego 0%. Panel pokazuje
+czas pomiaru i próby, a szczegóły wyjaśniają powód. Świeża quota z nieznanym resetem
+nadal jest pomiarem: nie rysujemy wtedy kreski tempa. AGY pokazuje dynamiczne
+grupy/modelowe buckety subskrypcji, bez utożsamiania ich z Gemini API lub Vertex.
+AGY bez wiarygodnego identyfikatora konta nie zachowuje historycznych grup po błędzie.
+
+W **Ustawienia → Widoczność limitów AI** można ukryć każdą grupę zwróconą przez
+AGY, w tym frontier i „Claude and GPT models”, oraz osobne limity Claude/Codex.
+Grupy są dynamiczne, bez listy modeli w kodzie. Wybór zapisuje się w tej
+przeglądarce, obejmuje pulpit i szczegóły, nie zmienia pomiarów. Nowe grupy są
+domyślnie widoczne; ukryte grupy pozostają w ustawieniach, aby dało się je przywrócić.
+
+W **Ustawienia → Warmup AI** są osobne przełączniki automatu Claude/Codex i model.
+Automat sprawdza stan co 30 s przez całą dobę: po potwierdzeniu zamkniętego okna
+5h i braku aktywnej sesji CLI sam wysyła krótki warmup. Nie ustawia się godziny;
+działa po kolejnych resetach, nie raz dziennie. Claude używa Haiku; Codex wymaga
+podania modelu dostępnego w CLI. Krótkie, stałe prompty są pokazane w formularzu.
+Przełącznik zaczyna obowiązywać po „Zapisz”; ustawienia trafiają przez backend
+do owner-auth API adaptera, bez ujawniania klucza w przeglądarce. Zapis jest trwały,
+działa bez restartu, nie uruchamia promptu i nie zeruje cooldownu. Już rozpoczęta
+próba może się dokończyć. Stary/niedostępny adapter oznacza jawny brak ustawień.
+Panel wymaga deklaracji `mode: on_reset` w statusie adaptera. Dawne pole `time`
+jest ignorowane przez nowy adapter; zachowane są opt-in, model i cooldown.
+Aktywny proces CLI (również bezczynny), brak wiarygodnych quota lub cooldown
+mogą opóźnić próbę. Zmiana samego czasu zapisanego resetu nie uruchamia warmupu.
+
+Warmup jest kontrolowany w adapterze, domyślnie wyłączony. Nie jest
+częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`
+i `npm run quota:warmup -- Codex --dry-run` w katalogu istniejącej instalacji
+adaptera. Wymaga jego prywatnej konfiguracji; skrypt nie startuje nowej usługi.
+Opt-in, limity bezpieczeństwa i natywny warmup Claude na Windows przez ConPTY opisuje
+[dokumentacja adaptera](https://github.com/metelskiwiktor/cezar-adapter/blob/feat/claude-warmup-windows/docs/claude-warmup-windows.md).
+
+Weryfikacja: `just check`; `just screenshots quota-telemetry --pages pulpit
+--device all --scale primary` sprawdza reauthentication, częściowy Codex i dynamiczne
+AGY w istniejącym układzie. Screenshotów ani wyników lokalnych testów nie commitujemy.
+Scenariusz `quota-settings` pokazuje nowe ustawienia i grupy jak na ekranie AGY:
+`just screenshots quota-settings --pages pulpit,ustawienia --device all --scale primary`.

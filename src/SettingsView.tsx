@@ -3,6 +3,9 @@ import { defaultLayout, widgetNames, type Layout } from './layout';
 import { Card } from './components';
 import { GoogleAccounts } from './GoogleAccounts';
 import { ScreenCard } from './ScreenCard';
+import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
+import type { QuotaAccount } from './model';
+import type { useQuotaVisibility } from './quota-visibility';
 
 export function SettingsView({
   layout,
@@ -10,19 +13,26 @@ export function SettingsView({
   storageError,
   tabletPreview,
   onTabletPreviewChange,
+  quotaAccounts,
+  quotaVisibility,
 }: {
   layout: Layout;
   configure: (next: Layout) => void;
   storageError: boolean;
   tabletPreview?: boolean;
   onTabletPreviewChange?: () => void;
+  quotaAccounts?:QuotaAccount[]|null;
+  quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
 }) {
+  const warmup = useWarmupStatus();
   return (
     <div className="settings-stack">
       <Card title="Połączenia" icon={<Layers3 />}>
         <p className="card-intro">CPU i RAM co około 2 sekundy, Cezar co 5 sekund, kalendarz co minutę. Bieżące limity AI co około minutę, bez rozmów z modelem.</p>
       </Card>
       <ScreenCard />
+      {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
+      <WarmupSettingsCard warmup={warmup} />
       <Card title="Podgląd pionowy" icon={<Settings2 />}>
         <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
         <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>
@@ -70,7 +80,7 @@ export function SettingsView({
         </p>
         {[
           'Cezar · workspace i zadania',
-          'Claude / Codex · bieżące limity CLI',
+          'Claude / Codex / AGY · bieżące limity CLI',
           'Google Calendar · Twoje konto, tylko odczyt',
           'Windows · lokalny backend CPU i RAM',
         ].map((label) => (
@@ -79,6 +89,7 @@ export function SettingsView({
           </div>
         ))}
       </Card>
+      <WarmupHistoryCard warmup={warmup} />
     </div>
   );
 }

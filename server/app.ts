@@ -4,6 +4,7 @@ import { extname, resolve, sep } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { mailActionSchema } from '../src/mail-contract';
+import { warmupEditFor, warmupProviderSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
@@ -25,6 +26,18 @@ export function createPanelServer(sources: PanelSources, root: string) {
     if (!host || !/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)) { res.writeHead(403).end(); return; }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
+    if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
+      if(req.headers.origin!==`http://${host}`){res.writeHead(403).end();return;}
+      res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
+      try{
+        const provider=warmupProviderSchema.safeParse(url.pathname.slice('/api/quotas/warmup/'.length));
+        if(!provider.success)throw new SourceError(400);
+        const input=await readJson(req,warmupEditFor(provider.data));
+        if(!sources.saveWarmup)throw new SourceError(503);
+        res.end(JSON.stringify(await sources.saveWarmup(provider.data,input)));
+      }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się zapisać ustawień warmupu.'}));}
+      return;
+    }
     if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== `http://${host}`) { res.writeHead(403).end(); return; }

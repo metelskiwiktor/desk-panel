@@ -32,7 +32,7 @@ const entrySchema = z.object({
   target: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('task'), id: z.string().max(1000) }),
     z.object({ kind: z.literal('event'), id: z.string().max(1000) }),
-    z.object({ kind: z.literal('quota'), provider: z.enum(['Claude', 'Codex']) }),
+    z.object({ kind: z.literal('quota'), provider: z.enum(['Claude', 'Codex', 'AGY']) }),
     z.object({ kind: z.literal('system') }),
   ]),
 });

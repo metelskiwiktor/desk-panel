@@ -13,7 +13,7 @@ import {
   type Task,
 } from './model';
 import { time, stamp, date, allDayDate, preciseStamp } from './format';
-import { quotaPace, quotaPaceLabels, quotaResetIn, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
+import { quotaPace, quotaPaceLabels, quotaResetIn, sortSnapshots, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
 
 export function SourceNote<T>({
   source,
@@ -173,9 +173,9 @@ export function QuotaWindow({
   return (
     <div className="quota-window">
       <div className="quota-label">
-        <span>Okno {snapshot.window}</span>
+        <span>{snapshot.model ? `${snapshot.model} · ${snapshot.label || snapshot.window}` : `Okno ${snapshot.window}`}</span>
         <strong>
-          {state === 'unavailable' ? 'Brak danych' : `${snapshot.usedPercent}%`}
+          {snapshot.state === 'auth_required' ? 'Wymaga logowania' : state === 'unavailable' ? (snapshot.reason === 'window_inactive' ? 'Okno nieaktywne' : 'Brak danych') : `${Number(snapshot.usedPercent!.toFixed(1))}%`}
         </strong>
       </div>
       {state !== 'unavailable' && (
@@ -186,7 +186,7 @@ export function QuotaWindow({
           aria-valuenow={snapshot.usedPercent!}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${elapsed}%. ${quotaPaceLabels[pace.tone]}. Reset za ${quotaResetIn(snapshot.resetAt!, now)}.` : `${snapshot.usedPercent}% · nieaktualna obserwacja`}
+          aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${elapsed}%. ${quotaPaceLabels[pace.tone]}. Reset za ${quotaResetIn(snapshot.resetAt!, now)}.` : state === 'fresh' ? `Zużyto ${snapshot.usedPercent}%. Termin resetu ${snapshot.resetAt ? stamp(snapshot.resetAt) : 'nieznany'}.` : `${snapshot.usedPercent}% · nieaktualna obserwacja`}
         >
           <span style={{ width: `${snapshot.usedPercent}%` }} />
           {pace && <i className="quota-time-marker" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
@@ -197,7 +197,7 @@ export function QuotaWindow({
           ? 'Nie zarejestrowano pomiaru'
           : state === 'stale'
             ? 'Nieaktualne · ostatnia obserwacja'
-            : `Czas okna: ${elapsed}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}`}
+            : pace ? `Czas okna: ${elapsed}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : snapshot.resetAt ? `Reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'Termin resetu nieznany'}
       </span>
       {showPaceDetails && pace && <div className="quota-pace-details">
         <span className="meta">{pace.tone === 'green' ? 'Zielony' : pace.tone === 'yellow' ? 'Żółty' : 'Czerwony'} · zużycie {pp(Math.abs(excess))} p.p. {excess < 0 ? 'poniżej' : 'powyżej'} upływu czasu</span>
@@ -207,6 +207,10 @@ export function QuotaWindow({
             <span className="meta">Do progu czerwonego: {pp(QUOTA_PACE_WARNING - excess)} p.p.</span>
           </> : <span className="meta">Ponad próg czerwonego: {pp(excess - QUOTA_PACE_WARNING)} p.p.</span>}
       </div>}
+      {snapshot.reason && <span className="meta" title={snapshot.reason}>{quotaReason(snapshot.reason)}</span>}
+      {snapshot.retryAt && <span className="meta">Kolejna próba odczytu po {stamp(snapshot.retryAt)}</span>}
+      {snapshot.attemptedAt && <span className="meta">Próba {stamp(snapshot.attemptedAt)}</span>}
+      {snapshot.state && state === 'fresh' && snapshot.observedAt !== null && <span className="meta">Odczyt {stamp(snapshot.observedAt)}</span>}
       {state !== 'fresh' && snapshot.source && snapshot.observedAt !== null && <span className="meta">Obserwacja {stamp(snapshot.observedAt)} · reset {snapshot.resetAt === null ? 'nieznany' : stamp(snapshot.resetAt)}</span>}
     </div>
   );
@@ -241,17 +245,17 @@ export function QuotaCard({
     >
       <span className="provider">
         <span className={`provider-logo ${account.provider.toLowerCase()}`}>
-          {account.provider === 'Claude' ? '✳' : '⌘'}
+          {account.provider === 'Claude' ? '✳' : account.provider === 'AGY' ? '✦' : '⌘'}
         </span>
         <strong>{account.provider}</strong>
         <ChevronRight size={17} />
       </span>
       {account.snapshots.length ? (
-        account.snapshots.map((s) => (
-          <QuotaWindow key={s.window} snapshot={s} now={now} sourceConnected={sourceConnected} />
+        sortSnapshots(account.snapshots).map((s) => (
+          <QuotaWindow key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} sourceConnected={sourceConnected} />
         ))
       ) : (
-        <span className="meta">Brak snapshotów</span>
+        <span className="meta">{account.reason ? quotaReason(account.reason) : "Brak snapshotów"}</span>
       )}
     </button>
   );
@@ -265,4 +269,15 @@ export function SourceLink({ url }: { url?: string }) {
   ) : (
     <p className="meta">Link źródłowy nie jest dostępny.</p>
   );
+}
+
+export function quotaReason(reason: string) {
+  const labels: Record<string,string> = {field_unsupported:'Dostawca nie udostępnił tego pola',window_inactive:'Brak aktywnego okna',window_not_reported:'Dostawca nie zgłosił okna',
+    agy_auth_required:'Zaloguj się w AGY CLI',parse_error:'Nierozpoznany format pomiaru',agy_schema_unsupported:'Nieobsługiwany format AGY',http_401:'Sesja wygasła — zaloguj się w CLI',
+    claude_login_expired:'Sesja wygasła — wymagane logowanie w Claude CLI',claude_login_unavailable:'Brak sesji Claude CLI',http_403:'Dostawca odmówił dostępu',
+    http_429:'Dostawca ograniczył odczyty — ponowienie przy następnym odświeżeniu',http_5xx:'Przejściowy błąd dostawcy',
+    network_error:'Błąd sieci',request_timeout:'Przekroczony czas odczytu',cli_not_installed:'CLI nie jest zainstalowane',
+    cli_execution_failed:'CLI odrzuciło odczyt',account_changed:'Zmieniono konto — oczekiwanie na nowy odczyt',
+    reset_elapsed:'Okno minęło — oczekiwanie na nowy pomiar'};
+  return labels[reason] || 'Odczyt chwilowo niedostępny';
 }

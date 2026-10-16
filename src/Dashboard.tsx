@@ -1,9 +1,9 @@
 import { ChevronDown } from 'lucide-react';
-import { Empty, SourceNote, Sparkline } from './components';
+import { Empty, SourceNote, Sparkline, quotaReason } from './components';
 import { time } from './format';
 import { todayAgenda, upcomingDays } from './agenda';
-import { MAX_AGE, fresh, orderedTasks, quotaState, taskLabels, type DashboardData, type Detail, type QuotaSnapshot, type SystemSample, type Task } from './model';
-import { quotaPace, quotaPaceLabels, quotaResetIn } from './quota-pace';
+import { MAX_AGE, fresh, orderedTasks, quotaState, taskLabels, type DashboardData, type Detail, type Provider, type QuotaAccount, type QuotaSnapshot, type SystemSample, type Task } from './model';
+import { normalizeQuotaWindow, quotaPace, quotaPaceLabels, quotaResetIn, sortSnapshots } from './quota-pace';
 import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
 import { MailFeed } from './MailFeed';
@@ -132,25 +132,100 @@ function QuotaBar({ snapshot, now, connected }: { snapshot: QuotaSnapshot; now: 
   const measured = quotaState(snapshot, now);
   const state = !connected && measured === 'fresh' ? 'stale' : measured;
   const pace = state === 'fresh' ? quotaPace(snapshot, now) : null;
+  const windowLabel = normalizeQuotaWindow(snapshot.window) || snapshot.window;
   return <div className={`quota-bar ${pace ? `quota-pace-${pace.tone}` : 'quota-muted'}`}>
-    <span className="quota-window-label">{snapshot.window}</span>
-    <span className="quota-track" role="meter" aria-label={`Użycie limitu ${snapshot.window}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot.usedPercent ?? 0}
+    <span className="quota-window-label">{windowLabel}</span>
+    <span className="quota-track" role="meter" aria-label={`Użycie limitu ${windowLabel}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot.usedPercent ?? undefined}
       aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${Math.round(pace.elapsedPercent)}%. ${quotaPaceLabels[pace.tone]}.` : 'Brak aktualnego pomiaru'}>
       {state !== 'unavailable' && <span className="quota-fill" style={{ width: `${snapshot.usedPercent}%` }} />}
       {pace && <i className="quota-tick" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
     </span>
-    <strong className="quota-value">{state === 'unavailable' ? '—' : `${snapshot.usedPercent}%`}</strong>
-    <span className="quota-sub">{pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? 'brak pomiaru' : 'nieaktualne · ostatnia obserwacja'}</span>
+    <strong className="quota-value">{state === 'unavailable' ? '—' : `${Number(snapshot.usedPercent!.toFixed(1))}%`}</strong>
+    <span className="quota-sub">{snapshot.state === 'auth_required' ? 'wymaga logowania' : pace ? `czas ${Math.round(pace.elapsedPercent)}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : state === 'unavailable' ? snapshot.reason ? quotaReason(snapshot.reason) : 'brak pomiaru' : state === 'fresh' ? snapshot.resetAt ? `reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'reset nieznany' : snapshot.reason === 'http_429' ? `limit zapytań dostawcy${snapshot.retryAt ? ` · kolejna próba ${time(snapshot.retryAt)}` : ''} · ostatnia obserwacja` : 'nieaktualne · ostatnia obserwacja'}{snapshot.state && snapshot.observedAt !== null && ` · odczyt ${time(snapshot.observedAt)}`}</span>
   </div>;
 }
 
+interface QuotaCardItem {
+  id: string;
+  provider: Provider;
+  title: string;
+  badge?: string;
+  snapshots: QuotaSnapshot[];
+  reason?: string | null;
+}
+
+
+function getQuotaCards(accounts: QuotaAccount[] | null): QuotaCardItem[] {
+  if (!accounts) return [];
+  const cards: QuotaCardItem[] = [];
+
+  for (const account of accounts) {
+    if (account.provider !== 'AGY') {
+      cards.push({
+        id: account.provider,
+        provider: account.provider,
+        title: account.provider,
+        snapshots: sortSnapshots(account.snapshots),
+        reason: account.reason,
+      });
+      continue;
+    }
+
+    const groups = new Map<string, QuotaSnapshot[]>();
+    for (const s of account.snapshots) {
+      const groupName = s.model || 'Gemini Models';
+      if (!groups.has(groupName)) groups.set(groupName, []);
+      groups.get(groupName)!.push(s);
+    }
+
+    if (groups.size === 0) {
+      cards.push({
+        id: 'agy-empty',
+        provider: 'AGY',
+        title: 'Gemini',
+        snapshots: [],
+        reason: account.reason,
+      });
+      continue;
+    }
+
+    for (const [model, snapshots] of groups.entries()) {
+      let title = model;
+      let badge: string | undefined;
+
+      if (model === 'Gemini Models' || model === 'Gemini') {
+        title = 'Gemini';
+      } else if (model === 'Claude and GPT models' || model === 'Claude & GPT') {
+        title = 'Agy: Claude & GPT';
+      } else if (model.includes('Argon')) {
+        title = 'Gemini 4 Argon';
+        badge = 'frontier';
+      }
+
+      cards.push({
+        id: `agy:${model}`,
+        provider: 'AGY',
+        title,
+        badge,
+        snapshots: sortSnapshots(snapshots),
+      });
+    }
+  }
+
+  return cards;
+}
+
 function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; open: (d: Detail) => void }) {
-  const accounts = data.quotas.data;
+  const cards = getQuotaCards(data.quotas.data);
   const connected = fresh(data.quotas, now, MAX_AGE.quotas);
   return <section className="pulpit-card quota-strip" aria-label="Limity AI">
-    {accounts?.length ? accounts.map(a => <button key={a.provider} className="quota-provider" onClick={() => open({ kind: 'quota', provider: a.provider })}>
-      <strong>{a.provider}</strong>
-      {a.snapshots.map(s => <QuotaBar key={s.window} snapshot={s} now={now} connected={connected} />)}
+    {cards.length ? cards.map(c => <button key={c.id} className="quota-provider" onClick={() => open({ kind: 'quota', provider: c.provider })}>
+      <div className="quota-provider-header">
+        <strong>{c.title}</strong>
+        {c.badge && <span className="quota-badge">{c.badge}</span>}
+      </div>
+      {!c.snapshots.length && <span className="quota-sub">{c.reason ? quotaReason(c.reason) : "Brak pomiaru"}</span>}
+      {c.snapshots.map(s => <QuotaBar key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} connected={connected} />)}
     </button>) : <Empty>{data.quotas.status === 'loading' ? 'Ładowanie limitów…' : 'Brak limitów AI.'}</Empty>}
     {!connected && <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />}
   </section>;

@@ -12,7 +12,7 @@ export function useQuotas() {
     let controller: AbortController;
     async function read() {
       controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), 50000);
       try {
         const response = await fetch('/api/quotas', { signal: controller.signal });
         if (!response.ok) throw new Error('offline');

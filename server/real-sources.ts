@@ -7,6 +7,7 @@ import { createGoogleAccount, GoogleAuthError, type GoogleService } from './goog
 import { createMailReader } from './gmail';
 import { createSystemReader } from './system';
 import { createQuotaReader } from './quotas';
+import { createWarmupClient } from './warmup';
 import { SourceError, type PanelSources } from './sources';
 
 export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
@@ -27,6 +28,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
   const readSystem = createSystemReader();
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
+  const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
   let fetchedAt = 0;
@@ -47,6 +49,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
+    warmup:warmup.read,
+    saveWarmup:warmup.save,
     async googleConnect(email) {
       const account = accounts.find(a => a.email === email);
       if (!account) throw new SourceError(404);

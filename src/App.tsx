@@ -36,10 +36,12 @@ import { useCezar } from './useCezar';
 import { useCalendar } from './useCalendar';
 import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
+import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
 import { usePollingEnabled } from './polling';
+import { sortSnapshots } from './quota-pace';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -64,6 +66,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const calendar = useCalendar();
   const system = useSystem();
   const quotas = useQuotas();
+  const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
@@ -92,7 +95,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     setLayout(next);
     setStorageError(!saveLayout(next));
   };
-  const data = { tasks: cezar.source, calendar, system, quotas };
+  const data = { tasks: cezar.source, calendar, system, quotas:{...quotas,data:filterQuotas(quotas.data,quotaVisibility.value)} };
   const tasks = orderedTasks(data.tasks.data ?? []);
   const activeTasks = tasks.filter((task) => task.status !== 'done');
   const events = [...(data.calendar.data ?? [])]
@@ -298,14 +301,13 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     }
     const account = data.quotas.data?.find((a) => a.provider === detail.provider);
     return account ? (
-      <Card title={`${account.provider} · limity konta`} icon={<Layers3 />}>
+      <Card title={`${account.provider === 'AGY' ? 'Gemini & Modele CLI · limity konta' : `${account.provider} · limity konta`}`} icon={<Layers3 />}>
         <p className="card-intro">
-          Procent wykorzystania limitu konta w oknie 5h lub 7d. Snapshoty są oddzielnymi
-          obserwacjami.
+          Procent wykorzystania limitu konta lub grupy modeli. Każde okno jest oddzielną obserwacją.
         </p>
         <p className="meta">Bieżący odczyt limitów kont zalogowanych w lokalnych CLI. Odświeżanie co około minutę nie uruchamia rozmów z modelem. Przy błędzie pozostaje ostatni pomiar z oznaczeniem nieaktualności.</p>
-        {account.snapshots.map((s) => (
-          <div className="quota-detail" key={s.window}>
+        {sortSnapshots(account.snapshots).map((s) => (
+          <div className="quota-detail" key={`${s.model || ""}:${s.window}`}>
             <QuotaWindow
               snapshot={s}
               now={now}
@@ -321,6 +323,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           </div>
         ))}
         <QuotaLegend />
+        {account.provider === 'AGY' && <p className="meta">Limity subskrypcji Gemini / Antigravity; modele w grupie dzielą limit. To nie są kwoty Gemini Developer API ani Vertex AI.</p>}
         <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />
         <h3>{account.history.length ? 'Historia obserwacji' : 'Ostatni odczyt'}</h3>
         <p className="meta">Bez interpolacji i szacowania wartości po resecie.</p>
@@ -329,7 +332,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           .map((s, i) => (
             <div className="snapshot" key={i}>
               <span>
-                {s.observedAt === null ? 'Brak pomiaru' : stamp(s.observedAt)} · {s.window}
+                {s.observedAt === null ? 'Brak pomiaru' : stamp(s.observedAt)} · {s.model || ''} {s.label || s.window}
               </span>
               <strong>{s.usedPercent === null ? 'Brak danych' : `${s.usedPercent}% limitu`}</strong>
             </div>
@@ -420,6 +423,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                 {page === 'events' && <EventRulesView />}
                 {page === 'settings' && (
                   <SettingsView
+                    quotaAccounts={quotas.data}
+                    quotaVisibility={quotaVisibility}
                     tabletPreview={tabletPreview}
                     onTabletPreviewChange={onTabletPreviewChange}
                     layout={layout}
