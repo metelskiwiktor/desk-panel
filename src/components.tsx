@@ -278,7 +278,6 @@ export function quotaReason(reason: string) {
     http_429:'Dostawca ograniczył odczyty — ponowienie przy następnym odświeżeniu',http_5xx:'Przejściowy błąd dostawcy',
     network_error:'Błąd sieci',request_timeout:'Przekroczony czas odczytu',cli_not_installed:'CLI nie jest zainstalowane',
     cli_execution_failed:'CLI odrzuciło odczyt',account_changed:'Zmieniono konto — oczekiwanie na nowy odczyt',
-    reset_elapsed:'Okno minęło — oczekiwanie na nowy pomiar',
-    implausible_reset_to_zero:'Dostawca zwrócił puste konto (0%) w trwającym oknie — pokazano poprzedni pomiar'};
+    reset_elapsed:'Okno minęło — oczekiwanie na nowy pomiar'};
   return labels[reason] || 'Odczyt chwilowo niedostępny';
 }
