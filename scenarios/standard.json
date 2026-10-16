@@ -424,5 +424,90 @@
         ]
       }
     ]
+  },
+  "taskUsage": {
+    "status": "connected",
+    "observedAt": "now-20s",
+    "tasks": [
+      {
+        "id": "t1",
+        "title": "Naprawa synchronizacji notatek",
+        "provider": "claude",
+        "status": "done",
+        "startedAt": "now-3h",
+        "finishedAt": "now-2h30m",
+        "tokensUsed": 2650000,
+        "inputTokens": 420,
+        "outputTokens": 91000,
+        "costUsd": 6.02,
+        "steps": [
+          {
+            "name": "Do the task",
+            "provider": "claude",
+            "tokensUsed": 2650000,
+            "costUsd": 6.02
+          }
+        ]
+      },
+      {
+        "id": "t2",
+        "title": "Refaktor ekranu ustawień",
+        "provider": "codex",
+        "status": "review",
+        "startedAt": "now-5h",
+        "finishedAt": "now-4h20m",
+        "tokensUsed": 980000,
+        "inputTokens": 610000,
+        "outputTokens": 38000,
+        "costUsd": null,
+        "steps": [
+          {
+            "name": "Implement",
+            "provider": "codex",
+            "tokensUsed": 700000,
+            "costUsd": null
+          },
+          {
+            "name": "Review",
+            "provider": "codex",
+            "tokensUsed": 280000,
+            "costUsd": null
+          }
+        ]
+      },
+      {
+        "id": "t3",
+        "title": "Krótkie pytanie o architekturę",
+        "provider": "claude",
+        "status": "done",
+        "startedAt": "now-1d",
+        "finishedAt": "now-1d+30s",
+        "tokensUsed": 69639,
+        "inputTokens": 2,
+        "outputTokens": 73,
+        "costUsd": 0.45,
+        "steps": [
+          {
+            "name": "Do the task",
+            "provider": "claude",
+            "tokensUsed": 69639,
+            "costUsd": 0.45
+          }
+        ]
+      },
+      {
+        "id": "t4",
+        "title": "Zadanie w toku",
+        "provider": "claude",
+        "status": "running",
+        "startedAt": "now-12m",
+        "finishedAt": null,
+        "tokensUsed": 310000,
+        "inputTokens": 90,
+        "outputTokens": 12000,
+        "costUsd": 0.81,
+        "steps": []
+      }
+    ]
   }
 }

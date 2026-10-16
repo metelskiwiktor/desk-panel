@@ -20,7 +20,7 @@ it('keeps the settings page mounted, pauses all host reads, and refreshes immedi
   navigate('Ustawienia');
   await settle();
   const initialPaths = fetcher.mock.calls.map(([url]) => String(url).split('?')[0]);
-  for (const path of ['/api/cezar', '/api/calendar', '/api/system', '/api/quotas', '/api/quotas/warmup', '/api/mail', '/api/google/accounts']) expect(initialPaths).toContain(path);
+  for (const path of ['/api/cezar', '/api/calendar', '/api/system', '/api/quotas', '/api/quotas/warmup', '/api/task-usage', '/api/mail', '/api/google/accounts']) expect(initialPaths).toContain(path);
   fireEvent.click(screen.getByRole('button', { name: 'Otwórz podgląd pionowy' }));
   const pausedCalls = fetcher.mock.calls.length;
   await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
@@ -42,10 +42,10 @@ it('aborts in-flight reads when the host is hidden without starting new ones', a
   render(<TabletPreview />);
   navigate('Ustawienia');
   fireEvent.click(screen.getByRole('button', { name: 'Otwórz podgląd pionowy' }));
-  expect(signals).toHaveLength(7);
+  expect(signals).toHaveLength(8);
   expect(signals.every(signal => signal.aborted)).toBe(true);
   await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
-  expect(fetcher).toHaveBeenCalledTimes(7);
+  expect(fetcher).toHaveBeenCalledTimes(8);
 });
 
 it('preserves a pending mail undo across a short preview visit', async () => {

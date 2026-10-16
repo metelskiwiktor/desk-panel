@@ -7,6 +7,7 @@ import { createGoogleAccount, GoogleAuthError, type GoogleService } from './goog
 import { createMailReader } from './gmail';
 import { createSystemReader } from './system';
 import { createQuotaReader } from './quotas';
+import { createTaskUsageReader } from './taskUsage';
 import { createWarmupClient } from './warmup';
 import { SourceError, type PanelSources } from './sources';
 
@@ -29,6 +30,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const readSystem = createSystemReader();
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
+  const readTaskUsage = createTaskUsageReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
   let fetchedAt = 0;
@@ -49,6 +51,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
+    taskUsage: readTaskUsage,
     warmup:warmup.read,
     saveWarmup:warmup.save,
     async googleConnect(email) {
