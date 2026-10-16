@@ -343,7 +343,21 @@ nadal jest pomiarem: nie rysujemy wtedy kreski tempa. AGY pokazuje dynamiczne
 grupy/modelowe buckety subskrypcji, bez utożsamiania ich z Gemini API lub Vertex.
 AGY bez wiarygodnego identyfikatora konta nie zachowuje historycznych grup po błędzie.
 
-Warmup jest konfigurowany i kontrolowany w adapterze, domyślnie wyłączony. Nie jest
+W **Ustawienia → Widoczność limitów AI** można ukryć każdą grupę zwróconą przez
+AGY, w tym frontier i „Claude and GPT models”, oraz osobne limity Claude/Codex.
+Grupy są dynamiczne, bez listy modeli w kodzie. Wybór zapisuje się w tej
+przeglądarce, obejmuje pulpit i szczegóły, nie zmienia pomiarów. Nowe grupy są
+domyślnie widoczne; ukryte grupy pozostają w ustawieniach, aby dało się je przywrócić.
+
+W **Ustawienia → Warmup AI** są osobne przełączniki Claude/Codex, godzina
+`Europe/Warsaw` (domyślnie 06:00) i model. Claude używa Haiku; Codex wymaga
+podania modelu dostępnego w CLI. Krótkie, stałe prompty są pokazane w formularzu.
+Przełącznik zaczyna obowiązywać po „Zapisz”; ustawienia trafiają przez backend
+do owner-auth API adaptera, bez ujawniania klucza w przeglądarce. Zapis jest trwały,
+działa bez restartu, nie uruchamia promptu i nie zeruje cooldownu. Już rozpoczęta
+próba może się dokończyć. Stary/niedostępny adapter oznacza jawny brak ustawień.
+
+Warmup jest kontrolowany w adapterze, domyślnie wyłączony. Nie jest
 częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`
 i `npm run quota:warmup -- Codex --dry-run` w katalogu istniejącej instalacji
 adaptera. Wymaga jego prywatnej konfiguracji; skrypt nie startuje nowej usługi.
@@ -353,3 +367,5 @@ Opt-in, limity bezpieczeństwa i natywny warmup Claude na Windows przez ConPTY o
 Weryfikacja: `just check`; `just screenshots quota-telemetry --pages pulpit
 --device all --scale primary` sprawdza reauthentication, częściowy Codex i dynamiczne
 AGY w istniejącym układzie. Screenshotów ani wyników lokalnych testów nie commitujemy.
+Scenariusz `quota-settings` pokazuje nowe ustawienia i grupy jak na ekranie AGY:
+`just screenshots quota-settings --pages pulpit,ustawienia --device all --scale primary`.

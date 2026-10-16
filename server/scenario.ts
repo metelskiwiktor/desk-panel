@@ -6,6 +6,7 @@ import { googleAccountsSchema } from '../src/google-contract';
 import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
+import { warmupStatusSchema,warmupEditFor } from '../src/warmup-contract';
 import { SourceError, type PanelSources } from './sources';
 
 /**
@@ -30,6 +31,7 @@ export const scenarioSchema = z.object({
   mail: endpoint(mailSourceSchema),
   system: endpoint(systemSourceSchema),
   quotas: endpoint(quotaSourceSchema),
+  warmup: endpoint(warmupStatusSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'>;
@@ -69,6 +71,7 @@ export function loadScenario(file: string, now = Date.now()): Scenario {
  */
 export function createScenarioSources(file: string): PanelSources {
   const handled = new Set<string>();
+  let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   async function serve<K extends ScenarioEndpoint>(key: K) {
     const value = loadScenario(file)[key];
     if ('$error' in value) throw new SourceError(value.$error);
@@ -93,6 +96,11 @@ export function createScenarioSources(file: string): PanelSources {
     },
     system: () => serve('system'),
     quotas: () => serve('quotas'),
+    warmup:async()=>warmup ?? serve('warmup'),
+    saveWarmup:async(provider,value)=>{
+      const current=warmup ?? await serve('warmup');
+      warmup={...current,settings:{...current.settings,[provider]:warmupEditFor(provider).parse(value)}};return warmup;
+    },
     googleConnect: async () => { throw new SourceError(409); },
     googleCallback: async () => ({ ok: false, message: 'Scenariusz nie obsługuje logowania Google.' }),
   };

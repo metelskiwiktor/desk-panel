@@ -36,6 +36,7 @@ import { useCezar } from './useCezar';
 import { useCalendar } from './useCalendar';
 import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
+import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
@@ -64,6 +65,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const calendar = useCalendar();
   const system = useSystem();
   const quotas = useQuotas();
+  const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
@@ -92,7 +94,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     setLayout(next);
     setStorageError(!saveLayout(next));
   };
-  const data = { tasks: cezar.source, calendar, system, quotas };
+  const data = { tasks: cezar.source, calendar, system, quotas:{...quotas,data:filterQuotas(quotas.data,quotaVisibility.value)} };
   const tasks = orderedTasks(data.tasks.data ?? []);
   const activeTasks = tasks.filter((task) => task.status !== 'done');
   const events = [...(data.calendar.data ?? [])]
@@ -420,6 +422,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                 {page === 'events' && <EventRulesView />}
                 {page === 'settings' && (
                   <SettingsView
+                    quotaAccounts={quotas.data}
+                    quotaVisibility={quotaVisibility}
                     tabletPreview={tabletPreview}
                     onTabletPreviewChange={onTabletPreviewChange}
                     layout={layout}

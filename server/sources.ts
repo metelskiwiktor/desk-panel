@@ -4,6 +4,7 @@ import type { GoogleAccountStatus } from '../src/google-contract';
 import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
 import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
+import type { WarmupStatus, WarmupProvider, WarmupSettings } from '../src/warmup-contract';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
@@ -18,6 +19,8 @@ export interface PanelSources {
   googleAccounts(): Promise<GoogleAccountStatus[]>;
   system(): Promise<SystemSource>;
   quotas(): Promise<QuotaSource>;
+  warmup?():Promise<WarmupStatus>;
+  saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
   /** Starts Google sign-in for one configured account and resolves to the authorization URL. */
   googleConnect(email: string): Promise<string>;
   googleCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;
@@ -37,5 +40,6 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/google/accounts': () => sources.googleAccounts(),
     '/api/system': () => sources.system(),
     '/api/quotas': () => sources.quotas(),
+    '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };
 }

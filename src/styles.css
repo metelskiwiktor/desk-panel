@@ -1064,3 +1064,13 @@ nav button.active:after {
 .quota-dynamic .quota-window-label { grid-column: 1 / -1; font-family: inherit; overflow-wrap: anywhere; }
 .quota-dynamic .quota-track { grid-column: 1 / 3; }
 .quota-dynamic .quota-sub { grid-column: 1 / -1; }
+.warmup-form { margin-top: 1.2rem; }
+.warmup-form fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; display: grid; gap: .85rem; min-width: 0; }
+.warmup-form legend { padding: 0 .4rem; font-weight: 650; }
+.warmup-form label:not(.visibility-toggle) { display: grid; gap: .4rem; }
+.warmup-form input:not([type=checkbox]) { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: .65rem; width: 100%; min-width: 0; box-sizing: border-box; }
+.warmup-form input[readonly] { opacity: .75; }
+.warmup-form p { margin: 0; overflow-wrap: anywhere; }
+.widget-setting.visibility-toggle { justify-content: flex-start; flex-wrap: nowrap; }
+.widget-setting.visibility-toggle input { flex-shrink: 0; }
+.widget-setting.visibility-toggle span { overflow-wrap: anywhere; min-width: 0; }
