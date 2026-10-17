@@ -2,6 +2,7 @@
 //   npm run scenario -- standard                       → serve until Ctrl+C
 //   npm run scenario -- offline --shot                 → output/screenshots/offline-*.png
 //   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device waveshare-11.6 --scale all
+// The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -21,6 +22,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   device: { type: 'string', default: Object.keys(devices)[0] },
   scale: { type: 'string', default: 'primary' },
   out: { type: 'string', default: 'output/screenshots' },
+  nav: { type: 'boolean', default: false },
 } });
 const name = positionals[0] ?? 'standard';
 const file = name.endsWith('.json') ? resolve(name) : join(process.cwd(), 'scenarios', `${name}.json`);
@@ -59,7 +61,9 @@ if (!values.shot) {
         await page.getByRole('navigation').getByRole('button', { name: PAGES[pageName] }).click();
         await page.waitForTimeout(600);
         const path = join(values.out, `${label}-${pageName}-${target.label}.png`);
+        const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
         await page.screenshot({ path, fullPage: true });
+        await hidden?.evaluate(node => (node as Element).remove());
         console.log(path);
       }
       await page.close();
