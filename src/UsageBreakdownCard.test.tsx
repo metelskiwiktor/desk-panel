@@ -43,3 +43,16 @@ it('states loading, no data and offline without inventing numbers', () => {
   render(<UsageBreakdownCard usage={usage({ status: 'offline' })} />);
   expect(screen.getByText(/ostatnie dane/)).toBeTruthy();
 });
+
+it('draws the bar from the timeline, so one source can appear on both sides of another', () => {
+  const timeline = [{ key: 'session:claude-app:desk-panel', percent: 20 }, { key: 't1', percent: 15 }, { key: 'session:claude-app:desk-panel', percent: 10 }];
+  const provider = { ...claude, usedPercent: 45, segments: [
+    { kind: 'session' as const, id: 'session:claude-app:desk-panel', title: 'desk-panel', origin: 'claude-app' as const, percent: 30 },
+    { kind: 'task' as const, id: 't1', title: 'Zadanie', percent: 15 }], timeline };
+  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [provider] })} />);
+  const widths = [...container.querySelectorAll('.breakdown-bar i')].map(i => (i as HTMLElement).style.width);
+  expect(widths).toEqual(['20%', '15%', '10%']);
+  const colours = [...container.querySelectorAll('.breakdown-bar i')].map(i => (i as HTMLElement).style.background);
+  expect(colours[0]).toBe(colours[2]);
+  expect(colours[0]).not.toBe(colours[1]);
+});
