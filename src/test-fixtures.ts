@@ -3,7 +3,7 @@ import { createScenarioSources, loadScenario } from '../server/scenario';
 import { jsonRoutes } from '../server/sources';
 import type { DashboardData, Source } from './model';
 import { mailActionSchema } from './mail-contract';
-import { warmupEditSchema,warmupProviderSchema } from './warmup-contract';
+import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
 export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings';
@@ -36,6 +36,11 @@ export function scenarioFetch(name: ScenarioName): typeof fetch {
     const url = new URL(String(input), 'http://127.0.0.1');
     try {
       if(init?.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
+        if(url.pathname.endsWith('/run')){
+          const provider=warmupProviderSchema.parse(url.pathname.split('/').at(-2));
+          warmupRunInputSchema.parse(JSON.parse(String(init.body)));
+          return Response.json(await sources.runWarmup!(provider));
+        }
         const provider=warmupProviderSchema.parse(url.pathname.split('/').at(-1));
         return Response.json(await sources.saveWarmup!(provider,warmupEditSchema.parse(JSON.parse(String(init.body)))));
       }

@@ -101,3 +101,58 @@ it('offers a Gemini warmup limited to the Gemini Models group and saves its flas
   const argon=await request('/api/quotas/warmup/Gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true,model:'gemini-4-argon-low'})}).catch(()=>null);
   expect(argon===null || !argon.ok).toBe(true);
 });
+
+it.each(['Claude','Codex','Gemini'] as const)('%s: manual action works with disabled automation and recent cooldown, shows pending and allows retry after failure',async provider=>{
+  const base=scenarioFetch('quota-settings');let release!:(response:Response)=>void,calls=0;
+  const url=`/api/quotas/warmup/${provider}/run`;
+  const request=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input)===url && init?.method==='POST'){
+      calls++;
+      if(calls===1)return new Promise<Response>(resolve=>{release=resolve;});
+    }
+    const response=await base(input,init);
+    if(String(input)==='/api/quotas/warmup'){
+      const status=await response.json();status.last[provider]={at:new Date().toISOString(),result:'reserved'};
+      return Response.json(status);
+    }
+    return response;
+  });
+  vi.stubGlobal('fetch',request);const user=userEvent.setup();render(<Warmup/>);
+  const name=`Uruchom warmup ${provider} teraz`,button=await screen.findByRole('button',{name});
+  const group=button.closest('fieldset')!;
+  expect((within(group).getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+  expect(within(group).getByText(/Następna możliwa próba automatyczna/)).toBeTruthy();
+  await user.click(button);expect(calls).toBe(1);
+  expect(await screen.findByText(`Warmup ${provider} w toku. Weryfikacja może potrwać kilka minut.`)).toBeTruthy();
+  expect((screen.getByRole('button',{name:`Warmup ${provider} w toku…`}) as HTMLButtonElement).disabled || (group as HTMLFieldSetElement).disabled).toBe(true);
+  const other=provider==='Claude' ? 'Codex' : 'Claude';
+  expect((screen.getByRole('button',{name:`Uruchom warmup ${other} teraz`}).closest('fieldset') as HTMLFieldSetElement).disabled).toBe(false);
+  release(Response.json({provider,at:new Date().toISOString(),result:'failed_no_retry',reason:'cli_execution_failed'}));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/CLI zakończyło się błędem/);
+  await user.click(screen.getByRole('button',{name}));
+  expect(await screen.findByText(new RegExp(`Warmup ${provider} wykonany`))).toBeTruthy();
+  expect(calls).toBe(2);expect(screen.queryByRole('alert')).toBeNull();
+  const posts=request.mock.calls.filter(([,init])=>init?.method==='POST');
+  expect(posts).toHaveLength(2);
+  for(const [target,init] of posts){expect(target).toBe(url);expect(JSON.parse(String(init!.body))).toEqual({force:true});}
+});
+
+it('does not present a skipped attempt or HTTP error as success and keeps the retry button usable',async()=>{
+  const base=scenarioFetch('quota-settings');let calls=0;
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input)==='/api/quotas/warmup/Claude/run'){
+      calls++;
+      if(calls===1)return new Response('',{status:502});
+      if(calls===2)return Response.json({provider:'Claude',at:new Date().toISOString(),result:'locked'});
+    }
+    return base(input,init);
+  }));
+  const user=userEvent.setup();render(<Warmup/>);
+  const name='Uruchom warmup Claude teraz';await user.click(await screen.findByRole('button',{name}));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/Nie udało się potwierdzić/);
+  await user.click(screen.getByRole('button',{name}));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/Inny warmup już trwa/);
+  expect(screen.queryByText(/Warmup Claude wykonany/)).toBeNull();
+  await user.click(screen.getByRole('button',{name}));
+  expect(await screen.findByText(/Warmup Claude wykonany w aktywnym oknie/)).toBeTruthy();
+});

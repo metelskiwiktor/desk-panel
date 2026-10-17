@@ -4,7 +4,7 @@ import { extname, resolve, sep } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { mailActionSchema } from '../src/mail-contract';
-import { warmupEditFor, warmupProviderSchema } from '../src/warmup-contract';
+import { warmupEditFor, warmupProviderSchema, warmupRunInputSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
@@ -30,12 +30,19 @@ export function createPanelServer(sources: PanelSources, root: string) {
       if(req.headers.origin!==`http://${host}`){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
       try{
-        const provider=warmupProviderSchema.safeParse(url.pathname.slice('/api/quotas/warmup/'.length));
+        const action=url.pathname.slice('/api/quotas/warmup/'.length).split('/');
+        const manual=action.length===2 && action[1]==='run';
+        const provider=warmupProviderSchema.safeParse(action.length===1 || manual ? action[0] : undefined);
         if(!provider.success)throw new SourceError(400);
+        if(manual){
+          await readJson(req,warmupRunInputSchema);
+          if(!sources.runWarmup)throw new SourceError(503);
+          res.end(JSON.stringify(await sources.runWarmup(provider.data)));return;
+        }
         const input=await readJson(req,warmupEditFor(provider.data));
         if(!sources.saveWarmup)throw new SourceError(503);
         res.end(JSON.stringify(await sources.saveWarmup(provider.data,input)));
-      }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się zapisać ustawień warmupu.'}));}
+      }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
     if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action')) {

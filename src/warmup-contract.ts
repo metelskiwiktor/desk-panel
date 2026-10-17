@@ -4,6 +4,11 @@ export const warmupProviderSchema=z.enum(['Claude','Codex','Gemini']);
 /** Gemini Models group only: not Argon, not the Claude/GPT models that AGY also serves. */
 export const geminiModelAllowed=(model?:string)=>!!model && /^gemini-[a-z0-9.-]{1,80}$/.test(model) && !/argon/.test(model);
 export type WarmupProvider=z.infer<typeof warmupProviderSchema>;
+/** Only this explicit action may bypass automatic scheduling; no prompts or model overrides. */
+export const warmupRunInputSchema=z.object({force:z.literal(true)}).strict();
+export const warmupRunResultSchema=z.object({provider:warmupProviderSchema,at:z.string().datetime(),result:z.string(),
+  reason:z.string().regex(/^[a-z_]{1,80}$/).optional()});
+export type WarmupRunResult=z.infer<typeof warmupRunResultSchema>;
 export const warmupSettingsSchema=z.object({enabled:z.boolean(),
   model:z.string().regex(/^[a-zA-Z0-9_.-]{1,100}$/).optional(),configurationError:z.string().optional()});
 export const warmupEditSchema=warmupSettingsSchema.omit({configurationError:true}).strict();

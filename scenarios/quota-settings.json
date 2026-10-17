@@ -535,5 +535,22 @@
         }
       }
     ]
+  },
+  "warmupRun": {
+    "Claude": {
+      "provider": "Claude",
+      "at": "2026-10-17T21:00:00.000Z",
+      "result": "completed_existing_window"
+    },
+    "Codex": {
+      "provider": "Codex",
+      "at": "2026-10-17T21:00:00.000Z",
+      "result": "completed"
+    },
+    "Gemini": {
+      "provider": "Gemini",
+      "at": "2026-10-17T21:00:00.000Z",
+      "result": "completed"
+    }
   }
 }
