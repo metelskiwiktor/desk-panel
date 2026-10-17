@@ -20,6 +20,12 @@ it('splits each limit bar into Cezar tasks, other sources and usage from before 
   expect(screen.getByText('Claude (aplikacja) · desk-panel')).toBeTruthy();
   expect(screen.getByText('Cezar · pomocnicze')).toBeTruthy();
   expect(screen.getByText('Inne źródła (bez śladu w sesjach)')).toBeTruthy();
+  cleanup();
+  render(<UsageBreakdownCard usage={usage({ providers: [{ ...gemini, usedPercent: 5, segments: [
+    { kind: 'session', id: 'session:antigravity-app:x', title: 'bez katalogu', origin: 'antigravity-app', percent: 3 },
+    { kind: 'session', id: 'session:warmup', title: 'automatyczny warmup', origin: 'warmup', percent: 2 }] }] })} />);
+  expect(screen.getByText('Antigravity (aplikacja) · bez katalogu')).toBeTruthy();
+  expect(screen.getByText('Automatyczny warmup')).toBeTruthy();
 });
 
 it('says when a provider has no current reading instead of drawing an empty bar', () => {
