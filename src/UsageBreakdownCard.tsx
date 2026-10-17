@@ -110,6 +110,8 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   const windowLabel = provider.resetAt ? `${clock(provider.resetAt - WINDOW_MS)}–${clock(provider.resetAt)}` : '5h';
   const segmentByKey = new Map(provider.segments.map(s => [keyOf(s), s] as const));
   const ticks = ticksOf(provider, provider.resetAt ? provider.resetAt - WINDOW_MS : null);
+  // Where the reading falls in the window, as on the quota bars: the bar is usage, so a bar that ends before this line is using less than the time passed.
+  const elapsed = provider.resetAt && provider.observedAt !== null ? Math.max(0, Math.min(100, (provider.observedAt - (provider.resetAt - WINDOW_MS)) / WINDOW_MS * 100)) : null;
   const sumOf = (...ids: string[]) => groups.filter(g => ids.includes(g.id)).reduce((n, g) => n + g.total, 0);
   const cezar = sumOf('cezar'), other = sumOf('other'), before = sumOf('unobserved');
   const sessions = provider.segments.length ? sumOf(...groups.map(g => g.id).filter(id => !['cezar', 'other', 'unobserved'].includes(id))) : 0;
@@ -120,10 +122,12 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   });
   return <div className="breakdown-row">
     <div className="breakdown-summary">
-      <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno {windowLabel} · {Math.round(provider.usedPercent)}% zużyte</span></span>
-      <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, inne sesje ${points.format(sessions)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
+      <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno {windowLabel} · {Math.round(provider.usedPercent)}% zużyte{elapsed !== null ? ` · czas ${Math.round(elapsed)}%` : ''}</span></span>
+      <span className="breakdown-barwrap"><span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, inne sesje ${points.format(sessions)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.${elapsed !== null ? ` Upłynęło ${Math.round(elapsed)}% czasu okna.` : ''}`}>
         {pieces.map((piece, i) => <i key={i} title={piece.label} style={{ flex: `${piece.percent} 1 0`, background: piece.color }} />)}
         <i className="breakdown-free" style={{ flex: `${Math.max(0, 100 - provider.usedPercent)} 1 0` }} />
+      </span>
+      {elapsed !== null && <i className="quota-tick breakdown-pace" style={{ left: `${elapsed}%` }} title={`Upłynęło ${Math.round(elapsed)}% czasu okna`} aria-hidden="true" />}
       </span>
       {ticks.length > 0 && <span className="breakdown-ticks" aria-hidden="true">{ticks.map((t, i) => <span key={i} className={`${i === 0 ? 'first' : ''} ${t.now ? 'now' : ''}`} style={{ left: `${t.left}%` }}>{t.text}</span>)}</span>}
     </div>

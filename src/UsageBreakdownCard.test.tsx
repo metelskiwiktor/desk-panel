@@ -45,6 +45,18 @@ it('marks clock times under the bar where parts begin and the reading time at th
   expect(ticks[2].className).toContain('now');
 });
 
+it('draws the time-in-window line on the bar, like the quota bars, and says it in the header', () => {
+  const start = new Date(2026, 9, 17, 10, 10).getTime();
+  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...claude, resetAt: start + 5 * 3600000, observedAt: start + 2.5 * 3600000 }, gemini] })} />);
+  const line = container.querySelector('.breakdown-pace') as HTMLElement;
+  expect(line.style.left).toBe('50%');
+  expect(screen.getByText(/92% zużyte · czas 50%/)).toBeTruthy();
+  expect(screen.getByRole('img', { name: /Upłynęło 50% czasu okna/ })).toBeTruthy();
+  cleanup();
+  const { container: bare } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...claude, resetAt: null }, gemini] })} />);
+  expect(bare.querySelector('.breakdown-pace')).toBeNull();
+});
+
 it('says when a provider has no current reading instead of drawing an empty bar', () => {
   render(<UsageBreakdownCard usage={usage()} />);
   expect(screen.getByText('brak aktualnego pomiaru')).toBeTruthy();
