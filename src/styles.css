@@ -1097,6 +1097,12 @@ nav button.active:after {
 .breakdown-bar { display: flex; gap: 1px; height: 16px; border-radius: 8px; overflow: hidden; background: var(--line); }
 .breakdown-bar i { display: block; height: 100%; min-width: 4px; }
 .breakdown-bar i.breakdown-free { min-width: 0; background: transparent; }
+.breakdown-ticks { position: relative; display: block; height: 16px; }
+.breakdown-ticks span { position: absolute; top: 0; padding-top: 4px; font-size: 10px; line-height: 12px; color: var(--muted); white-space: nowrap; transform: translateX(-50%); }
+.breakdown-ticks span::before { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 3px; background: var(--muted); }
+.breakdown-ticks span.first { transform: none; }
+.breakdown-ticks span.first::before { left: 0; }
+.breakdown-ticks span.now { color: var(--text, #e6edf7); font-weight: 600; }
 .breakdown-legend { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
 .breakdown-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .breakdown-legend li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
