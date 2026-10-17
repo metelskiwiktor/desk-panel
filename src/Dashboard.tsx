@@ -8,8 +8,8 @@ import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
 import { MailFeed } from './MailFeed';
 import type { WidgetId } from './layout';
-import { TaskUsageCard } from './TaskUsageCard';
-import type { TaskUsageState } from './useTaskUsage';
+import { UsageBreakdownCard } from './UsageBreakdownCard';
+import type { UsageBreakdownState } from './useUsageBreakdown';
 
 /** CPU or RAM at or above this share of the machine shows the Komputer card on the dashboard. */
 export const SYSTEM_ALERT_PERCENT = 90;
@@ -237,8 +237,8 @@ function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; ope
  * The dashboard sizes itself to its content and the screen: the Komputer card only appears on a
  * problem, Cezar folds to one line when nothing waits for you, and long mail lists scroll locally.
  */
-export function Dashboard({ data, snapshot, mail, taskUsage, now, open, showTasks, visible }: {
-  data: DashboardData; taskUsage: TaskUsageState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
+export function Dashboard({ data, snapshot, mail, usageBreakdown, now, open, showTasks, visible }: {
+  data: DashboardData; usageBreakdown: UsageBreakdownState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
   open: (d: Detail) => void; showTasks: () => void; visible: (id: WidgetId) => boolean;
 }) {
   const side = visible('cezar') || visible('mail');
@@ -252,6 +252,6 @@ export function Dashboard({ data, snapshot, mail, taskUsage, now, open, showTask
       </div>}
     </div>
     {visible('quotas') && <QuotaStrip data={data} now={now} open={open} />}
-    {visible('usage') && <TaskUsageCard usage={taskUsage} />}
+    {visible('breakdown') && <UsageBreakdownCard usage={usageBreakdown} />}
   </div>;
 }

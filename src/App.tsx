@@ -36,7 +36,7 @@ import { useCezar } from './useCezar';
 import { useCalendar } from './useCalendar';
 import { useSystem } from './useSystem';
 import { useQuotas } from './useQuotas';
-import { useTaskUsage } from './useTaskUsage';
+import { useUsageBreakdown } from './useUsageBreakdown';
 import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
@@ -67,7 +67,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const calendar = useCalendar();
   const system = useSystem();
   const quotas = useQuotas();
-  const taskUsage = useTaskUsage();
+  const usageBreakdown = useUsageBreakdown();
   const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
   const [clockNow, setNow] = useState(Date.now);
@@ -370,7 +370,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} taskUsage={taskUsage} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
+                <Dashboard data={data} usageBreakdown={usageBreakdown} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
                   showTasks={() => navigate('tasks')} visible={visible} />
                 {visible('insights') && (
                   <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}

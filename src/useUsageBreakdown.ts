@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { usePollingEnabled } from './polling';
-import { taskUsageSchema, type TaskUsage } from './task-usage-contract';
+import { usageBreakdownSchema, type UsageBreakdown } from './usage-breakdown-contract';
 
-export type TaskUsageState = TaskUsage | { status: 'loading'; observedAt: null; tasks: [] };
+export type UsageBreakdownState = UsageBreakdown | { status: 'loading'; observedAt: null; providers: [] };
 
-export function useTaskUsage(): TaskUsageState {
-  const [state, setState] = useState<TaskUsageState>({ status: 'loading', observedAt: null, tasks: [] });
+export function useUsageBreakdown(): UsageBreakdownState {
+  const [state, setState] = useState<UsageBreakdownState>({ status: 'loading', observedAt: null, providers: [] });
   const pollingEnabled = usePollingEnabled();
   useEffect(() => {
     if (!pollingEnabled) return;
@@ -14,15 +14,15 @@ export function useTaskUsage(): TaskUsageState {
       controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20000);
       try {
-        const response = await fetch('/api/task-usage', { signal: controller.signal });
+        const response = await fetch('/api/usage-breakdown', { signal: controller.signal });
         if (!response.ok) throw new Error('offline');
-        const value = taskUsageSchema.parse(await response.json());
+        const value = usageBreakdownSchema.parse(await response.json());
         if (!stopped) setState(value);
       } catch {
-        if (!stopped) setState(previous => ({ ...previous, status: 'offline' }) as TaskUsageState);
+        if (!stopped) setState(previous => ({ ...previous, status: 'offline' }) as UsageBreakdownState);
       } finally {
         clearTimeout(timeout);
-        if (!stopped) timer = setTimeout(read, 60000);
+        if (!stopped) timer = setTimeout(read, 30000);
       }
     }
     void read();

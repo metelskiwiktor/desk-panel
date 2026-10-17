@@ -425,108 +425,63 @@
       }
     ]
   },
-  "taskUsage": {
+  "usageBreakdown": {
     "status": "connected",
     "observedAt": "now-20s",
-    "tasks": [
+    "providers": [
       {
-        "id": "t1",
-        "title": "Naprawa synchronizacji notatek",
-        "provider": "claude",
-        "status": "done",
-        "startedAt": "now-3h",
-        "finishedAt": "now-2h30m",
-        "tokensUsed": 2650000,
-        "inputTokens": 420,
-        "outputTokens": 91000,
-        "costUsd": 6.02,
-        "steps": [
+        "provider": "Claude",
+        "usedPercent": 92,
+        "observedAt": "now-20s",
+        "resetAt": "now+2h5m",
+        "segments": [
           {
-            "name": "Do the task",
-            "provider": "claude",
-            "tokensUsed": 2650000,
-            "costUsd": 6.02
-          }
-        ],
-        "quota": {
-          "fiveHour": 14.5,
-          "sevenDay": 3.2,
-          "note": null
-        }
-      },
-      {
-        "id": "t2",
-        "title": "Refaktor ekranu ustawień",
-        "provider": "codex",
-        "status": "review",
-        "startedAt": "now-5h",
-        "finishedAt": "now-4h20m",
-        "tokensUsed": 980000,
-        "inputTokens": 610000,
-        "outputTokens": 38000,
-        "costUsd": null,
-        "steps": [
-          {
-            "name": "Implement",
-            "provider": "codex",
-            "tokensUsed": 700000,
-            "costUsd": null
+            "kind": "task",
+            "id": "t1",
+            "title": "Naprawa synchronizacji notatek",
+            "percent": 15
           },
           {
-            "name": "Review",
-            "provider": "codex",
-            "tokensUsed": 280000,
-            "costUsd": null
-          }
-        ],
-        "quota": {
-          "fiveHour": 6,
-          "sevenDay": 1.1,
-          "note": "overlap"
-        }
-      },
-      {
-        "id": "t3",
-        "title": "Krótkie pytanie o architekturę",
-        "provider": "claude",
-        "status": "done",
-        "startedAt": "now-1d",
-        "finishedAt": "now-1d+30s",
-        "tokensUsed": 69639,
-        "inputTokens": 2,
-        "outputTokens": 73,
-        "costUsd": 0.45,
-        "steps": [
+            "kind": "task",
+            "id": "t2",
+            "title": "Przegląd widoku notatki",
+            "percent": 8,
+            "shared": true
+          },
           {
-            "name": "Do the task",
-            "provider": "claude",
-            "tokensUsed": 69639,
-            "costUsd": 0.45
+            "kind": "other",
+            "percent": 54
+          },
+          {
+            "kind": "unobserved",
+            "percent": 15
           }
-        ],
-        "quota": {
-          "fiveHour": 0.4,
-          "sevenDay": 0.1,
-          "note": null
-        }
+        ]
       },
       {
-        "id": "t4",
-        "title": "Zadanie w toku",
-        "provider": "claude",
-        "status": "running",
-        "startedAt": "now-12m",
-        "finishedAt": null,
-        "tokensUsed": 310000,
-        "inputTokens": 90,
-        "outputTokens": 12000,
-        "costUsd": 0.81,
-        "steps": [],
-        "quota": {
-          "fiveHour": null,
-          "sevenDay": null,
-          "note": "no_samples"
-        }
+        "provider": "Codex",
+        "usedPercent": 38,
+        "observedAt": "now-20s",
+        "resetAt": "now+3h25m",
+        "segments": [
+          {
+            "kind": "task",
+            "id": "t3",
+            "title": "Refaktor ekranu ustawień",
+            "percent": 6
+          },
+          {
+            "kind": "other",
+            "percent": 32
+          }
+        ]
+      },
+      {
+        "provider": "Gemini",
+        "usedPercent": null,
+        "observedAt": null,
+        "resetAt": null,
+        "segments": []
       }
     ]
   }

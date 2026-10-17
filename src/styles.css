@@ -1089,23 +1089,14 @@ nav button.active:after {
 .warmup-history-row code { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 479px) { .warmup-history-row dl { grid-template-columns: minmax(0, 1fr); } .warmup-history-row dd { margin-bottom: .3rem; } }
 
-/* Zużycie AI na zadanie */
-.usage-card { display: grid; gap: 10px; }
-.usage-mode { display: inline-flex; gap: 4px; justify-self: start; }
-.usage-mode button { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 8px; padding: 4px 12px; min-height: 32px; }
-.usage-mode button.active { color: var(--text, inherit); border-color: var(--blue); }
-.usage-mode button:disabled { opacity: .5; }
-.usage-list { display: grid; gap: 4px; }
-.usage-row summary { display: grid; grid-template-columns: minmax(0, 2fr) minmax(60px, 3fr) auto; align-items: center; gap: 12px; cursor: pointer; padding: 6px 0; }
-.usage-title { display: grid; min-width: 0; }
-.usage-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.usage-bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
-.usage-bar span { display: block; height: 100%; border-radius: 5px; background: var(--blue); }
-.usage-bar.codex span { background: var(--quota-green); }
-.usage-bar.agy span { background: var(--amber); }
-.usage-value { font-variant-numeric: tabular-nums; text-align: right; }
-.usage-row dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 4px 0 8px; font-size: 14px; }
-.usage-row dt { color: var(--muted); }
-.usage-row dd { margin: 0; }
-.usage-step { display: contents; }
-@media (max-width: 560px) { .usage-row summary { grid-template-columns: minmax(0, 1fr) auto; } .usage-bar { grid-column: 1 / -1; grid-row: 2; } }
+/* Podział zużycia AI */
+.breakdown-card { display: grid; gap: 10px; }
+.breakdown-list { display: grid; gap: 12px; }
+.breakdown-row summary { display: grid; gap: 6px; cursor: pointer; list-style: none; }
+.breakdown-row summary::-webkit-details-marker { display: none; }
+.breakdown-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.breakdown-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
+.breakdown-bar i { display: block; height: 100%; min-width: 2px; }
+.breakdown-row ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.breakdown-row li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.breakdown-row li i { width: 10px; height: 10px; border-radius: 3px; }

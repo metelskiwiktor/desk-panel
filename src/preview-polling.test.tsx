@@ -20,7 +20,7 @@ it('keeps the settings page mounted, pauses all host reads, and refreshes immedi
   navigate('Ustawienia');
   await settle();
   const initialPaths = fetcher.mock.calls.map(([url]) => String(url).split('?')[0]);
-  for (const path of ['/api/cezar', '/api/calendar', '/api/system', '/api/quotas', '/api/quotas/warmup', '/api/task-usage', '/api/mail', '/api/google/accounts']) expect(initialPaths).toContain(path);
+  for (const path of ['/api/cezar', '/api/calendar', '/api/system', '/api/quotas', '/api/quotas/warmup', '/api/usage-breakdown', '/api/mail', '/api/google/accounts']) expect(initialPaths).toContain(path);
   fireEvent.click(screen.getByRole('button', { name: 'Otwórz podgląd pionowy' }));
   const pausedCalls = fetcher.mock.calls.length;
   await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
