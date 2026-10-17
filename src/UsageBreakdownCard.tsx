@@ -8,10 +8,11 @@ export const pointsLabel = (n: number) => `${points.format(n)} p.p.`;
 const providerNames = { Claude: 'Claude', Codex: 'ChatGPT / Codex', Gemini: 'Gemini (Antigravity)' } as const;
 const sum = (segments: UsageSegment[], kinds: UsageSegment['kind'][]) => segments.filter(s => kinds.includes(s.kind)).reduce((n, s) => n + s.percent, 0);
 
-const originNames = { cezar: 'Cezar', 'claude-app': 'Claude (aplikacja)', 'claude-cli': 'Claude Code (terminal)', 'codex-app': 'ChatGPT / Codex (aplikacja)', 'codex-cli': 'Codex (terminal)', unknown: 'Sesja lokalna' } as const;
+const originNames = { cezar: 'Cezar', 'claude-app': 'Claude (aplikacja)', 'claude-cli': 'Claude Code (terminal)', 'codex-app': 'ChatGPT / Codex (aplikacja)', 'codex-cli': 'Codex (terminal)', 'antigravity-app': 'Antigravity (aplikacja)', 'antigravity-cli': 'Antigravity (terminal)', warmup: 'Warmup', unknown: 'Sesja lokalna' } as const;
 export function segmentLabel(segment: UsageSegment) {
   const shared = segment.shared ? ' (równolegle)' : '';
   if (segment.kind === 'task') return `Cezar · ${segment.title ?? 'zadanie'}${shared}`;
+  if (segment.kind === 'session' && segment.origin === 'warmup') return 'Automatyczny warmup';
   if (segment.kind === 'session') return segment.origin === 'cezar' ? `Cezar · ${segment.title ?? 'pomocnicze'}${shared}` : `${originNames[segment.origin ?? 'unknown']} · ${segment.title ?? 'bez nazwy'}${shared}`;
   return segment.kind === 'tasks_rest' ? 'Pozostałe źródła' : segment.kind === 'other' ? 'Inne źródła (bez śladu w sesjach)' : 'Sprzed pomiarów';
 }
@@ -48,7 +49,7 @@ export function UsageBreakdownCard({ usage }: { usage: UsageBreakdownState }) {
     </div>
     {usage.status === 'loading' ? <Empty>Ładowanie podziału…</Empty> : !providers.length ? <Empty>Brak aktualnych pomiarów limitów.</Empty> :
       <div className="breakdown-list">{usage.providers.map(p => <ProviderRow key={p.provider} provider={p} />)}</div>}
-    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu dzieli się między zadania Cezara oraz sesje Claude i Codex (aplikacja, terminal) proporcjonalnie do zużytych tokenów. Źródła bez śladu w transkryptach (przeglądarka, Antigravity) trafiają do „inne źródła”.</p>}
+    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu dzieli się między zadania Cezara oraz sesje Claude, Codex i Antigravity (aplikacja, terminal) proporcjonalnie do zużytych tokenów. Źródła bez śladu w transkryptach (np. przeglądarka) trafiają do „inne źródła”.</p>}
     {note && <p className="meta warning">{note}</p>}
   </section>;
 }
