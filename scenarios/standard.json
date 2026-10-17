@@ -470,6 +470,62 @@
             "kind": "other",
             "percent": 26
           }
+        ],
+        "timeline": [
+          {
+            "key": "unobserved",
+            "percent": 15,
+            "from": "now-2h55m",
+            "to": "now-2h40m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 6,
+            "from": "now-2h40m",
+            "to": "now-2h20m"
+          },
+          {
+            "key": "t1",
+            "percent": 15,
+            "from": "now-2h20m",
+            "to": "now-1h50m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 12,
+            "from": "now-1h50m",
+            "to": "now-1h10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-1h10m",
+            "to": "now-1h"
+          },
+          {
+            "key": "other",
+            "percent": 26,
+            "from": "now-1h",
+            "to": "now-30m"
+          },
+          {
+            "key": "t2",
+            "percent": 8,
+            "from": "now-30m",
+            "to": "now-20m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 8,
+            "from": "now-20m",
+            "to": "now-10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-10m",
+            "to": "now"
+          }
         ]
       },
       {
