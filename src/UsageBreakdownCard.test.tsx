@@ -33,6 +33,18 @@ it('puts the window and the time of the last reading on the day', () => {
   expect(screen.getByText('bieżące okno 5h · pomiar 12:28')).toBeTruthy();
 });
 
+it('marks clock times under the bar where parts begin and the reading time at the end of the used part, skipping crowded ones', () => {
+  const start = new Date(2026, 9, 17, 10, 10).getTime(), at = (h: number, m: number) => new Date(2026, 9, 17, h, m).getTime();
+  const provider = { ...claude, usedPercent: 40, resetAt: start + 5 * 3600000, observedAt: at(12, 28), segments: [
+    { kind: 'unobserved' as const, percent: 16 }, { kind: 'session' as const, id: 'a', title: 'x', origin: 'claude-app' as const, percent: 23 }, { kind: 'task' as const, id: 't', title: 'z', percent: 1 }],
+    timeline: [{ key: 'unobserved', percent: 16, from: start, to: at(11, 0) }, { key: 'a', percent: 2, from: at(11, 5), to: at(11, 8) }, { key: 't', percent: 1, from: at(11, 9), to: at(11, 10) }, { key: 'a', percent: 21, from: at(11, 30), to: at(12, 20) }] };
+  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [provider] })} />);
+  const ticks = [...container.querySelectorAll('.breakdown-ticks span')] as HTMLElement[];
+  expect(ticks.map(t => t.textContent)).toEqual(['10:10', '11:05', '12:28']);
+  expect(ticks.map(t => t.style.left)).toEqual(['0%', '16%', '40%']);
+  expect(ticks[2].className).toContain('now');
+});
+
 it('says when a provider has no current reading instead of drawing an empty bar', () => {
   render(<UsageBreakdownCard usage={usage()} />);
   expect(screen.getByText('brak aktualnego pomiaru')).toBeTruthy();

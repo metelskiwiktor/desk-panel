@@ -85,6 +85,23 @@ function Lanes({ provider, groups }: { provider: UsageProvider; groups: Group[] 
   </details>;
 }
 
+const TICK_SPACING = 5;
+/** Clock times under the bar where parts begin, plus the reading time at the end of the used part. The bar is scaled by usage, not by time, so the times are uneven. */
+function ticksOf(provider: UsageProvider, windowStart: number | null) {
+  const used = provider.usedPercent ?? 0, ticks: { left: number; text: string; now?: boolean }[] = [];
+  let at = 0, lastLeft = -Infinity;
+  for (const piece of provider.timeline ?? []) {
+    const time = piece.key === 'unobserved' && windowStart !== null ? windowStart : piece.from;
+    if (time !== undefined && at - lastLeft >= TICK_SPACING && used - at >= TICK_SPACING) { ticks.push({ left: at, text: clock(time) }); lastLeft = at; }
+    at += piece.percent;
+  }
+  if (provider.observedAt !== null && used > 0) {
+    if (ticks.length && used - ticks[ticks.length - 1].left < TICK_SPACING) ticks.pop();
+    ticks.push({ left: Math.min(100, used), text: clock(provider.observedAt), now: true });
+  }
+  return ticks;
+}
+
 function ProviderRow({ provider }: { provider: UsageProvider }) {
   if (provider.usedPercent === null) return <div className="breakdown-row">
     <div className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">brak aktualnego pomiaru</span></div></div>;
@@ -92,6 +109,7 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   // The window runs 5 hours up to the provider's reset; show it as clock times so "bieżące okno" has a place on the day.
   const windowLabel = provider.resetAt ? `${clock(provider.resetAt - WINDOW_MS)}–${clock(provider.resetAt)}` : '5h';
   const segmentByKey = new Map(provider.segments.map(s => [keyOf(s), s] as const));
+  const ticks = ticksOf(provider, provider.resetAt ? provider.resetAt - WINDOW_MS : null);
   const sumOf = (...ids: string[]) => groups.filter(g => ids.includes(g.id)).reduce((n, g) => n + g.total, 0);
   const cezar = sumOf('cezar'), other = sumOf('other'), before = sumOf('unobserved');
   const sessions = provider.segments.length ? sumOf(...groups.map(g => g.id).filter(id => !['cezar', 'other', 'unobserved'].includes(id))) : 0;
@@ -107,6 +125,7 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
         {pieces.map((piece, i) => <i key={i} title={piece.label} style={{ flex: `${piece.percent} 1 0`, background: piece.color }} />)}
         <i className="breakdown-free" style={{ flex: `${Math.max(0, 100 - provider.usedPercent)} 1 0` }} />
       </span>
+      {ticks.length > 0 && <span className="breakdown-ticks" aria-hidden="true">{ticks.map((t, i) => <span key={i} className={`${i === 0 ? 'first' : ''} ${t.now ? 'now' : ''}`} style={{ left: `${t.left}%` }}>{t.text}</span>)}</span>}
     </div>
     <Legend groups={groups} />
     <Lanes provider={provider} groups={groups} />
