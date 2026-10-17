@@ -447,9 +447,17 @@
           },
           {
             "kind": "session",
-            "id": "session:desk-panel",
+            "id": "session:claude-app:desk-panel",
             "title": "desk-panel",
-            "percent": 32
+            "origin": "claude-app",
+            "percent": 26
+          },
+          {
+            "kind": "session",
+            "id": "session:cezar",
+            "title": "pomocnicze",
+            "origin": "cezar",
+            "percent": 2
           },
           {
             "kind": "task",
@@ -460,7 +468,7 @@
           },
           {
             "kind": "other",
-            "percent": 22
+            "percent": 26
           }
         ]
       },
@@ -477,7 +485,10 @@
             "percent": 6
           },
           {
-            "kind": "other",
+            "kind": "session",
+            "id": "session:codex-app:notes",
+            "title": "notes",
+            "origin": "codex-app",
             "percent": 32
           }
         ]

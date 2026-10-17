@@ -8,10 +8,11 @@ export const pointsLabel = (n: number) => `${points.format(n)} p.p.`;
 const providerNames = { Claude: 'Claude', Codex: 'ChatGPT / Codex', Gemini: 'Gemini (Antigravity)' } as const;
 const sum = (segments: UsageSegment[], kinds: UsageSegment['kind'][]) => segments.filter(s => kinds.includes(s.kind)).reduce((n, s) => n + s.percent, 0);
 
+const originNames = { cezar: 'Cezar', 'claude-app': 'Claude (aplikacja)', 'claude-cli': 'Claude Code (terminal)', 'codex-app': 'ChatGPT / Codex (aplikacja)', 'codex-cli': 'Codex (terminal)', unknown: 'Sesja lokalna' } as const;
 export function segmentLabel(segment: UsageSegment) {
   const shared = segment.shared ? ' (równolegle)' : '';
   if (segment.kind === 'task') return `${segment.title ?? 'Zadanie'}${shared}`;
-  if (segment.kind === 'session') return `Sesja lokalna: ${segment.title ?? 'bez nazwy'}${shared}`;
+  if (segment.kind === 'session') return segment.origin === 'cezar' ? `Cezar · ${segment.title ?? 'pomocnicze'}${shared}` : `${originNames[segment.origin ?? 'unknown']} · ${segment.title ?? 'bez nazwy'}${shared}`;
   return segment.kind === 'tasks_rest' ? 'Pozostałe źródła' : segment.kind === 'other' ? 'Inne źródła (bez śladu w sesjach)' : 'Sprzed pomiarów';
 }
 const HATCH = 'repeating-linear-gradient(135deg, #3a4659 0 3px, #263041 3px 6px)';
@@ -28,7 +29,7 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   return <div className="breakdown-row">
     <div className="breakdown-summary">
       <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno 5h · {Math.round(provider.usedPercent)}% zużyte</span></span>
-      <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, sesje lokalne ${points.format(local)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
+      <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, sesje poza Cezarem ${points.format(local)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
         {coloured.map(({ s, color }, i) => <i key={i} style={{ width: `${s.percent}%`, background: color }} />)}</span>
     </div>
     <ul className="breakdown-legend">{coloured.map(({ s, color }, i) => <li key={i}><i style={{ background: color }} aria-hidden="true" /><span>{segmentLabel(s)}</span><span className="meta">{pointsLabel(s.percent)}</span></li>)}</ul>
@@ -47,7 +48,7 @@ export function UsageBreakdownCard({ usage }: { usage: UsageBreakdownState }) {
     </div>
     {usage.status === 'loading' ? <Empty>Ładowanie podziału…</Empty> : !providers.length ? <Empty>Brak aktualnych pomiarów limitów.</Empty> :
       <div className="breakdown-list">{usage.providers.map(p => <ProviderRow key={p.provider} provider={p} />)}</div>}
-    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu dzieli się między sesje Claude Code, Codex i zadania Cezara proporcjonalnie do zużytych tokenów. Źródła bez śladu w transkryptach (przeglądarka, Antigravity) trafiają do „inne źródła”.</p>}
+    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu dzieli się między zadania Cezara oraz sesje Claude i Codex (aplikacja, terminal) proporcjonalnie do zużytych tokenów. Źródła bez śladu w transkryptach (przeglądarka, Antigravity) trafiają do „inne źródła”.</p>}
     {note && <p className="meta warning">{note}</p>}
   </section>;
 }
