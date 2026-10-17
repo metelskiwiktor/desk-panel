@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { UsageBreakdownCard } from './UsageBreakdownCard';
+import { UsageBreakdownCard, breakdownPieces } from './UsageBreakdownCard';
+import { splitFor } from './Dashboard';
 import type { UsageBreakdownState } from './useUsageBreakdown';
 
 afterEach(cleanup);
@@ -10,12 +11,10 @@ const claude = { provider: 'Claude' as const, usedPercent: 92, observedAt: Date.
   { kind: 'other' as const, percent: 24 }, { kind: 'unobserved' as const, percent: 15 }] };
 const gemini = { provider: 'Gemini' as const, usedPercent: null, observedAt: null, resetAt: null, segments: [] };
 const usage = (over: Partial<UsageBreakdownState> = {}) => ({ status: 'connected', observedAt: Date.now(), providers: [claude, gemini], ...over }) as UsageBreakdownState;
-const pieces = (container: HTMLElement) => [...container.querySelectorAll('.breakdown-bar i:not(.breakdown-free)')] as HTMLElement[];
 
 it('lists sources under group headings, with Cezar tasks and helper calls together and a lone session on one line', () => {
   render(<UsageBreakdownCard usage={usage()} />);
   expect(screen.getByRole('heading', { name: 'Podział zużycia AI' })).toBeTruthy();
-  expect(screen.getByRole('img', { name: /Claude: 92% limitu 5h\. Zadania Cezara 33, inne sesje 20, inne źródła 24, sprzed pomiarów 15/ })).toBeTruthy();
   const cezar = screen.getByText('Cezar').closest('li')!;
   expect(within(cezar).getByText('33 p.p.')).toBeTruthy();
   expect(within(cezar).getByText('Naprawa synchronizacji')).toBeTruthy();
@@ -29,32 +28,8 @@ it('lists sources under group headings, with Cezar tasks and helper calls togeth
 it('puts the window and the time of the last reading on the day', () => {
   const start = new Date(2026, 9, 17, 10, 10).getTime(), observed = new Date(2026, 9, 17, 12, 28).getTime();
   render(<UsageBreakdownCard usage={usage({ observedAt: observed, providers: [{ ...claude, resetAt: start + 5 * 3600000 }, gemini] })} />);
-  expect(screen.getByText(/okno 10:10–15:10 · 92% zużyte/)).toBeTruthy();
+  expect(screen.getByText('okno 10:10–15:10 · 92% zużyte')).toBeTruthy();
   expect(screen.getByText('bieżące okno 5h · pomiar 12:28')).toBeTruthy();
-});
-
-it('marks clock times under the bar where parts begin and the reading time at the end of the used part, skipping crowded ones', () => {
-  const start = new Date(2026, 9, 17, 10, 10).getTime(), at = (h: number, m: number) => new Date(2026, 9, 17, h, m).getTime();
-  const provider = { ...claude, usedPercent: 40, resetAt: start + 5 * 3600000, observedAt: at(12, 28), segments: [
-    { kind: 'unobserved' as const, percent: 16 }, { kind: 'session' as const, id: 'a', title: 'x', origin: 'claude-app' as const, percent: 23 }, { kind: 'task' as const, id: 't', title: 'z', percent: 1 }],
-    timeline: [{ key: 'unobserved', percent: 16, from: start, to: at(11, 0) }, { key: 'a', percent: 2, from: at(11, 5), to: at(11, 8) }, { key: 't', percent: 1, from: at(11, 9), to: at(11, 10) }, { key: 'a', percent: 21, from: at(11, 30), to: at(12, 20) }] };
-  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [provider] })} />);
-  const ticks = [...container.querySelectorAll('.breakdown-ticks span')] as HTMLElement[];
-  expect(ticks.map(t => t.textContent)).toEqual(['10:10', '11:05', '12:28']);
-  expect(ticks.map(t => t.style.left)).toEqual(['0%', '16%', '40%']);
-  expect(ticks[2].className).toContain('now');
-});
-
-it('draws the time-in-window line on the bar, like the quota bars, and says it in the header', () => {
-  const start = new Date(2026, 9, 17, 10, 10).getTime();
-  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...claude, resetAt: start + 5 * 3600000, observedAt: start + 2.5 * 3600000 }, gemini] })} />);
-  const line = container.querySelector('.breakdown-pace') as HTMLElement;
-  expect(line.style.left).toBe('50%');
-  expect(screen.getByText(/92% zużyte · czas 50%/)).toBeTruthy();
-  expect(screen.getByRole('img', { name: /Upłynęło 50% czasu okna/ })).toBeTruthy();
-  cleanup();
-  const { container: bare } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...claude, resetAt: null }, gemini] })} />);
-  expect(bare.querySelector('.breakdown-pace')).toBeNull();
 });
 
 it('says when a provider has no current reading instead of drawing an empty bar', () => {
@@ -79,17 +54,15 @@ it('states loading, no data and offline without inventing numbers, and names Ant
   expect(screen.getByText('Automatyczny warmup')).toBeTruthy();
 });
 
-it('draws the bar from the timeline in the source colour, so one source can appear on both sides of another and tiny parts stay visible', () => {
+it('builds the quota bar parts from the timeline in the source colour, so one source can appear on both sides of another and tiny parts stay in', () => {
   const timeline = [{ key: 'session:claude-app:desk-panel', percent: 20 }, { key: 't1', percent: 0.1 }, { key: 'session:claude-app:desk-panel', percent: 10 }];
-  const provider = { ...claude, usedPercent: 30.1, segments: [
-    { kind: 'session' as const, id: 'session:claude-app:desk-panel', title: 'desk-panel', origin: 'claude-app' as const, percent: 30 },
-    { kind: 'task' as const, id: 't1', title: 'Zadanie', percent: 0.1 }], timeline };
-  const { container } = render(<UsageBreakdownCard usage={usage({ providers: [provider] })} />);
-  const parts = pieces(container);
-  expect(parts.map(i => i.style.flexGrow)).toEqual(['20', '0.1', '10']);
-  expect(parts[0].style.background).toBe(parts[2].style.background);
-  expect(parts[0].style.background).not.toBe(parts[1].style.background);
-  expect(parts[1].getAttribute('title')).toBe('Cezar · Zadanie · 0,1 p.p.');
+  const parts = breakdownPieces({ ...claude, usedPercent: 30.1, segments: [
+    { kind: 'session', id: 'session:claude-app:desk-panel', title: 'desk-panel', origin: 'claude-app', percent: 30 },
+    { kind: 'task', id: 't1', title: 'Zadanie', percent: 0.1 }], timeline });
+  expect(parts.map(p => p.percent)).toEqual([20, 0.1, 10]);
+  expect(parts[0].color).toBe(parts[2].color);
+  expect(parts[0].color).not.toBe(parts[1].color);
+  expect(parts[1].label).toBe('Cezar · Zadanie · 0,1 p.p.');
 });
 
 it('shows a time lane per source group when slices carry times, with a marker for now', () => {
@@ -101,11 +74,24 @@ it('shows a time lane per source group when slices carry times, with a marker fo
     { key: 't1', percent: 5, from: start + 3600000, to: start + 3 * 3600000 / 2 }] };
   const { container } = render(<UsageBreakdownCard usage={usage({ providers: [provider] })} />);
   const lanes = [...container.querySelectorAll('.breakdown-lane')];
-  expect(lanes.map(l => l.querySelector('span')!.textContent)).toEqual(['Sprzed pomiarów', 'Claude (aplikacja)', 'Cezar']);
+  expect(lanes.map(l => l.querySelector('.breakdown-lane-label span')!.textContent)).toEqual(['Sprzed pomiarów', 'Claude (aplikacja)', 'Cezar']);
   expect(lanes.every(l => l.querySelectorAll('.breakdown-track i').length >= 1)).toBe(true);
   expect(container.querySelector('.breakdown-now')).toBeTruthy();
-  expect(screen.getByText('Oś czasu okna 5h')).toBeTruthy();
   cleanup();
   const { container: bare } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...provider, timeline: [{ key: 'unobserved', percent: 10 }] }] })} />);
   expect(bare.querySelector('.breakdown-lanes')).toBeNull();
+  expect(screen.getByText('Cezar')).toBeTruthy();
+});
+
+it('splits the Antigravity 5h quota bar too, whatever the adapter calls its window, but not other models or windows', () => {
+  const reset = Date.now() + 3600000;
+  const agy = { ...gemini, usedPercent: 10, resetAt: reset, segments: [{ kind: 'session' as const, id: 'session:antigravity-app:x', title: 'x', origin: 'antigravity-app' as const, percent: 10 }] };
+  const state = usage({ providers: [agy] });
+  const snap = (window: string) => ({ window, usedPercent: 10, resetAt: reset }) as never;
+  const card = (title: string) => ({ provider: 'AGY', title }) as never;
+  expect(splitFor(snap('gemini-5h'), card('Gemini'), state)?.length).toBe(1);
+  expect(splitFor(snap('gemini-weekly'), card('Gemini'), state)).toBeUndefined();
+  expect(splitFor(snap('3p-5h'), card('Agy: Claude & GPT'), state)).toBeUndefined();
+  expect(splitFor(snap('gemini-5h'), card('Gemini'), usage({ status: 'offline', providers: [agy] }))).toBeUndefined();
+  expect(splitFor({ window: 'gemini-5h', usedPercent: 10, resetAt: reset + 3 * 3600000 } as never, card('Gemini'), state)).toBeUndefined();
 });

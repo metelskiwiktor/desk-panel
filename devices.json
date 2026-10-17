@@ -2,15 +2,15 @@
   "medialove-14": {
     "name": "Medialove 14\" Full HD",
     "diagonalInches": 14,
-    "resolution": [1080, 1920],
-    "scales": [1.25, 1.5, 1],
-    "touch": true
-  },
-  "waveshare-11.6": {
-    "name": "Waveshare 11.6\"",
-    "diagonalInches": 11.6,
-    "resolution": [828, 1768],
-    "scales": [1, 1.25],
+    "resolution": [
+      1080,
+      1920
+    ],
+    "scales": [
+      1.25,
+      1.5,
+      1
+    ],
     "touch": true
   }
 }

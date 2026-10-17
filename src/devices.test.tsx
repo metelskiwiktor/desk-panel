@@ -20,7 +20,7 @@ describe('devices.json', () => {
   });
   it('matches a screen only with the same scaling, tolerating rounding of fractional sizes', () => {
     expect(matchScreen({ width: 864, height: 1536, scale: 1.25 })?.deviceId).toBe('medialove-14');
-    expect(matchScreen({ width: 663, height: 1414, scale: 1.25 })?.deviceId).toBe('waveshare-11.6');
+    expect(matchScreen({ width: 663, height: 1414, scale: 1.25 })).toBeUndefined();
     expect(matchScreen({ width: 864, height: 1536, scale: 1 })).toBeUndefined();
     expect(() => viewportsOf('missing')).toThrow(/Dostępne/);
   });

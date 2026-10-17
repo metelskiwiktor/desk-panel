@@ -8,7 +8,7 @@ import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
 import { MailFeed } from './MailFeed';
 import type { WidgetId } from './layout';
-import { UsageBreakdownCard } from './UsageBreakdownCard';
+import { UsageBreakdownCard, breakdownPieces } from './UsageBreakdownCard';
 import type { UsageBreakdownState } from './useUsageBreakdown';
 
 /** CPU or RAM at or above this share of the machine shows the Komputer card on the dashboard. */
@@ -130,7 +130,17 @@ function CezarPanel({ data, snapshot, now, open, showAll }: {
   </section>;
 }
 
-function QuotaBar({ snapshot, now, connected }: { snapshot: QuotaSnapshot; now: number; connected: boolean }) {
+const BREAKDOWN_RESET_SLACK_MS = 10 * 60_000;
+/** The 5h bar is drawn in source colours when the breakdown describes the same window; otherwise it stays one colour. */
+export function splitFor(snapshot: QuotaSnapshot, card: QuotaCardItem, usage: UsageBreakdownState) {
+  const name = card.provider === 'AGY' ? (card.title === 'Gemini' ? 'Gemini' : null) : card.provider;
+  const provider = usage.status === 'offline' ? undefined : usage.providers.find(p => p.provider === name);
+  if (!provider || provider.usedPercent === null || normalizeQuotaWindow(snapshot.window) !== '5h' || !provider.segments.length) return undefined;
+  if (snapshot.resetAt && provider.resetAt && Math.abs(snapshot.resetAt - provider.resetAt) > BREAKDOWN_RESET_SLACK_MS) return undefined;
+  return breakdownPieces(provider);
+}
+
+function QuotaBar({ snapshot, now, connected, split }: { snapshot: QuotaSnapshot; now: number; connected: boolean; split?: ReturnType<typeof breakdownPieces> }) {
   const measured = quotaState(snapshot, now);
   const state = !connected && measured === 'fresh' ? 'stale' : measured;
   const pace = state === 'fresh' ? quotaPace(snapshot, now) : null;
@@ -139,7 +149,9 @@ function QuotaBar({ snapshot, now, connected }: { snapshot: QuotaSnapshot; now: 
     <span className="quota-window-label">{windowLabel}</span>
     <span className="quota-track" role="meter" aria-label={`Użycie limitu ${windowLabel}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot.usedPercent ?? undefined}
       aria-valuetext={pace ? `Zużyto ${snapshot.usedPercent}%, czas okna ${Math.round(pace.elapsedPercent)}%. ${quotaPaceLabels[pace.tone]}.` : 'Brak aktualnego pomiaru'}>
-      {state !== 'unavailable' && <span className="quota-fill" style={{ width: `${snapshot.usedPercent}%` }} />}
+      {state !== 'unavailable' && (split && state === 'fresh'
+        ? <span className="quota-fill quota-split" style={{ width: `${snapshot.usedPercent}%` }}>{split.map((p, i) => <i key={i} title={p.label} style={{ flex: `${p.percent} 1 0`, background: p.color }} />)}</span>
+        : <span className="quota-fill" style={{ width: `${snapshot.usedPercent}%` }} />)}
       {pace && <i className="quota-tick" style={{ left: `${pace.elapsedPercent}%` }} aria-hidden="true" />}
     </span>
     <strong className="quota-value">{state === 'unavailable' ? '—' : `${Number(snapshot.usedPercent!.toFixed(1))}%`}</strong>
@@ -217,7 +229,7 @@ function getQuotaCards(accounts: QuotaAccount[] | null): QuotaCardItem[] {
   return cards;
 }
 
-function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; open: (d: Detail) => void }) {
+function QuotaStrip({ data, now, open, usage }: { data: DashboardData; now: number; open: (d: Detail) => void; usage: UsageBreakdownState }) {
   const cards = getQuotaCards(data.quotas.data);
   const connected = fresh(data.quotas, now, MAX_AGE.quotas);
   return <section className="pulpit-card quota-strip" aria-label="Limity AI">
@@ -227,7 +239,7 @@ function QuotaStrip({ data, now, open }: { data: DashboardData; now: number; ope
         {c.badge && <span className="quota-badge">{c.badge}</span>}
       </div>
       {!c.snapshots.length && <span className="quota-sub">{c.reason ? quotaReason(c.reason) : "Brak pomiaru"}</span>}
-      {c.snapshots.map(s => <QuotaBar key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} connected={connected} />)}
+      {c.snapshots.map(s => <QuotaBar key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} connected={connected} split={splitFor(s, c, usage)} />)}
     </button>) : <Empty>{data.quotas.status === 'loading' ? 'Ładowanie limitów…' : 'Brak limitów AI.'}</Empty>}
     {!connected && <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />}
   </section>;
@@ -251,7 +263,7 @@ export function Dashboard({ data, snapshot, mail, usageBreakdown, now, open, sho
         {visible('mail') && <MailFeed mail={mail} now={now} open={open} />}
       </div>}
     </div>
-    {visible('quotas') && <QuotaStrip data={data} now={now} open={open} />}
+    {visible('quotas') && <QuotaStrip data={data} now={now} open={open} usage={usageBreakdown} />}
     {visible('breakdown') && <UsageBreakdownCard usage={usageBreakdown} />}
   </div>;
 }

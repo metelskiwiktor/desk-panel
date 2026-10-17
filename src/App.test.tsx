@@ -100,6 +100,16 @@ describe('interaktywny panel', () => {
     expect(screen.getAllByText('Reset według źródła')).toHaveLength(2);
     expect(screen.getByText('75% limitu')).toBeTruthy();
   });
+  it('rysuje pasek 5h w kolorach źródeł, gdy jest podział, a 7d zostawia jednokolorowy', async () => {
+    renderWith();
+    const strip = await screen.findByRole('region', { name: 'Limity AI' });
+    await waitFor(() => expect(strip.querySelector('.quota-split')).toBeTruthy());
+    const split = strip.querySelector('.quota-split')!;
+    expect(split.children.length).toBeGreaterThan(0);
+    const bar = split.closest('.quota-bar')!;
+    expect(within(bar as HTMLElement).getByRole('meter').getAttribute('aria-label')).toBe('Użycie limitu 5h');
+    expect(strip.querySelectorAll('.quota-fill:not(.quota-split)').length).toBeGreaterThan(0);
+  });
   it('wszystkie zakładki działają; agenda prowadzi do szczegółów', async () => {
     const user = userEvent.setup();
     renderWith();

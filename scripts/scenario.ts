@@ -1,7 +1,7 @@
 // Runs the real UI (Vite) against a scenario API, optionally taking Playwright screenshots.
 //   npm run scenario -- standard                       → serve until Ctrl+C
 //   npm run scenario -- offline --shot                 → output/screenshots/offline-*.png
-//   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device waveshare-11.6 --scale all
+//   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device medialove-14 --scale all
 // The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
