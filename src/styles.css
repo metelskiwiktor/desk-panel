@@ -1097,6 +1097,8 @@ nav button.active:after {
 .breakdown-bar { display: flex; gap: 1px; height: 16px; border-radius: 8px; overflow: hidden; background: var(--line); }
 .breakdown-bar i { display: block; height: 100%; min-width: 4px; }
 .breakdown-bar i.breakdown-free { min-width: 0; background: transparent; }
+.breakdown-barwrap { position: relative; display: block; }
+.breakdown-barwrap .quota-tick { top: -4px; height: 24px; }
 .breakdown-ticks { position: relative; display: block; height: 16px; }
 .breakdown-ticks span { position: absolute; top: 0; padding-top: 4px; font-size: 10px; line-height: 12px; color: var(--muted); white-space: nowrap; transform: translateX(-50%); }
 .breakdown-ticks span::before { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 3px; background: var(--muted); }
