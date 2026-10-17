@@ -3,6 +3,7 @@ export const widgetNames = {
   system: 'Komputer (tylko przy problemie)',
   calendar: 'Kalendarz · dziś i kolejne dni',
   quotas: 'Limity AI',
+  breakdown: 'Podział zużycia AI',
   insights: 'Zdarzenia panelu',
   mail: 'Poczta',
 } as const;

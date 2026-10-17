@@ -4,6 +4,7 @@ import type { GoogleAccountStatus } from '../src/google-contract';
 import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
 import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
+import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings } from '../src/warmup-contract';
 
 /**
@@ -19,6 +20,7 @@ export interface PanelSources {
   googleAccounts(): Promise<GoogleAccountStatus[]>;
   system(): Promise<SystemSource>;
   quotas(): Promise<QuotaSource>;
+  usageBreakdown?(): Promise<UsageBreakdown>;
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
   /** Starts Google sign-in for one configured account and resolves to the authorization URL. */
@@ -40,6 +42,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/google/accounts': () => sources.googleAccounts(),
     '/api/system': () => sources.system(),
     '/api/quotas': () => sources.quotas(),
+    '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };
 }

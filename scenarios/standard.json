@@ -424,5 +424,65 @@
         ]
       }
     ]
+  },
+  "usageBreakdown": {
+    "status": "connected",
+    "observedAt": "now-20s",
+    "providers": [
+      {
+        "provider": "Claude",
+        "usedPercent": 92,
+        "observedAt": "now-20s",
+        "resetAt": "now+2h5m",
+        "segments": [
+          {
+            "kind": "task",
+            "id": "t1",
+            "title": "Naprawa synchronizacji notatek",
+            "percent": 15
+          },
+          {
+            "kind": "task",
+            "id": "t2",
+            "title": "Przegląd widoku notatki",
+            "percent": 8,
+            "shared": true
+          },
+          {
+            "kind": "other",
+            "percent": 54
+          },
+          {
+            "kind": "unobserved",
+            "percent": 15
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "usedPercent": 38,
+        "observedAt": "now-20s",
+        "resetAt": "now+3h25m",
+        "segments": [
+          {
+            "kind": "task",
+            "id": "t3",
+            "title": "Refaktor ekranu ustawień",
+            "percent": 6
+          },
+          {
+            "kind": "other",
+            "percent": 32
+          }
+        ]
+      },
+      {
+        "provider": "Gemini",
+        "usedPercent": null,
+        "observedAt": null,
+        "resetAt": null,
+        "segments": []
+      }
+    ]
   }
 }

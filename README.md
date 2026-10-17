@@ -258,6 +258,7 @@ kontraktu są zgłaszane ze ścieżką pola.
 just scenario offline                                  # UI na scenariuszu, adres w konsoli
 just screenshots standard                              # output/screenshots/standard-*.png
 just screenshots high-ram --pages pulpit,system --device medialove-14 --scale all
+just screenshots standard --nav                        # keep the bottom navigation (hidden by default)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 ```
 

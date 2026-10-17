@@ -6,6 +6,7 @@ import { googleAccountsSchema } from '../src/google-contract';
 import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
+import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor } from '../src/warmup-contract';
 import { SourceError, type PanelSources } from './sources';
 
@@ -32,6 +33,7 @@ export const scenarioSchema = z.object({
   system: endpoint(systemSourceSchema),
   quotas: endpoint(quotaSourceSchema),
   warmup: endpoint(warmupStatusSchema),
+  usageBreakdown: endpoint(usageBreakdownSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'>;
@@ -96,6 +98,7 @@ export function createScenarioSources(file: string): PanelSources {
     },
     system: () => serve('system'),
     quotas: () => serve('quotas'),
+    usageBreakdown: () => serve('usageBreakdown'),
     warmup:async()=>warmup ?? serve('warmup'),
     saveWarmup:async(provider,value)=>{
       const current=warmup ?? await serve('warmup');
