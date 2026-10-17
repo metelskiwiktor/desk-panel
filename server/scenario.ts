@@ -7,7 +7,7 @@ import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
-import { warmupStatusSchema,warmupEditFor } from '../src/warmup-contract';
+import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { SourceError, type PanelSources } from './sources';
 
 /**
@@ -33,6 +33,7 @@ export const scenarioSchema = z.object({
   system: endpoint(systemSourceSchema),
   quotas: endpoint(quotaSourceSchema),
   warmup: endpoint(warmupStatusSchema),
+  warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
@@ -100,6 +101,7 @@ export function createScenarioSources(file: string): PanelSources {
     quotas: () => serve('quotas'),
     usageBreakdown: () => serve('usageBreakdown'),
     warmup:async()=>warmup ?? serve('warmup'),
+    runWarmup:async(provider)=>(await serve('warmupRun'))[provider],
     saveWarmup:async(provider,value)=>{
       const current=warmup ?? await serve('warmup');
       warmup={...current,settings:{...current.settings,[provider]:warmupEditFor(provider).parse(value)}};return warmup;

@@ -350,7 +350,7 @@ Grupy są dynamiczne, bez listy modeli w kodzie. Wybór zapisuje się w tej
 przeglądarce, obejmuje pulpit i szczegóły, nie zmienia pomiarów. Nowe grupy są
 domyślnie widoczne; ukryte grupy pozostają w ustawieniach, aby dało się je przywrócić.
 
-W **Ustawienia → Warmup AI** są osobne przełączniki automatu Claude/Codex i model.
+W **Ustawienia → Warmup AI** są osobne przełączniki automatu Claude/Codex/Gemini i model.
 Automat sprawdza stan co 30 s przez całą dobę: po potwierdzeniu zamkniętego okna
 5h i braku aktywnej sesji CLI sam wysyła krótki warmup. Nie ustawia się godziny;
 działa po kolejnych resetach, nie raz dziennie. Claude używa Haiku; Codex wymaga
@@ -363,6 +363,30 @@ Panel wymaga deklaracji `mode: on_reset` w statusie adaptera. Dawne pole `time`
 jest ignorowane przez nowy adapter; zachowane są opt-in, model i cooldown.
 Aktywny proces CLI (również bezczynny), brak wiarygodnych quota lub cooldown
 mogą opóźnić próbę. Zmiana samego czasu zapisanego resetu nie uruchamia warmupu.
+
+Każdy dostawca ma też przycisk **Uruchom warmup teraz**. Ręczne wywołanie używa
+zapisanego modelu, działa przy wyłączonym automacie i jawnie wymusza próbę,
+pomijając cooldown 5h oraz aktywne/już rozpoczęte okno. Nie zmienia ustawień
+automatu ani nie resetuje lub zwiększa limitów dostawcy — wysłany prompt zużywa quota.
+Gemini dotyczy wyłącznie grupy Gemini Models w Antigravity. Nadal obowiązują
+kontrole modelu, sesji CLI, wiarygodności quota i blokada równoległych warmupów.
+UI pokazuje trwanie próby oraz wynik; po błędzie można ponowić ręcznie.
+Automatyczne próby nadal respektują dotychczasowe warunki i trwały cooldown,
+także po ręcznej próbie zakończonej błędem.
+
+`POST /api/quotas/warmup/:provider/run` wymaga tego samego Origin i JSON
+`{"force":true}`. Backend wywołuje istniejący owner-auth endpoint adaptera
+`POST /panel/v2/quotas/warmup/:provider` z `{"dryRun":false,"force":true}`.
+Wymagana jest wersja adaptera obsługująca jawny tryb force; starszy adapter
+zgłasza błąd, bez obchodzenia ograniczeń przez tymczasową zmianę ustawień.
+Towarzysząca zmiana adaptera wraz z testami jest w
+[cezar-adapter PR #24](https://github.com/metelskiwiktor/cezar-adapter/pull/24).
+Desk Panel wymaga tej obsługi force po stronie adaptera; nie instaluje ani
+nie wdraża jej automatycznie.
+Zapis ustawień i odczyty quota/statusu nie wywołują warmupu. Ręczne wykonanie
+ma osobny, pięciominutowy timeout na CLI i weryfikację; utrata odpowiedzi
+nie potwierdza, że prompt nie został wykonany. Adapter zachowuje blokadę
+do zakończenia próby.
 
 Warmup jest kontrolowany w adapterze, domyślnie wyłączony. Nie jest
 częścią pollingu UI. Status i ręczny dry-run: `npm run quota:warmup -- --status`

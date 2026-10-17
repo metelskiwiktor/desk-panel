@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { History, Settings2 } from 'lucide-react';
 import { Card } from './components';
 import type { QuotaAccount } from './model';
 import type { QuotaVisibility } from './quota-visibility';
-import { warmupStatusSchema, type WarmupStatus, type WarmupProvider, type WarmupSettings, type WarmupHistoryEntry } from './warmup-contract';
+import { warmupStatusSchema, warmupRunResultSchema, type WarmupRunResult, type WarmupStatus, type WarmupProvider, type WarmupSettings, type WarmupHistoryEntry } from './warmup-contract';
 import { usePollingEnabled } from './polling';
 
 export function QuotaVisibilitySettings({accounts,value,change,error}:{accounts:QuotaAccount[]|null;value:QuotaVisibility;change:(value:QuotaVisibility)=>void;error:boolean}) {
@@ -30,6 +30,14 @@ const reasonLabels:Record<string,string>={claude_turn_timeout:'Claude nie zakoń
   cli_timeout:'CLI przekroczyło limit czasu',cli_not_installed:'Brak CLI',cli_execution_failed:'CLI zakończyło się błędem',subscription_auth_required:'Wymagane logowanie subskrypcją',
   custom_cli_config_unsupported:'Niestandardowa konfiguracja CLI blokuje warmup',execution_failed:'Nieznany błąd wykonania'};
 const describeReason=(reason?:string)=>reason ? `${reasonLabels[reason] || 'Błąd'} (${reason})` : undefined;
+const manualLabels:Record<string,string>={locked:'Inny warmup już trwa. Spróbuj po jego zakończeniu.',
+  active_session:'Aktywna sesja CLI blokuje próbę. Zakończ ją i spróbuj ponownie.',session_state_unknown:'Nie można sprawdzić aktywnych sesji CLI.',
+  quota_unknown:'Nie można potwierdzić aktualnego stanu quota.',model_required:'Najpierw podaj model i zapisz ustawienia.',
+  claude_haiku_required:'Claude wymaga modelu Haiku.',gemini_model_not_allowed:'Zapisz model z grupy Gemini Models.',
+  settings_changed:'Ustawienia zmieniły się w trakcie próby. Spróbuj ponownie.',
+  disabled:'Adapter nie obsługuje wymuszenia przy wyłączonym automacie. Zaktualizuj adapter.',
+  duplicate_or_cooldown:'Adapter nie obsługuje pominięcia cooldownu. Zaktualizuj adapter.',
+  window_active:'Adapter pominął próbę w aktywnym oknie. Zaktualizuj adapter.'};
 const providerName=(provider:WarmupProvider)=>provider==='Codex' ? 'ChatGPT / Codex' : provider==='Gemini' ? 'Gemini (Antigravity)' : provider;
 const COOLDOWN_MS=5*3600000;
 
@@ -37,6 +45,7 @@ const COOLDOWN_MS=5*3600000;
 export function useWarmupStatus() {
   const pollingEnabled=usePollingEnabled();
   const [status,setStatus]=useState<WarmupStatus|null>(null),[error,setError]=useState(false),[retry,setRetry]=useState(0);
+  const running=useRef(new Set<WarmupProvider>());
   useEffect(()=>{
     if(!pollingEnabled)return;
     let stopped=false,controller:AbortController|undefined;
@@ -50,6 +59,17 @@ export function useWarmupStatus() {
     return()=>{stopped=true;clearInterval(interval);controller?.abort();};
   },[retry,pollingEnabled]);
   return {status,error,retry:()=>{setError(false);setRetry(n=>n+1);},
+    run:async(provider:WarmupProvider)=>{
+      if(running.current.has(provider))throw new Error('running');
+      running.current.add(provider);
+      try{
+        const response=await fetch(`/api/quotas/warmup/${provider}/run`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({force:true}),signal:AbortSignal.timeout(310000)});
+        if(!response.ok)throw new Error(response.status===409 ? 'running' : 'unavailable');
+        const result=warmupRunResultSchema.parse(await response.json());
+        if(result.provider!==provider)throw new Error('unavailable');
+        return result;
+      }finally{running.current.delete(provider);setRetry(n=>n+1);}
+    },
     save:async(provider:WarmupProvider,value:WarmupSettings)=>{
       const response=await fetch(`/api/quotas/warmup/${provider}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:value.enabled,...(value.model ? {model:value.model} : {})}),signal:AbortSignal.timeout(12000)});
       if(!response.ok)throw new Error();setStatus(warmupStatusSchema.parse(await response.json()));
@@ -57,8 +77,9 @@ export function useWarmupStatus() {
 }
 type WarmupState=ReturnType<typeof useWarmupStatus>;
 
-function WarmupForm({provider,settings,last,save}:{provider:WarmupProvider;settings:WarmupSettings;last:WarmupStatus['last'][string];save:(value:WarmupSettings)=>Promise<void>}) {
+function WarmupForm({provider,settings,last,save,run}:{provider:WarmupProvider;settings:WarmupSettings;last:WarmupStatus['last'][string];save:(value:WarmupSettings)=>Promise<void>;run:()=>Promise<WarmupRunResult>}) {
   const [value,setValue]=useState(settings),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+  const [running,setRunning]=useState(false),[manualMessage,setManualMessage]=useState(''),[manualError,setManualError]=useState(false);
   const edit=(next:WarmupSettings)=>{setValue(next);setMessage('Niezapisane zmiany. Zapisz, aby je zastosować.');};
   useEffect(()=>setValue(settings),[settings.enabled,settings.model]);
   const nextAllowed=last && Date.parse(last.at)+COOLDOWN_MS>Date.now() ? new Date(Date.parse(last.at)+COOLDOWN_MS) : null;
@@ -68,16 +89,31 @@ function WarmupForm({provider,settings,last,save}:{provider:WarmupProvider;setti
     catch{setMessage('Nie udało się zapisać. Sprawdź połączenie z aktualnym adapterem.');}
     finally{setBusy(false);}
   }}>
-    <fieldset disabled={busy}><legend>{providerName(provider)}</legend>
+    <fieldset disabled={busy || running}><legend>{providerName(provider)}</legend>
       <label className="visibility-toggle"><input type="checkbox" checked={value.enabled} onChange={e=>edit({...value,enabled:e.target.checked})}/>Włącz warmup po zamknięciu okna 5h</label>
       <label>Model{provider==='Claude' ? <input value="Haiku" readOnly/> : <input placeholder={provider==='Gemini' ? 'gemini-3.8-flash-low' : 'Model dostępny w Twoim Codex CLI'} pattern="[a-zA-Z0-9_.\-]{1,100}" required={value.enabled} value={value.model || ''} onChange={e=>edit({...value,model:e.target.value || undefined})}/>}</label>
       <p className="meta">Prompt: {provider==='Claude' ? 'Reply with exactly [losowy kod]. Do not use tools.' : 'Reply only OK. Do not use tools.'}</p>
       <p className="meta">{provider==='Claude' ? 'Krótki prompt jest stały; losowy kod pozwala potwierdzić, że Claude odpowiedział. Narzędzia są wyłączone.' : provider==='Gemini' ? 'Dotyczy tylko grupy Gemini Models (okno gemini-5h), nie Argon ani Claude i GPT. Wykonanie potwierdza jedna zwykła tura agy.' : 'Krótki prompt jest stały; wykonanie potwierdza zakończona tura Codex CLI. Narzędzia są wyłączone.'}</p>
       {settings.configurationError && <p className="warning">Popraw ustawienia warmupu i zapisz.</p>}
       {last && <p className="meta">Ostatnia próba: {new Date(last.at).toLocaleString('pl-PL')} · {resultLabels[last.result] || 'Pominięto próbę'}{last.reason ? ` · ${describeReason(last.reason)}` : ''}</p>}
-      {nextAllowed && <p className="meta">Następna możliwa próba: {nextAllowed.toLocaleString('pl-PL')} (5h odstępu od ostatniej)</p>}
+      {nextAllowed && <p className="meta">Następna możliwa próba automatyczna: {nextAllowed.toLocaleString('pl-PL')} (5h odstępu od ostatniej)</p>}
       <button className="button" type="submit">{busy ? 'Zapisywanie…' : `Zapisz warmup ${provider}`}</button>
+      <button className="button" type="button" onClick={async()=>{
+        setRunning(true);setManualMessage('');setManualError(false);
+        try{
+          const result=await run(),ok=result.result==='completed' || result.result==='completed_existing_window';
+          setManualError(!ok);
+          setManualMessage(ok ? `Warmup ${provider} wykonany${result.result==='completed_existing_window' ? ' w aktywnym oknie' : ''}.` :
+            `Warmup ${provider}: ${manualLabels[result.result] || 'Nie udało się wykonać warmupu.'}${result.reason ? ` ${describeReason(result.reason)}` : ''}`);
+        }catch(error){
+          setManualError(true);setManualMessage(error instanceof Error && error.message==='running' ? 'Warmup już trwa. Spróbuj po jego zakończeniu.' :
+            'Nie udało się potwierdzić wykonania. Sprawdź połączenie i wersję adaptera. Próba mogła nadal trwać; możesz spróbować ponownie.');
+        }finally{setRunning(false);}
+      }}>{running ? `Warmup ${provider} w toku…` : `Uruchom warmup ${provider} teraz`}</button>
+      <p className="meta">Ręczna próba używa zapisanego modelu, także przy wyłączonym automacie. Pomija cooldown i stan okna 5h. Zużywa quota; nie resetuje ani nie zwiększa limitów dostawcy.</p>
     </fieldset>
+    {running && <p role="status">Warmup {provider} w toku. Weryfikacja może potrwać kilka minut.</p>}
+    {manualMessage && <p role={manualError ? 'alert' : 'status'}>{manualMessage}</p>}
     {message && <p role="status">{message}</p>}
   </form>;
 }
@@ -85,9 +121,9 @@ export function WarmupSettingsCard({warmup}:{warmup:WarmupState}) {
   const {status,error}=warmup;
   return <Card title="Warmup AI" icon={<Settings2 />}>
     <p className="card-intro">Domyślnie wyłączony. Co 30 sekund sprawdza, czy okno 5h jest zamknięte i nie ma aktywnej sesji CLI. Wtedy sam wyśle krótki prompt z istniejącej subskrypcji, aby rozpocząć kolejne okno. Zużywa quota i nie zwiększa limitu.</p>
-    <p className="meta">Działa przez całą dobę, bez ustalania godziny. Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywny proces CLI blokuje próbę, również gdy jest bezczynny. Nieznane quota blokują warmup. Minimum 5h między próbami chroni przed duplikatami, także po błędzie. Wyłączenie zatrzymuje przyszłe próby; rozpoczęta próba może się dokończyć.</p>
+    <p className="meta">Automat działa przez całą dobę, bez ustalania godziny. Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywny proces CLI blokuje próbę, również gdy jest bezczynny. Nieznane quota blokują warmup. Automat zachowuje minimum 5h między próbami, także po błędzie. Wyłączenie zatrzymuje przyszłe próby automatyczne; rozpoczęta próba może się dokończyć. Równoległe wywołania warmupu są blokowane także w trybie ręcznym.</p>
     {error && !status ? <p role="alert">Ustawienia warmupu niedostępne. Wymagany jest aktualny adapter. <button className="button" onClick={warmup.retry}>Ponów odczyt</button></p> : !status ? <p role="status">Odczyt ustawień…</p> :
-      (['Claude','Codex','Gemini'] as const).flatMap(provider=>status.settings[provider] ? [[provider,status.settings[provider]!] as const] : []).map(([provider,settings])=><WarmupForm key={provider} provider={provider} settings={settings} last={status.last[provider]} save={value=>warmup.save(provider,value)}/>)}
+      (['Claude','Codex','Gemini'] as const).flatMap(provider=>status.settings[provider] ? [[provider,status.settings[provider]!] as const] : []).map(([provider,settings])=><WarmupForm key={provider} provider={provider} settings={settings} last={status.last[provider]} save={value=>warmup.save(provider,value)} run={()=>warmup.run(provider)}/>)}
   </Card>;
 }
 

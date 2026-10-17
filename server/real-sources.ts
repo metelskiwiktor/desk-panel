@@ -54,6 +54,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     usageBreakdown: readUsageBreakdown,
     warmup:warmup.read,
     saveWarmup:warmup.save,
+    runWarmup:warmup.run,
     async googleConnect(email) {
       const account = accounts.find(a => a.email === email);
       if (!account) throw new SourceError(404);
