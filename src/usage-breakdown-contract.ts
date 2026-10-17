@@ -9,6 +9,8 @@ export const usageSegmentSchema = z.object({
 export const usageProviderSchema = z.object({
   provider: z.enum(['Claude', 'Codex', 'Gemini']), usedPercent: percent.nullable(),
   observedAt: z.number().nullable(), resetAt: z.number().nullable(), segments: z.array(usageSegmentSchema).max(10),
+  /** Same parts in time order; `key` is a segment's id, or its kind for tasks_rest, other and unobserved. */
+  timeline: z.array(z.object({ key: z.string(), percent })).max(150).optional(),
 });
 /** What filled each provider's current 5h window: Cezar tasks, other sources, or usage seen before the first reading. */
 export const usageBreakdownSchema = z.object({

@@ -26,12 +26,15 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
     <div className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">brak aktualnego pomiaru</span></div></div>;
   let taskIndex = 0;
   const coloured = provider.segments.map(s => ({ s, color: colorOf(s, s.kind === 'task' || s.kind === 'session' ? taskIndex++ : 0) }));
+  const colourOf = new Map(coloured.map(({ s, color }) => [s.id ?? s.kind, color] as const));
+  // In time order when the adapter sent it, so a source that worked all along shows between the others, not in front of them.
+  const bar = provider.timeline?.length ? provider.timeline.map(p => ({ percent: p.percent, color: colourOf.get(p.key) ?? colorOf({ kind: 'other', percent: p.percent }, 0) })) : coloured.map(({ s, color }) => ({ percent: s.percent, color }));
   const cezar = sum(provider.segments, ['task']), local = sum(provider.segments, ['session']), other = sum(provider.segments, ['other', 'tasks_rest']), before = sum(provider.segments, ['unobserved']);
   return <div className="breakdown-row">
     <div className="breakdown-summary">
       <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno 5h · {Math.round(provider.usedPercent)}% zużyte</span></span>
       <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, sesje poza Cezarem ${points.format(local)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
-        {coloured.map(({ s, color }, i) => <i key={i} style={{ width: `${s.percent}%`, background: color }} />)}</span>
+        {bar.map((piece, i) => <i key={i} style={{ width: `${piece.percent}%`, background: piece.color }} />)}</span>
     </div>
     <ul className="breakdown-legend">{coloured.map(({ s, color }, i) => <li key={i}><i style={{ background: color }} aria-hidden="true" /><span>{segmentLabel(s)}</span><span className="meta">{pointsLabel(s.percent)}</span></li>)}</ul>
   </div>;
