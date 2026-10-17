@@ -12,8 +12,9 @@ export function segmentLabel(segment: UsageSegment) {
   if (segment.kind === 'task') return `${segment.title ?? 'Zadanie'}${segment.shared ? ' (równolegle)' : ''}`;
   return segment.kind === 'tasks_rest' ? 'Pozostałe zadania Cezara' : segment.kind === 'other' ? 'Poza Cezarem' : 'Sprzed pomiarów';
 }
+const HATCH = 'repeating-linear-gradient(135deg, #3a4659 0 3px, #263041 3px 6px)';
 function colorOf(segment: UsageSegment, taskIndex: number) {
-  return segment.kind === 'task' ? TASK_COLORS[taskIndex % TASK_COLORS.length] : segment.kind === 'tasks_rest' ? '#4f6a8f' : segment.kind === 'other' ? '#6b7a90' : '#3a4659';
+  return segment.kind === 'task' ? TASK_COLORS[taskIndex % TASK_COLORS.length] : segment.kind === 'tasks_rest' ? '#4f6a8f' : segment.kind === 'other' ? '#8593a8' : HATCH;
 }
 
 function ProviderRow({ provider }: { provider: UsageProvider }) {
@@ -22,18 +23,17 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   let taskIndex = 0;
   const coloured = provider.segments.map(s => ({ s, color: colorOf(s, s.kind === 'task' ? taskIndex++ : 0) }));
   const cezar = sum(provider.segments, ['task', 'tasks_rest']), other = sum(provider.segments, ['other']), before = sum(provider.segments, ['unobserved']);
-  return <details className="breakdown-row">
-    <summary>
+  return <div className="breakdown-row">
+    <div className="breakdown-summary">
       <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno 5h · {Math.round(provider.usedPercent)}% zużyte</span></span>
       <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, poza Cezarem ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
         {coloured.map(({ s, color }, i) => <i key={i} style={{ width: `${s.percent}%`, background: color }} />)}</span>
-      <span className="meta breakdown-legend">zadania Cezara {points.format(cezar)} · poza Cezarem {points.format(other)}{before > 0 ? ` · sprzed pomiarów ${points.format(before)}` : ''}</span>
-    </summary>
-    <ul>{coloured.map(({ s, color }, i) => <li key={i}><i style={{ background: color }} aria-hidden="true" /><span>{segmentLabel(s)}</span><span className="meta">{pointsLabel(s.percent)}</span></li>)}</ul>
-  </details>;
+    </div>
+    <ul className="breakdown-legend">{coloured.map(({ s, color }, i) => <li key={i}><i style={{ background: color }} aria-hidden="true" /><span>{segmentLabel(s)}</span><span className="meta">{pointsLabel(s.percent)}</span></li>)}</ul>
+  </div>;
 }
 
-/** Each bar is the provider's whole 5h limit; coloured parts are what filled it. Approximate: rises are matched to what was running. */
+/** Each bar is the provider's whole 5h limit; coloured parts are what filled it, named in the legend under it. Approximate: rises are matched to what was running. */
 export function UsageBreakdownCard({ usage }: { usage: UsageBreakdownState }) {
   const providers = usage.providers.filter(p => p.usedPercent !== null);
   const note = usage.status === 'offline' ? (usage.observedAt ? 'Adapter niedostępny — pokazuję ostatnie dane.' : 'Nie można odczytać podziału z cezar-adapter.')

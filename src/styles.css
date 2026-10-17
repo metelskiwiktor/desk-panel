@@ -1092,11 +1092,11 @@ nav button.active:after {
 /* Podział zużycia AI */
 .breakdown-card { display: grid; gap: 10px; }
 .breakdown-list { display: grid; gap: 12px; }
-.breakdown-row summary { display: grid; gap: 6px; cursor: pointer; list-style: none; }
-.breakdown-row summary::-webkit-details-marker { display: none; }
+.breakdown-summary { display: grid; gap: 6px; }
 .breakdown-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .breakdown-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
 .breakdown-bar i { display: block; height: 100%; min-width: 2px; }
-.breakdown-row ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
-.breakdown-row li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-.breakdown-row li i { width: 10px; height: 10px; border-radius: 3px; }
+.breakdown-legend { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.breakdown-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.breakdown-legend li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breakdown-legend li i { width: 12px; height: 12px; border-radius: 3px; }
