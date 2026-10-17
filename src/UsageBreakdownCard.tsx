@@ -2,31 +2,33 @@ import { Empty } from './components';
 import type { UsageProvider, UsageSegment } from './usage-breakdown-contract';
 import type { UsageBreakdownState } from './useUsageBreakdown';
 
-const TASK_COLORS = ['#378ADD', '#1D9E75', '#85B7EB', '#BA7517', '#7F77DD', '#D4537E'];
+const SOURCE_COLORS = ['#378ADD', '#1D9E75', '#85B7EB', '#BA7517', '#7F77DD', '#D4537E'];
 const points = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 });
 export const pointsLabel = (n: number) => `${points.format(n)} p.p.`;
 const providerNames = { Claude: 'Claude', Codex: 'ChatGPT / Codex', Gemini: 'Gemini (Antigravity)' } as const;
 const sum = (segments: UsageSegment[], kinds: UsageSegment['kind'][]) => segments.filter(s => kinds.includes(s.kind)).reduce((n, s) => n + s.percent, 0);
 
 export function segmentLabel(segment: UsageSegment) {
-  if (segment.kind === 'task') return `${segment.title ?? 'Zadanie'}${segment.shared ? ' (równolegle)' : ''}`;
-  return segment.kind === 'tasks_rest' ? 'Pozostałe zadania Cezara' : segment.kind === 'other' ? 'Poza Cezarem' : 'Sprzed pomiarów';
+  const shared = segment.shared ? ' (równolegle)' : '';
+  if (segment.kind === 'task') return `${segment.title ?? 'Zadanie'}${shared}`;
+  if (segment.kind === 'session') return `Sesja lokalna: ${segment.title ?? 'bez nazwy'}${shared}`;
+  return segment.kind === 'tasks_rest' ? 'Pozostałe źródła' : segment.kind === 'other' ? 'Inne źródła (bez śladu w sesjach)' : 'Sprzed pomiarów';
 }
 const HATCH = 'repeating-linear-gradient(135deg, #3a4659 0 3px, #263041 3px 6px)';
 function colorOf(segment: UsageSegment, taskIndex: number) {
-  return segment.kind === 'task' ? TASK_COLORS[taskIndex % TASK_COLORS.length] : segment.kind === 'tasks_rest' ? '#4f6a8f' : segment.kind === 'other' ? '#8593a8' : HATCH;
+  return segment.kind === 'task' || segment.kind === 'session' ? SOURCE_COLORS[taskIndex % SOURCE_COLORS.length] : segment.kind === 'tasks_rest' ? '#4f6a8f' : segment.kind === 'other' ? '#8593a8' : HATCH;
 }
 
 function ProviderRow({ provider }: { provider: UsageProvider }) {
   if (provider.usedPercent === null) return <div className="breakdown-row">
     <div className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">brak aktualnego pomiaru</span></div></div>;
   let taskIndex = 0;
-  const coloured = provider.segments.map(s => ({ s, color: colorOf(s, s.kind === 'task' ? taskIndex++ : 0) }));
-  const cezar = sum(provider.segments, ['task', 'tasks_rest']), other = sum(provider.segments, ['other']), before = sum(provider.segments, ['unobserved']);
+  const coloured = provider.segments.map(s => ({ s, color: colorOf(s, s.kind === 'task' || s.kind === 'session' ? taskIndex++ : 0) }));
+  const cezar = sum(provider.segments, ['task']), local = sum(provider.segments, ['session']), other = sum(provider.segments, ['other', 'tasks_rest']), before = sum(provider.segments, ['unobserved']);
   return <div className="breakdown-row">
     <div className="breakdown-summary">
       <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno 5h · {Math.round(provider.usedPercent)}% zużyte</span></span>
-      <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, poza Cezarem ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
+      <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, sesje lokalne ${points.format(local)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
         {coloured.map(({ s, color }, i) => <i key={i} style={{ width: `${s.percent}%`, background: color }} />)}</span>
     </div>
     <ul className="breakdown-legend">{coloured.map(({ s, color }, i) => <li key={i}><i style={{ background: color }} aria-hidden="true" /><span>{segmentLabel(s)}</span><span className="meta">{pointsLabel(s.percent)}</span></li>)}</ul>
@@ -45,7 +47,7 @@ export function UsageBreakdownCard({ usage }: { usage: UsageBreakdownState }) {
     </div>
     {usage.status === 'loading' ? <Empty>Ładowanie podziału…</Empty> : !providers.length ? <Empty>Brak aktualnych pomiarów limitów.</Empty> :
       <div className="breakdown-list">{usage.providers.map(p => <ProviderRow key={p.provider} provider={p} />)}</div>}
-    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu trafia do zadań działających w tym czasie, a gdy żadne nie działało — do „poza Cezarem”.</p>}
+    {providers.length > 0 && <p className="meta">Przypisanie orientacyjne: wzrost limitu dzieli się między sesje Claude Code, Codex i zadania Cezara proporcjonalnie do zużytych tokenów. Źródła bez śladu w transkryptach (przeglądarka, Antigravity) trafiają do „inne źródła”.</p>}
     {note && <p className="meta warning">{note}</p>}
   </section>;
 }

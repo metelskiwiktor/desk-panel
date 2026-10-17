@@ -446,6 +446,12 @@
             "percent": 15
           },
           {
+            "kind": "session",
+            "id": "session:desk-panel",
+            "title": "desk-panel",
+            "percent": 32
+          },
+          {
             "kind": "task",
             "id": "t2",
             "title": "Przegląd widoku notatki",
@@ -454,7 +460,7 @@
           },
           {
             "kind": "other",
-            "percent": 54
+            "percent": 22
           }
         ]
       },

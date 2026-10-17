@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const percent = z.number().min(0).max(100);
 export const usageSegmentSchema = z.object({
-  kind: z.enum(['task', 'tasks_rest', 'other', 'unobserved']), id: z.string().optional(), title: z.string().max(200).optional(),
+  kind: z.enum(['task', 'session', 'tasks_rest', 'other', 'unobserved']), id: z.string().optional(), title: z.string().max(200).optional(),
   percent, shared: z.boolean().optional(),
 });
 export const usageProviderSchema = z.object({
