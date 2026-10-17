@@ -6,7 +6,7 @@ import { createTaskUsageReader } from './taskUsage';
 import { createScenarioSources } from './scenario';
 
 const wireTask = { id: 't', title: 'Zadanie', provider: 'claude', status: 'done', startedAt: '2026-10-17T08:00:00.000Z', finishedAt: '2026-10-17T08:05:00.000Z',
-  tokensUsed: 1000, inputTokens: 10, outputTokens: 5, costUsd: null, steps: [] };
+  tokensUsed: 1000, inputTokens: 10, outputTokens: 5, costUsd: null, quota: { fiveHour: 4.2, sevenDay: null, note: null }, steps: [] };
 const wire = (over = {}) => ({ version: 1, asOf: '2026-10-17T10:00:00.000Z', availability: 'available', tasks: [wireTask], ...over });
 
 it('reads the fixed loopback route with backend-only auth, maps times to ms and keeps the last data when the adapter is down', async () => {

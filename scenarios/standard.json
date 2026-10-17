@@ -447,7 +447,12 @@
             "tokensUsed": 2650000,
             "costUsd": 6.02
           }
-        ]
+        ],
+        "quota": {
+          "fiveHour": 14.5,
+          "sevenDay": 3.2,
+          "note": null
+        }
       },
       {
         "id": "t2",
@@ -473,7 +478,12 @@
             "tokensUsed": 280000,
             "costUsd": null
           }
-        ]
+        ],
+        "quota": {
+          "fiveHour": 6,
+          "sevenDay": 1.1,
+          "note": "overlap"
+        }
       },
       {
         "id": "t3",
@@ -493,7 +503,12 @@
             "tokensUsed": 69639,
             "costUsd": 0.45
           }
-        ]
+        ],
+        "quota": {
+          "fiveHour": 0.4,
+          "sevenDay": 0.1,
+          "note": null
+        }
       },
       {
         "id": "t4",
@@ -506,7 +521,12 @@
         "inputTokens": 90,
         "outputTokens": 12000,
         "costUsd": 0.81,
-        "steps": []
+        "steps": [],
+        "quota": {
+          "fiveHour": null,
+          "sevenDay": null,
+          "note": "no_samples"
+        }
       }
     ]
   }
