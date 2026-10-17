@@ -379,10 +379,10 @@ także po ręcznej próbie zakończonej błędem.
 `POST /panel/v2/quotas/warmup/:provider` z `{"dryRun":false,"force":true}`.
 Wymagana jest wersja adaptera obsługująca jawny tryb force; starszy adapter
 zgłasza błąd, bez obchodzenia ograniczeń przez tymczasową zmianę ustawień.
-Towarzysząca zmiana adaptera wraz z testami jest dołączona jako
-[patch](integrations/cezar-adapter/manual-warmup.patch), względem jego commita
-`e3dde0f`. Można ją przejrzeć i zastosować w osobnym checkoutcie adaptera;
-nie jest automatycznie instalowana ani wdrażana przez Desk Panel.
+Towarzysząca zmiana adaptera wraz z testami jest w
+[cezar-adapter PR #24](https://github.com/metelskiwiktor/cezar-adapter/pull/24).
+Desk Panel wymaga tej obsługi force po stronie adaptera; nie instaluje ani
+nie wdraża jej automatycznie.
 Zapis ustawień i odczyty quota/statusu nie wywołują warmupu. Ręczne wykonanie
 ma osobny, pięciominutowy timeout na CLI i weryfikację; utrata odpowiedzi
 nie potwierdza, że prompt nie został wykonany. Adapter zachowuje blokadę
