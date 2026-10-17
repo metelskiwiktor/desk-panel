@@ -436,6 +436,10 @@
         "resetAt": "now+2h5m",
         "segments": [
           {
+            "kind": "unobserved",
+            "percent": 15
+          },
+          {
             "kind": "task",
             "id": "t1",
             "title": "Naprawa synchronizacji notatek",
@@ -451,10 +455,6 @@
           {
             "kind": "other",
             "percent": 54
-          },
-          {
-            "kind": "unobserved",
-            "percent": 15
           }
         ]
       },
