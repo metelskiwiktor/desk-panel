@@ -14,9 +14,9 @@ it('splits each limit bar into Cezar tasks, other sources and usage from before 
   render(<UsageBreakdownCard usage={usage()} />);
   expect(screen.getByRole('heading', { name: 'Podział zużycia AI' })).toBeTruthy();
   expect(screen.getByRole('img', { name: /Claude: 92% limitu 5h\. Zadania Cezara 23, sesje poza Cezarem 30, inne źródła 24, sprzed pomiarów 15/ })).toBeTruthy();
-  expect(screen.getByText('Naprawa synchronizacji')).toBeTruthy();
+  expect(screen.getByText('Cezar · Naprawa synchronizacji')).toBeTruthy();
   expect(screen.getByText('Sprzed pomiarów')).toBeTruthy();
-  expect(screen.getByText('Przegląd notatki (równolegle)')).toBeTruthy();
+  expect(screen.getByText('Cezar · Przegląd notatki (równolegle)')).toBeTruthy();
   expect(screen.getByText('Claude (aplikacja) · desk-panel')).toBeTruthy();
   expect(screen.getByText('Cezar · pomocnicze')).toBeTruthy();
   expect(screen.getByText('Inne źródła (bez śladu w sesjach)')).toBeTruthy();

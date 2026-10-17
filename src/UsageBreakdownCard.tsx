@@ -11,7 +11,7 @@ const sum = (segments: UsageSegment[], kinds: UsageSegment['kind'][]) => segment
 const originNames = { cezar: 'Cezar', 'claude-app': 'Claude (aplikacja)', 'claude-cli': 'Claude Code (terminal)', 'codex-app': 'ChatGPT / Codex (aplikacja)', 'codex-cli': 'Codex (terminal)', unknown: 'Sesja lokalna' } as const;
 export function segmentLabel(segment: UsageSegment) {
   const shared = segment.shared ? ' (równolegle)' : '';
-  if (segment.kind === 'task') return `${segment.title ?? 'Zadanie'}${shared}`;
+  if (segment.kind === 'task') return `Cezar · ${segment.title ?? 'zadanie'}${shared}`;
   if (segment.kind === 'session') return segment.origin === 'cezar' ? `Cezar · ${segment.title ?? 'pomocnicze'}${shared}` : `${originNames[segment.origin ?? 'unknown']} · ${segment.title ?? 'bez nazwy'}${shared}`;
   return segment.kind === 'tasks_rest' ? 'Pozostałe źródła' : segment.kind === 'other' ? 'Inne źródła (bez śladu w sesjach)' : 'Sprzed pomiarów';
 }
