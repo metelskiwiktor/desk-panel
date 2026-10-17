@@ -1094,9 +1094,24 @@ nav button.active:after {
 .breakdown-list { display: grid; gap: 12px; }
 .breakdown-summary { display: grid; gap: 6px; }
 .breakdown-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.breakdown-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
-.breakdown-bar i { display: block; height: 100%; min-width: 2px; }
+.breakdown-bar { display: flex; gap: 1px; height: 16px; border-radius: 8px; overflow: hidden; background: var(--line); }
+.breakdown-bar i { display: block; height: 100%; min-width: 4px; }
+.breakdown-bar i.breakdown-free { min-width: 0; background: transparent; }
 .breakdown-legend { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
 .breakdown-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .breakdown-legend li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .breakdown-legend li i { width: 12px; height: 12px; border-radius: 3px; }
+.breakdown-group { display: block !important; }
+.breakdown-group-head { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.breakdown-group-head i { width: 12px; height: 12px; border-radius: 3px; }
+.breakdown-group ul { list-style: none; margin: 2px 0 0 20px; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.breakdown-group ul li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.breakdown-lanes { margin-top: 8px; }
+.breakdown-lanes summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.breakdown-lane { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; align-items: center; margin: 6px 0; }
+.breakdown-track { position: relative; height: 20px; border-radius: 4px; background: var(--line); }
+.breakdown-track i { position: absolute; bottom: 0; min-width: 3px; border-radius: 2px; }
+.breakdown-now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #e6edf7; opacity: .75; }
+.breakdown-axis { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; font-size: 11px; color: var(--muted); }
+.breakdown-axis div { display: flex; justify-content: space-between; }
+@media (max-width: 560px) { .breakdown-lane, .breakdown-axis { grid-template-columns: 90px minmax(0, 1fr); } }

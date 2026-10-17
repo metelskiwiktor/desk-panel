@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { usageProviderSchema, type UsageBreakdown } from '../src/usage-breakdown-contract';
 
 const wire = z.object({ version: z.literal(1), asOf: z.iso.datetime(), availability: z.enum(['available', 'unavailable']),
-  providers: z.array(usageProviderSchema.extend({ observedAt: z.iso.datetime().nullable(), resetAt: z.iso.datetime().nullable() })).max(3) });
+  providers: z.array(usageProviderSchema.extend({ observedAt: z.iso.datetime().nullable(), resetAt: z.iso.datetime().nullable(),
+    timeline: z.array(z.object({ key: z.string(), percent: z.number().min(0).max(100), from: z.iso.datetime(), to: z.iso.datetime() })).max(150).optional() })).max(3) });
 
 /** Fixed loopback adapter route; the browser never receives the owner credential. Keeps the last good answer when the adapter is down. */
 export function createUsageBreakdownReader(envFile: string, request: typeof fetch = fetch, now = Date.now) {
@@ -23,7 +24,7 @@ export function createUsageBreakdownReader(envFile: string, request: typeof fetc
         const value = wire.parse(await response.json());
         const time = (iso: string | null) => iso ? Date.parse(iso) : null;
         cache = { status: value.availability === 'available' ? 'connected' : 'unavailable', observedAt: Date.parse(value.asOf),
-          providers: value.providers.map(p => ({ ...p, observedAt: time(p.observedAt), resetAt: time(p.resetAt) })) };
+          providers: value.providers.map(p => ({ ...p, observedAt: time(p.observedAt), resetAt: time(p.resetAt), timeline: p.timeline?.map(t => ({ ...t, from: Date.parse(t.from), to: Date.parse(t.to) })) })) };
       } catch {
         cache = { observedAt: null, providers: [], ...cache, status: 'offline' };
       }
