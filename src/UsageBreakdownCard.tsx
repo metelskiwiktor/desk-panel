@@ -89,6 +89,8 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   if (provider.usedPercent === null) return <div className="breakdown-row">
     <div className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">brak aktualnego pomiaru</span></div></div>;
   const groups = groupsOf(provider.segments);
+  // The window runs 5 hours up to the provider's reset; show it as clock times so "bieżące okno" has a place on the day.
+  const windowLabel = provider.resetAt ? `${clock(provider.resetAt - WINDOW_MS)}–${clock(provider.resetAt)}` : '5h';
   const segmentByKey = new Map(provider.segments.map(s => [keyOf(s), s] as const));
   const sumOf = (...ids: string[]) => groups.filter(g => ids.includes(g.id)).reduce((n, g) => n + g.total, 0);
   const cezar = sumOf('cezar'), other = sumOf('other'), before = sumOf('unobserved');
@@ -100,7 +102,7 @@ function ProviderRow({ provider }: { provider: UsageProvider }) {
   });
   return <div className="breakdown-row">
     <div className="breakdown-summary">
-      <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno 5h · {Math.round(provider.usedPercent)}% zużyte</span></span>
+      <span className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">okno {windowLabel} · {Math.round(provider.usedPercent)}% zużyte</span></span>
       <span className="breakdown-bar" role="img" aria-label={`${providerNames[provider.provider]}: ${Math.round(provider.usedPercent)}% limitu 5h. Zadania Cezara ${points.format(cezar)}, inne sesje ${points.format(sessions)}, inne źródła ${points.format(other)}, sprzed pomiarów ${points.format(before)} punktów procentowych.`}>
         {pieces.map((piece, i) => <i key={i} title={piece.label} style={{ flex: `${piece.percent} 1 0`, background: piece.color }} />)}
         <i className="breakdown-free" style={{ flex: `${Math.max(0, 100 - provider.usedPercent)} 1 0` }} />
@@ -119,7 +121,7 @@ export function UsageBreakdownCard({ usage }: { usage: UsageBreakdownState }) {
   return <section className="pulpit-card breakdown-card" aria-labelledby="breakdown-title">
     <div className="pulpit-card-head">
       <h2 id="breakdown-title">Podział zużycia AI</h2>
-      <span className="meta">bieżące okno 5h</span>
+      <span className="meta">bieżące okno 5h{usage.observedAt ? ` · pomiar ${clock(usage.observedAt)}` : ''}</span>
     </div>
     {usage.status === 'loading' ? <Empty>Ładowanie podziału…</Empty> : !providers.length ? <Empty>Brak aktualnych pomiarów limitów.</Empty> :
       <div className="breakdown-list">{usage.providers.map(p => <ProviderRow key={p.provider} provider={p} />)}</div>}

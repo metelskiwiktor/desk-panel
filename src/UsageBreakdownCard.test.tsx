@@ -26,6 +26,13 @@ it('lists sources under group headings, with Cezar tasks and helper calls togeth
   expect(screen.getByText('Sprzed pomiarów')).toBeTruthy();
 });
 
+it('puts the window and the time of the last reading on the day', () => {
+  const start = new Date(2026, 9, 17, 10, 10).getTime(), observed = new Date(2026, 9, 17, 12, 28).getTime();
+  render(<UsageBreakdownCard usage={usage({ observedAt: observed, providers: [{ ...claude, resetAt: start + 5 * 3600000 }, gemini] })} />);
+  expect(screen.getByText(/okno 10:10–15:10 · 92% zużyte/)).toBeTruthy();
+  expect(screen.getByText('bieżące okno 5h · pomiar 12:28')).toBeTruthy();
+});
+
 it('says when a provider has no current reading instead of drawing an empty bar', () => {
   render(<UsageBreakdownCard usage={usage()} />);
   expect(screen.getByText('brak aktualnego pomiaru')).toBeTruthy();
