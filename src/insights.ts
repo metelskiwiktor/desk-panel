@@ -65,9 +65,9 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
       if (account.provider === 'AGY') continue; // Group windows have no inferred nominal pacing.
       for (const snapshot of account.snapshots) {
         if (quotaState(snapshot, now) !== 'fresh') continue;
-        const pace = quotaPace(snapshot, now)!;
-        const context = `${snapshot.window}: ${snapshot.usedPercent}% limitu · reset za ${quotaResetIn(snapshot.resetAt!, now)}`;
-        if (pace.tone !== 'green') {
+        const pace = quotaPace(snapshot, now);
+        const context = `${snapshot.window}: ${snapshot.usedPercent}% limitu${snapshot.resetAt ? ` · reset za ${quotaResetIn(snapshot.resetAt, now)}` : ''}`;
+        if (pace && pace.tone !== 'green') {
           const excess = snapshot.usedPercent! - pace.elapsedPercent;
           facts.push({
             id: `quota-pace:${account.provider}:${snapshot.window}:${snapshot.resetAt}:${pace.tone}`,
