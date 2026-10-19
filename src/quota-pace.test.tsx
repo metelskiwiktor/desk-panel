@@ -24,7 +24,7 @@ it('compares usage to elapsed time in both windows, including colour boundaries'
 
 it('bounds elapsed time and withholds pace for missing, expired and stale observations', () => {
   expect(quotaPace({ ...snapshot, resetAt: now + 400 * MINUTE }, now)?.elapsedPercent).toBe(0);
-  for (const patch of [{ usedPercent: null }, { resetAt: null }, { resetAt: now }, { stale: true }, { observedAt: now - 121 * 1000 }]) {
+  for (const patch of [{ usedPercent: null }, { resetAt: null }, { resetAt: now }, { stale: true }, { observedAt: now - 301 * 1000 }]) {
     expect(quotaPace({ ...snapshot, ...patch }, now)).toBeNull();
   }
 });

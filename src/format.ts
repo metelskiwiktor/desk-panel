@@ -22,3 +22,111 @@ export function allDayDate(start: string, end: string): string {
   const format = (n: number) => new Date(n).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', timeZone: 'UTC' });
   return first === last ? format(first) : `${format(first)} — ${format(last)}`;
 }
+
+export interface ElapsedInfo {
+  text: string;
+  isLong: boolean;
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
+export function formatElapsed(startAt?: number, now = Date.now()): ElapsedInfo | null {
+  if (!startAt) return null;
+  const s = Math.max(0, Math.floor((now - startAt) / 1000));
+  const remSec = s % 60;
+  const m = Math.floor(s / 60);
+  const remMin = m % 60;
+  const h = Math.floor(m / 60);
+
+  if (h > 0) {
+    return {
+      text: `${h} godz. ${remMin} min`,
+      isLong: true,
+      hours: h,
+      minutes: remMin,
+      seconds: remSec,
+    };
+  }
+  if (m > 0) {
+    return {
+      text: `${m} min ${remSec} s`,
+      isLong: false,
+      hours: 0,
+      minutes: m,
+      seconds: remSec,
+    };
+  }
+  return {
+    text: `${s} s`,
+    isLong: false,
+    hours: 0,
+    minutes: 0,
+    seconds: s,
+  };
+}
+
+export function elapsed(startAt?: number, now = Date.now()): string {
+  const info = formatElapsed(startAt, now);
+  return info ? info.text : '';
+}
+
+export function cleanCommand(raw?: string): string {
+  if (!raw) return '';
+  let cmd = raw.trim();
+
+  // Strip PowerShell execution wrappers (e.g. pwsh.exe -Command '...')
+  const pwshPattern = /^(?:"[^"]*p(?:wsh|owershell)\.exe"|p(?:wsh|owershell)(?:\.exe)?)\s+.*-(?:Command|c)\s+(?:'([\s\S]*)'|"([\s\S]*)"|([\s\S]*))$/i;
+  const match = cmd.match(pwshPattern);
+  if (match) {
+    cmd = (match[1] ?? match[2] ?? match[3] ?? cmd).trim();
+  }
+
+  // Clean quote concatenation artifacts like '"', '", "', or \"
+  cmd = cmd.replace(/'"'/g, '"');
+  cmd = cmd.replace(/'"|"'|\\"/g, '"');
+  cmd = cmd.replace(/'(?=;)/g, '"');
+  cmd = cmd.replace(/';\s*"?/g, '; ');
+  cmd = cmd.replace(/;'\s*$/g, ';');
+  cmd = cmd.replace(/'\s*$/g, '');
+
+  // Collapse multiple newlines into single line
+  cmd = cmd.replace(/\r?\n\s*/g, ' ; ');
+  cmd = cmd.replace(/\s*;\s*/g, '; ').trim();
+
+  return cmd;
+}
+
+export function formatModelName(model: string): string {
+  if (!model) return '';
+  const trimmed = model.trim();
+  if (trimmed === 'sonnet' || trimmed === 'claude-3-7-sonnet' || trimmed === 'claude-3-7-sonnet-latest') {
+    return 'Claude 3.7 Sonnet';
+  }
+  if (trimmed === 'opus' || trimmed === 'claude-3-opus') {
+    return 'Claude 3 Opus';
+  }
+  if (trimmed === 'haiku' || trimmed === 'claude-3-5-haiku') {
+    return 'Claude 3.5 Haiku';
+  }
+  if (trimmed.includes('gemini-3.8-flash') || trimmed.includes('gemini-2.5-flash')) {
+    return 'Gemini 3.8 Flash';
+  }
+  return trimmed;
+}
+
+export function formatModelLabel(runner?: string, model?: string): string {
+  if (!runner && !model) return '';
+  if (!model) return runner || '';
+  if (!runner) return formatModelName(model);
+
+  const cleanModel = formatModelName(model);
+  const lowerRunner = runner.toLowerCase();
+  const lowerModel = cleanModel.toLowerCase();
+
+  if (lowerModel.includes(lowerRunner)) {
+    return cleanModel;
+  }
+  return `${runner} · ${cleanModel}`;
+}
+

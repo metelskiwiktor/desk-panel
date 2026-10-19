@@ -11,12 +11,43 @@ export interface Source<T> {
   data: T | null;
 }
 export type TaskStatus = 'needs-input' | 'review' | 'running' | 'queue' | 'done';
+
+export interface TaskActivityDetail {
+  state: 'executing_tool' | 'thinking' | 'waiting_for_input' | 'completed' | 'queued';
+  activeTool?: string;
+  activeToolInput?: string;
+  elapsedMs?: number;
+  message?: string;
+}
+
+export interface TaskChecks {
+  executed: boolean;
+  total: number;
+  passed: number;
+  failed: number;
+  items?: Array<{
+    command: string;
+    status: 'passed' | 'failed' | 'running' | 'unknown';
+    exitCode?: number;
+    outputExcerpt?: string;
+  }>;
+}
+
 export interface Task {
   id: string;
   title: string;
   project: string;
   runner?: string;
+  model?: string;
+  branch?: string;
+  workflow?: string;
   activity?: string;
+  activityDetail?: TaskActivityDetail;
+  checks?: TaskChecks;
+  diffStat?: { adds: number; dels: number; files: number };
+  currentStep?: { id: string; name?: string; status: string } | null;
+  question?: string | null;
+  lastMessage?: string;
   status: TaskStatus;
   startedAt?: number;
   checkedAt: number;
@@ -86,7 +117,7 @@ export const MINUTE = 60_000;
 export const MAX_AGE = {
   tasks: 75_000,
   calendar: 5 * MINUTE,
-  quotas: 2 * MINUTE,
+  quotas: 5 * MINUTE,
   system: 15_000,
   mail: 2 * MINUTE,
 };

@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { Empty, SourceNote, Sparkline, quotaReason } from './components';
-import { time } from './format';
+import { time, elapsed, formatElapsed, cleanCommand, formatModelLabel } from './format';
 import { todayAgenda, upcomingDays } from './agenda';
 import { MAX_AGE, fresh, orderedTasks, quotaState, taskLabels, type DashboardData, type Detail, type Provider, type QuotaAccount, type QuotaSnapshot, type SystemSample, type Task } from './model';
 import { normalizeQuotaWindow, quotaPace, quotaPaceLabels, quotaResetIn, sortSnapshots } from './quota-pace';
@@ -96,38 +96,235 @@ function TodayColumn({ data, now, open }: { data: DashboardData; now: number; op
 function CezarPanel({ data, snapshot, now, open, showAll }: {
   data: DashboardData; snapshot: CezarSnapshot | null; now: number; open: (d: Detail) => void; showAll: () => void;
 }) {
-  const tasks = orderedTasks((data.tasks.data ?? []).filter(t => t.status !== 'done'));
-  const waiting = tasks.filter(t => t.status === 'needs-input' || t.status === 'review');
+  const allTasks = orderedTasks((data.tasks.data ?? []).filter(t => t.status !== 'done'));
+  const waiting = allTasks.filter(t => t.status === 'needs-input' || t.status === 'review');
+  const running = allTasks.filter(t => t.status === 'running');
+  const queue = allTasks.filter(t => t.status === 'queue');
   const counts = snapshot?.counts;
   const ok = fresh(data.tasks, now, MAX_AGE.tasks);
-  if (data.tasks.data === null) return <section className={`pulpit-card pulpit-line ${data.tasks.status === 'loading' ? '' : 'warn'}`} aria-label="Cezar">
-    <i className="line-dot" /><span><strong>{data.tasks.status === 'loading' ? 'Cezar · ładowanie…' : 'Cezar niedostępny'}</strong>
-      {data.tasks.status !== 'loading' && <span className="meta">Ponawiam co 5 s</span>}</span>
-  </section>;
-  if (!waiting.length) {
-    const running = tasks.filter(t => t.status === 'running');
-    return <section className="pulpit-card pulpit-line" aria-label="Cezar">
-      <i className="line-dot ok" />
-      <span><strong>Cezar · nic nie czeka na Ciebie</strong>
-        <span className="meta">{running.length ? `${running.length} w toku: ${running.map(t => t.title).join(', ')}` : tasks.length ? `${tasks.length} w kolejce` : 'Brak zadań'}</span></span>
-      <button className="icon-button" aria-label="Wszystkie zadania" onClick={showAll}><ChevronDown size={18} /></button>
-      {!ok && <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />}
-    </section>;
+
+  if (data.tasks.data === null) {
+    const isLoading = data.tasks.status === 'loading';
+    return (
+      <section className="pulpit-card cezar-hud cezar-hud-compact" aria-label="Cezar">
+        <div className="hud-idle-button">
+          <div className="hud-idle-left">
+            <i className={`hud-dot ${isLoading ? 'idle' : 'alert'}`} />
+            <div className="hud-idle-texts">
+              <strong className="hud-idle-title">{isLoading ? 'Cezar · ładowanie…' : 'Cezar niedostępny'}</strong>
+              <span className="hud-idle-meta">{isLoading ? 'Pobieranie stanu zadań...' : 'Ponawiam co 5 s'}</span>
+            </div>
+          </div>
+          <div className="hud-idle-right">
+            <span className={`hud-badge-status ${isLoading ? 'idle' : 'alert'}`}>
+              {isLoading ? 'ŁADOWANIE' : 'OFFLINE'}
+            </span>
+          </div>
+        </div>
+      </section>
+    );
   }
-  const shown = tasks.slice(0, 3);
-  return <section className="pulpit-card cezar-panel" aria-labelledby="cezar-title">
-    <div className="pulpit-card-head">
-      <h2 id="cezar-title">Cezar</h2>
-      <span className="meta">{counts ? (['running', 'queue', 'review', 'needs-input'] as const).filter(s => counts[s]).map(s => `${counts[s]} ${taskLabels[s].toLowerCase()}`).join(' · ') : ''}</span>
-    </div>
-    {shown.map((task: Task) => <button key={task.id} className={`cezar-task ${task.status}`} onClick={() => open({ kind: 'task', id: task.id })}>
-      <span><strong>{task.title}</strong><span className="meta">{[task.project, task.runner].filter(Boolean).join(' · ')}</span></span>
-      <span className={`badge ${task.status}`}>{task.status === 'needs-input' ? 'Czeka na Ciebie' : taskLabels[task.status]}</span>
-    </button>)}
-    {tasks.length > shown.length && <button className="link-button" onClick={showAll}>i {tasks.length - shown.length} więcej</button>}
-    {!ok && <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />}
-    {snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-  </section>;
+
+  if (!waiting.length && !running.length) {
+    return (
+      <section className="pulpit-card cezar-hud cezar-hud-compact" aria-label="Cezar">
+        <button
+          type="button"
+          className="hud-idle-button"
+          onClick={showAll}
+          aria-label="Otwórz zadania Cezara"
+        >
+          <div className="hud-idle-left">
+            <i className="hud-dot live" />
+            <div className="hud-idle-texts">
+              <strong className="hud-idle-title">Cezar · nic nie czeka na Ciebie</strong>
+              <span className="hud-idle-meta">
+                {queue.length ? `${queue.length} w kolejce` : 'Brak zadań w toku · system gotowy'}
+              </span>
+            </div>
+          </div>
+          <div className="hud-idle-right">
+            <span className="hud-badge-status idle">GOTOWY</span>
+            <span className="hud-header-arrow">→</span>
+          </div>
+        </button>
+        {!ok && <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />}
+      </section>
+    );
+  }
+
+  // Do NOT duplicate running count in countsLabel: only show other non-running buckets (queue, review, needs-input)
+  const nonRunningCounts = counts
+    ? (['queue', 'review', 'needs-input'] as const)
+        .filter(s => counts[s] && counts[s]! > 0)
+        .map(s => `${counts[s]} ${taskLabels[s].toLowerCase()}`)
+        .join(' · ')
+    : '';
+
+  const isLive = running.length > 0;
+  const hasAlert = waiting.length > 0;
+
+  const shownWaiting = waiting.slice(0, 3);
+  const shownRunning = running.slice(0, 3);
+  const shownCount = shownWaiting.length + shownRunning.length;
+
+  return (
+    <section className="pulpit-card cezar-hud" aria-labelledby="cezar-title">
+      <button
+        type="button"
+        className="hud-header"
+        onClick={showAll}
+        aria-label="Otwórz zadania Cezara"
+      >
+        <div className="hud-header-title">
+          <i className={`hud-dot ${hasAlert ? 'alert' : isLive ? 'live' : 'idle'}`} />
+          <h2 id="cezar-title">Cezar</h2>
+          {nonRunningCounts && <span className="meta hud-counts">{nonRunningCounts}</span>}
+        </div>
+        <div className="hud-header-right">
+          <span className={`hud-badge-status ${isLive ? 'live' : hasAlert ? 'alert' : 'idle'}`}>
+            {isLive
+              ? `${running.length} ${running.length === 1 ? 'PROCES AKTYWNY' : 'PROCESY AKTYWNE'}`
+              : hasAlert
+              ? 'WYMAGA UWAGI'
+              : 'GOTOWY'}
+          </span>
+          <span className="hud-header-arrow">→</span>
+        </div>
+      </button>
+
+      {/* Attention rows for tasks needing input or review */}
+      {shownWaiting.map((task: Task) => (
+        <button
+          key={task.id}
+          className={`hud-alert-row ${task.status}`}
+          onClick={() => open({ kind: 'task', id: task.id })}
+        >
+          <div className="hud-alert-badge">
+            <span className="hud-tag-project">{task.project}</span>
+            <span className="hud-tag-id">#{task.id.split('/')[1] || task.id}</span>
+            <span className="hud-tag-status">
+              {task.status === 'needs-input' ? 'Wymaga odpowiedzi' : taskLabels[task.status]}
+            </span>
+          </div>
+          <div className="hud-alert-content">
+            <strong className="hud-alert-title">{task.title}</strong>
+            {task.question && <p className="hud-alert-question">„{task.question}”</p>}
+          </div>
+          <span className="hud-alert-action">Otwórz →</span>
+        </button>
+      ))}
+
+      {/* Running active processes */}
+      {shownRunning.length > 0 && (
+        <div className="hud-processes">
+          {shownRunning.map((task: Task) => {
+            const rawId = task.id.split('/')[1] || task.id;
+            const shortId = rawId.slice(0, 8);
+            const tool = task.activityDetail?.activeTool || (task.activity ? 'BASH' : undefined);
+            const rawCmd = task.activityDetail?.activeToolInput || task.activityDetail?.message || task.activity;
+            const cleanedCmd = cleanCommand(rawCmd);
+            const diff = task.diffStat;
+            const hasDiff = diff && (diff.adds > 0 || diff.dels > 0);
+            const modelLabel = formatModelLabel(task.runner, task.model);
+            const elapsedInfo = formatElapsed(task.startedAt, now);
+            const isThinking = task.activityDetail?.state === 'thinking';
+            const isTool = !!cleanedCmd && !isThinking;
+
+            return (
+              <button
+                key={task.id}
+                className="hud-process-block"
+                onClick={() => open({ kind: 'task', id: task.id })}
+              >
+                <div className="hud-process-head">
+                  <div className="hud-process-id-line">
+                    <span className="hud-chip-project">{task.project}</span>
+                    <span className="hud-chip-id">#{shortId}</span>
+                    {task.branch && <span className="hud-chip-branch">({task.branch})</span>}
+                    <span className="hud-process-title">{task.title}</span>
+                  </div>
+                  <div className="hud-process-meta-right">
+                    {task.workflow && <span className="hud-chip-workflow">{task.workflow}</span>}
+                    {modelLabel && <span className="hud-chip-runner">{modelLabel}</span>}
+                    {elapsedInfo && (
+                      <span
+                        className={`hud-chip-time ${elapsedInfo.isLong ? 'long-running' : 'normal'}`}
+                        title={`Czas trwania: ${elapsedInfo.text}`}
+                      >
+                        <span className="hud-time-icon">{elapsedInfo.isLong ? '⏳' : '⏱️'}</span>
+                        <span className="hud-time-val">{elapsedInfo.text}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Terminal gutter box with left border */}
+                <div className={`hud-process-terminal ${isThinking ? 'thinking' : isTool ? 'tool' : 'idle'}`}>
+                  {isThinking ? (
+                    <div className="hud-term-cmd thinking">
+                      <span className="hud-prompt-symbol">&gt;</span>{' '}
+                      <span className="hud-term-text">{task.activityDetail?.message || 'Analiza i planowanie kolejnego kroku...'}</span>
+                    </div>
+                  ) : cleanedCmd ? (
+                    <div className="hud-term-cmd tool">
+                      <span className="hud-prompt-symbol">$</span>{' '}
+                      <span className="hud-tool-tag">{tool || 'BASH'}</span>{' '}
+                      <code className="hud-cmd-code">{cleanedCmd}</code>
+                    </div>
+                  ) : (
+                    <div className="hud-term-cmd idle">
+                      <span className="hud-prompt-symbol">$</span>{' '}
+                      <span className="hud-term-text">Agent wykonuje zadanie w toku...</span>
+                    </div>
+                  )}
+
+                  {task.currentStep?.name && (
+                    <div className="hud-term-step">
+                      <span className="hud-step-label">Krok:</span> {task.currentStep.name}
+                      {task.currentStep.status && <span className="hud-step-status"> ({task.currentStep.status})</span>}
+                    </div>
+                  )}
+
+                  <div className="hud-term-footer">
+                    <div className="hud-term-meta-left">
+                      <span className="hud-diff-tag">
+                        Diff:{' '}
+                        {hasDiff ? (
+                          <>
+                            <span className="diff-plus">+{diff.adds}</span>{' '}
+                            <span className="diff-minus">-{diff.dels}</span>
+                            {diff.files > 0 && <span className="diff-files"> ({diff.files} pl.)</span>}
+                          </>
+                        ) : (
+                          <span className="diff-none">brak zmian</span>
+                        )}
+                      </span>
+                    </div>
+                    {task.checks && task.checks.total > 0 && (
+                      <span className={`hud-checks-tag ${task.checks.failed > 0 ? 'failed' : 'passed'}`}>
+                        Checks: {task.checks.passed}/{task.checks.total} OK
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+
+          })}
+        </div>
+      )}
+
+      {allTasks.length > shownCount && (
+        <button className="link-button hud-more-button" onClick={showAll}>
+          i {allTasks.length - shownCount} więcej
+        </button>
+      )}
+
+      {!ok && <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />}
+      {snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
+    </section>
+  );
 }
 
 const BREAKDOWN_RESET_SLACK_MS = 10 * 60_000;
