@@ -7,7 +7,7 @@ import { OAuth2Client, LoginTicket } from 'google-auth-library';
 import { createGoogleAccount, type GoogleService } from './google-oauth';
 import { readPrivate, writePrivate } from './private-store';
 
-vi.mock('./private-store', () => ({ readPrivate: vi.fn(async () => { throw new Error('missing'); }), writePrivate: vi.fn(async () => {}) }));
+vi.mock('./private-store', () => ({ readPrivate: vi.fn(async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); }), writePrivate: vi.fn(async () => {}) }));
 const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks(); vi.clearAllMocks();
@@ -46,6 +46,18 @@ describe('Google OAuth', () => {
     expect(url.searchParams.get('login_hint')).toBe('owner@gmail.com');
     expect(url.searchParams.get('scope')).toContain('calendar.readonly');
     expect(await auth.status()).toMatchObject({ status: 'unavailable', reason: 'login_required' });
+  });
+  it('reports an unreadable saved sign-in as storage_failed, not as a missing login', async () => {
+    const auth = await setup();
+    vi.mocked(readPrivate).mockRejectedValueOnce(new Error('Private store unavailable'));
+    expect(await auth.status()).toMatchObject({ status: 'unavailable', reason: 'storage_failed' });
+  });
+  it('reports a refresh token rejected by Google as token_expired', async () => {
+    const auth = await setup();
+    vi.mocked(readPrivate).mockResolvedValueOnce({ clientId: 'test.apps.googleusercontent.com', email: 'owner@gmail.com', refreshToken: 'fake-old' });
+    vi.spyOn(OAuth2Client.prototype, 'request').mockRejectedValue({ response: { status: 400, data: { error: 'invalid_grant' } } });
+    await expect(auth.request('calendar', 'https://www.googleapis.com/calendar/v3/calendars/x/events')).rejects.toMatchObject({ reason: 'token_expired' });
+    expect(await auth.status()).toMatchObject({ status: 'unavailable', reason: 'token_expired' });
   });
   it('rejects wrong/expired state before exchanging codes', async () => {
     const auth = await setup();

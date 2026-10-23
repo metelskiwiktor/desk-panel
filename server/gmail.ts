@@ -80,7 +80,10 @@ export function createMailReader(accounts: Account[], now = Date.now) {
       }
       state.status = auth || disabled ? 'unavailable' : 'offline';
       state.message = auth ? (error.reason === 'scopes_missing' ? 'Połącz konto ponownie, aby panel mógł obsługiwać Gmail.'
-        : error.reason === 'client_missing' || error.reason === 'invalid_client' ? 'Dodaj klienta OAuth Google.' : 'Zaloguj się przez Google w Ustawieniach.')
+        : error.reason === 'client_missing' || error.reason === 'invalid_client' ? 'Dodaj klienta OAuth Google.'
+        : error.reason === 'token_expired' ? 'Google odrzucił zapisane logowanie (wygasło lub zostało cofnięte). Zaloguj się ponownie w Ustawieniach.'
+        : error.reason === 'storage_failed' ? 'Nie udało się odczytać zapisanego logowania z dysku. Zaloguj się ponownie w Ustawieniach.'
+        : 'Zaloguj się przez Google w Ustawieniach.')
         : disabled ? 'Włącz Gmail API w projekcie klienta OAuth Google.'
         : limited ? 'Konto jest połączone. Gmail ograniczył liczbę zapytań. Ponowię odczyt automatycznie po przerwie.'
         : 'Nie udało się odczytać Gmaila. Ponowię połączenie.';

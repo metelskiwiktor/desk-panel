@@ -15,7 +15,7 @@ const clientKey = z.object({ client_id: z.string().endsWith('.apps.googleusercon
 const clientSchema = z.union([z.object({ installed: clientKey }), z.object({ web: clientKey })]);
 // `scopes` is absent in tokens saved before multi-account support; those were calendar-only.
 const tokenSchema = z.object({ clientId: z.string(), email: z.string(), refreshToken: z.string().min(1), scopes: z.array(z.string()).optional() });
-export type GoogleAuthReason = 'client_missing' | 'login_required' | 'invalid_client' | 'invalid_callback' | 'wrong_account' | 'storage_failed' | 'scopes_missing';
+export type GoogleAuthReason = 'client_missing' | 'login_required' | 'invalid_client' | 'invalid_callback' | 'wrong_account' | 'storage_failed' | 'scopes_missing' | 'token_expired';
 export class GoogleAuthError extends Error {
   constructor(public readonly reason: GoogleAuthReason) { super(reason); }
 }
@@ -25,7 +25,7 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
   const required = options.services.map(s => SCOPES[s]);
   let active: { client: OAuth2Client; scopes: string[] } | undefined;
   let flow: { state: string; verifier: string; expires: number; client: OAuth2Client; clientId: string } | undefined;
-  let needsLogin = false;
+  let expired = false; // Google rejected the saved refresh token (invalid_grant or 401).
   let loading: Promise<{ client: OAuth2Client; scopes: string[] }> | undefined;
   async function configured() {
     let raw: unknown;
@@ -40,17 +40,19 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
     return { client, clientId: key.client_id };
   }
   async function session() {
-    if (needsLogin) throw new GoogleAuthError('login_required');
+    if (expired) throw new GoogleAuthError('token_expired');
     if (active) return active;
     loading ??= (async () => {
       const { client, clientId } = await configured();
-      try {
-        const stored = tokenSchema.parse(await readPrivate(options.tokenFile));
-        if (stored.clientId !== clientId || stored.email !== options.email) throw new Error('Mismatched account');
-        client.setCredentials({ refresh_token: stored.refreshToken });
-        active = { client, scopes: stored.scopes ?? [SCOPES.calendar] };
-        return active;
-      } catch { throw new GoogleAuthError('login_required'); }
+      let stored: z.infer<typeof tokenSchema>;
+      try { stored = tokenSchema.parse(await readPrivate(options.tokenFile)); }
+      // No saved sign-in is a normal first run; an unreadable one (DPAPI, corrupt file) is a different problem.
+      catch (error) { throw new GoogleAuthError((error as { code?: string }).code === 'ENOENT' ? 'login_required' : 'storage_failed'); }
+      // The sign-in belongs to another OAuth client or account, so it cannot be refreshed.
+      if (stored.clientId !== clientId || stored.email !== options.email) throw new GoogleAuthError('login_required');
+      client.setCredentials({ refresh_token: stored.refreshToken });
+      active = { client, scopes: stored.scopes ?? [SCOPES.calendar] };
+      return active;
     })().finally(() => { loading = undefined; });
     return loading;
   }
@@ -99,7 +101,7 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
       catch { throw new GoogleAuthError('storage_failed'); }
       current.client.setCredentials(tokens);
       active = { client: current.client, scopes: granted };
-      needsLogin = false;
+      expired = false;
     },
     /** Authorized Google API call; a service whose scope was not granted fails with scopes_missing. */
     async request(service: GoogleService, url: string, init: { method?: 'GET' | 'POST'; params?: Record<string, string | string[]>; data?: unknown } = {}) {
@@ -112,7 +114,7 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
       } catch (error) {
         const e = error as { response?: { status?: number; data?: { error?: unknown } } };
         if (e.response?.status === 401 || e.response?.data?.error === 'invalid_grant') {
-          active = undefined; needsLogin = true; throw new GoogleAuthError('login_required');
+          active = undefined; expired = true; throw new GoogleAuthError('token_expired');
         }
         throw error;
       }

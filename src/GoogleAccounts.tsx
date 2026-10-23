@@ -11,6 +11,8 @@ function describe(account: GoogleAccountStatus) {
   if (account.status === 'connected') return 'Połączono z Twoim kontem.';
   if (account.reason === 'client_missing' || account.reason === 'invalid_client') return 'Najpierw dodaj pobrany plik klienta OAuth Google do lokalnego serwera.';
   if (account.reason === 'scopes_missing') return `Połącz ponownie, aby panel mógł obsługiwać: ${names(account.missing)}.`;
+  if (account.reason === 'token_expired') return 'Google odrzucił zapisane logowanie (wygasło lub zostało cofnięte). Połącz ponownie.';
+  if (account.reason === 'storage_failed') return 'Nie udało się odczytać zapisanego logowania z dysku. Połącz ponownie.';
   return 'Konto czeka na Twoją zgodę Google.';
 }
 

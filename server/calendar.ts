@@ -69,7 +69,10 @@ export function createCalendarReader(calendarId: string, request: Request, now =
         const disabled = failure.response?.data?.error?.errors?.some(e => e.reason === 'accessNotConfigured');
         const unavailable = error instanceof GoogleAuthError || status === 401 || status === 403 || status === 404;
         const message = error instanceof GoogleAuthError ? (error.reason === 'client_missing' || error.reason === 'invalid_client'
-          ? 'Dodaj klienta OAuth Google, a następnie zaloguj się w Ustawieniach.' : 'Zaloguj się przez Google w Ustawieniach panelu.')
+          ? 'Dodaj klienta OAuth Google, a następnie zaloguj się w Ustawieniach.'
+          : error.reason === 'token_expired' ? 'Google odrzucił zapisane logowanie (wygasło lub zostało cofnięte). Zaloguj się ponownie w Ustawieniach panelu.'
+          : error.reason === 'storage_failed' ? 'Nie udało się odczytać zapisanego logowania z dysku. Zaloguj się ponownie w Ustawieniach panelu.'
+          : 'Zaloguj się przez Google w Ustawieniach panelu.')
           : disabled ? 'Włącz Google Calendar API w projekcie klienta OAuth.'
           : status === 403 || status === 404 ? 'Sprawdź zgodę Google i identyfikator kalendarza.'
           : status === 401 ? 'Zaloguj się ponownie przez Google w Ustawieniach.'
