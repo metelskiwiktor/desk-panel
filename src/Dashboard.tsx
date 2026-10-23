@@ -1,8 +1,8 @@
 import { SourceNote, Sparkline } from './components';
-import { cleanCommand, formatElapsed, formatModelLabel } from './format';
+import { CezarPanel } from './CezarCard';
 import { dayRibbon } from './day-ribbon';
 import { DayRibbonView, MeetingFocus } from './DayRibbon';
-import { MAX_AGE, fresh, orderedTasks, taskLabels, type DashboardData, type Detail, type SystemSample, type Task } from './model';
+import { MAX_AGE, fresh, type DashboardData, type Detail, type SystemSample } from './model';
 import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
 import { MailFeed } from './MailFeed';
@@ -74,189 +74,6 @@ function SystemAlertCard({ data, now, open }: { data: DashboardData; now: number
   </button>;
 }
 
-/** Cezar's tasks that wait for you or run. Without any, only the chip in the header speaks for Cezar. */
-function CezarPanel({ data, snapshot, now, open, showAll }: {
-  data: DashboardData; snapshot: CezarSnapshot | null; now: number; open: (d: Detail) => void; showAll: () => void;
-}) {
-  const allTasks = orderedTasks((data.tasks.data ?? []).filter(t => t.status !== 'done'));
-  const waiting = allTasks.filter(t => t.status === 'needs-input' || t.status === 'review');
-  const running = allTasks.filter(t => t.status === 'running');
-  const counts = snapshot?.counts;
-  const ok = fresh(data.tasks, now, MAX_AGE.tasks);
-
-  // Do NOT duplicate running count in countsLabel: only show other non-running buckets (queue, review, needs-input)
-  const nonRunningCounts = counts
-    ? (['queue', 'review', 'needs-input'] as const)
-        .filter(s => counts[s] && counts[s]! > 0)
-        .map(s => `${counts[s]} ${taskLabels[s].toLowerCase()}`)
-        .join(' · ')
-    : '';
-
-  const isLive = running.length > 0;
-  const hasAlert = waiting.length > 0;
-
-  const shownWaiting = waiting.slice(0, 3);
-  const shownRunning = running.slice(0, 3);
-  const shownCount = shownWaiting.length + shownRunning.length;
-
-  return (
-    <section className="pulpit-card cezar-hud" aria-labelledby="cezar-title">
-      <button
-        type="button"
-        className="hud-header"
-        onClick={showAll}
-        aria-label="Otwórz zadania Cezara"
-      >
-        <div className="hud-header-title">
-          <i className={`hud-dot ${hasAlert ? 'alert' : isLive ? 'live' : 'idle'}`} />
-          <h2 id="cezar-title">Cezar</h2>
-          {nonRunningCounts && <span className="meta hud-counts">{nonRunningCounts}</span>}
-        </div>
-        <div className="hud-header-right">
-          <span className={`hud-badge-status ${isLive ? 'live' : hasAlert ? 'alert' : 'idle'}`}>
-            {isLive
-              ? `${running.length} ${running.length === 1 ? 'PROCES AKTYWNY' : 'PROCESY AKTYWNE'}`
-              : hasAlert
-              ? 'WYMAGA UWAGI'
-              : 'GOTOWY'}
-          </span>
-          <span className="hud-header-arrow">→</span>
-        </div>
-      </button>
-
-      {/* Attention rows for tasks needing input or review */}
-      {shownWaiting.map((task: Task) => (
-        <button
-          key={task.id}
-          className={`hud-alert-row ${task.status}`}
-          onClick={() => open({ kind: 'task', id: task.id })}
-        >
-          <div className="hud-alert-badge">
-            <span className="hud-tag-project">{task.project}</span>
-            <span className="hud-tag-id">#{task.id.split('/')[1] || task.id}</span>
-            <span className="hud-tag-status">
-              {task.status === 'needs-input' ? 'Wymaga odpowiedzi' : taskLabels[task.status]}
-            </span>
-          </div>
-          <div className="hud-alert-content">
-            <strong className="hud-alert-title">{task.title}</strong>
-            {task.question && <p className="hud-alert-question">„{task.question}”</p>}
-          </div>
-        </button>
-      ))}
-
-      {/* Running active processes */}
-      {shownRunning.length > 0 && (
-        <div className="hud-processes">
-          {shownRunning.map((task: Task) => {
-            const rawId = task.id.split('/')[1] || task.id;
-            const shortId = rawId.slice(0, 8);
-            const tool = task.activityDetail?.activeTool || (task.activity ? 'BASH' : undefined);
-            const rawCmd = task.activityDetail?.activeToolInput || task.activityDetail?.message || task.activity;
-            const cleanedCmd = cleanCommand(rawCmd);
-            const diff = task.diffStat;
-            const hasDiff = diff && (diff.adds > 0 || diff.dels > 0);
-            const modelLabel = formatModelLabel(task.runner, task.model);
-            const elapsedInfo = formatElapsed(task.startedAt, now);
-            const isThinking = task.activityDetail?.state === 'thinking';
-            const isTool = !!cleanedCmd && !isThinking;
-
-            return (
-              <button
-                key={task.id}
-                className="hud-process-block"
-                onClick={() => open({ kind: 'task', id: task.id })}
-              >
-                <div className="hud-process-head">
-                  <div className="hud-process-id-line">
-                    <span className="hud-chip-project">{task.project}</span>
-                    <span className="hud-chip-id">#{shortId}</span>
-                    {task.branch && <span className="hud-chip-branch">({task.branch})</span>}
-                    <span className="hud-process-title">{task.title}</span>
-                  </div>
-                  <div className="hud-process-meta-right">
-                    {task.workflow && <span className="hud-chip-workflow">{task.workflow}</span>}
-                    {modelLabel && <span className="hud-chip-runner">{modelLabel}</span>}
-                    {elapsedInfo && (
-                      <span
-                        className={`hud-chip-time ${elapsedInfo.isLong ? 'long-running' : 'normal'}`}
-                        title={`Czas trwania: ${elapsedInfo.text}`}
-                      >
-                        <span className="hud-time-icon">{elapsedInfo.isLong ? '⏳' : '⏱️'}</span>
-                        <span className="hud-time-val">{elapsedInfo.text}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Terminal gutter box with left border */}
-                <div className={`hud-process-terminal ${isThinking ? 'thinking' : isTool ? 'tool' : 'idle'}`}>
-                  {isThinking ? (
-                    <div className="hud-term-cmd thinking">
-                      <span className="hud-prompt-symbol">&gt;</span>{' '}
-                      <span className="hud-term-text">{task.activityDetail?.message || 'Analiza i planowanie kolejnego kroku...'}</span>
-                    </div>
-                  ) : cleanedCmd ? (
-                    <div className="hud-term-cmd tool">
-                      <span className="hud-prompt-symbol">$</span>{' '}
-                      <span className="hud-tool-tag">{tool || 'BASH'}</span>{' '}
-                      <code className="hud-cmd-code">{cleanedCmd}</code>
-                    </div>
-                  ) : (
-                    <div className="hud-term-cmd idle">
-                      <span className="hud-prompt-symbol">$</span>{' '}
-                      <span className="hud-term-text">Agent wykonuje zadanie w toku...</span>
-                    </div>
-                  )}
-
-                  {task.currentStep?.name && (
-                    <div className="hud-term-step">
-                      <span className="hud-step-label">Krok:</span> {task.currentStep.name}
-                      {task.currentStep.status && <span className="hud-step-status"> ({task.currentStep.status})</span>}
-                    </div>
-                  )}
-
-                  <div className="hud-term-footer">
-                    <div className="hud-term-meta-left">
-                      <span className="hud-diff-tag">
-                        Diff:{' '}
-                        {hasDiff ? (
-                          <>
-                            <span className="diff-plus">+{diff.adds}</span>{' '}
-                            <span className="diff-minus">-{diff.dels}</span>
-                            {diff.files > 0 && <span className="diff-files"> ({diff.files} pl.)</span>}
-                          </>
-                        ) : (
-                          <span className="diff-none">brak zmian</span>
-                        )}
-                      </span>
-                    </div>
-                    {task.checks && task.checks.total > 0 && (
-                      <span className={`hud-checks-tag ${task.checks.failed > 0 ? 'failed' : 'passed'}`}>
-                        Checks: {task.checks.passed}/{task.checks.total} OK
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-
-          })}
-        </div>
-      )}
-
-      {allTasks.length > shownCount && (
-        <button className="link-button hud-more-button" onClick={showAll}>
-          i {allTasks.length - shownCount} więcej
-        </button>
-      )}
-
-      {!ok && <SourceNote source={data.tasks} now={now} maxAge={MAX_AGE.tasks} refreshEveryMs={5000} />}
-      {snapshot?.partial && <p className="warning">Lista częściowa — nie wszystkie zadania są dostępne.</p>}
-    </section>
-  );
-}
-
 /**
  * The dashboard's frame: today on the left (the meeting that is about to start, today's workout, the day as a ribbon),
  * the AI limits on the right, the next days underneath. Cezar, mail and a computer alarm appear on the right only
@@ -293,7 +110,7 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
       {(quotasOn || side) && <aside className="p2-side">
         {quotasOn && <QuotaRings data={data} now={now} open={open} compact={side} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
         {alert && <SystemAlertCard data={data} now={now} open={open} />}
-        {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} />}
+        {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={mailShown} />}
         {mailShown && <MailFeed mail={mail} now={now} open={open} />}
       </aside>}
     </div>

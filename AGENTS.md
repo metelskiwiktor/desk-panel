@@ -10,7 +10,8 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   [--device ID|all] [--scale N|primary|all]`: run the real UI against
   `scenarios/NAME.json` (Vite + a scenario API on free ports, never the service
   port) and take Playwright screenshots into output/screenshots. Use this to
-  check UI changes visually on the target screens.
+  check UI changes visually on the target screens. `--query ambient=day|night` shoots the
+  idle clock instead of walking the pages.
 - `just devices`: target screens from devices.json with derived CSS sizes.
   Screen sizes live only there; the layout is fluid and never reads it.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only

@@ -6,7 +6,7 @@ import { mailActionSchema } from './mail-contract';
 import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
-export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings';
+export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings' | 'inbox';
 export const scenarioFile = (name: ScenarioName) => join(process.cwd(), 'scenarios', `${name}.json`);
 
 /** What a UI hook holds when the endpoint fails or never answers. */

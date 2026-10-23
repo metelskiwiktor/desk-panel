@@ -45,6 +45,9 @@ import { useTraining } from './useTraining';
 import { UsageBreakdownCard } from './UsageBreakdownCard';
 import { WorkoutDetail } from './TrainingCard';
 import { usePollingEnabled } from './polling';
+import { Ambient } from './AmbientClock';
+import { ambientLines, useAmbient } from './ambient-mode';
+import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
@@ -189,6 +192,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     </Card>
   );
   const visible = (id: WidgetId) => layout.widgets.find((w) => w.id === id)?.visible ?? true;
+  const ambient = useAmbient(pollingEnabled && visible('ambient'), now);
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')
@@ -356,8 +360,15 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
       <Empty>Brak danych tego konta.</Empty>
     );
   }
+  const ambientView = ambient.ambient && <Ambient now={now} night={ambient.night} wake={ambient.wake} lines={ambientLines({
+    now, timeZone: training.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    events: withoutPlanDuplicates(data.calendar.data ?? [], training.data?.workouts ?? []),
+    workouts: training.data?.workouts ?? [], activities: training.data?.activities ?? [],
+    tasks: data.tasks.data, unreadMail: mail.source.status === 'connected' ? mail.source.total : null,
+  })} />;
   return (
     <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`}>
+      {ambientView}
       <header className="top-bar">
         <div className="top-clock">
           <time dateTime={new Date(now).toISOString()}>{time(now)}</time>

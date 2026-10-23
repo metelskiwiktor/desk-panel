@@ -1,6 +1,7 @@
 // Runs the real UI (Vite) against a scenario API, optionally taking Playwright screenshots.
 //   npm run scenario -- standard                       → serve until Ctrl+C
 //   npm run scenario -- offline --shot                 → output/screenshots/offline-*.png
+//   npm run scenario -- standard --shot --query ambient=night   (first screen with a URL query, no page walk)
 //   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device medialove-14 --scale all
 // The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
@@ -23,6 +24,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   scale: { type: 'string', default: 'primary' },
   out: { type: 'string', default: 'output/screenshots' },
   nav: { type: 'boolean', default: false },
+  query: { type: 'string' },
 } });
 const name = positionals[0] ?? 'standard';
 const file = name.endsWith('.json') ? resolve(name) : join(process.cwd(), 'scenarios', `${name}.json`);
@@ -55,8 +57,16 @@ if (!values.shot) {
       const page = await browser.newPage({ viewport: { width: target.width, height: target.height }, deviceScaleFactor: target.scale, hasTouch: target.device.touch });
       page.on('pageerror', error => console.error(`Błąd strony: ${error.message}`));
       page.on('console', message => { if (message.type() === 'error') console.error(`Konsola: ${message.text()}`); });
-      await page.goto(url);
+      await page.goto(values.query ? `${url}?${values.query}` : url);
       await page.waitForTimeout(1500);
+      if (values.query) {
+        // A query (e.g. ambient=night) changes what the first screen is; there is no navigation to walk through.
+        const path = join(values.out, `${label}-${values.query.replace(/[^a-z0-9]+/gi, '-')}-${target.label}.png`);
+        await page.screenshot({ path, fullPage: true });
+        console.log(path);
+        await page.close();
+        continue;
+      }
       for (const pageName of pages) {
         // The navigation bar is hidden until something in it has focus (the dashboard itself is the navigation).
         const entry = page.getByRole('navigation').getByRole('button', { name: PAGES[pageName] });

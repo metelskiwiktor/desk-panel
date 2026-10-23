@@ -7,6 +7,7 @@ export const widgetNames = {
   breakdown: 'Podział zużycia AI',
   insights: 'Zdarzenia panelu',
   mail: 'Poczta',
+  ambient: 'Zegar po bezczynności (10 min, w nocy 2 min)',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 /** Order, displayMode and priority are kept from earlier layouts; the dashboard sizes sections by content. */

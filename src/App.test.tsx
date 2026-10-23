@@ -189,6 +189,13 @@ describe('interaktywny panel', () => {
     expect(document.querySelector('.p2-frame')!.getAttribute('data-side')).toBe('true');
     expect(document.querySelector('.p2-quotas')!.classList.contains('compact')).toBe(true);
   });
+  it('jedno zadanie Cezara w toku to jedna linia obok poczty, bez nagłówka z licznikami', async () => {
+    renderWith('inbox');
+    const cezar = await screen.findByRole('region', { name: 'Cezar' });
+    expect(within(cezar).getAllByRole('button')).toHaveLength(1);
+    expect(within(cezar).getByRole('button', { name: /Poprawa wyszukiwania po etykietach/ })).toBeTruthy();
+    expect(within(await screen.findByRole('region', { name: 'Poczta' })).getAllByRole('button', { name: /^(Anna|GitHub)/ }).length).toBeGreaterThan(0);
+  });
   it('nawiguje dotknięciem paneli i przyciskami u góry zamiast paska na dole', async () => {
     const user = userEvent.setup();
     renderWith();

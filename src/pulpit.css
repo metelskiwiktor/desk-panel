@@ -11,6 +11,7 @@
   --p2-track: #232c3d;
   --p2-cal: #7ca9ff;
   --p2-train: #f07ab5;
+  --p2-cezar: #b79cff;
 }
 
 /* The home page fills the screen; the frame divides what is left after the top bar. */
@@ -22,7 +23,7 @@
 .p2-today { display: flex; flex-direction: column; gap: 12px; padding: 18px 24px 16px; overflow: hidden; }
 .p2-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .p2-side > * { flex: none; }
-.p2-side > .mail-card { flex: 1 1 0; min-height: 260px; }
+.p2-side > .p2-mail { flex: 1 1 0; min-height: 250px; }
 .p2-quotas { display: flex; flex-direction: column; gap: 10px; padding: 18px 22px; }
 /* Alone, the limits take the whole column; beside Cezar or mail they keep their own height. */
 .p2-frame[data-side="false"] .p2-quotas { flex: 1 1 auto; }
@@ -110,6 +111,66 @@
 .p2-hours { position: relative; height: 22px; margin-top: 8px; }
 .p2-hours span { position: absolute; transform: translateX(-50%); font-size: 12px; color: var(--p2-faint); }
 
+/* Side cards (Cezar, mail): the same surface as the other panels, a head that is a tap target, rows of 56 px and more */
+.p2-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px 12px; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-surface); }
+.p2-card.alert { border-color: color-mix(in srgb, var(--quota-yellow) 45%, var(--p2-line)); }
+.p2-card-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 6px; border: 0; border-radius: 12px; background: transparent; color: var(--p2-muted); text-align: left; }
+.p2-card-head h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--p2-text); }
+.p2-card-head svg { margin-left: auto; flex: none; }
+.p2-card-head .p2-meta { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p2-card-head .p2-badge { margin-left: auto; white-space: nowrap; }
+.p2-card-head .p2-badge + svg { margin-left: 0; }
+.p2-card-head .mail-accounts { margin-left: auto; flex: none; }
+.p2-badge.cezar { background: color-mix(in srgb, var(--p2-cezar) 22%, transparent); color: var(--p2-cezar); }
+.p2-more-link { align-self: flex-start; min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--p2-cal); font-size: 14px; }
+.p2-note.warn { color: var(--quota-yellow); }
+.p2-empty { margin: 0; padding: 14px 6px; font-size: 14px; color: var(--p2-muted); }
+
+/* Cezar: what waits for you first, then what runs */
+.p2-cdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--p2-cezar); }
+.p2-cdot.waits { background: var(--quota-yellow); }
+.p2-card.single { gap: 0; padding: 12px 12px 8px 18px; }
+.p2-card.single .p2-crow { min-height: 52px; }
+.p2-crows { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.p2-crow { --hover-bg: var(--p2-surface-2); display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 6px 8px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; }
+.p2-crow .p2-cdot { align-self: flex-start; margin-top: 8px; }
+.p2-crow.waits .p2-cdot { background: var(--quota-yellow); }
+.p2-crow-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.p2-crow-body > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 600; }
+.p2-crow-sub { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 13px; color: var(--p2-muted); }
+.p2-crow-sub > span { flex: none; }
+.p2-crow-sub em, .p2-crow-sub code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-style: normal; }
+.p2-crow-sub code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--p2-faint); }
+.p2-crow-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; text-align: right; }
+.p2-crow-side b { font-size: 14px; font-weight: 600; }
+.p2-crow.waits .p2-crow-side b { color: var(--quota-yellow); }
+.p2-crow.runs .p2-crow-side b { color: var(--p2-cezar); }
+.p2-crow-side small { font-size: 12px; color: var(--p2-muted); }
+.p2-crow-side small.bad { color: var(--quota-red); }
+@media (prefers-reduced-motion: no-preference) {
+  .p2-crow.runs .p2-cdot { animation: p2-pulse 2.4s ease-in-out infinite; }
+  @keyframes p2-pulse { 50% { opacity: 0.35; } }
+}
+
+/* Mail: sender, subject and a line of the message; swipe left = read, right = Trash */
+.p2-mail { min-height: 0; }
+.p2-mlist { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; overscroll-behavior: contain; }
+.p2-mlist .activity-swipe { border-radius: 12px; border-bottom: 1px solid var(--p2-line); }
+.p2-mlist .activity-swipe:last-child { border-bottom: 0; }
+.p2-mlist .activity-row { background: var(--p2-surface); }
+.p2-mrow { --hover-bg: var(--p2-surface-2); display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; min-height: 64px; padding: 8px 8px; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; touch-action: pan-y; user-select: none; }
+.p2-mrow-body { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.p2-mrow-from { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.p2-mrow-from strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: #c9d4e4; }
+.p2-mrow-from small { font-size: 12px; color: var(--p2-faint); }
+.p2-mrow-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.p2-mrow-snippet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--p2-muted); }
+.p2-mrow-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; font-size: 12px; color: var(--p2-muted); }
+.p2-undo { display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 0 6px; font-size: 13px; color: var(--p2-muted); }
+.p2-undo:empty { display: none; }
+.p2-undo button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-cal); font-size: 14px; }
+.p2-hint { font-size: 12px; color: var(--p2-faint); }
+
 /* AI limits as rings: outer 5h, inner 7d */
 .p2-quotas-head { display: flex; align-items: center; justify-content: space-between; }
 .p2-rings { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-around; }
@@ -133,9 +194,10 @@
 /* With Cezar, mail or an alarm present the rings fold into one row. */
 .p2-quotas.compact { padding: 12px 16px; }
 .p2-quotas.compact .p2-rings { flex: none; flex-direction: row; justify-content: stretch; gap: 8px; }
-.p2-quotas.compact .p2-ring-card { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 6px; padding: 4px; border: 0; text-align: center; }
-.p2-quotas.compact .p2-ring { width: 64px; height: 64px; }
-.p2-quotas.compact .p2-ring-text { align-items: center; }
+.p2-quotas.compact .p2-ring-card { flex: 1 1 0; min-width: 0; flex-direction: row; gap: 10px; padding: 2px 4px; border: 0; text-align: left; }
+.p2-quotas.compact .p2-ring { width: 56px; height: 56px; }
+.p2-quotas.compact .p2-ring text { font-size: 26px; }
+.p2-quotas.compact .p2-ring-text { align-items: flex-start; }
 .p2-quotas.compact .p2-ring-text strong { font-size: 15px; }
 .p2-quotas.compact .p2-ring-text .p2-meta { font-size: 12px; }
 .p2-quotas.compact .p2-ring-text .p2-meta + .p2-meta { display: none; }
@@ -176,3 +238,17 @@
 @media (prefers-reduced-motion: no-preference) {
   .p2-block, .p2-train, .p2-focus { transition: background-color 0.15s, border-color 0.15s; }
 }
+
+/* Ambient: the quiet clock after a while without a touch */
+.ambient { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; background: #000; color: #8b95a6; cursor: pointer; }
+.ambient.night { color: #4c5360; }
+.ambient-content { display: flex; flex-direction: column; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; transition: transform 2s ease-in-out; }
+.ambient-time { font-size: clamp(120px, 26vw, 360px); font-weight: 200; letter-spacing: -0.04em; line-height: 1; color: #c3cbd8; }
+.ambient.night .ambient-time { color: #6b7380; }
+.ambient-date { margin: 0 0 28px; font-size: clamp(20px, 2.6vw, 34px); font-weight: 300; }
+.ambient-lines { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; font-size: clamp(18px, 2.2vw, 28px); }
+.ambient-lines li { display: flex; align-items: center; gap: 14px; }
+.ambient-lines strong { font-weight: 600; color: #a9b3c4; }
+.ambient.night .ambient-lines strong { color: #5f6773; }
+.ambient-lines svg { flex: none; }
+@media (prefers-reduced-motion: reduce) { .ambient-content { transition: none; } }

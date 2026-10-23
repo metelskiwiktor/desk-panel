@@ -1,6 +1,6 @@
 # Desk Panel
 
-Lokalny panel React + TypeScript na pionowy ekran biurkowy. **Cezar i Google Calendar korzystają
+Lokalny panel React + TypeScript na poziomy ekran biurkowy (1280×720 CSS). **Cezar i Google Calendar korzystają
 z rzeczywistych danych. CPU, RAM oraz bieżące limity AI również są rzeczywiste.**
 Zegar korzysta z czasu przeglądarki.
 
@@ -260,13 +260,20 @@ a układ nie zależy od urządzenia:
   ile czasu okna już upłynęło, a kolor (zielony / żółty / czerwony) mówi tylko, czy zużycie wyprzedza
   czas; pod pierścieniami procent i reset. „Podział zużycia” otwiera szczegóły z podziałem na źródła;
 - gdy Cezar czeka lub pracuje, poczta ma wątki albo komputer przekroczył 90%, ich karty dochodzą pod
-  limity, a pierścienie zwijają się do jednego rzędu; bez nich limity zajmują całą kolumnę;
+  limity, a pierścienie zwijają się do jednego rzędu; bez nich limity zajmują całą kolumnę.
+  Cezar pokazuje najpierw zadania czekające na Ciebie (tytuł, projekt, pytanie), potem te w toku
+  (aktywność, czas, testy); jedno zadanie to jedna linia, a obok poczty widać dwie pozycje i „i N więcej”.
+  Poczta to lista nadawca / temat / początek wiadomości; przesunięcie w lewo oznacza przeczytane, w prawo kosz;
 - na dole siedem najbliższych dni: plan treningowy (czas i poziom, ✓ przy wykonanym) razem
   ze spotkaniami; wydarzenia całodniowe z zasubskrybowanego kalendarza Garmin, które dublują trening,
   są pomijane.
 
 Status treningu (wykonany / częściowo / nie zrobiony) wynika z nagrań z danego dnia, patrz Garmin Connect
 powyżej. Dopóki źródło nie odpowie, pasek dnia i tydzień pokazują kreskę zamiast „wolne”.
+Po 10 minutach bez dotyku (w nocy, 23–6, po 2) panel przechodzi w ciemny zegar: duża godzina, data i do czterech
+linii tego, co się liczy (najbliższe spotkanie, trening, Cezar czeka, nieprzeczytana poczta). Obraz dryfuje o kilka
+pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w to, co pod spodem. Wyłącza go odznaczenie
+„Zegar po bezczynności” w Ustawieniach; `?ambient=day|night` w adresie pokazuje go od razu.
 Poniżej 900 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona. Zdarzenia panelu
 (zwinięte: liczba i najnowsze z etykietą źródła, nowe rozwijają listę na 10 s) stoją w pasku u góry.
 
@@ -305,6 +312,7 @@ just scenario offline                                  # UI na scenariuszu, adre
 just screenshots standard                              # output/screenshots/standard-*.png
 just screenshots high-ram --pages pulpit,system --device medialove-14 --scale all
 just screenshots standard --nav                        # keep the bottom navigation (hidden by default)
+npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 ```
 
