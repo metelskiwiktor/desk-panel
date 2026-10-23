@@ -64,7 +64,8 @@ export function QuotaRings({ data, now, open, compact, showBreakdown }: {
 }) {
   const cards = getQuotaCards(data.quotas.data);
   const connected = fresh(data.quotas, now, MAX_AGE.quotas);
-  return <section className={`p2-quotas ${compact ? 'compact' : ''}`} aria-label="Limity AI">
+  // Four or more limits (Antigravity adds groups) do not fit as full rows: they shrink instead of being cut.
+  return <section className={`p2-quotas ${compact ? 'compact' : ''} ${cards.length > 3 ? 'dense' : ''}`} aria-label="Limity AI">
     <div className="p2-quotas-head">
       <h2 className="p2-eyebrow">Limity AI</h2>
       {showBreakdown && cards.length > 0 && <button className="p2-link" onClick={showBreakdown}>Podział zużycia</button>}
