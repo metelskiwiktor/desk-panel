@@ -22,7 +22,7 @@ export function QuotaVisibilitySettings({accounts,value,change,error}:{accounts:
   </Card>;
 }
 
-const resultLabels:Record<string,string>={completed:'Wykonano i potwierdzono',completed_existing_window:'Potwierdzono w aktywnym oknie',failed_no_retry:'Błąd; bez automatycznego ponawiania',
+const resultLabels:Record<string,string>={completed:'Wykonano i potwierdzono',completed_existing_window:'Potwierdzono w aktywnym oknie',completed_no_window:'Prompt wykonany, ale okno 5h nie ruszyło; ponowienie za 30 min',failed_no_retry:'Błąd; bez automatycznego ponawiania',
   reserved:'Próba rozpoczęta',window_active:'Okno już aktywne',settings_changed:'Pominięto po zmianie ustawień'};
 const reasonLabels:Record<string,string>={claude_turn_timeout:'Claude nie zakończył odpowiedzi w limicie czasu',claude_total_timeout:'Przekroczono łączny limit czasu Claude',
   claude_startup_unverified:'Nie potwierdzono startu Claude CLI',claude_quota_unverified:'Nie potwierdzono quota po próbie',claude_account_changed:'Zmieniło się konto Claude w trakcie',
@@ -32,7 +32,7 @@ const reasonLabels:Record<string,string>={claude_turn_timeout:'Claude nie zakoń
 const describeReason=(reason?:string)=>reason ? `${reasonLabels[reason] || 'Błąd'} (${reason})` : undefined;
 const manualLabels:Record<string,string>={locked:'Inny warmup już trwa. Spróbuj po jego zakończeniu.',
   active_session:'Aktywna sesja CLI blokuje próbę. Zakończ ją i spróbuj ponownie.',session_state_unknown:'Nie można sprawdzić aktywnych sesji CLI.',
-  quota_unknown:'Nie można potwierdzić aktualnego stanu quota.',model_required:'Najpierw podaj model i zapisz ustawienia.',
+  quota_unknown:'Nie można potwierdzić aktualnego stanu quota.',completed_no_window:'Prompt wykonany, ale okno 5h nie ruszyło. Spróbuj ponownie za chwilę.',model_required:'Najpierw podaj model i zapisz ustawienia.',
   claude_haiku_required:'Claude wymaga modelu Haiku.',gemini_model_not_allowed:'Zapisz model z grupy Gemini Models.',
   settings_changed:'Ustawienia zmieniły się w trakcie próby. Spróbuj ponownie.',
   disabled:'Adapter nie obsługuje wymuszenia przy wyłączonym automacie. Zaktualizuj adapter.',
