@@ -36,8 +36,8 @@ function ActivityRow({ entry, open, dismiss }: {
 }
 
 /** Panel events float over the dashboard: a pill with the newest one, or the whole list when opened. */
-export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storageError }: {
-  entries: ActivityEntry[]; open: (target: Detail) => void;
+export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storageError, showRules }: {
+  entries: ActivityEntry[]; open: (target: Detail) => void; showRules: () => void;
   dismiss: (entry: ActivityEntry) => void; restore: () => void; canUndo: boolean; storageError: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -73,7 +73,8 @@ export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storage
     </ul>}
     <div className="activity-undo" role="status">{canUndo
       ? <><span>Usunięto zdarzenie.</span><button className="button" onClick={restore}>Cofnij</button></>
-      : <span className="meta">Przesuń wpis w bok, aby usunąć.</span>}</div>
+      : <span className="meta">Przesuń wpis w bok, aby usunąć.</span>}
+      <button className="link-button events-rules-link" onClick={showRules}>Zasady zdarzeń</button></div>
     {storageError && <p className="source-note warning">Nie udało się zapisać zdarzeń. Lista działa w tej sesji.</p>}
   </section>;
 }

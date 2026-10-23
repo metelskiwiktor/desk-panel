@@ -267,9 +267,17 @@ Ekrany pochodzą z `devices.json`: rozdzielczość fizyczna, przekątna, lista s
 Windows (pierwsze to główne) i dotyk. Rozmiar CSS, PPI i wartości do Chrome DevTools
 (*Settings → Devices → Add custom device*) są wyliczane — `just devices` je wypisuje.
 `--device <id>|all` (domyślnie pierwsze urządzenie) i `--scale <współczynnik>|primary|all`
-wybierają ekrany; zrzuty mają fizyczną rozdzielczość, np. `standard-pulpit-medialove-14@1.25x.png`.
+wybierają ekrany; zrzuty mają fizyczną rozdzielczość, np. `standard-pulpit-medialove-14@1.5x.png`.
 UI nie czyta tego pliku do układu — w Ustawieniach karta „Ekran” jedynie pokazuje,
 któremu urządzeniu i skalowaniu odpowiada bieżący ekran.
+
+### Monitor 14" (Secondary)
+
+- **Identyfikator EDID**: P16 (producent YZA)
+- **Rozdzielczość**: 1920 × 1080 @ 60 Hz
+- **Pozycja**: X = 3440, Y = 0 (po prawej stronie głównego monitora)
+- **Skala w Windows**: 150% (logiczny obszar roboczy 1280 × 720)
+- **Orientacja**: Pozioma (Landscape)
 
 Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
 prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a

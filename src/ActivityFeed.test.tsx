@@ -13,7 +13,7 @@ const entry: ActivityEntry = { id:'1', detectedAt:now, title:'Przykładowy alert
 it('opens details by tap/keyboard, removes by button, and provides undo without a separate view', async () => {
   const user = userEvent.setup();
   const open=vi.fn(), dismiss=vi.fn(), restore=vi.fn();
-  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={restore} canUndo storageError={false} />);
+  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={restore} canUndo storageError={false} showRules={()=>{}} />);
   await user.click(screen.getByRole('button',{name:'Zdarzenia panelu: 1, najnowsze: Przykładowy alert'}));
   await user.click(screen.getByRole('button',{name:'Limity AI: Przykładowy alert'}));
   expect(open).toHaveBeenCalledWith(entry.target);
@@ -27,7 +27,7 @@ it('opens details by tap/keyboard, removes by button, and provides undo without 
 it('distinguishes horizontal dismissals in either direction from vertical scrolling and short drags', () => {
   vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId=1; isPrimary=true; });
   const open=vi.fn(), dismiss=vi.fn();
-  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={()=>{}} canUndo={false} storageError={false} />);
+  render(<ActivityFeed entries={[entry]} open={open} dismiss={dismiss} restore={()=>{}} canUndo={false} storageError={false} showRules={()=>{}} />);
   fireEvent.click(screen.getByRole('button',{name:/^Zdarzenia panelu:/}));
   const button = screen.getByRole('button',{name:'Limity AI: Przykładowy alert'});
   function drag(x:number,y:number,cancel=false) {
@@ -79,7 +79,7 @@ it('degrades to an in-memory list when storage is unavailable', () => {
 it('opens for an event detected after start-up and folds back on its own', () => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
-  const props = { open: vi.fn(), dismiss: vi.fn(), restore: () => {}, canUndo: false, storageError: false };
+  const props = { open: vi.fn(), dismiss: vi.fn(), restore: () => {}, canUndo: false, storageError: false, showRules: () => {} };
   const view = render(<ActivityFeed entries={[entry]} {...props} />);
   expect(screen.queryByRole('region',{name:'Zdarzenia panelu'})).toBeNull();
   act(() => { vi.advanceTimersByTime(6000); });

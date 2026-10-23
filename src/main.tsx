@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { TabletPreview } from './TabletPreview';
+import { watchForNewBuild } from './auto-reload';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -8,3 +9,5 @@ createRoot(document.getElementById('root')!).render(
     <TabletPreview />
   </React.StrictMode>,
 );
+
+if (import.meta.env.PROD) watchForNewBuild();

@@ -21,7 +21,7 @@
   /* On narrow screens the dashboard scrolls; the mail list then keeps this height. */
   --mail-list-height: 420px;
   /* Space the fixed bottom navigation takes, kept free below the dashboard. */
-  --nav-space: 104px;
+  --nav-space: 24px;
 }
 * {
   box-sizing: border-box;
@@ -768,7 +768,7 @@ select {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin: 29px 4px 112px;
+  margin: 29px 4px 24px;
   font-size: 9px;
   letter-spacing: 1px;
   color: #8a9bb4;
@@ -1598,3 +1598,84 @@ nav button.active:after {
 .breakdown-axis { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; font-size: 11px; color: var(--muted); }
 .breakdown-axis div { display: flex; justify-content: space-between; }
 @media (max-width: 560px) { .breakdown-lane, .breakdown-axis { grid-template-columns: 90px minmax(0, 1fr); } }
+
+/* ── Breakdown: one line while the dashboard is busy, the full card when there is room ── */
+.breakdown-slot { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.breakdown-fold { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 14px; font: inherit; color: inherit; }
+.breakdown-fold > strong { font-size: 13px; font-weight: 600; }
+.breakdown-fold > .meta { flex: 1; min-width: 0; }
+.breakdown-fold-chevron { margin-left: auto; color: #9aa8bd; transition: transform 160ms ease-out; }
+.breakdown-fold.open .breakdown-fold-chevron { transform: rotate(180deg); }
+/* Touch works by swipe; these stay in the tree for keyboard and screen readers only. */
+.mail-action-hidden { position: absolute; width: 1px; height: 1px; min-height: 0; flex: none; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+
+/* ── Landscape desk screen: the layout follows what is going on (Dashboard sets data-mode) ──
+   full  meetings + Cezar/mail   day  only meetings   work  only Cezar/mail   calm  neither.
+   Wide and short, no page scroll; cards scroll inside themselves. Not tied to a device. */
+@media (min-aspect-ratio: 4/3) and (max-height: 900px) and (min-width: 1000px) {
+  :root { --gap: 14px; }
+  .app-shell { max-width: none; }
+  .top-bar { padding: 14px 0 12px; }
+  .top-clock time { font-size: 48px; }
+  .app-shell.is-home { height: 100dvh; }
+  .app-shell.is-home main { flex: 1; overflow: hidden; }
+
+  .pulpit { display: grid; height: 100%; gap: var(--gap); }
+  .pulpit-grid { display: contents; }
+  .pulpit > *, .pulpit-grid > * { min-width: 0; min-height: 0; }
+  .system-alert { grid-area: sys; }
+  .today-card { grid-area: today; }
+  .pulpit-side { grid-area: side; max-height: none; overflow: hidden; }
+  .pulpit-side > .cezar-hud { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .quota-strip { grid-area: quota; align-self: start; max-height: 100%; overflow-y: auto; }
+  .breakdown-slot { grid-area: brk; }
+  .breakdown-slot > .breakdown-card { flex: 1; min-height: 0; overflow-y: auto; }
+  .breakdown-card > p.meta:not(.warning) { display: none; }
+
+  [data-mode='full'] { grid-template-columns: 350px minmax(0, 1fr) 370px; grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'sys sys sys' 'today side quota' 'today side brk'; }
+  [data-mode='day'] { grid-template-columns: 350px minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: 'sys sys' 'today side' 'today quota' 'today brk'; }
+  [data-mode='work'] { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: 'sys sys' 'today quota' 'side quota' 'side brk'; }
+  [data-mode='calm'] { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: 'sys sys' 'today side' 'quota quota' 'brk brk'; }
+
+  /* Quotas stack in a narrow column; with room they sit side by side, a bit larger. */
+  [data-mode='full'] .quota-strip, [data-mode='work'] .quota-strip { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  [data-mode='calm'] .quota-track, [data-mode='calm'] .quota-fill { height: 12px; }
+  [data-mode='calm'] .quota-value { font-size: 20px; }
+  [data-mode='full'] .breakdown-card, [data-mode='work'] .breakdown-card { max-height: 34dvh; }
+
+  /* Meetings get an hour axis that uses the height; without them the card is a one-line strip. */
+  .today-card.fill { align-self: stretch; }
+  .today-card.fill .day-axis { flex: 1 1 auto; height: auto; min-height: 200px; }
+  .today-card.fill .upcoming { flex: 0 1 auto; max-height: 34%; }
+  .today-card:not(.fill) { align-self: start; flex-direction: row; align-items: center; gap: 16px; padding: 10px 18px; min-height: 60px; }
+  .today-card:not(.fill) .pulpit-card-head { margin: 0; gap: 10px; flex: none; }
+  .today-card:not(.fill) .upcoming { flex-direction: row; gap: 18px; margin: 0; padding: 0; border: 0; overflow: hidden; min-width: 0; }
+  .today-card:not(.fill) .upcoming > .eyebrow, .today-card:not(.fill) .upcoming-day.free { display: none; }
+  .today-card:not(.fill) .upcoming-day { display: flex; align-items: center; flex: 0 1 auto; gap: 8px; white-space: nowrap; min-width: 0; }
+  /* One line is room for the nearest day with something in it. */
+  .today-card:not(.fill) .upcoming-day.day ~ .upcoming-day.day { display: none; }
+  .today-card:not(.fill) .upcoming-head { gap: 6px; }
+  .today-card:not(.fill) .upcoming-item { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; background: none; }
+  .today-card:not(.fill) .upcoming-title { max-width: 220px; }
+  /* The head already says "cały dzień", so the strip drops the repeated label and keeps titles on one line. */
+  .today-card:not(.fill) .all-day { margin: 0; white-space: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .today-card:not(.fill) .all-day-label, .today-card:not(.fill) .all-day-time { display: none; }
+
+  .pulpit-side > .mail-card { flex: 1 1 0; min-height: 260px; }
+  .mail-card .mail-list { max-height: none; flex: 1; }
+}
+
+/* ── Navigation is the dashboard itself: tap a panel. The old bar stays for keyboards and screen readers,
+   out of sight until something in it has focus; the top bar keeps Settings and the way back. ── */
+nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; box-shadow: none; }
+.top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.top-button { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 999px; border: 1px solid #263246; background: #111824; color: #c9d3e1; }
+.top-button[aria-current='page'] { background: #293c58; color: #a7cbff; }
+.pulpit-card-head { position: relative; min-height: 44px; align-items: center; }
+.card-link { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: none; border-radius: 12px; cursor: pointer; }
+.card-link:hover:not(:disabled) { background: #ffffff08; }
+.events-rules-link { padding: 0; margin-left: auto; }

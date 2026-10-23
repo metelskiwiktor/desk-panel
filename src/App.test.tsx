@@ -161,9 +161,28 @@ describe('interaktywny panel', () => {
   });
   it('zwija puste źródła', async () => {
     renderWith('empty');
-    expect(await screen.findByText('Brak nieprzeczytanych wiadomości.')).toBeTruthy();
-    expect(screen.getByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(await screen.findByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
     expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('bez spotkań')).toBeTruthy();
+  });
+  it('dopasowuje tryb układu do tego, co się dzieje', async () => {
+    const quiet = renderWith('empty');
+    await screen.findByText(/Cezar · nic nie czeka na Ciebie/);
+    expect(document.querySelector('.pulpit')!.getAttribute('data-mode')).toBe('calm');
+    quiet.unmount();
+    renderWith('standard');
+    await screen.findByRole('region', { name: 'Poczta' });
+    expect(document.querySelector('.pulpit')!.getAttribute('data-mode')).toBe('full');
+  });
+  it('nawiguje dotknięciem paneli i przyciskami u góry zamiast paska na dole', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: 'Otwórz kalendarz' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Kalendarz' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Ustawienia' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Przejdź do pulpitu' }));
+    expect(await screen.findByRole('region', { name: 'Dziś' })).toBeTruthy();
   });
   it('komunikuje brak możliwości zapisania ustawień', async () => {
     const user = userEvent.setup();

@@ -3,12 +3,12 @@
     "name": "Medialove 14\" Full HD",
     "diagonalInches": 14,
     "resolution": [
-      1080,
-      1920
+      1920,
+      1080
     ],
     "scales": [
-      1.25,
       1.5,
+      1.25,
       1
     ],
     "touch": true

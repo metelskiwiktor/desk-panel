@@ -26,6 +26,10 @@ screenshots name="standard" *args:
 devices:
     npx tsx scripts/devices.ts
 
+# Full-resolution screenshot of a real monitor into output/screenshots (default: the first non-primary one).
+monitor display="0":
+    & ./scripts/monitor-shot.ps1 -Display {{display}}
+
 # Run all tests, typecheck and produce the frontend served by the service.
 check:
     npm test

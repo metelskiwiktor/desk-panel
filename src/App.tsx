@@ -355,7 +355,11 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <span className="clock-seconds">{new Date(now).getSeconds().toString().padStart(2, '0')}</span>
           <span className="today">{date(now)}</span>
         </div>
-        <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
+        <div className="top-right">
+          <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
+          {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
+          <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
+        </div>
       </header>
       <main ref={main} tabIndex={-1} id="main-content">
         {detail ? (
@@ -371,10 +375,10 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {page === 'home' ? (
               <>
                 <Dashboard data={data} usageBreakdown={usageBreakdown} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
-                  showTasks={() => navigate('tasks')} visible={visible} />
+                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} visible={visible} />
                 {visible('insights') && (
                   <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
-                    restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} />
+                    restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} showRules={() => navigate('events')} />
                 )}
               </>
             ) : (

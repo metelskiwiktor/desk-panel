@@ -58,7 +58,11 @@ if (!values.shot) {
       await page.goto(url);
       await page.waitForTimeout(1500);
       for (const pageName of pages) {
-        await page.getByRole('navigation').getByRole('button', { name: PAGES[pageName] }).click();
+        // The navigation bar is hidden until something in it has focus (the dashboard itself is the navigation).
+        const entry = page.getByRole('navigation').getByRole('button', { name: PAGES[pageName] });
+        await entry.focus();
+        await entry.click();
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.waitForTimeout(600);
         const path = join(values.out, `${label}-${pageName}-${target.label}.png`);
         const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });

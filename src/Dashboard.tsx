@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Empty, SourceNote, Sparkline, quotaReason } from './components';
 import { time, elapsed, formatElapsed, cleanCommand, formatModelLabel } from './format';
@@ -58,7 +59,7 @@ function SystemAlertCard({ data, now, open }: { data: DashboardData; now: number
   </button>;
 }
 
-function TodayColumn({ data, now, open }: { data: DashboardData; now: number; open: (d: Detail) => void }) {
+function TodayColumn({ data, now, open, showCalendar }: { data: DashboardData; now: number; open: (d: Detail) => void; showCalendar: () => void }) {
   const events = data.calendar.data ?? [];
   const today = todayAgenda(events, now);
   const upcoming = upcomingDays(events, now);
@@ -68,8 +69,9 @@ function TodayColumn({ data, now, open }: { data: DashboardData; now: number; op
     <div className="pulpit-card-head">
       <h2 id="today-title">Dziś</h2>
       <span className="meta">{data.calendar.data ? today.summary : data.calendar.status === 'loading' ? 'ładowanie…' : 'kalendarz niedostępny'}</span>
+      <button className="card-link" aria-label="Otwórz kalendarz" onClick={showCalendar} />
     </div>
-    {today.allDay.map(e => <button key={e.id} className="all-day" onClick={() => open({ kind: 'event', id: e.id })}>Cały dzień · {e.title}</button>)}
+    {today.allDay.map(e => <button key={e.id} className="all-day" onClick={() => open({ kind: 'event', id: e.id })}><span className="all-day-label">Cały dzień · </span>{e.title}</button>)}
     {today.blocks.length > 0 && <div className="day-axis">
       {today.hours.map(h => <span key={h.label} className="day-hour" style={{ top: `${h.top}%` }}><span>{h.label}</span></span>)}
       {today.blocks.map(b => <button key={b.event.id} className={`day-block ${b.ongoing ? 'ongoing' : ''} ${b === today.blocks.find(x => !x.ongoing) ? 'next' : ''}`}
@@ -85,7 +87,7 @@ function TodayColumn({ data, now, open }: { data: DashboardData; now: number; op
       {upcoming.map(d => <div key={d.label} className={`upcoming-day ${d.kind}`}>
         <div className="upcoming-head"><strong>{d.label}</strong><span>{d.rel}</span></div>
         {d.kind === 'day' && d.items.map(i => <button key={i.event.id} className="upcoming-item" onClick={() => open({ kind: 'event', id: i.event.id })}>
-          <span className="upcoming-time">{i.time}</span><span className="upcoming-title">{i.event.title}</span><span className="meta">{i.duration}</span>
+          <span className={`upcoming-time ${i.event.allDay ? 'all-day-time' : ''}`}>{i.time}</span><span className="upcoming-title">{i.event.title}</span><span className="meta">{i.duration}</span>
         </button>)}
       </div>)}
     </div>}
@@ -211,7 +213,6 @@ function CezarPanel({ data, snapshot, now, open, showAll }: {
             <strong className="hud-alert-title">{task.title}</strong>
             {task.question && <p className="hud-alert-question">„{task.question}”</p>}
           </div>
-          <span className="hud-alert-action">Otwórz →</span>
         </button>
       ))}
 
@@ -442,25 +443,51 @@ function QuotaStrip({ data, now, open, usage }: { data: DashboardData; now: numb
   </section>;
 }
 
+/** Folded to one line while the dashboard is busy; the full card when the day is quiet and there is room. */
+function BreakdownSlot({ usage, fold }: { usage: UsageBreakdownState; fold: boolean }) {
+  const [open, setOpen] = useState(false);
+  const expanded = !fold || open;
+  return <div className="breakdown-slot">
+    {fold && <button className={`pulpit-card breakdown-fold ${expanded ? 'open' : ''}`} aria-expanded={expanded} onClick={() => setOpen(!open)}>
+      <strong>{expanded ? 'Zwiń podział zużycia' : 'Podział zużycia AI'}</strong>
+      {!expanded && <span className="meta">bieżące okno 5h{usage.observedAt ? ` · pomiar ${time(usage.observedAt)}` : ''}</span>}
+      <ChevronDown size={16} className="breakdown-fold-chevron" aria-hidden="true" />
+    </button>}
+    {expanded && <UsageBreakdownCard usage={usage} />}
+  </div>;
+}
+
 /**
- * The dashboard sizes itself to its content and the screen: the Komputer card only appears on a
- * problem, Cezar folds to one line when nothing waits for you, and long mail lists scroll locally.
+ * The dashboard follows what is going on. The mode names the situation (data-mode, laid out in CSS):
+ * `full` meetings and Cezar/mail both have something, `day` only meetings, `work` only Cezar/mail,
+ * `calm` neither. Mail has no card at all while the inbox is empty; Cezar folds to one line when
+ * nothing waits for you; the AI limits are always there and take the room the rest leaves them.
  */
-export function Dashboard({ data, snapshot, mail, usageBreakdown, now, open, showTasks, visible }: {
+export function Dashboard({ data, snapshot, mail, usageBreakdown, now, open, showTasks, showCalendar, visible }: {
   data: DashboardData; usageBreakdown: UsageBreakdownState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
-  open: (d: Detail) => void; showTasks: () => void; visible: (id: WidgetId) => boolean;
+  open: (d: Detail) => void; showTasks: () => void; showCalendar: () => void; visible: (id: WidgetId) => boolean;
 }) {
-  const side = visible('cezar') || visible('mail');
-  return <div className="pulpit">
+  const today = todayAgenda(data.calendar.data ?? [], now);
+  // Only timed meetings need the tall hour axis; all-day items fit the one-line strip.
+  const meetings = visible('calendar') && today.blocks.length > 0;
+  // No card for a known-empty inbox. It stays for threads, an unreachable or unconsented account, and
+  // while the undo bar or an error needs it (also right after the last thread was handled).
+  const mailProblem = mail.source.accounts.some(a => a.status !== 'connected' && a.status !== 'loading');
+  const mailShown = visible('mail') && !!(mail.threads ? mail.threads.length || mailProblem : mail.source.status !== 'loading') || !!(visible('mail') && (mail.undo || mail.error));
+  const cezarBusy = visible('cezar') && (data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running');
+  const busySide = cezarBusy || mailShown;
+  const mode = meetings ? (busySide ? 'full' : 'day') : (busySide ? 'work' : 'calm');
+  const side = visible('cezar') || mailShown;
+  return <div className="pulpit" data-mode={mode}>
     {visible('system') && <SystemAlertCard data={data} now={now} open={open} />}
     <div className={`pulpit-grid ${visible('calendar') && side ? '' : 'single'}`}>
-      {visible('calendar') && <TodayColumn data={data} now={now} open={open} />}
-      {side && <div className={`pulpit-side ${visible('mail') && mail.threads?.length ? 'fill' : ''}`}>
+      {visible('calendar') && <TodayColumn data={data} now={now} open={open} showCalendar={showCalendar} />}
+      {side && <div className={`pulpit-side ${mailShown && mail.threads?.length ? 'fill' : ''}`}>
         {visible('cezar') && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} />}
-        {visible('mail') && <MailFeed mail={mail} now={now} open={open} />}
+        {mailShown && <MailFeed mail={mail} now={now} open={open} />}
       </div>}
     </div>
     {visible('quotas') && <QuotaStrip data={data} now={now} open={open} usage={usageBreakdown} />}
-    {visible('breakdown') && <UsageBreakdownCard usage={usageBreakdown} />}
+    {visible('breakdown') && <BreakdownSlot usage={usageBreakdown} fold={mode === 'full' || mode === 'work'} />}
   </div>;
 }

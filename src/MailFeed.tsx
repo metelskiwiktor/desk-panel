@@ -33,8 +33,9 @@ function MailRow({ thread, open, act, tone }: {
           {tone && <span className={`account-tag ${tone}`}>{accountLabel(thread.account)}</span>}
         </span>
       </button>
-      <button className="activity-remove" aria-label={`Oznacz jako przeczytane: ${thread.subject}`} onClick={() => act(thread, 'read')}><Check size={17} /></button>
-      <button className="activity-remove" aria-label={`Przenieś do kosza: ${thread.subject}`} onClick={() => act(thread, 'trash')}><Trash2 size={17} /></button>
+      {/* Touch works by swipe only; these stay for keyboard and screen readers, out of sight. */}
+      <button className="activity-remove mail-action-hidden" aria-label={`Oznacz jako przeczytane: ${thread.subject}`} onClick={() => act(thread, 'read')}><Check size={17} /></button>
+      <button className="activity-remove mail-action-hidden" aria-label={`Przenieś do kosza: ${thread.subject}`} onClick={() => act(thread, 'trash')}><Trash2 size={17} /></button>
     </div>
   </li>;
 }
