@@ -11,6 +11,9 @@
     "observedAt": null,
     "data": null
   },
+  "training": {
+    "$pending": true
+  },
   "googleAccounts": [
     {
       "email": "owner@gmail.com",

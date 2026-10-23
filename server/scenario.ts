@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
+import { trainingSourceSchema } from '../src/training-contract';
 import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
@@ -15,7 +16,8 @@ import { SourceError, type PanelSources } from './sources';
  * real server returns. Instead of a body an endpoint may be `{ "$error": 502 }`
  * (HTTP failure) or `{ "$pending": true }` (never answers, the UI keeps loading).
  * Any string of the form `now`, `now-20m`, `now+2h30m` is a timestamp relative
- * to the moment of the request (units: ms, s, m, h, d).
+ * to the moment of the request (units: ms, s, m, h, d). `today`, `today+2`, `today-1` are calendar
+ * days (YYYY-MM-DD, local time) counted from the day of the request; `today-1@22:10` is that moment.
  */
 const special = z.union([
   z.object({ $error: z.number().int().min(400).max(599) }).strict(),
@@ -27,6 +29,7 @@ export const scenarioSchema = z.object({
   description: z.string().optional(),
   cezar: endpoint(cezarSchema),
   calendar: endpoint(calendarSourceSchema),
+  training: endpoint(trainingSourceSchema),
   googleAccounts: endpoint(googleAccountsSchema),
   /** All listed conversations; the server applies `limit` and the actions taken in this session. */
   mail: endpoint(mailSourceSchema),
@@ -42,8 +45,17 @@ export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
 const AMOUNT = '\\d+(?:ms|s|m|h|d)';
 const RELATIVE = new RegExp(`^now((?:[+-](?:${AMOUNT})+)*)$`);
+const DAY = /^today([+-]\d+)?(?:@(\d{2}):(\d{2}))?$/;
 function resolveTimes(value: unknown, now: number): unknown {
   if (typeof value === 'string') {
+    const day = DAY.exec(value);
+    if (day) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + Number(day[1] ?? 0));
+      // `today-1@22:10` is a moment (ms) of that local day; without a time it is the date.
+      if (day[2]) return d.setHours(Number(day[2]), Number(day[3]), 0, 0);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
     const match = RELATIVE.exec(value);
     if (!match) return value;
     let at = now;
@@ -84,6 +96,7 @@ export function createScenarioSources(file: string): PanelSources {
   return {
     cezar: () => serve('cezar'),
     calendar: () => serve('calendar'),
+    training: () => serve('training'),
     googleAccounts: () => serve('googleAccounts'),
     async mail(limit) {
       const source = await serve('mail');

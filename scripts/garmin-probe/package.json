@@ -1,0 +1,16 @@
+{
+  "name": "garmin-probe",
+  "private": true,
+  "type": "module",
+  "description": "One-shot read-only probe of Garmin Connect data shapes. Not part of the panel build.",
+  "scripts": {
+    "selftest": "node probe.mjs --selftest",
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "garminconnect-js": "0.10.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

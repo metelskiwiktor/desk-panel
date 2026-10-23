@@ -4,6 +4,7 @@ import type { GoogleAccountStatus } from '../src/google-contract';
 import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
 import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
+import type { TrainingSource } from '../src/training-contract';
 import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } from '../src/warmup-contract';
 
@@ -14,6 +15,8 @@ import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } fr
 export interface PanelSources {
   cezar(): Promise<CezarSnapshot>;
   calendar(): Promise<CalendarSource>;
+  /** Garmin Connect plan, the coming workouts' steps and recent recordings. */
+  training(): Promise<TrainingSource>;
   /** First `limit` unread inbox conversations of all mail accounts, newest first. */
   mail(limit: number): Promise<MailSource>;
   mailAction(account: string, threadId: string, action: MailAction): Promise<void>;
@@ -39,6 +42,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
   return {
     '/api/cezar': () => sources.cezar(),
     '/api/calendar': () => sources.calendar(),
+    '/api/training': () => sources.training(),
     '/api/mail': url => sources.mail(Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || MAIL_PAGE))),
     '/api/google/accounts': () => sources.googleAccounts(),
     '/api/system': () => sources.system(),

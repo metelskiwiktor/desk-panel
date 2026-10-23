@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "dotenv": "^18.0.8",
+    "garminconnect-js": "0.10.0",
     "google-auth-library": "^11.3.0",
     "lucide-react": "^0.468.0",
     "luxon": "^3.7.2",

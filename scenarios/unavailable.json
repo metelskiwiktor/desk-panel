@@ -11,6 +11,15 @@
     "observedAt": null,
     "data": null
   },
+  "training": {
+    "live": true,
+    "name": "Garmin Connect",
+    "status": "unavailable",
+    "observedAt": null,
+    "message": "Połącz Garmin Connect. Uruchom „just garmin-login\".",
+    "timeZone": "Europe/Warsaw",
+    "data": null
+  },
   "googleAccounts": [
     {
       "email": "owner@gmail.com",

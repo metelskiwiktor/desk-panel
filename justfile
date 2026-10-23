@@ -30,6 +30,10 @@ devices:
 monitor display="0":
     & ./scripts/monitor-shot.ps1 -Display {{display}}
 
+# Sign in to Garmin Connect once; e-mail, password and MFA are typed in the terminal, only DPAPI-encrypted tokens are saved.
+garmin-login:
+    npx tsx scripts/garmin-login.ts
+
 # Run all tests, typecheck and produce the frontend served by the service.
 check:
     npm test

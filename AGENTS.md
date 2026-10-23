@@ -13,6 +13,8 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   check UI changes visually on the target screens.
 - `just devices`: target screens from devices.json with derived CSS sizes.
   Screen sizes live only there; the layout is fluid and never reads it.
+- `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
+  DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
 - `just check`: all tests, typecheck and frontend build. Run before publishing.
 - `just update [--force]`: deploy to the service — merges origin/main only when it
   cannot conflict with local work (otherwise lists the files and changes
@@ -30,5 +32,7 @@ defines `PanelSources`, implemented by `real-sources.ts` (service) and
 lives only in scenarios/ — add a file there instead of branching in the UI. Contract schemas validate provider data. Preserve
 real observation timestamps on failures. Quota reads must never send model prompts
 or start agent turns. Gmail uses `gmail.modify` only: metadata reads, read/unread
-and Trash/untrash — never message bodies, sending or permanent deletion. Do not commit .env, OAuth clients, tokens, logs, screenshots,
+and Trash/untrash — never message bodies, sending or permanent deletion. Garmin Connect
+(unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and
+recordings' basics reach the UI (no body, sleep, places or ids). Do not commit .env, OAuth clients, tokens, logs, screenshots,
 node_modules or dist. Do not print credentials in tool output.

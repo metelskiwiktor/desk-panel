@@ -120,6 +120,7 @@ export const MAX_AGE = {
   quotas: 5 * MINUTE,
   system: 15_000,
   mail: 2 * MINUTE,
+  training: 45 * MINUTE,
 };
 export function fresh<T>(source: Source<T>, now: number, maxAge: number): boolean {
   return (

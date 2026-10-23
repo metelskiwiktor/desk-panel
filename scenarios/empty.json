@@ -20,6 +20,18 @@
     "observedAt": "now",
     "data": []
   },
+  "training": {
+    "live": true,
+    "name": "Garmin Connect",
+    "status": "connected",
+    "observedAt": "now",
+    "timeZone": "Europe/Warsaw",
+    "data": {
+      "plan": null,
+      "workouts": [],
+      "activities": []
+    }
+  },
   "googleAccounts": [
     {
       "email": "owner@gmail.com",

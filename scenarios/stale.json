@@ -156,6 +156,176 @@
       }
     ]
   },
+  "training": {
+    "live": true,
+    "name": "Garmin Connect",
+    "status": "connected",
+    "observedAt": "now-2h",
+    "timeZone": "Europe/Warsaw",
+    "data": {
+      "plan": {
+        "name": "Plan fitness",
+        "workoutsPerWeek": 5,
+        "targetDate": "today+55"
+      },
+      "workouts": [
+        {
+          "id": "scenario-sprint",
+          "name": "Sprint",
+          "sport": "cycling",
+          "date": "today-1",
+          "durationSec": 3180,
+          "phrase": "ANAEROBIC_SPEED",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        },
+        {
+          "id": "scenario-long",
+          "name": "Długa jazda",
+          "sport": "cycling",
+          "date": "today",
+          "durationSec": 5400,
+          "phrase": "LONG_WORKOUT",
+          "trainingEffect": 2.7,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 5400,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-base",
+          "name": "Baza",
+          "sport": "cycling",
+          "date": "today+1",
+          "durationSec": 4380,
+          "phrase": "BASE",
+          "trainingEffect": 2.5,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 4380,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-thresh",
+          "name": "Próg",
+          "sport": "cycling",
+          "date": "today+2",
+          "durationSec": 3000,
+          "phrase": "LACTATE_THRESHOLD",
+          "trainingEffect": 3.5,
+          "trainingEffectLabel": "LACTATE_THRESHOLD",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "warmup",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 148,
+                "high": 201
+              }
+            },
+            {
+              "kind": "repeat",
+              "durationSec": null,
+              "target": null,
+              "iterations": 2,
+              "skipLastRest": true,
+              "children": [
+                {
+                  "kind": "interval",
+                  "durationSec": 480,
+                  "target": {
+                    "type": "power",
+                    "low": 242,
+                    "high": 282
+                  }
+                },
+                {
+                  "kind": "recovery",
+                  "durationSec": 240,
+                  "target": {
+                    "type": "power",
+                    "low": 121,
+                    "high": 175
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "cooldown",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-anaerobic",
+          "name": "Beztlenowe",
+          "sport": "cycling",
+          "date": "today+4",
+          "durationSec": 3600,
+          "phrase": "ANAEROBIC_CAPACITY",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        }
+      ],
+      "activities": [
+        {
+          "startAt": "today-1@22:10",
+          "durationSec": 600,
+          "sport": "indoor_cycling",
+          "avgPower": 132,
+          "avgHeartRate": 134,
+          "trainingStress": 7.4
+        },
+        {
+          "startAt": "today-1@22:25",
+          "durationSec": 62,
+          "sport": "indoor_cycling",
+          "avgPower": 132,
+          "avgHeartRate": 86,
+          "trainingStress": 0.3
+        }
+      ]
+    }
+  },
   "googleAccounts": [
     {
       "email": "owner@gmail.com",

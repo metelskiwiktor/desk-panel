@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCezar } from './cezar';
 import { createCalendarReader } from './calendar';
+import { createGarminApi, createGarminReader } from './garmin';
+import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
 import { createMailReader } from './gmail';
 import { createSystemReader } from './system';
@@ -29,6 +31,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   // Other calendars of the calendar account, e.g. a subscribed Garmin training calendar (`…@import.calendar.google.com`).
   const extraCalendars = (env.DESK_EXTRA_CALENDARS || '').split(',').map(id => id.trim()).filter(Boolean);
   const readCalendar = createCalendarReader(calendarId, calendarRequest(calendarId), Date.now, extraCalendars.map(calendarRequest));
+  // The plan day boundaries follow the machine's zone unless set explicitly.
+  const readTraining = createGarminReader({ api: createGarminApi(garminTokenFile(env)), timeZone: env.DESK_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone });
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
   const readSystem = createSystemReader();
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -46,6 +50,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       return cache!;
     },
     calendar: () => readCalendar(),
+    training: () => readTraining(),
     mail: limit => mail.read(limit),
     async mailAction(account, threadId, action) {
       try { await mail.act(account, threadId, action); }
