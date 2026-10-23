@@ -29,12 +29,41 @@ export function pixelShift(at: number) {
   return { x: ((step * 2) % SHIFT_STEPS - 2) * SHIFT_PX, y: ((step * 3) % SHIFT_STEPS - 2) * SHIFT_PX };
 }
 
+const NIGHT_KEY = 'desk-panel.night';
+interface NightOverride { night: boolean; /** What the clock said when it was set; the override ends when that changes (dusk or dawn). */ auto: boolean }
+function readOverride(): NightOverride | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(NIGHT_KEY) ?? 'null');
+    return value && typeof value.night === 'boolean' && typeof value.auto === 'boolean' ? value : null;
+  } catch { return null; }
+}
+/**
+ * Day or night for the whole panel: by the hour, unless the button said otherwise. A manual choice holds until the
+ * hour would have switched anyway, so a "day" pressed at 2 a.m. does not keep the panel bright next evening.
+ */
+export function useNight(now: number) {
+  const [override, setOverride] = useState(readOverride);
+  const auto = isNight(now);
+  const night = override && override.auto === auto ? override.night : auto;
+  useEffect(() => {
+    if (!override || override.auto === auto) return;
+    setOverride(null);
+    try { localStorage.removeItem(NIGHT_KEY); } catch { /* nothing stored then either */ }
+  }, [override, auto]);
+  const toggle = useCallback(() => {
+    const next = { night: !night, auto };
+    setOverride(next);
+    try { localStorage.setItem(NIGHT_KEY, JSON.stringify(next)); } catch { /* the choice then lasts until reload */ }
+  }, [night, auto]);
+  return { night, toggle };
+}
+
 export interface AmbientState { ambient: boolean; night: boolean; wake: () => void }
 /**
  * Idle detection. While the clock shows, only `wake` (the tap on the clock itself) ends it, so the tap that wakes the
  * panel never lands on a button underneath. Polling and the data underneath keep running.
  */
-export function useAmbient(enabled: boolean, now: number): AmbientState {
+export function useAmbient(enabled: boolean, now: number, night = isNight(now)): AmbientState {
   const forced = forcedAmbient();
   const lastTouch = useRef(Date.now());
   const [asleep, setAsleep] = useState(false);
@@ -50,7 +79,7 @@ export function useAmbient(enabled: boolean, now: number): AmbientState {
     return () => { for (const name of events) window.removeEventListener(name, touched); window.clearInterval(timer); };
   }, [enabled]);
   const wake = useCallback(() => { lastTouch.current = Date.now(); setAsleep(false); }, []);
-  return { ambient: enabled && (forced !== null || asleep), night: forced ? forced === 'night' : isNight(now), wake };
+  return { ambient: enabled && (forced !== null || asleep), night: forced ? forced === 'night' : night, wake };
 }
 
 export interface AmbientLine { kind: 'meeting' | 'training' | 'cezar' | 'mail'; text: string; strong?: string }

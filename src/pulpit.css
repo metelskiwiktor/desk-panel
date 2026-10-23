@@ -252,3 +252,8 @@
 .ambient.night .ambient-lines strong { color: #5f6773; }
 .ambient-lines svg { flex: none; }
 @media (prefers-reduced-motion: reduce) { .ambient-content { transition: none; } }
+
+/* Night: the dashboard itself is dimmed and a little desaturated; the ambient clock has its own, darker palette */
+.app-shell > :not(.ambient) { transition: filter 0.4s; }
+.app-shell[data-night="true"] > :not(.ambient) { filter: brightness(0.6) saturate(0.85); }
+.top-button[aria-pressed="true"] { color: #f2c46d; }

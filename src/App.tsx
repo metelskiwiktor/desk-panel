@@ -14,6 +14,10 @@ import {
   MailOpen,
   Trash2,
   Settings2,
+  Moon,
+  Sun,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 import { useActivityLog } from './useActivityLog';
 import { ActivityFeed } from './ActivityFeed';
@@ -46,7 +50,8 @@ import { UsageBreakdownCard } from './UsageBreakdownCard';
 import { WorkoutDetail } from './TrainingCard';
 import { usePollingEnabled } from './polling';
 import { Ambient } from './AmbientClock';
-import { ambientLines, useAmbient } from './ambient-mode';
+import { ambientLines, useAmbient, useNight } from './ambient-mode';
+import { useFullscreen } from './fullscreen';
 import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
 
@@ -192,7 +197,9 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     </Card>
   );
   const visible = (id: WidgetId) => layout.widgets.find((w) => w.id === id)?.visible ?? true;
-  const ambient = useAmbient(pollingEnabled && visible('ambient'), now);
+  const dayNight = useNight(now);
+  const fullscreen = useFullscreen();
+  const ambient = useAmbient(pollingEnabled && visible('ambient'), now, dayNight.night);
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')
@@ -367,7 +374,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     tasks: data.tasks.data, unreadMail: mail.source.status === 'connected' ? mail.source.total : null,
   })} />;
   return (
-    <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`}>
+    <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`} data-night={dayNight.night}>
       {ambientView}
       <header className="top-bar">
         <div className="top-clock">
@@ -384,6 +391,12 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
           {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
+          <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
+            {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          {fullscreen.supported && <button className="top-button" aria-label={fullscreen.active ? 'Wyjdź z pełnego ekranu' : 'Pełny ekran'} onClick={fullscreen.toggle}>
+            {fullscreen.active ? <Minimize size={20} /> : <Maximize size={20} />}
+          </button>}
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>

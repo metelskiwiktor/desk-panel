@@ -1,7 +1,8 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Ambient } from './AmbientClock';
-import { AMBIENT_AFTER_MS, AMBIENT_AFTER_NIGHT_MS, ambientLines, forcedAmbient, isNight, pixelShift, useAmbient } from './ambient-mode';
+import { AMBIENT_AFTER_MS, AMBIENT_AFTER_NIGHT_MS, ambientLines, forcedAmbient, isNight, pixelShift, useAmbient, useNight } from './ambient-mode';
+import { useFullscreen } from './fullscreen';
 import type { CalendarEvent, Task } from './model';
 import type { TrainingActivity, TrainingWorkout } from './training-contract';
 
@@ -93,5 +94,65 @@ describe('idle detection', () => {
     idle(AMBIENT_AFTER_NIGHT_MS + 6000);
     expect(night.result.current).toMatchObject({ ambient: true, night: true });
     expect(off.result.current.ambient).toBe(false);
+  });
+});
+
+describe('day and night button', () => {
+  afterEach(() => localStorage.clear());
+  it('follows the hour until the button says otherwise, and gives the choice up when the hour changes', () => {
+    const { result, rerender } = renderHook(({ now }) => useNight(now), { initialProps: { now: at(14) } });
+    expect(result.current.night).toBe(false);
+    act(() => result.current.toggle());
+    expect(result.current.night).toBe(true);
+    rerender({ now: at(15) });
+    expect(result.current.night).toBe(true);
+    rerender({ now: at(23, 30) }); // dusk: the hour decides again
+    expect(result.current.night).toBe(true);
+    act(() => result.current.toggle());
+    expect(result.current.night).toBe(false); // "day" pressed at night
+    rerender({ now: at(2, 0, 25) });
+    expect(result.current.night).toBe(false);
+    rerender({ now: at(9, 0, 25) }); // dawn
+    expect(result.current.night).toBe(false);
+    rerender({ now: at(23, 30, 25) });
+    expect(result.current.night).toBe(true);
+  });
+  it('remembers the choice across reloads', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(at(14));
+    const first = renderHook(() => useNight(at(14)));
+    act(() => first.result.current.toggle());
+    first.unmount();
+    expect(renderHook(() => useNight(at(15))).result.current.night).toBe(true);
+    vi.restoreAllMocks();
+  });
+  it('lets an ambient clock follow the chosen night', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(at(12));
+    const { result } = renderHook(() => useAmbient(true, Date.now(), true));
+    expect(result.current.night).toBe(true);
+    vi.useRealTimers();
+  });
+});
+
+describe('fullscreen', () => {
+  afterEach(() => { Reflect.deleteProperty(document, 'fullscreenEnabled'); Reflect.deleteProperty(document, 'fullscreenElement'); vi.restoreAllMocks(); });
+  it('is unsupported where the browser has no fullscreen', () => {
+    expect(renderHook(() => useFullscreen()).result.current.supported).toBe(false);
+  });
+  it('enters, follows the browser and exits', () => {
+    Object.defineProperty(document, 'fullscreenEnabled', { value: true, configurable: true });
+    Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true, writable: true });
+    const enter = vi.fn(async () => {});
+    const exit = vi.fn(async () => {});
+    document.documentElement.requestFullscreen = enter;
+    document.exitFullscreen = exit;
+    const { result } = renderHook(() => useFullscreen());
+    expect(result.current).toMatchObject({ supported: true, active: false });
+    act(() => result.current.toggle());
+    expect(enter).toHaveBeenCalledTimes(1);
+    act(() => { (document as { fullscreenElement: Element | null }).fullscreenElement = document.documentElement; document.dispatchEvent(new Event('fullscreenchange')); });
+    expect(result.current.active).toBe(true);
+    act(() => result.current.toggle());
+    expect(exit).toHaveBeenCalledTimes(1);
   });
 });
