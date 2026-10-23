@@ -24,8 +24,11 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     services: [...(email === calendarId ? ['calendar'] : []), ...(options.mailAccounts.includes(email) ? ['mail'] : [])] as GoogleService[],
   }));
   const calendarAccount = accounts[0];
-  const readCalendar = createCalendarReader(calendarId, (path, params) =>
-    calendarAccount.request('calendar', `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}${path}`, { params }));
+  const calendarRequest = (id: string) => (path: string, params?: Record<string, string>) =>
+    calendarAccount.request('calendar', `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}${path}`, { params });
+  // Other calendars of the calendar account, e.g. a subscribed Garmin training calendar (`…@import.calendar.google.com`).
+  const extraCalendars = (env.DESK_EXTRA_CALENDARS || '').split(',').map(id => id.trim()).filter(Boolean);
+  const readCalendar = createCalendarReader(calendarId, calendarRequest(calendarId), Date.now, extraCalendars.map(calendarRequest));
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
   const readSystem = createSystemReader();
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));

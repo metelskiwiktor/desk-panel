@@ -31,6 +31,16 @@ describe('Google Calendar', () => {
     await read();
     expect(request).toHaveBeenCalledTimes(3);
   });
+  it('merges extra calendars with prefixed ids and keeps the main one when an extra fails', async () => {
+    const main = async (path: string) => path === '' ? { timeZone: 'Europe/Warsaw' } : { items: [allDay] };
+    const extra = async () => ({ items: [allDay] });
+    const read = createCalendarReader('owner@gmail.com', main, () => Date.parse('2026-03-29T09:00:00Z'), [extra]);
+    const merged = await read();
+    expect(merged.data?.map(e => e.id)).toEqual(['day', 'extra0:day']);
+    expect(merged.partial).toBe(false);
+    const failing = createCalendarReader('owner@gmail.com', main, () => Date.parse('2026-03-29T09:00:00Z'), [async () => { throw { response: { status: 404 } }; }]);
+    expect(await failing()).toMatchObject({ status: 'connected', partial: true, data: [{ id: 'day' }] });
+  });
   it('distinguishes missing permission from empty success and keeps old data on network failure without leaking secrets', async () => {
     let at = Date.now();
     const request = vi.fn().mockResolvedValueOnce({ timeZone: 'Europe/Warsaw' }).mockResolvedValueOnce({ items: [timed] })

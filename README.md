@@ -45,6 +45,7 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_CEZAR_URL` | `http://127.0.0.1:4321` | Lokalny serwer Cezara; HTTP loopback, bez credentials |
 | `DESK_PORT` | `5174` | Port serwera Desk Panelu; przy zmianie w development zmień również proxy Vite |
 | `DESK_CALENDAR_ID` | `metelski.wiktor@gmail.com` | Konto Google i jego główny kalendarz; login jest sprawdzany |
+| `DESK_EXTRA_CALENDARS` | brak | Dodatkowe kalendarze tego samego konta, rozdzielone przecinkami (identyfikator z ustawień kalendarza Google, np. zasubskrybowany plan Garmin `…@import.calendar.google.com`); ich zdarzenia trafiają do tej samej agendy |
 | `DESK_MAIL_ACCOUNTS` | konto z `DESK_CALENDAR_ID` | Konta Gmail na liście poczty, rozdzielone przecinkami (np. `a@gmail.com,b@gmail.com`) |
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |

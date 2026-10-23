@@ -33,10 +33,27 @@ export function projectEvents(payload: unknown, timeZone: string) {
   }) };
 }
 type Request = (path: string, params?: Record<string, string>) => Promise<unknown>;
-export function createCalendarReader(calendarId: string, request: Request, now = Date.now) {
+/** `extra` are further calendars of the same account (e.g. a subscribed Garmin one); the main calendar's failures still fail the read. */
+export function createCalendarReader(calendarId: string, request: Request, now = Date.now, extra: Request[] = []) {
   let cache: CalendarSource | undefined;
   let lastAttempt = -Infinity;
   let pending: Promise<CalendarSource> | undefined;
+  async function fetchEvents(send: Request, timeZone: string, start: DateTime) {
+    const events = [];
+    let pageToken: string | undefined;
+    for (let i = 0; i < 10; i++) {
+      const result = projectEvents(await send('/events', {
+        timeMin: start.toUTC().toISO()!, timeMax: start.plus({ days: 7 }).toUTC().toISO()!,
+        singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
+        ...(pageToken ? { pageToken } : {}),
+      }), timeZone);
+      events.push(...result.events);
+      if (result.nextPageToken && result.nextPageToken === pageToken) throw new Error('Invalid pagination');
+      pageToken = result.nextPageToken;
+      if (!pageToken) break;
+    }
+    return { events, partial: !!pageToken };
+  }
   return async function read(): Promise<CalendarSource> {
     if (pending) return pending;
     if (cache && now() - lastAttempt < (cache.status === 'connected' ? 60_000 : 15_000)) return cache;
@@ -45,22 +62,20 @@ export function createCalendarReader(calendarId: string, request: Request, now =
       try {
         const { timeZone } = metadata.parse(await request(''));
         const start = DateTime.fromMillis(now(), { zone: timeZone }).startOf('day');
-        const events = [];
-        let pageToken: string | undefined;
-        for (let i = 0; i < 10; i++) {
-          const result = projectEvents(await request('/events', {
-            timeMin: start.toUTC().toISO()!, timeMax: start.plus({ days: 7 }).toUTC().toISO()!,
-            singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
-            ...(pageToken ? { pageToken } : {}),
-          }), timeZone);
-          events.push(...result.events);
-          if (result.nextPageToken && result.nextPageToken === pageToken) throw new Error('Invalid pagination');
-          pageToken = result.nextPageToken;
-          if (!pageToken) break;
+        const main = await fetchEvents(request, timeZone, start);
+        const events = [...main.events];
+        let partial = main.partial;
+        // An unreadable extra calendar must not hide the main one; mark the list incomplete instead.
+        for (const [index, send] of extra.entries()) {
+          try {
+            const more = await fetchEvents(send, timeZone, start);
+            events.push(...more.events.map(e => ({ ...e, id: `extra${index}:${e.id}` })));
+            partial ||= more.partial;
+          } catch { partial = true; }
         }
         cache = calendarSourceSchema.parse({ name: 'Google Calendar', live: true, status: 'connected',
           calendarId, observedAt: now(), data: [...new Map(events.map(e => [e.id, e])).values()].sort((a,b) => a.startAt - b.startAt),
-          timeZone, partial: !!pageToken,
+          timeZone, partial,
         });
       } catch (error) {
         // Never serialize GoogleAuth errors: request config can contain credentials.
