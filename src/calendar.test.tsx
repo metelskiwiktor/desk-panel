@@ -89,8 +89,9 @@ describe('Google Calendar', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /Rzeczywiste wydarzenie/ })).toBeTruthy());
-    await user.click(screen.getByRole('button', { name: /Rzeczywiste wydarzenie/ }));
+    // The event is on the day ribbon and in the next-days strip: either opens it.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ }).length).toBeGreaterThan(0));
+    await user.click(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ })[0]);
     expect(screen.getByText('Opis z Google')).toBeTruthy();
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(source.data[0].sourceUrl);
   });

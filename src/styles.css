@@ -957,12 +957,6 @@ nav button.active:after {
    Long lists scroll inside bounded cards, without reserving an empty screen below. */
 .app-shell.is-home { min-height: 100dvh; display: flex; flex-direction: column; }
 .app-shell.is-home main { position: relative; min-height: 0; padding-bottom: var(--nav-space); }
-.pulpit { display: flex; flex-direction: column; gap: var(--gap); }
-.pulpit-grid { min-height: 0; display: grid; grid-template-columns: minmax(240px, 35%) minmax(0, 1fr); gap: var(--gap); align-items: start; }
-/* A column stretches only when it has something to fill the height with (meetings, a mail list). */
-.pulpit-grid > .fill { align-self: stretch; }
-.pulpit-grid.single { grid-template-columns: minmax(0, 1fr); }
-.pulpit-side { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; max-height: 100%; }
 .pulpit-card { border-radius: 18px; border: 1px solid #1f2b3d; background: #111824; padding: 16px 18px; min-width: 0; color: inherit; text-align: left; }
 .pulpit-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
 .pulpit-card-head h2 { font-size: 18px; }
@@ -975,25 +969,6 @@ nav button.active:after {
 .system-alert .sparkline { flex: 1; height: 90px; }
 .sparkline.red polyline { stroke: var(--quota-red); }
 
-.today-card { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; }
-.all-day { margin-top: 6px; padding: 8px 10px; border-radius: 10px; border: 0; background: #172235; color: #e6ebf3; text-align: left; font-size: 13px; }
-.day-axis { position: relative; flex: none; height: clamp(260px, 35dvh, 480px); margin: 14px 0 8px; }
-.day-hour { position: absolute; left: 0; right: 0; border-top: 1px solid #1a2433; }
-.day-hour span { position: absolute; top: -8px; left: 0; padding-right: 6px; background: #111824; font-family: ui-monospace, 'Cascadia Mono', monospace; font-size: 11px; color: #6f7d92; }
-.day-block { position: absolute; min-height: 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; overflow: hidden; padding: 6px 10px; border: 0; border-radius: 10px; background: #1c2b44; color: #eef3fb; text-align: left; font-size: 12px; }
-.day-block strong { font-size: 14px; font-weight: 600; }
-.day-block span { color: #b9c8dd; }
-.day-block.next, .day-block.ongoing { background: #2b4366; }
-.day-now { position: absolute; left: 38px; right: 0; height: 2px; background: var(--amber); }
-.day-now span { position: absolute; left: -40px; top: -9px; padding: 1px 4px; border-radius: 4px; background: var(--amber); color: #0b1018; font-size: 11px; font-variant-numeric: tabular-nums; }
-.upcoming { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; margin-top: 8px; padding-top: 12px; border-top: 1px solid #1f2b3d; }
-.upcoming-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
-.upcoming-head span { color: #a9c6f2; }
-.upcoming-day.free .upcoming-head strong { color: #6f7d92; font-weight: 500; }
-.upcoming-day.free .upcoming-head span { color: #55627a; }
-.upcoming-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; margin-top: 6px; padding: 8px 10px; border: 0; border-radius: 10px; background: #172235; color: inherit; text-align: left; }
-.upcoming-time { min-width: 42px; font-family: ui-monospace, 'Cascadia Mono', monospace; font-size: 12px; color: #a9c6f2; }
-.upcoming-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 
 .pulpit-line { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
 .pulpit-line > span { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -1501,11 +1476,6 @@ nav button.active:after {
 .mail-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
 .mail-problem { margin: 0 0 8px; padding: 8px 10px; border: 1px solid #5c4a2e; border-radius: 10px; background: #1b1812; color: #f3d9ab; font-size: 13px; }
 
-.quota-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px 28px; padding: 14px 20px 16px; }
-.quota-strip .source-note { grid-column: 1 / -1; }
-.quota-provider { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; }
-.quota-provider-header { display: flex; align-items: center; gap: 8px; }
-.quota-provider-header > strong { font-size: 13px; }
 .quota-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 1px 6px; border-radius: 4px; background: #202b3c; color: #a9c6f2; border: 1px solid #32435c; }
 .quota-bar { display: grid; grid-template-columns: 26px minmax(0, 1fr) 48px; align-items: center; gap: 4px 10px; }
 .quota-muted { --quota-pace-color: #5d6b80; }
@@ -1542,7 +1512,6 @@ nav button.active:after {
 
 /* Narrow screens: one column, and the dashboard scrolls like any page. */
 @media (max-width: 639px) {
-  .pulpit-grid { grid-template-columns: minmax(0, 1fr); }
   .mail-card .mail-list { max-height: var(--mail-list-height); }
   .system-alert { flex-direction: column; align-items: stretch; }
 }
@@ -1600,18 +1569,11 @@ nav button.active:after {
 @media (max-width: 560px) { .breakdown-lane, .breakdown-axis { grid-template-columns: 90px minmax(0, 1fr); } }
 
 /* ── Breakdown: one line while the dashboard is busy, the full card when there is room ── */
-.breakdown-slot { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.breakdown-fold { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 14px; font: inherit; color: inherit; }
-.breakdown-fold > strong { font-size: 13px; font-weight: 600; }
-.breakdown-fold > .meta { flex: 1; min-width: 0; }
-.breakdown-fold-chevron { margin-left: auto; color: #9aa8bd; transition: transform 160ms ease-out; }
-.breakdown-fold.open .breakdown-fold-chevron { transform: rotate(180deg); }
 /* Touch works by swipe; these stay in the tree for keyboard and screen readers only. */
 .mail-action-hidden { position: absolute; width: 1px; height: 1px; min-height: 0; flex: none; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 
-/* ── Landscape desk screen: the layout follows what is going on (Dashboard sets data-mode) ──
-   full  meetings + Cezar/mail   day  only meetings   work  only Cezar/mail   calm  neither.
-   Wide and short, no page scroll; cards scroll inside themselves. Not tied to a device. */
+/* ── Landscape desk screen: wide and short, so the home page fits it without page scroll ──
+   The frame (pulpit.css) divides the height; long lists scroll inside their cards. Not tied to a device. */
 @media (min-aspect-ratio: 4/3) and (max-height: 900px) and (min-width: 1000px) {
   :root { --gap: 14px; }
   .app-shell { max-width: none; }
@@ -1619,53 +1581,6 @@ nav button.active:after {
   .top-clock time { font-size: 48px; }
   .app-shell.is-home { height: 100dvh; }
   .app-shell.is-home main { flex: 1; overflow: hidden; }
-
-  .pulpit { display: grid; height: 100%; gap: var(--gap); }
-  .pulpit-grid { display: contents; }
-  .pulpit > *, .pulpit-grid > * { min-width: 0; min-height: 0; }
-  .system-alert { grid-area: sys; }
-  .today-card { grid-area: today; }
-  .pulpit-side { grid-area: side; max-height: none; overflow: hidden; }
-  .pulpit-side > .cezar-hud { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .quota-strip { grid-area: quota; align-self: start; max-height: 100%; overflow-y: auto; }
-  .breakdown-slot { grid-area: brk; }
-  .breakdown-slot > .breakdown-card { flex: 1; min-height: 0; overflow-y: auto; }
-  .breakdown-card > p.meta:not(.warning) { display: none; }
-
-  [data-mode='full'] { grid-template-columns: 350px minmax(0, 1fr) 370px; grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: 'sys sys sys' 'today side quota' 'today side brk'; }
-  [data-mode='day'] { grid-template-columns: 350px minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr);
-    grid-template-areas: 'sys sys' 'today side' 'today quota' 'today brk'; }
-  [data-mode='work'] { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto auto minmax(0, 1fr) auto;
-    grid-template-areas: 'sys sys' 'today quota' 'side quota' 'side brk'; }
-  [data-mode='calm'] { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto minmax(0, 1fr);
-    grid-template-areas: 'sys sys' 'today side' 'quota quota' 'brk brk'; }
-
-  /* Quotas stack in a narrow column; with room they sit side by side, a bit larger. */
-  [data-mode='full'] .quota-strip, [data-mode='work'] .quota-strip { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  [data-mode='calm'] .quota-track, [data-mode='calm'] .quota-fill { height: 12px; }
-  [data-mode='calm'] .quota-value { font-size: 20px; }
-  [data-mode='full'] .breakdown-card, [data-mode='work'] .breakdown-card { max-height: 34dvh; }
-
-  /* Meetings get an hour axis that uses the height; without them the card is a one-line strip. */
-  .today-card.fill { align-self: stretch; }
-  .today-card.fill .day-axis { flex: 1 1 auto; height: auto; min-height: 200px; }
-  .today-card.fill .upcoming { flex: 0 1 auto; max-height: 34%; }
-  .today-card:not(.fill) { align-self: start; flex-direction: row; align-items: center; gap: 16px; padding: 10px 18px; min-height: 60px; }
-  .today-card:not(.fill) .pulpit-card-head { margin: 0; gap: 10px; flex: none; }
-  .today-card:not(.fill) .upcoming { flex-direction: row; gap: 18px; margin: 0; padding: 0; border: 0; overflow: hidden; min-width: 0; }
-  .today-card:not(.fill) .upcoming > .eyebrow, .today-card:not(.fill) .upcoming-day.free { display: none; }
-  .today-card:not(.fill) .upcoming-day { display: flex; align-items: center; flex: 0 1 auto; gap: 8px; white-space: nowrap; min-width: 0; }
-  /* One line is room for the nearest day with something in it. */
-  .today-card:not(.fill) .upcoming-day.day ~ .upcoming-day.day { display: none; }
-  .today-card:not(.fill) .upcoming-head { gap: 6px; }
-  .today-card:not(.fill) .upcoming-item { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; background: none; }
-  .today-card:not(.fill) .upcoming-title { max-width: 220px; }
-  /* The head already says "cały dzień", so the strip drops the repeated label and keeps titles on one line. */
-  .today-card:not(.fill) .all-day { margin: 0; white-space: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .today-card:not(.fill) .all-day-label, .today-card:not(.fill) .all-day-time { display: none; }
-
-  .pulpit-side > .mail-card { flex: 1 1 0; min-height: 260px; }
   .mail-card .mail-list { max-height: none; flex: 1; }
 }
 

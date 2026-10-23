@@ -2,6 +2,7 @@ export const widgetNames = {
   cezar: 'Cezar',
   system: 'Komputer (tylko przy problemie)',
   calendar: 'Kalendarz · dziś i kolejne dni',
+  training: 'Trening (Garmin Connect)',
   quotas: 'Limity AI',
   breakdown: 'Podział zużycia AI',
   insights: 'Zdarzenia panelu',

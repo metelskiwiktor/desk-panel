@@ -245,21 +245,30 @@ wydarzeń, np. zawodów w głównym kalendarzu Google.
 
 ## Interfejs
 
-Pulpit mieści się na ekranie bez przewijania, a sekcje zajmują tyle miejsca, ile mają treści:
+Pulpit mieści się na poziomym ekranie (1280×720 CSS) bez przewijania. Rama ma trzy strefy,
+a układ nie zależy od urządzenia:
 
-- u góry godzina, data i jedna linia stanu (PC z CPU/RAM, Cezar, Gmail);
-- „Dziś”: pozostałe spotkania na osi od bieżącej godziny (co najmniej 6 h, nakładające się
-  obok siebie, linia „teraz”), wydarzenia całodniowe, a pod osią kolejne dni pogrupowane po
-  dniu — kolejne dni bez wydarzeń zwijają się do jednej linii „wolne · N dni”; bez spotkań
-  oś znika;
-- Cezar pokazuje listę tylko, gdy coś czeka na odpowiedź lub przegląd; inaczej jedna linia;
-- Poczta zajmuje resztę wysokości, skrzynki mają różne kolory;
-- limity AI: dla każdego okna pasek zużycia, kreska upływu czasu, procent i reset;
-- karta Komputer pojawia się tylko, gdy CPU lub RAM przekroczy 90%;
-- zdarzenia panelu unoszą się w prawym górnym rogu: zwinięte pokazują liczbę i najnowsze
-  z etykietą źródła (Kalendarz, Cezar, Limity AI, Komputer), nowe rozwijają listę na 10 s.
+- u góry godzina, data, pigułka zdarzeń panelu i jedna linia stanu (PC z CPU/RAM, Cezar —
+  „nic nie czeka” / „N czeka na Ciebie” / „N w toku”, Gmail); pigułka stoi w pasku, więc nic nie zasłania;
+- po lewej „Dziś”: spotkanie za 15 minut lub trwające zajmuje miejsce na górze (odliczanie), pod nim
+  dzisiejszy trening z Garmina (nazwa, rower, czas, poziom, efekt treningowy oraz profil interwałów:
+  szerokość słupka to czas, wysokość to moc docelowa), uwaga o wczorajszym treningu zrobionym tylko
+  częściowo, a na dole cały dzień jako pasek godzin z linią „teraz” (przeszłość zakreskowana, spotkania
+  jako bloki, nakładające się w pasach, wydarzenia całodniowe nad paskiem). Dotknięcie treningu otwiera
+  jego szczegóły z listą kroków, spotkania — szczegóły wydarzenia, „Kalendarz” — pełną agendę;
+- po prawej limity AI jako pierścienie: zewnętrzny to okno 5h, wewnętrzny 7d, biała kreska pokazuje,
+  ile czasu okna już upłynęło, a kolor (zielony / żółty / czerwony) mówi tylko, czy zużycie wyprzedza
+  czas; pod pierścieniami procent i reset. „Podział zużycia” otwiera szczegóły z podziałem na źródła;
+- gdy Cezar czeka lub pracuje, poczta ma wątki albo komputer przekroczył 90%, ich karty dochodzą pod
+  limity, a pierścienie zwijają się do jednego rzędu; bez nich limity zajmują całą kolumnę;
+- na dole siedem najbliższych dni: plan treningowy (czas i poziom, ✓ przy wykonanym) razem
+  ze spotkaniami; wydarzenia całodniowe z zasubskrybowanego kalendarza Garmin, które dublują trening,
+  są pomijane.
 
-Poniżej 640 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona.
+Status treningu (wykonany / częściowo / nie zrobiony) wynika z nagrań z danego dnia, patrz Garmin Connect
+powyżej. Dopóki źródło nie odpowie, pasek dnia i tydzień pokazują kreskę zamiast „wolne”.
+Poniżej 900 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona. Zdarzenia panelu
+(zwinięte: liczba i najnowsze z etykietą źródła, nowe rozwijają listę na 10 s) stoją w pasku u góry.
 
 Gdy źródło nie jest świeże, sekcja pokazuje częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty

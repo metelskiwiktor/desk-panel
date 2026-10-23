@@ -29,6 +29,13 @@ export function localDate(at: number, timeZone: string): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
 }
 
+/** The calendar day `days` after `day` (negative: before), YYYY-MM-DD. */
+export function addDays(day: string, days: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export function workoutProgress(workout: TrainingWorkout, activities: TrainingActivity[], now: number, timeZone: string): WorkoutProgress {
   if (workout.restDay) return { state: 'rest', doneSec: 0, ratio: null };
   const doneSec = Math.round(activities

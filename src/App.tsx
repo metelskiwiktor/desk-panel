@@ -41,6 +41,9 @@ import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
+import { useTraining } from './useTraining';
+import { UsageBreakdownCard } from './UsageBreakdownCard';
+import { WorkoutDetail } from './TrainingCard';
 import { usePollingEnabled } from './polling';
 import { sortSnapshots } from './quota-pace';
 
@@ -70,6 +73,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const usageBreakdown = useUsageBreakdown();
   const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
+  const training = useTraining();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
   const now = Math.max(clockNow, Date.now());
@@ -301,6 +305,11 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
         <Empty>Wydarzenie jest niedostępne.</Empty>
       );
     }
+    if (detail.kind === 'workout') {
+      const workout = training.data?.workouts.find((w) => w.id === detail.id);
+      return workout ? <WorkoutDetail workout={workout} training={training} now={now} /> : <Empty>Trening jest niedostępny.</Empty>;
+    }
+    if (detail.kind === 'breakdown') return <UsageBreakdownCard usage={usageBreakdown} />;
     const account = data.quotas.data?.find((a) => a.provider === detail.provider);
     return account ? (
       <Card title={`${account.provider === 'AGY' ? 'Gemini & Modele CLI · limity konta' : `${account.provider} · limity konta`}`} icon={<Layers3 />}>
@@ -356,6 +365,12 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <span className="today">{date(now)}</span>
         </div>
         <div className="top-right">
+          {page === 'home' && !detail && visible('insights') && (
+            <div className="events-slot">
+              <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
+                restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} showRules={() => navigate('events')} />
+            </div>
+          )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
           {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
@@ -374,12 +389,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} usageBreakdown={usageBreakdown} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
-                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} visible={visible} />
-                {visible('insights') && (
-                  <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
-                    restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} showRules={() => navigate('events')} />
-                )}
+                <Dashboard data={data} training={training} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
+                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} />
               </>
             ) : (
               <>

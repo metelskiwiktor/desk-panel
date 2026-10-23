@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { TabletPreview } from './TabletPreview';
 import { watchForNewBuild } from './auto-reload';
 import './styles.css';
+import './pulpit.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

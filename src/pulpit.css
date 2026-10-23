@@ -1,0 +1,174 @@
+/* ── Pulpit: the frame (today · limits · next days) ──────────────────────────────────────────
+   Tokens first. Domain accents are three different hues and never a status colour; green, yellow
+   and red (the --quota-* variables of styles.css) are kept for status only. */
+:root {
+  --p2-surface: #141922;
+  --p2-surface-2: #1b2230;
+  --p2-line: #273044;
+  --p2-text: #eaeff6;
+  --p2-muted: #93a0b4;
+  --p2-faint: #5d6a80;
+  --p2-track: #232c3d;
+  --p2-cal: #7ca9ff;
+  --p2-train: #f07ab5;
+}
+
+/* The home page fills the screen; the frame divides what is left after the top bar. */
+.app-shell.is-home main { display: flex; flex-direction: column; }
+.p2-frame { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 16px; font-variant-numeric: tabular-nums; }
+.p2-main { min-height: 340px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 36%); gap: 16px; }
+.p2-main.single { grid-template-columns: minmax(0, 1fr); }
+.p2-today, .p2-quotas { min-width: 0; min-height: 0; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-surface); }
+.p2-today { display: flex; flex-direction: column; gap: 12px; padding: 18px 24px 16px; overflow: hidden; }
+.p2-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.p2-side > * { flex: none; }
+.p2-side > .mail-card { flex: 1 1 0; min-height: 260px; }
+.p2-quotas { display: flex; flex-direction: column; gap: 10px; padding: 18px 22px; }
+/* Alone, the limits take the whole column; beside Cezar or mail they keep their own height. */
+.p2-frame[data-side="false"] .p2-quotas { flex: 1 1 auto; }
+.p2-eyebrow { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; line-height: 1.5; text-transform: uppercase; color: var(--p2-muted); }
+.p2-meta { font-size: 14px; color: var(--p2-muted); }
+.p2-note { margin: 0; font-size: 13px; color: var(--p2-muted); }
+.p2-link { align-self: center; margin-left: auto; min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--p2-cal); font-size: 14px; }
+.p2-badge { display: inline-flex; align-items: center; margin-left: 10px; padding: 2px 10px; border-radius: 10px; background: color-mix(in srgb, var(--p2-train) 24%, transparent); color: var(--p2-train); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: none; }
+.p2-badge.warn { background: color-mix(in srgb, var(--quota-yellow) 18%, transparent); color: var(--quota-yellow); }
+/* The global button:hover tint must not repaint these; each says what it falls back to. */
+.p2-frame button:hover:not(:disabled) { background-color: var(--hover-bg, transparent); }
+
+/* Level: three bars, as many lit as the workout is hard. */
+.p2-level { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; }
+.p2-level b { width: 6px; border-radius: 2px; background: var(--p2-faint); opacity: 0.45; }
+.p2-level b:nth-child(1) { height: 7px; }
+.p2-level b:nth-child(2) { height: 12px; }
+.p2-level b:nth-child(3) { height: 18px; }
+.p2-level b.on { background: var(--p2-train); opacity: 1; }
+
+/* Today's workout */
+.p2-training { display: flex; flex-direction: column; gap: 10px; }
+.p2-train { position: relative; padding: 16px 20px 14px; border: 1px solid color-mix(in srgb, var(--p2-train) 40%, transparent); border-radius: 16px; background: color-mix(in srgb, var(--p2-train) 11%, var(--p2-surface)); }
+.p2-train.done { border-color: color-mix(in srgb, var(--p2-train) 70%, transparent); background: color-mix(in srgb, var(--p2-train) 16%, var(--p2-surface)); }
+.p2-train-head { display: flex; align-items: center; gap: 18px; width: 100%; min-height: 56px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.p2-train-head::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.p2-train-mark { display: grid; place-items: center; flex: none; width: 56px; height: 56px; border-radius: 15px; background: color-mix(in srgb, var(--p2-train) 22%, var(--p2-surface-2)); color: var(--p2-train); }
+.p2-train-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.p2-train-title > strong { font-size: 32px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.05; }
+.p2-train-title .p2-eyebrow { display: flex; align-items: center; color: var(--p2-train); }
+.p2-train-title .p2-badge { margin-left: 4px; }
+.p2-train-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; text-align: right; }
+.p2-train-side > strong { font-size: 20px; }
+.p2-train-side small { font-size: 12px; color: var(--p2-muted); }
+.p2-train-side .p2-level { transform: scale(1.25); transform-origin: right bottom; }
+.p2-train.compact { padding: 10px 18px; }
+.p2-train.compact .p2-train-head { min-height: 40px; gap: 14px; }
+.p2-train.compact .p2-train-mark { width: 38px; height: 38px; border-radius: 11px; }
+.p2-train.compact .p2-train-title { flex-direction: row; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.p2-train.compact .p2-train-title > strong { font-size: 20px; }
+.p2-profile { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 12px; }
+.p2-profile i { display: block; min-width: 2px; border-radius: 3px; }
+.p2-profile i.warmup, .p2-profile i.cooldown { background: color-mix(in srgb, var(--p2-train) 38%, var(--p2-surface-2)); }
+.p2-profile i.interval { background: var(--p2-train); }
+.p2-profile i.recovery, .p2-profile i.rest, .p2-profile i.other { background: color-mix(in srgb, var(--p2-train) 22%, var(--p2-surface-2)); }
+.p2-steps { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--p2-muted); }
+.p2-training.rest { flex: 1; justify-content: center; }
+.p2-rest { margin: 0; font-size: 15px; color: var(--p2-muted); }
+.p2-training.rest .p2-rest { font-size: 26px; font-weight: 300; }
+.p2-rest b { color: var(--p2-text); font-weight: 600; }
+.p2-yesterday { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 6px; border: 0; background: transparent; color: inherit; font-size: 15px; text-align: left; }
+.p2-yesterday .p2-badge { margin-left: auto; }
+.p2-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; background: var(--p2-train); }
+.p2-detail-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 6px 0 12px; color: var(--p2-muted); }
+.p2-detail-level { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The meeting that is about to start (or on) takes this slot */
+.p2-focus { --hover-bg: transparent; display: flex; align-items: center; gap: 28px; width: 100%; padding: 10px 22px; border: 1px solid color-mix(in srgb, var(--p2-cal) 55%, var(--p2-line)); border-radius: 16px; background: linear-gradient(120deg, color-mix(in srgb, var(--p2-cal) 20%, var(--p2-surface)), var(--p2-surface) 70%); color: inherit; text-align: left; }
+.p2-focus-count { display: flex; flex-direction: column; gap: 4px; flex: none; color: var(--p2-cal); font-size: 46px; font-weight: 600; letter-spacing: -2px; line-height: 1; white-space: nowrap; }
+.p2-focus-count small { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--p2-muted); }
+.p2-focus-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.p2-focus-body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 28px; font-weight: 600; }
+
+/* Today as a ribbon */
+/* Never squeezed below its own height: a crowded panel is cut at the bottom, text never overlaps. */
+.p2-day { display: flex; flex-direction: column; justify-content: flex-end; flex: 1 0 auto; }
+.p2-day-head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.p2-day-head .p2-meta { font-size: 15px; }
+.p2-allday { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
+.p2-allday button { --hover-bg: #1f2c44; min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; background: #172235; color: var(--p2-text); font-size: 14px; }
+.p2-allday span { color: var(--p2-muted); }
+.p2-ribbon { margin-top: 30px; }
+.p2-rbox { position: relative; height: 56px; }
+.p2-rtrack { position: absolute; inset: 0; overflow: hidden; border-radius: 14px; background: var(--p2-surface-2); }
+.p2-rpast { position: absolute; top: 0; bottom: 0; left: 0; background: repeating-linear-gradient(135deg, #10151d 0 6px, #131a24 6px 12px); }
+.p2-rhour { position: absolute; top: 0; bottom: 0; width: 1px; background: #ffffff0d; }
+.p2-rfree { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; color: var(--p2-faint); font-size: 15px; letter-spacing: 0.02em; }
+.p2-block { --hover-bg: #9bbcff; position: absolute; min-width: 28px; padding: 0 8px; overflow: hidden; border: 1px solid var(--p2-surface-2); border-radius: 10px; background: var(--p2-cal); color: #0b1220; font-size: 13px; font-weight: 600; text-align: left; }
+.p2-block span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p2-block.past { --hover-bg: color-mix(in srgb, var(--p2-cal) 36%, var(--p2-surface-2)); background: color-mix(in srgb, var(--p2-cal) 30%, var(--p2-surface-2)); color: var(--p2-muted); }
+.p2-tag { position: absolute; bottom: calc(100% + 8px); padding: 4px 12px; border: 1px solid color-mix(in srgb, var(--p2-cal) 40%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--p2-cal) 14%, var(--p2-surface)); color: var(--p2-cal); font-size: 14px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.p2-now { position: absolute; top: -8px; bottom: -8px; width: 3px; border-radius: 2px; background: var(--p2-text); transform: translateX(-1.5px); pointer-events: none; }
+/* Near the left edge the line stands alone: the clock above says the time, and a label would meet the tag. */
+.p2-now span { position: absolute; top: -26px; right: 8px; padding: 2px 8px; border-radius: 9px; background: var(--p2-text); color: #0c0f14; font-size: 13px; font-weight: 700; }
+.p2-hours { position: relative; height: 22px; margin-top: 8px; }
+.p2-hours span { position: absolute; transform: translateX(-50%); font-size: 12px; color: var(--p2-faint); }
+
+/* AI limits as rings: outer 5h, inner 7d */
+.p2-quotas-head { display: flex; align-items: center; justify-content: space-between; }
+.p2-rings { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-around; }
+.p2-ring-card { --hover-bg: transparent; display: flex; align-items: center; gap: 18px; width: 100%; padding: 8px 6px; border: 0; border-top: 1px solid var(--p2-line); border-radius: 0; background: transparent; color: inherit; text-align: left; }
+.p2-rings > .p2-ring-card:first-child { border-top: 0; }
+.p2-ring { flex: none; width: 84px; height: 84px; }
+.p2-ring text { fill: var(--p2-text); font-size: 22px; font-weight: 600; }
+.p2-track { fill: none; stroke: var(--p2-track); }
+.p2-arc { fill: none; stroke-linecap: round; stroke: #5d6b80; }
+.p2-arc[data-tone='green'] { stroke: var(--quota-green); }
+.p2-arc[data-tone='yellow'] { stroke: var(--quota-yellow); }
+.p2-arc[data-tone='red'] { stroke: var(--quota-red); }
+.p2-tick { stroke: #fff; stroke-width: 2.6; stroke-linecap: round; }
+.p2-ring-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.p2-ring-text strong { font-size: 18px; font-weight: 600; }
+.p2-ring-text strong .p2-badge { font-size: 11px; }
+/* With Cezar, mail or an alarm present the rings fold into one row. */
+.p2-quotas.compact { padding: 12px 16px; }
+.p2-quotas.compact .p2-rings { flex: none; flex-direction: row; justify-content: stretch; gap: 8px; }
+.p2-quotas.compact .p2-ring-card { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 6px; padding: 4px; border: 0; text-align: center; }
+.p2-quotas.compact .p2-ring { width: 64px; height: 64px; }
+.p2-quotas.compact .p2-ring-text { align-items: center; }
+.p2-quotas.compact .p2-ring-text strong { font-size: 15px; }
+.p2-quotas.compact .p2-ring-text .p2-meta { font-size: 12px; }
+.p2-quotas.compact .p2-ring-text .p2-meta + .p2-meta { display: none; }
+
+/* Next days */
+.p2-week ol { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.p2-weekday { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 132px; padding: 12px 12px 10px; border: 1px solid var(--p2-line); border-radius: 18px; background: var(--p2-surface); }
+.p2-weekday.today { border-color: color-mix(in srgb, var(--p2-text) 40%, var(--p2-line)); background: var(--p2-surface-2); }
+.p2-weekday-head { display: flex; align-items: baseline; justify-content: space-between; }
+.p2-weekday-head b { font-size: 17px; }
+.p2-weekday-head span { font-size: 13px; color: var(--p2-muted); }
+.p2-item { display: flex; flex-direction: column; gap: 2px; min-height: 40px; padding: 4px 4px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; }
+.p2-item-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; line-height: 1.2; }
+.p2-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p2-item-time { margin-left: auto; padding-left: 4px; font-size: 12px; color: var(--p2-muted); }
+.p2-item-check { margin-left: auto; color: var(--p2-train); flex: none; }
+.p2-mark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--p2-cal); }
+.p2-item.workout .p2-mark { border-radius: 3px; background: var(--p2-train); }
+.p2-item.missed .p2-item-title, .p2-item.partial .p2-item-title { color: var(--p2-muted); }
+.p2-item-sub { display: flex; align-items: center; gap: 7px; padding-left: 17px; color: var(--p2-train); }
+.p2-item-sub .p2-level { height: 12px; transform: scale(0.7); transform-origin: left bottom; margin-right: -4px; }
+.p2-more, .p2-free { margin-top: auto; font-size: 13px; color: var(--p2-faint); }
+
+/* Panel events sit in the top bar, so they never cover the content */
+.events-slot { position: relative; }
+.top-bar .events-pill { position: static; max-width: 280px; box-shadow: none; }
+.top-bar .events-pill-title { max-width: 140px; }
+.top-bar .events-panel { top: calc(100% + 10px); z-index: 20; }
+
+@media (max-width: 899px) {
+  .p2-main { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .p2-week ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .p2-train-title > strong { font-size: 24px; }
+  .p2-focus { gap: 16px; }
+  .p2-focus-count { font-size: 36px; }
+  .p2-focus-body strong { font-size: 20px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .p2-block, .p2-train, .p2-focus { transition: background-color 0.15s, border-color 0.15s; }
+}

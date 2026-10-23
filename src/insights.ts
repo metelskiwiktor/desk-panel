@@ -1,6 +1,6 @@
 import { fresh, MAX_AGE, MINUTE, quotaState, type DashboardData, type Detail } from './model';
 /** Events point at dashboard sources; mail is not an event source. */
-type InsightTarget = Exclude<Detail, { kind: 'mail' }>;
+type InsightTarget = Extract<Detail, { kind: 'task' | 'event' | 'quota' | 'system' }>;
 import { quotaPace, quotaResetIn } from './quota-pace';
 import { EVENT_RULES } from './event-rules';
 

@@ -112,6 +112,8 @@ export type Detail =
   | { kind: 'event'; id: string }
   | { kind: 'quota'; provider: Provider }
   | { kind: 'mail'; id: string }
+  | { kind: 'workout'; id: string }
+  | { kind: 'breakdown' }
   | { kind: 'system' };
 export const MINUTE = 60_000;
 export const MAX_AGE = {

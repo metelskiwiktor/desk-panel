@@ -15,7 +15,7 @@ it('hides only the selected AGY group on dashboard and details, survives reload,
   await screen.findByText(/^Gemini 4 Argon/);await navigate(user,'Ustawienia');
   await user.click(screen.getByRole('checkbox',{name:'Gemini 4 Argon'}));
   await navigate(user,'Pulpit');expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();expect(screen.getByText(/^Agy: Claude & GPT/)).toBeTruthy();
-  await user.click(screen.getByRole('button',{name:/^Gemini /}));expect(screen.queryByText(/Gemini 4 Argon/)).toBeNull();
+  await user.click(screen.getByRole('button',{name:/^Gemini:/}));expect(screen.queryByText(/Gemini 4 Argon/)).toBeNull();
   view.unmount();render(<App/>);await screen.findAllByText(/^Gemini/);expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();
   await navigate(user,'Ustawienia');expect((screen.getByRole('checkbox',{name:'Gemini 4 Argon'}) as HTMLInputElement).checked).toBe(false);
   await user.click(screen.getByRole('checkbox',{name:'Gemini 4 Argon'}));await navigate(user,'Pulpit');expect(screen.getByText(/^Gemini 4 Argon/)).toBeTruthy();
@@ -87,7 +87,7 @@ it('explains an HTTP 429 pause with the next attempt time instead of a bare "nie
     return Response.json(body);
   }));
   render(<App/>);
-  expect((await screen.findAllByText(/limit zapytań dostawcy · kolejna próba \d\d:\d\d · ostatnia obserwacja/)).length).toBe(2);
+  expect((await screen.findAllByText(/limit zapytań dostawcy · kolejna próba \d\d:\d\d · ostatnia obserwacja/)).length).toBe(1);
 });
 it('offers a Gemini warmup limited to the Gemini Models group and saves its flash model',async()=>{
   const request=vi.fn(scenarioFetch('quota-settings'));vi.stubGlobal('fetch',request);const user=userEvent.setup();render(<Warmup/>);

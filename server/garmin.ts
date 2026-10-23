@@ -1,7 +1,7 @@
 import { Garmin, GarminAuthError, GarminClient, GarminRateLimitError } from 'garminconnect-js';
 import { z } from 'zod';
 import { stepKinds, trainingSourceSchema, type StepKind, type StepTarget, type TrainingActivity, type TrainingPlan, type TrainingSource, type TrainingStep, type TrainingWorkout } from '../src/training-contract';
-import { localDate } from '../src/training-progress';
+import { addDays, localDate } from '../src/training-progress';
 import { createGarminTokenStore, GarminStorageError } from './garmin-tokens';
 
 /** The few read-only calls of garminconnect-js the panel uses; tests replace it. */
@@ -88,12 +88,6 @@ export function mapPlan(raw: unknown[]): TrainingPlan | null {
   return { name: str(plan.planName) ?? null, workoutsPerWeek: perWeek && Number.isInteger(perWeek) && perWeek > 0 ? perWeek : null,
     targetDate: target && /^\d{4}-\d{2}-\d{2}$/.test(target) ? target : null };
 }
-
-const addDays = (day: string, days: number) => {
-  const d = new Date(`${day}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-};
 
 const OK_AFTER_MS = 15 * 60_000;
 const RETRY_AFTER_MS = 5 * 60_000;

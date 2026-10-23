@@ -42,14 +42,18 @@ describe('interaktywny panel', () => {
     renderWith();
     await loaded();
     expect(screen.queryByText(/DEMO|demonstracyjn|DANE RZECZYWISTE/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Cezar' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Cezar · / })).toBeTruthy();
   });
   it('pokazuje dzisiejsze spotkania na osi i kolejne dni', async () => {
     const user = userEvent.setup();
     renderWith();
     const today = await screen.findByRole('region', { name: 'Dziś' });
     expect(within(today).getByText(/3 spotkania · najbliższe za 12 min/)).toBeTruthy();
-    expect(within(today).getByText('KOLEJNE DNI')).toBeTruthy();
+    // The meeting 12 minutes away takes the focus slot; today's workout and the next days sit beside it.
+    expect(screen.getByRole('button', { name: /^Za 12 min: Planowanie Tabnote/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Trening: Długa jazda/ })).toBeTruthy();
+    const week = screen.getByRole('region', { name: 'Najbliższe dni' });
+    expect(within(week).getByRole('button', { name: /^Próg/ })).toBeTruthy();
     await user.click(within(today).getByRole('button', { name: /Planowanie Tabnote/ }));
     expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
   });
@@ -84,7 +88,7 @@ describe('interaktywny panel', () => {
     expect(screen.queryByText('KOMPUTER')).toBeNull();
     cleanup();
     renderWith('high-ram');
-    expect(await screen.findByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
     expect(await screen.findByText('KOMPUTER')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^PC · RAM \d+%$/ })).toBeTruthy();
   });
@@ -100,15 +104,21 @@ describe('interaktywny panel', () => {
     expect(screen.getAllByText('Reset według źródła')).toHaveLength(2);
     expect(screen.getByText('75% limitu')).toBeTruthy();
   });
-  it('rysuje pasek 5h w kolorach źródeł, gdy jest podział, a 7d zostawia jednokolorowy', async () => {
+  it('rysuje limity jako pierścienie 5h i 7d ze znacznikiem czasu i kolorem tempa', async () => {
     renderWith();
     const strip = await screen.findByRole('region', { name: 'Limity AI' });
-    await waitFor(() => expect(strip.querySelector('.quota-split')).toBeTruthy());
-    const split = strip.querySelector('.quota-split')!;
-    expect(split.children.length).toBeGreaterThan(0);
-    const bar = split.closest('.quota-bar')!;
-    expect(within(bar as HTMLElement).getByRole('meter').getAttribute('aria-label')).toBe('Użycie limitu 5h');
-    expect(strip.querySelectorAll('.quota-fill:not(.quota-split)').length).toBeGreaterThan(0);
+    const claude = await within(strip).findByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
+    // Two rings (5h outside, 7d inside), each with the tick of how far its window has run; 92% used at 58% of the time is red.
+    expect(claude.querySelectorAll('.p2-track')).toHaveLength(2);
+    expect(claude.querySelectorAll('.p2-tick')).toHaveLength(2);
+    expect(claude.querySelector('.p2-arc[data-tone="red"]')).toBeTruthy();
+    expect(within(claude).getByText(/reset za/)).toBeTruthy();
+  });
+  it('otwiera podział zużycia AI z limitów', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: 'Podział zużycia' }));
+    expect(screen.getByRole('heading', { name: 'Podział zużycia AI' })).toBeTruthy();
   });
   it('wszystkie zakładki działają; agenda prowadzi do szczegółów', async () => {
     const user = userEvent.setup();
@@ -151,7 +161,8 @@ describe('interaktywny panel', () => {
   });
   it('pokazuje brak pomiaru limitów bez fałszywych zdarzeń', async () => {
     renderWith('quota-missing');
-    await waitFor(() => expect(screen.getAllByText('brak pomiaru')).toHaveLength(4));
+    // One line per limit card (each of the two cards has two windows without a reading).
+    await waitFor(() => expect(screen.getAllByText('brak pomiaru')).toHaveLength(2));
     expect(screen.queryByText(/Claude.*limit blisko wyczerpania/)).toBeNull();
   });
   it('oznacza nieaktualne zapisy i nie tworzy z nich zdarzeń', async () => {
@@ -161,18 +172,22 @@ describe('interaktywny panel', () => {
   });
   it('zwija puste źródła', async () => {
     renderWith('empty');
-    expect(await screen.findByText(/Cezar · nic nie czeka na Ciebie/)).toBeTruthy();
+    expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
     expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('bez spotkań')).toBeTruthy();
   });
   it('dopasowuje tryb układu do tego, co się dzieje', async () => {
     const quiet = renderWith('empty');
-    await screen.findByText(/Cezar · nic nie czeka na Ciebie/);
-    expect(document.querySelector('.pulpit')!.getAttribute('data-mode')).toBe('calm');
+    await screen.findByText(/Cezar · nic nie czeka/);
+    // Nothing waits: no side cards, the limits take the whole right column.
+    expect(document.querySelector('.p2-frame')!.getAttribute('data-side')).toBe('false');
+    expect(document.querySelector('.p2-quotas')!.classList.contains('compact')).toBe(false);
     quiet.unmount();
     renderWith('standard');
     await screen.findByRole('region', { name: 'Poczta' });
-    expect(document.querySelector('.pulpit')!.getAttribute('data-mode')).toBe('full');
+    // Cezar and mail have something: they join the limits, which fold into a row.
+    expect(document.querySelector('.p2-frame')!.getAttribute('data-side')).toBe('true');
+    expect(document.querySelector('.p2-quotas')!.classList.contains('compact')).toBe(true);
   });
   it('nawiguje dotknięciem paneli i przyciskami u góry zamiast paska na dole', async () => {
     const user = userEvent.setup();
