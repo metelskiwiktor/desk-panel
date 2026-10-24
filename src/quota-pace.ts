@@ -25,7 +25,7 @@ export function sortSnapshots(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
   });
 }
 
-/** The reset anchors the nominal window; no usage is predicted after it. */
+/** The reset anchors the nominal window; no usage is predicted after it. A spent limit (100%) is red until the reset, however close it is. */
 export function quotaPace(snapshot: QuotaSnapshot, now: number) {
   const norm = normalizeQuotaWindow(snapshot.window);
   if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !norm) return null;
@@ -33,9 +33,10 @@ export function quotaPace(snapshot: QuotaSnapshot, now: number) {
   const elapsedPercent = Math.max(0, Math.min(100, ((duration - (snapshot.resetAt! - now)) * 100) / duration));
   const excess = snapshot.usedPercent! - elapsedPercent;
   // Avoid moving an exact boundary across a colour due to floating-point noise.
-  const tone: keyof typeof quotaPaceLabels = excess <= QUOTA_PACE_TOLERANCE + 1e-9 ? 'green'
+  const exhausted = snapshot.usedPercent! >= 100;
+  const tone: keyof typeof quotaPaceLabels = exhausted ? 'red' : excess <= QUOTA_PACE_TOLERANCE + 1e-9 ? 'green'
     : excess <= QUOTA_PACE_WARNING + 1e-9 ? 'yellow' : 'red';
-  return { elapsedPercent, tone };
+  return { elapsedPercent, tone, exhausted };
 }
 
 export function quotaResetIn(resetAt: number, now: number) {

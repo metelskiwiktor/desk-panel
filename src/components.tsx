@@ -200,12 +200,14 @@ export function QuotaWindow({
             : pace ? `Czas okna: ${elapsed}% · reset za ${quotaResetIn(snapshot.resetAt!, now)}` : snapshot.resetAt ? `Reset za ${quotaResetIn(snapshot.resetAt, now)}` : 'Termin resetu nieznany'}
       </span>
       {showPaceDetails && pace && <div className="quota-pace-details">
+        {pace.exhausted ? <span className="meta">Czerwony · limit wyczerpany do resetu</span> : <>
         <span className="meta">{pace.tone === 'green' ? 'Zielony' : pace.tone === 'yellow' ? 'Żółty' : 'Czerwony'} · zużycie {pp(Math.abs(excess))} p.p. {excess < 0 ? 'poniżej' : 'powyżej'} upływu czasu</span>
         {pace.tone === 'green' ? <span className="meta">Do progu żółtego: {pp(QUOTA_PACE_TOLERANCE - excess)} p.p.</span>
           : pace.tone === 'yellow' ? <>
             <span className="meta">Ponad próg żółtego: {pp(excess - QUOTA_PACE_TOLERANCE)} p.p.</span>
             <span className="meta">Do progu czerwonego: {pp(QUOTA_PACE_WARNING - excess)} p.p.</span>
           </> : <span className="meta">Ponad próg czerwonego: {pp(excess - QUOTA_PACE_WARNING)} p.p.</span>}
+        </>}
       </div>}
       {snapshot.reason && <span className="meta" title={snapshot.reason}>{quotaReason(snapshot.reason)}</span>}
       {snapshot.retryAt && <span className="meta">Kolejna próba odczytu po {stamp(snapshot.retryAt)}</span>}
@@ -222,7 +224,7 @@ export function QuotaLegend() {
     <ul>
       <li><span className="quota-legend-swatch quota-pace-green" aria-hidden="true" /><span>Zielony — zużycie poniżej kreski lub do {QUOTA_PACE_TOLERANCE} punktów procentowych ponad nią.</span></li>
       <li><span className="quota-legend-swatch quota-pace-yellow" aria-hidden="true" /><span>Żółty — zużycie wyprzedza czas o ponad {QUOTA_PACE_TOLERANCE} do {QUOTA_PACE_WARNING} punktów procentowych.</span></li>
-      <li><span className="quota-legend-swatch quota-pace-red" aria-hidden="true" /><span>Czerwony — zużycie wyprzedza czas o ponad {QUOTA_PACE_WARNING} punktów procentowych.</span></li>
+      <li><span className="quota-legend-swatch quota-pace-red" aria-hidden="true" /><span>Czerwony — zużycie wyprzedza czas o ponad {QUOTA_PACE_WARNING} punktów procentowych albo limit jest wyczerpany (100%) — do resetu zostaje czerwony.</span></li>
     </ul>
     <p className="meta">Kolor porównuje zużycie z równomiernym tempem do resetu. Zielony nie gwarantuje dostępności limitu. Nieaktualny odczyt jest szary, bez kreski czasu. Po resecie czekamy na nowy pomiar.</p>
   </section>;
