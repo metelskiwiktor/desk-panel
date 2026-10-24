@@ -238,8 +238,9 @@ TSS. Waga, sen, tętno, miejsca, nazwy aktywności i identyfikatory konta nie op
 
 `GET /api/training` zwraca kontrakt z `src/training-contract.ts`. Czy trening jest wykonany, liczy
 `src/training-progress.ts` z nagrań danego dnia (od 80% planowanego czasu; nagrania krótsze niż 2 min
-się nie liczą), bo pole Garmina `associatedActivityId` bywa puste. Gotowość treningowa, sen, HRV i
-body battery nie są czytane: to konto ich nie zwraca. Dawny import planu przez zasubskrybowany kalendarz
+się nie liczą), bo pole Garmina `associatedActivityId` bywa puste. Gotowość treningowa, status i bilans
+obciążenia, prognozy zawodów, sen, HRV i body battery nie są czytane, choć to konto je zwraca; co jeszcze daje
+Garmin (pola, pułapki, pomysły na później) opisuje [docs/garmin-data.md](docs/garmin-data.md). Dawny import planu przez zasubskrybowany kalendarz
 Garmin w Google (`DESK_EXTRA_CALENDARS`) nie jest już potrzebny do planu; zostaje dla zwykłych
 wydarzeń, np. zawodów w głównym kalendarzu Google.
 
