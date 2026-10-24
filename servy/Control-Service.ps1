@@ -44,17 +44,24 @@ if ($Action -eq 'RUN') {
     exit $LASTEXITCODE
 }
 if ($Action -eq 'STATUS') { Get-Service -Name $definition.name | Select-Object Name,Status,StartType; exit 0 }
-if (!(Test-ServiceAdministrator)) {
+# The service's security descriptor lets this user start and stop it, so try that first; Windows asks for
+# elevation (UAC) only when it refuses, e.g. after the service was registered again.
+function Invoke-ServiceAction {
+    switch ($Action) {
+        'START' { Start-Service -Name $definition.name -ErrorAction Stop }
+        'END' { Stop-Service -Name $definition.name -ErrorAction Stop }
+        'STOP' { Stop-Service -Name $definition.name -ErrorAction Stop }
+        'RESTART' { Restart-Service -Name $definition.name -ErrorAction Stop }
+    }
+}
+$done = $false
+try { Invoke-ServiceAction; $done = $true } catch {
+    if (Test-ServiceAdministrator) { throw }
+}
+if (!$done) {
     $powershell="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $argsLine='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Manifest "'+$context.Path+'" -Id "'+$Id+'" -Action '+$Action
     $process=Start-Process $powershell -ArgumentList $argsLine -Verb RunAs -WindowStyle Hidden -PassThru -Wait
     if ($process.ExitCode -ne 0) { throw "Service operation failed (exit $($process.ExitCode))." }
-} else {
-    switch ($Action) {
-        'START' { Start-Service -Name $definition.name }
-        'END' { Stop-Service -Name $definition.name }
-        'STOP' { Stop-Service -Name $definition.name }
-        'RESTART' { Restart-Service -Name $definition.name }
-    }
 }
 Get-Service -Name $definition.name | Select-Object Name,Status,StartType

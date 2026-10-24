@@ -20,8 +20,8 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 - `just update [--force]`: deploy to the service — on main it merges origin/main only when it
   cannot conflict with local work (otherwise lists the files and changes
   nothing); on another branch it pulls nothing. Runs tests and build, swaps dist and
-  restarts. Uncommitted local changes are deployed too (no commit needed); an unchanged version is skipped. Restart may show a
-  UAC prompt the user must confirm.
+  restarts. Uncommitted local changes are deployed too (no commit needed); an unchanged version is skipped. The
+  restart needs no elevation (the service lets this user start and stop it); UAC shows only if Windows refuses.
 - `just service`: Windows service status. `just service RESTART` applies changes
   after a successful build. Never run another listener while the service runs.
 - `just install`: first-time Servy registration; may need Windows credentials

@@ -38,7 +38,7 @@ http://127.0.0.1:5174, także bez otwartej sesji terminala.
    nie da, przerywa bez instalacji. Zatrzymaną lub jeszcze niezarejestrowaną pomija.
 4. Testy, typecheck i build do `dist.next`; dopiero po sukcesie podmienia `dist`.
    Przy błędzie usługa dalej serwuje poprzedni frontend.
-5. Restartuje usługę (okno UAC) i sprawdza, czy API odpowiada. Niezarejestrowana
+5. Restartuje usługę i sprawdza, czy API odpowiada. Niezarejestrowana
    usługa kończy się komunikatem `just install`.
 
 Wdrażane jest to, co jest w katalogu — razem z niezacommitowanymi zmianami.
