@@ -112,6 +112,11 @@ zasady w `AGENTS.md` i README (sekcja „Garmin Connect”) oraz decyzji, kto wi
 
 ## Jak powtórzyć sondę
 
+W repozytorium jest już [scripts/garmin-probe](../scripts/garmin-probe/README.md): sonda, która loguje się hasłem i MFA wpisywanymi
+w Twoim terminalu i zapisuje zanonimizowany *kształt* odpowiedzi (klucze, typy, długości), bez danych osobowych. Nadaje się,
+gdy chcesz sprawdzić, co zwraca inne konto lub nowe urządzenie. Poniższy wariant działa na zapisanych tokenach panelu
+(bez hasła) i zapisuje surowe odpowiedzi, więc służy do podglądu wartości.
+
 Jednorazowy skrypt tylko do odczytu; umieść go w katalogu projektu (żeby działały importy), uruchom
 `npx tsx tmp-probe/garmin-probe.ts <katalog-na-surowe-odpowiedzi>` i usuń po użyciu. Surowe wyniki zapisuj poza repozytorium.
 
