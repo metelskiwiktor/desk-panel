@@ -9,6 +9,8 @@ export interface WeekItem {
   title: string;
   /** Start time of a timed event, "11:00". */
   at?: string;
+  startAt?: number;
+  endAt?: number;
   workout?: TrainingWorkout;
   state?: WorkoutState;
 }
@@ -18,15 +20,38 @@ export interface WeekDay {
   label: string;
   dayOfMonth: number;
   today: boolean;
+  /** Before today: shown, but the sources are read from today on. */
+  past: boolean;
   items: WeekItem[];
 }
 
 const clock = (at: number, timeZone: string) => new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
-const SHORT_DAYS = ['Nd', 'Pn', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob'];
+export const SHORT_DAYS = ['Nd', 'Pn', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob'];
 
 /** The Garmin plan used to reach the calendar as all-day events of a subscribed calendar; once the plan comes from Garmin itself those are the same workouts twice. */
 export function withoutPlanDuplicates(events: CalendarEvent[], workouts: TrainingWorkout[]): CalendarEvent[] {
   return events.filter(e => !(e.allDay && e.startDate && workouts.some(w => w.date === e.startDate && w.name.toLowerCase() === e.title.trim().toLowerCase())));
+}
+
+interface DayContext { now: number; timeZone: string; events: CalendarEvent[]; workouts: TrainingWorkout[]; activities: TrainingActivity[] }
+
+function buildDay(date: string, today: string, context: DayContext): WeekDay {
+  const { now, timeZone, events, workouts, activities } = context;
+  const noon = Date.parse(`${date}T12:00:00Z`);
+  const items: WeekItem[] = [
+    ...events.filter(e => e.allDay && e.startDate && e.endDate && e.startDate <= date && date < e.endDate)
+      .map((e): WeekItem => ({ kind: 'allDay', id: e.id, title: e.title })),
+    ...workouts.filter(w => w.date === date && !w.restDay)
+      .map((w): WeekItem => ({ kind: 'workout', id: w.id, title: w.name, workout: w, state: workoutProgress(w, activities, now, timeZone).state })),
+    ...events.filter(e => !e.allDay && localDate(e.startAt, timeZone) === date).sort((a, b) => a.startAt - b.startAt)
+      .map((e): WeekItem => ({ kind: 'event', id: e.id, title: e.title, at: clock(e.startAt, timeZone), endAt: e.endAt, startAt: e.startAt })),
+  ];
+  return { date, label: SHORT_DAYS[new Date(noon).getUTCDay()], dayOfMonth: Number(date.slice(8)), today: date === today, past: date < today, items };
+}
+
+/** One day, whatever its distance from today. */
+export function dayOf(date: string, options: { now: number; timeZone: string; events: CalendarEvent[]; workouts: TrainingWorkout[]; activities: TrainingActivity[] }): WeekDay {
+  return buildDay(date, localDate(options.now, options.timeZone), { ...options, events: withoutPlanDuplicates(options.events, options.workouts) });
 }
 
 /**
@@ -34,21 +59,24 @@ export function withoutPlanDuplicates(events: CalendarEvent[], workouts: Trainin
  * Days are cut in the given time zone, so a ride at 00:30 belongs to the day it was ridden.
  */
 export function weekDays(options: { now: number; timeZone: string; events: CalendarEvent[]; workouts: TrainingWorkout[]; activities: TrainingActivity[]; days?: number }): WeekDay[] {
-  const { now, timeZone, workouts, activities } = options;
-  const today = localDate(now, timeZone);
-  const events = withoutPlanDuplicates(options.events, workouts);
-  return Array.from({ length: options.days ?? 7 }, (_, index) => {
-    const date = addDays(today, index);
-    const noon = Date.parse(`${date}T12:00:00Z`);
-    const items: WeekItem[] = [
-      ...events.filter(e => e.allDay && e.startDate && e.endDate && e.startDate <= date && date < e.endDate)
-        .map((e): WeekItem => ({ kind: 'allDay', id: e.id, title: e.title })),
-      ...workouts.filter(w => w.date === date && !w.restDay)
-        .map((w): WeekItem => ({ kind: 'workout', id: w.id, title: w.name, workout: w, state: workoutProgress(w, activities, now, timeZone).state })),
-      ...events.filter(e => !e.allDay && localDate(e.startAt, timeZone) === date).sort((a, b) => a.startAt - b.startAt)
-        .map((e): WeekItem => ({ kind: 'event', id: e.id, title: e.title, at: clock(e.startAt, timeZone) })),
-    ];
-    return { date, label: SHORT_DAYS[new Date(noon).getUTCDay()],
-      dayOfMonth: Number(date.slice(8)), today: index === 0, items };
-  });
+  const today = localDate(options.now, options.timeZone);
+  const context = { ...options, events: withoutPlanDuplicates(options.events, options.workouts) };
+  return Array.from({ length: options.days ?? 7 }, (_, index) => buildDay(addDays(today, index), today, context));
+}
+
+/** Monday on or before `day`. */
+export function mondayOf(day: string): string {
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+  return addDays(day, -((weekday + 6) % 7));
+}
+
+/**
+ * Five weeks from this week's Monday, for the month view. The days of this week that have passed are in the grid
+ * (so each week has seven cells) but empty: the calendar is read from today on.
+ */
+export function monthDays(options: { now: number; timeZone: string; events: CalendarEvent[]; workouts: TrainingWorkout[]; activities: TrainingActivity[]; weeks?: number }): WeekDay[] {
+  const today = localDate(options.now, options.timeZone);
+  const context = { ...options, events: withoutPlanDuplicates(options.events, options.workouts) };
+  const first = mondayOf(today);
+  return Array.from({ length: (options.weeks ?? 5) * 7 }, (_, index) => buildDay(addDays(first, index), today, context));
 }

@@ -95,7 +95,7 @@ Windows. Tokeny i klient OAuth nigdy nie trafiają do przeglądarki. Bez Windows
 bezpieczny zapis jest niedostępny; aplikacja zgłasza ten stan zamiast zapisać token jawnie.
 
 Backend
-odczytuje strefę kalendarza i rozwinięte wystąpienia wydarzeń przez siedem dni
+odczytuje strefę kalendarza i rozwinięte wystąpienia wydarzeń przez sześć tygodni (42 dni)
 od początku dzisiejszego dnia. Obsługuje paginację (maks. 2500 wydarzeń, potem
 oznaczenie częściowej agendy), wydarzenia całodniowe z wyłącznym końcem oraz DST.
 Anulowane wydarzenia i odrzucone przez właściciela zaproszenia są pomijane.
@@ -229,7 +229,7 @@ koncie Windows i podchwyci logowanie przy następnym odczycie (do 15 minut), bez
 wygasa po ok. 30 dniach bez użycia; panel odpytuje Garmin stale, więc się odnawia, ale po dłuższej
 przerwie trzeba zalogować się ponownie. Strefa czasowa dnia: `DESK_TIME_ZONE` (domyślnie strefa komputera).
 
-Odczyt to wyłącznie GET: plan od 7 dni wstecz do 14 dni naprzód, kroki treningu (interwały i docelowa
+Odczyt to wyłącznie GET: plan od 7 dni wstecz do 35 dni naprzód, kroki treningu (interwały i docelowa
 moc) dla najbliższych 7 dni oraz ostatnie aktywności. Garmin jest pytany najwyżej co 15 minut (po błędzie
 co 5 min, po limicie zapytań co 30 min), a kroki treningu trzymane są w pamięci 6 godzin. Błąd zachowuje
 ostatni plan z pierwotną godziną pomiaru. Do panelu trafiają tylko: nazwa, sport, dzień, szacowany czas,
@@ -245,31 +245,35 @@ wydarzeń, np. zawodów w głównym kalendarzu Google.
 
 ## Interfejs
 
-Pulpit mieści się na poziomym ekranie (1280×720 CSS) bez przewijania. Rama ma trzy strefy,
-a układ nie zależy od urządzenia:
+Pulpit mieści się na poziomym ekranie (1280×720 CSS) bez przewijania. Pod paskiem z zegarem są trzy strefy jedna
+pod drugą, a układ nie zależy od urządzenia:
 
-- u góry godzina, data, pigułka zdarzeń panelu i jedna linia stanu (PC z CPU/RAM, Cezar —
-  „nic nie czeka” / „N czeka na Ciebie” / „N w toku”, Gmail); pigułka stoi w pasku, więc nic nie zasłania;
-- po lewej „Dziś”: spotkanie za 15 minut lub trwające zajmuje miejsce na górze (odliczanie), pod nim
-  dzisiejszy trening z Garmina (nazwa, rower, czas, poziom, efekt treningowy oraz profil interwałów:
-  szerokość słupka to czas, wysokość to moc docelowa), uwaga o wczorajszym treningu zrobionym tylko
-  częściowo, a na dole cały dzień jako pasek godzin z linią „teraz” (przeszłość zakreskowana, spotkania
-  jako bloki, nakładające się w pasach, wydarzenia całodniowe nad paskiem). Dotknięcie treningu otwiera
-  jego szczegóły z listą kroków, spotkania — szczegóły wydarzenia, „Kalendarz” — pełną agendę;
-- po prawej limity AI jako pierścienie: zewnętrzny to okno 5h, wewnętrzny 7d, biała kreska pokazuje,
-  ile czasu okna już upłynęło, a kolor (zielony / żółty / czerwony) mówi tylko, czy zużycie wyprzedza
-  czas; pod pierścieniami procent i reset. „Podział zużycia” otwiera szczegóły z podziałem na źródła;
-- gdy Cezar czeka lub pracuje, poczta ma wątki albo komputer przekroczył 90%, ich karty dochodzą pod
-  limity, a pierścienie zwijają się do jednego rzędu; bez nich limity zajmują całą kolumnę.
-  Cezar pokazuje najpierw zadania czekające na Ciebie (tytuł, projekt, pytanie), potem te w toku
-  (aktywność, czas, testy); jedno zadanie to jedna linia, a obok poczty widać dwie pozycje i „i N więcej”.
-  Poczta to lista nadawca / temat / początek wiadomości; przesunięcie w lewo oznacza przeczytane, w prawo kosz;
-- na dole siedem najbliższych dni: plan treningowy (czas i poziom, ✓ przy wykonanym) razem
-  ze spotkaniami; wydarzenia całodniowe z zasubskrybowanego kalendarza Garmin, które dublują trening,
-  są pomijane.
+- **góra: wybrany dzień** (na początku dzisiejszy; zmienia go dotknięcie dnia na dole, nie ma strzałek). Kafelek daty
+  (dla innego dnia niż dziś z niebieską obwódką i podpisem „jutro”, „pojutrze” lub miesiącem), kolumna **Trening**
+  (nazwa, sport i czas, poziom z efektem treningowym, kształt interwałów albo, gdy trening jest zrobiony lub
+  zaczęty, ile przejechano z planu; pod spodem uwaga o wczorajszym treningu zrobionym tylko częściowo), kolumna
+  **Spotkania** (lista z godzinami, całodniowe jako „cały dzień”, najbliższe w ciągu 15 minut podświetlone, a dalsze
+  jako „+N więcej”) i odliczenie do spotkania albo do jego końca. Dotknięcie treningu lub spotkania otwiera szczegóły.
+  Rozmiary: **standard**, **zmniejszona** (jedna linia chipów) i **ukryta** (sam pasek z podsumowaniem; dotknięcie
+  dnia na dole przywraca standard). Rozmiar zmienia uchwyt na dolnej krawędzi paska: przeciągnięcie ciągnie krawędź i zatrzaskuje się na najbliższym rozmiarze, samo dotknięcie wybiera kolejny (przy zmniejszonym i ukrytym pasku uchwyt jest po prawej);
+- **środek: obszar roboczy** z kartami limitów AI (blok na dostawcę: okno 5h jako gruby pasek, 7d jako cienki, biała
+  kreska pokazuje, ile czasu okna już upłynęło, a kolor mówi tylko, czy zużycie wyprzedza czas; bloki stoją obok
+  siebie, gdy karta jest szeroka, i jeden pod drugim, gdy wąska), Cezara i poczty. Karty dzielą
+  szerokość same; Cezar i poczta pojawiają się tylko, gdy mają coś do powiedzenia. Cezar pokazuje najpierw zadania
+  czekające na Ciebie, potem te w toku; poczta to lista nadawca / temat / początek wiadomości (w lewo przeczytane,
+  w prawo kosz). Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu znika;
+- **dół: dni** (z linkiem „Kalendarz” do pełnej agendy). Rozmiary: **krótki** (chip na dzień: etykieta i kropki treningów i spotkań), **średni** (domyślny: karta
+  na dzień z planem, czasem i poziomem, ✓ przy wykonanym) i **miesiąc** (pięć tygodni od poniedziałku tego tygodnia,
+  zajmuje cały ekran pod górą; dni, które minęły, są wygaszone, bo źródła czytamy od dziś). Dotknięcie dnia wybiera go
+  i góra pokazuje jego plan. Wydarzenia całodniowe z zasubskrybowanego kalendarza Garmin, które dublują trening, są
+  pomijane (dotyczy tylko takich, które mają tę samą nazwę i dzień).
+
+Rozmiary góry i dołu zmienia uchwyt przy tej strefie (przeciągnięcie albo dotknięcie: kolejny rozmiar, po ostatnim pierwszy), są zapamiętane w przeglądarce, a po
+bezczynności (zegar) wracają do domyślnych razem z wybranym dniem. Kalendarz Google jest czytany na sześć tygodni
+naprzód, plan Garmin na pięć; dalej jest pusto.
 
 Status treningu (wykonany / częściowo / nie zrobiony) wynika z nagrań z danego dnia, patrz Garmin Connect
-powyżej. Dopóki źródło nie odpowie, pasek dnia i tydzień pokazują kreskę zamiast „wolne”.
+powyżej. Dopóki źródło nie odpowie, dni pokazują kreskę zamiast „wolne”.
 Po 10 minutach bez dotyku (w nocy, 23–6, po 2) panel przechodzi w ciemny zegar: duża godzina, data i do czterech
 linii tego, co się liczy (najbliższe spotkanie, trening, Cezar czeka, nieprzeczytana poczta). Obraz dryfuje o kilka
 pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w to, co pod spodem. Wyłącza go odznaczenie
@@ -277,8 +281,13 @@ pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w t
 W pasku u góry są trzy przyciski: księżyc / słońce przełącza dzień i noc (noc przyciemnia cały pulpit i zegar; bez
 wyboru decyduje godzina 23–6, a ręczny wybór trwa do najbliższego świtu lub zmierzchu) przycisk zegara, który od razu pokazuje tryb ambient (także gdy samoczynne przechodzenie jest wyłączone), oraz pełny ekran / wyjście z niego
 (tylko tam, gdzie przeglądarka go udostępnia).
+Obciążenie komputera nie ma własnej karty: chip „PC” w pasku czerwieni się dopiero po 20 s ≥90% (krótki skok go nie rusza),
+dotknięcie otwiera okno (jak lista zdarzeń: Esc lub dotknięcie poza nim zamyka) z wykresami CPU i RAM z ostatnich 5 minut,
+progiem 90% i przyciskiem do zakładki Komputer, a utrzymany stan zostawia wpis w zdarzeniach. Dzień bez spotkań i wydarzeń całodniowych
+nie rysuje już niczego osobnego: dzień jest po prostu pusty („Dziś bez treningu i spotkań”).
 Poniżej 900 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona. Zdarzenia panelu
-(zwinięte: liczba i najnowsze z etykietą źródła, nowe rozwijają listę na 10 s) stoją w pasku u góry.
+(dzwonek z licznikiem, także przy zerze; dotknięcie rozwija listę, albo „Brak zdarzeń”, z przyciskiem do zasad;
+nowe zdarzenie rozwija listę na 10 s, Esc lub dotknięcie poza nią zwija) stoją w pasku u góry.
 
 Gdy źródło nie jest świeże, sekcja pokazuje częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty
@@ -345,7 +354,7 @@ Zakładka „Zdarzenia” w dolnej nawigacji opisuje aktualne reguły w krótkie
 warunek utworzenia oraz kiedy dany wpis może pojawić się ponownie. Pokazuje też
 zasady zapisu historii i usuwania. Progi i czasy są współdzielone z detekcją zdarzeń.
 
-Lista zdarzeń panelu rozwija się z „pigułki” na Pulpicie i przewija pionowo.
+Lista zdarzeń panelu rozwija się spod dzwonka na Pulpicie i przewija pionowo.
 Przesunięcie wpisu w lewo lub prawo usuwa go; przycisk × jest alternatywą dla gestu,
 a „Cofnij” działa przez sześć sekund. Dotknięcie wpisu otwiera szczegóły źródła.
 Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwierają szczegółów.
@@ -356,7 +365,7 @@ lub utracie połączenia. Zamknięty panel nie zbiera zdarzeń w tle.
 Zablokowany/uszkodzony localStorage nie blokuje pulpitu.
 
 Reguły: Cezar wymaga odpowiedzi; zadania zakończone w ostatnich 10 minutach;
-spotkania w ciągu 15 minut; RAM ≥90% przez ciągłą minutę. Limity AI tworzą osobne
+spotkania w ciągu 15 minut; RAM ≥90% przez ciągłą minutę, CPU ≥90% przez dwie. Limity AI tworzą osobne
 zdarzenia dla konta i okna: żółte tempo (>5 p.p.), czerwone (>15 p.p.), zużycie ≥90%.
 Każdy próg limitu zgłaszany jest najwyżej raz w danym oknie resetu, także po
 usunięciu wpisu i odświeżeniu strony; eskalacja do czerwonego tworzy nowy wpis,

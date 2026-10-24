@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
+import { systemAlert } from './Dashboard';
 import { STORAGE_KEY } from './layout';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
 
@@ -35,7 +36,7 @@ describe('interaktywny panel', () => {
   ] as const)('pokazuje stan %s i nie generuje zdarzeń', async (scenario, label) => {
     renderWith(scenario);
     expect((await screen.findAllByText(label)).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /^Zdarzenia panelu/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 0' })).toBeTruthy();
     expect(screen.queryByText(/^0 w toku/)).toBeNull();
   });
   it('nie oznacza danych jako demonstracyjne ani rzeczywiste', async () => {
@@ -48,9 +49,10 @@ describe('interaktywny panel', () => {
     const user = userEvent.setup();
     renderWith();
     const today = await screen.findByRole('region', { name: 'Dziś' });
-    expect(within(today).getByText(/3 spotkania · najbliższe za 12 min/)).toBeTruthy();
-    // The meeting 12 minutes away takes the focus slot; today's workout and the next days sit beside it.
-    expect(screen.getByRole('button', { name: /^Za 12 min: Planowanie Tabnote/ })).toBeTruthy();
+    // Meetings as a list with a countdown to the first; today's workout in full beside them.
+    expect(within(today).getByRole('heading', { name: /^Spotkania · 3$/ })).toBeTruthy();
+    expect(within(today).getByText('12 min')).toBeTruthy();
+    expect(within(today).getByText('do spotkania')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Trening: Długa jazda/ })).toBeTruthy();
     const week = screen.getByRole('region', { name: 'Najbliższe dni' });
     expect(within(week).getByRole('button', { name: /^Próg/ })).toBeTruthy();
@@ -89,7 +91,8 @@ describe('interaktywny panel', () => {
     cleanup();
     renderWith('high-ram');
     expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
-    expect(await screen.findByText('KOMPUTER')).toBeTruthy();
+    // Overload is a red chip (it opens the details) and, when it lasts, a panel event; never a card of its own.
+    expect(screen.queryByText('KOMPUTER')).toBeNull();
     expect(screen.getByRole('button', { name: /^PC · RAM \d+%$/ })).toBeTruthy();
   });
   it('otwiera quota z timestampami, resetem i dyskretną historią', async () => {
@@ -104,15 +107,21 @@ describe('interaktywny panel', () => {
     expect(screen.getAllByText('Reset według źródła')).toHaveLength(2);
     expect(screen.getByText('75% limitu')).toBeTruthy();
   });
-  it('rysuje limity jako pierścienie 5h i 7d ze znacznikiem czasu i kolorem tempa', async () => {
+  it('rysuje limity jako paski 5h i 7d ze znacznikiem czasu i kolorem tempa', async () => {
     renderWith();
     const strip = await screen.findByRole('region', { name: 'Limity AI' });
     const claude = await within(strip).findByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
-    // Two rings (5h outside, 7d inside), each with the tick of how far its window has run; 92% used at 58% of the time is red.
-    expect(claude.querySelectorAll('.p2-track')).toHaveLength(2);
-    expect(claude.querySelectorAll('.p2-tick')).toHaveLength(2);
-    expect(claude.querySelector('.p2-arc[data-tone="red"]')).toBeTruthy();
+    // Two bars (5h thick, 7d thin), each with the tick of how far its window has run; 92% used at 58% of the time is red.
+    expect(claude.querySelectorAll('.p3-lbar')).toHaveLength(2);
+    expect(claude.querySelectorAll('.p3-lbar u')).toHaveLength(2);
+    expect(claude.querySelector('.p3-lrow.lead .p3-lbar[data-tone="red"]')).toBeTruthy();
+    expect(claude.querySelectorAll('.p3-lrow.thin')).toHaveLength(1);
     expect(within(claude).getByText(/reset za/)).toBeTruthy();
+  });
+  it('pokazuje wszystkich dostawców, także Gemini', async () => {
+    renderWith();
+    const strip = await screen.findByRole('region', { name: 'Limity AI' });
+    for (const name of ['Claude', 'Codex', 'Gemini']) expect(await within(strip).findByRole('button', { name: new RegExp(`^${name}: 5h \\d`) })).toBeTruthy();
   });
   it('otwiera podział zużycia AI z limitów', async () => {
     const user = userEvent.setup();
@@ -135,7 +144,7 @@ describe('interaktywny panel', () => {
     await user.click(nav('Zdarzenia'));
     expect(screen.getByRole('heading', { level: 1, name: 'Zdarzenia' })).toBeTruthy();
     const rules = screen.getByRole('table', { name: 'Aktualne reguły tworzenia zdarzeń' });
-    expect(within(rules).getAllByRole('row')).toHaveLength(8);
+    expect(within(rules).getAllByRole('row')).toHaveLength(9);
     expect(within(rules).getByRole('columnheader', { name: 'Kiedy ponownie' })).toBeTruthy();
     expect(within(rules).getByText('Zużycie wyprzedza czas o ponad 5 do 15 p.p.')).toBeTruthy();
     expect(screen.getByText(/Restart serwera i odświeżenie strony zachowują historię/)).toBeTruthy();
@@ -168,7 +177,7 @@ describe('interaktywny panel', () => {
   it('oznacza nieaktualne zapisy i nie tworzy z nich zdarzeń', async () => {
     renderWith('stale');
     expect((await screen.findAllByText(/Nieaktualn/)).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: /^Zdarzenia panelu/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 0' })).toBeTruthy();
   });
   it('zwija puste źródła', async () => {
     renderWith('empty');
@@ -179,15 +188,15 @@ describe('interaktywny panel', () => {
   it('dopasowuje tryb układu do tego, co się dzieje', async () => {
     const quiet = renderWith('empty');
     await screen.findByText(/Cezar · nic nie czeka/);
-    // Nothing waits: no side cards, the limits take the whole right column.
-    expect(document.querySelector('.p2-frame')!.getAttribute('data-side')).toBe('false');
-    expect(document.querySelector('.p2-quotas')!.classList.contains('compact')).toBe(false);
+    // Nothing waits: the work area holds the limits alone.
+    const work = document.querySelector('.p3-work')!;
+    expect(work.children).toHaveLength(1);
+    expect(within(work as HTMLElement).getByRole('region', { name: 'Limity AI' })).toBeTruthy();
     quiet.unmount();
     renderWith('standard');
     await screen.findByRole('region', { name: 'Poczta' });
-    // Cezar and mail have something: they join the limits, which fold into a row.
-    expect(document.querySelector('.p2-frame')!.getAttribute('data-side')).toBe('true');
-    expect(document.querySelector('.p2-quotas')!.classList.contains('compact')).toBe(true);
+    // Cezar and mail have something: they join the limits in the same area.
+    expect(document.querySelector('.p3-work')!.children).toHaveLength(3);
   });
   it('jedno zadanie Cezara w toku to jedna linia obok poczty, bez nagłówka z licznikami', async () => {
     renderWith('inbox');
@@ -232,5 +241,41 @@ describe('interaktywny panel', () => {
     await user.click(nav('Ustawienia'));
     await user.click(screen.getByRole('checkbox', { name: 'Poczta' }));
     expect(screen.getByText(/Nie udało się zapisać\. Ustawienia/)).toBeTruthy();
+  });
+});
+
+describe('alarm obciążenia komputera', () => {
+  const sample = (at: number, cpuPercent: number) => ({ at, cpuPercent, ramUsedGb: 10, ramTotalGb: 32 });
+  const withSamples = (samples: ReturnType<typeof sample>[]) => ({ system: { status: 'connected' as const, observedAt: now, live: true, data: samples } }) as unknown as Parameters<typeof systemAlert>[0];
+  it('czerwienieje dopiero po utrzymanym obciążeniu, nie od skoku', () => {
+    const base = Array.from({ length: 11 }, (_, i) => sample(now - (10 - i) * 2000, 30));
+    expect(systemAlert(withSamples([...base.slice(0, -1), sample(now, 100)]), now)).toBeNull();
+    const held = Array.from({ length: 11 }, (_, i) => sample(now - (10 - i) * 2000, 97));
+    expect(systemAlert(withSamples(held), now)).toMatchObject({ metric: 'CPU' });
+    expect(systemAlert(withSamples(held.slice(-3)), now)).toBeNull(); // 4 s of history is not yet a trend
+  });
+});
+
+describe('okno komputera', () => {
+  it('chip PC otwiera okno z wykresami CPU i RAM, a przycisk prowadzi do zakładki System', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: /^PC · CPU/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Komputer' });
+    expect(within(dialog).getByRole('img', { name: /^CPU: teraz/ })).toBeTruthy();
+    expect(within(dialog).getByRole('img', { name: /^RAM: teraz/ })).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /Otwórz zakładkę Komputer/ }));
+    expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'System' })).toBeTruthy();
+  });
+  it('zamyka się Escape i dotknięciem poza oknem', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: /^PC · CPU/ }));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^PC · CPU/ }));
+    await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' }));
+    expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
   });
 });

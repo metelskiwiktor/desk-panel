@@ -477,6 +477,32 @@
             "source": null
           }
         ]
+      },
+      {
+        "provider": "AGY",
+        "snapshots": [
+          {
+            "window": "gemini-5h",
+            "usedPercent": 12,
+            "observedAt": "now",
+            "resetAt": "now+150m",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Five Hour Limit Remaining"
+          },
+          {
+            "window": "gemini-weekly",
+            "usedPercent": 31,
+            "observedAt": "now",
+            "resetAt": "now+3d",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Weekly Limit Remaining"
+          }
+        ],
+        "history": []
       }
     ]
   }

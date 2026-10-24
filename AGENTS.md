@@ -17,10 +17,10 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
   DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
 - `just check`: all tests, typecheck and frontend build. Run before publishing.
-- `just update [--force]`: deploy to the service — merges origin/main only when it
+- `just update [--force]`: deploy to the service — on main it merges origin/main only when it
   cannot conflict with local work (otherwise lists the files and changes
-  nothing), runs tests and build, swaps dist and restarts. Uncommitted local
-  changes are deployed too; an unchanged version is skipped. Restart may show a
+  nothing); on another branch it pulls nothing. Runs tests and build, swaps dist and
+  restarts. Uncommitted local changes are deployed too (no commit needed); an unchanged version is skipped. Restart may show a
   UAC prompt the user must confirm.
 - `just service`: Windows service status. `just service RESTART` applies changes
   after a successful build. Never run another listener while the service runs.

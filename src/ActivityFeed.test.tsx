@@ -24,6 +24,30 @@ it('opens details by tap/keyboard, removes by button, and provides undo without 
   expect(screen.queryByText('Zobacz wszystkie')).toBeNull();
 });
 
+it('keeps the bell with a zero and says the list is empty, with the way to the rules', async () => {
+  const user = userEvent.setup();
+  const showRules = vi.fn();
+  render(<ActivityFeed entries={[]} open={vi.fn()} dismiss={vi.fn()} restore={vi.fn()} canUndo={false} storageError={false} showRules={showRules} />);
+  expect(screen.queryByRole('region', { name: 'Zdarzenia panelu' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Zdarzenia panelu: 0' }));
+  expect(screen.getByText('Brak zdarzeń')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: /Zasady zdarzeń/ }));
+  expect(showRules).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('region', { name: 'Zdarzenia panelu' })).toBeNull();
+});
+
+it('folds on Escape and on a tap outside', async () => {
+  const user = userEvent.setup();
+  render(<><button>poza</button><ActivityFeed entries={[entry]} open={vi.fn()} dismiss={vi.fn()} restore={vi.fn()} canUndo={false} storageError={false} showRules={() => {}} /></>);
+  await user.click(screen.getByRole('button', { name: /^Zdarzenia panelu:/ }));
+  expect(screen.getByRole('region', { name: 'Zdarzenia panelu' })).toBeTruthy();
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('region', { name: 'Zdarzenia panelu' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: /^Zdarzenia panelu:/ }));
+  await user.click(screen.getByRole('button', { name: 'poza' }));
+  expect(screen.queryByRole('region', { name: 'Zdarzenia panelu' })).toBeNull();
+});
+
 it('distinguishes horizontal dismissals in either direction from vertical scrolling and short drags', () => {
   vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId=1; isPrimary=true; });
   const open=vi.fn(), dismiss=vi.fn();

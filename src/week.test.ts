@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent } from './model';
 import type { TrainingActivity, TrainingWorkout } from './training-contract';
-import { weekDays, withoutPlanDuplicates } from './week';
+import { dayOf, mondayOf, monthDays, weekDays, withoutPlanDuplicates } from './week';
 
 const zone = 'Europe/Warsaw';
 const now = Date.parse('2026-10-24T09:20:00Z'); // Saturday 11:20 in Warsaw
@@ -44,5 +44,25 @@ describe('week', () => {
     const events = [allDay('copy', 'Długa jazda', '2026-10-24', '2026-10-25'), allDay('other', 'Urlop', '2026-10-24', '2026-10-25'), allDay('elsewhere', 'Długa jazda', '2026-10-30', '2026-10-31')];
     expect(withoutPlanDuplicates(events, [workout({})]).map(e => e.id)).toEqual(['other', 'elsewhere']);
     expect(withoutPlanDuplicates(events, []).map(e => e.id)).toEqual(['copy', 'other', 'elsewhere']);
+  });
+});
+
+describe('month and single days', () => {
+  const sources = { now, timeZone: zone, events: [event({})], workouts: [workout({ id: 'next', name: 'Próg', date: '2026-11-03' })], activities: [] };
+  it('finds the Monday of a week', () => {
+    expect([mondayOf('2026-10-24'), mondayOf('2026-10-26'), mondayOf('2026-10-25')]).toEqual(['2026-10-19', '2026-10-26', '2026-10-19']);
+  });
+  it('is five weeks from this week\'s Monday, with the days already gone marked past and left empty', () => {
+    const days = monthDays(sources);
+    expect(days).toHaveLength(35);
+    expect(days[0]).toMatchObject({ date: '2026-10-19', label: 'Pn', past: true, today: false });
+    expect(days[5]).toMatchObject({ date: '2026-10-24', today: true, past: false });
+    expect(days.at(-1)!.date).toBe('2026-11-22');
+    expect(days[5].items.map(i => i.title)).toEqual(['Spotkanie']);
+    expect(days.find(d => d.date === '2026-11-03')!.items.map(i => i.title)).toEqual(['Próg']);
+  });
+  it('builds one day far from today the same way a week does', () => {
+    expect(dayOf('2026-11-03', sources).items.map(i => [i.kind, i.title])).toEqual([['workout', 'Próg']]);
+    expect(dayOf('2026-10-24', sources)).toEqual(weekDays(sources)[0]);
   });
 });

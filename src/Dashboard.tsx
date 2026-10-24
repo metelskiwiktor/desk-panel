@@ -1,17 +1,21 @@
-import { SourceNote, Sparkline } from './components';
+import { useEffect, useRef, useState } from 'react';
 import { CezarPanel } from './CezarCard';
-import { dayRibbon } from './day-ribbon';
-import { DayRibbonView, MeetingFocus } from './DayRibbon';
+import { FOCUS_WITHIN_MS, dayRibbon } from './day-ribbon';
+import { DayStrip } from './DayStrip';
+import { DaysZone } from './DaysZone';
 import { MAX_AGE, fresh, type DashboardData, type Detail, type SystemSample } from './model';
 import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
 import { MailFeed } from './MailFeed';
 import type { WidgetId } from './layout';
-import { QuotaRings } from './QuotaRings';
-import { TrainingPanel } from './TrainingCard';
-import { WeekStrip } from './WeekStrip';
-import { weekDays, withoutPlanDuplicates } from './week';
+import { useDismiss } from './popover';
+import { QuotaBars } from './QuotaBars';
+import { SystemPopover } from './SystemPopover';
+import { addDays, localDate, workoutProgress } from './training-progress';
+import { formatDuration } from './training-view';
+import { dayOf, monthDays, weekDays, withoutPlanDuplicates } from './week';
 import type { TrainingState } from './useTraining';
+import { BOTTOM_SIZES, TOP_CYCLE, cycleSize, useZones } from './zones';
 
 export { splitFor } from './quota-cards';
 
@@ -20,12 +24,19 @@ export const SYSTEM_ALERT_PERCENT = 90;
 const ramPercent = (s: SystemSample) => (s.ramUsedGb / s.ramTotalGb) * 100;
 const pct = (n: number) => `${Math.round(n)}%`;
 
+/** The chip turns red only when the load has lasted this long; a spike of a few seconds is not news. */
+export const SYSTEM_ALERT_HOLD_MS = 20_000;
+
 export function systemAlert(data: DashboardData, now: number) {
   const latest = data.system.data?.at(-1);
   if (!latest || !fresh(data.system, now, MAX_AGE.system)) return null;
-  const ram = ramPercent(latest);
-  if (ram < SYSTEM_ALERT_PERCENT && latest.cpuPercent < SYSTEM_ALERT_PERCENT) return null;
-  return { latest, ram, metric: ram >= SYSTEM_ALERT_PERCENT ? 'RAM' as const : 'CPU' as const };
+  const recent = (data.system.data ?? []).filter(s => latest.at - s.at <= SYSTEM_ALERT_HOLD_MS);
+  const span = latest.at - recent[0].at;
+  // Not enough history yet counts as no alarm; the load must cover the hold with no sample below the threshold.
+  const held = (high: (s: SystemSample) => boolean) => span >= SYSTEM_ALERT_HOLD_MS * 0.75 && recent.every(high);
+  const ramHigh = held(s => ramPercent(s) >= SYSTEM_ALERT_PERCENT), cpuHigh = held(s => s.cpuPercent >= SYSTEM_ALERT_PERCENT);
+  if (!ramHigh && !cpuHigh) return null;
+  return { latest, ram: ramPercent(latest), metric: ramHigh ? 'RAM' as const : 'CPU' as const };
 }
 
 type Tone = 'ok' | 'warn' | 'bad';
@@ -42,9 +53,12 @@ export function cezarChip(data: DashboardData, now: number): [Tone, string] {
 }
 
 /** Header chips: one line of state for the computer, Cezar and Gmail. */
-export function StatusChips({ data, mail, now, open, navigate }: {
-  data: DashboardData; mail: MailState; now: number; open: (d: Detail) => void; navigate: (page: 'tasks' | 'settings') => void;
+export function StatusChips({ data, mail, now, open, navigate, showPc = true }: {
+  data: DashboardData; mail: MailState; now: number; open: (d: Detail) => void; navigate: (page: 'tasks' | 'settings' | 'system') => void; showPc?: boolean;
 }) {
+  const [pcOpen, setPcOpen] = useState(false);
+  const pcRoot = useRef<HTMLDivElement>(null);
+  useDismiss(pcOpen, () => setPcOpen(false), pcRoot);
   const latest = data.system.data?.at(-1);
   const alert = systemAlert(data, now);
   const pc: [Tone, string] = alert ? ['bad', `PC · ${alert.metric} ${pct(alert.metric === 'RAM' ? alert.ram : alert.latest.cpuPercent)}`]
@@ -53,67 +67,75 @@ export function StatusChips({ data, mail, now, open, navigate }: {
   const cezar = cezarChip(data, now);
   const gmail: Tone = mail.source.status === 'connected' && mail.source.accounts.every(a => a.status === 'connected') ? 'ok' : 'warn';
   return <div className="status-chips">
-    <button className={`status-chip ${pc[0]}`} onClick={() => open({ kind: 'system' })}><i />{pc[1]}</button>
+    {showPc && <div className="sys-root" ref={pcRoot}>
+      <button className={`status-chip ${pc[0]}`} aria-expanded={pcOpen} aria-haspopup="dialog" onClick={() => setPcOpen(!pcOpen)}><i />{pc[1]}</button>
+      {pcOpen && <SystemPopover samples={data.system.data ?? []} threshold={SYSTEM_ALERT_PERCENT} close={() => setPcOpen(false)} showPage={() => navigate('system')} />}
+    </div>}
     <button className={`status-chip ${cezar[0]}`} onClick={() => navigate('tasks')}><i />{cezar[1]}</button>
     <button className={`status-chip ${gmail}`} onClick={() => navigate('settings')}><i />Gmail</button>
   </div>;
 }
 
-function SystemAlertCard({ data, now, open }: { data: DashboardData; now: number; open: (d: Detail) => void }) {
-  const alert = systemAlert(data, now);
-  if (!alert) return null;
-  const { latest, ram, metric } = alert;
-  const samples = data.system.data ?? [];
-  return <button className="pulpit-card system-alert" onClick={() => open({ kind: 'system' })}>
-    <span className="system-alert-value">
-      <span className="eyebrow alert">KOMPUTER</span>
-      <strong>{metric} {pct(metric === 'RAM' ? ram : latest.cpuPercent)}</strong>
-      <span className="meta">{latest.ramUsedGb.toLocaleString('pl-PL', { maximumFractionDigits: 1 })} / {latest.ramTotalGb.toLocaleString('pl-PL', { maximumFractionDigits: 1 })} GiB · CPU {pct(latest.cpuPercent)}</span>
-    </span>
-    <Sparkline tone="red" values={samples.map(s => metric === 'RAM' ? ramPercent(s) : s.cpuPercent)} label={`${metric} w ostatnich minutach, teraz ${pct(metric === 'RAM' ? ram : latest.cpuPercent)}`} />
-  </button>;
-}
-
 /**
- * The dashboard's frame: today on the left (the meeting that is about to start, today's workout, the day as a ribbon),
- * the AI limits on the right, the next days underneath. Cezar, mail and a computer alarm appear on the right only
- * while they have something to say; the limits then fold into a row to make room for them.
+ * Three zones one above the other. Top: the selected day (today at first) as training, meetings and what is about to
+ * start. Middle: the work area (limits, Cezar, mail), which takes what the other two leave and shows only what has
+ * something to say. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
+ * top and bottom zones are one step each way and are remembered.
  */
-export function Dashboard({ data, training, snapshot, mail, now, open, showTasks, showCalendar, showBreakdown, visible }: {
+export function Dashboard({ data, training, snapshot, mail, now, open, showTasks, showCalendar, showBreakdown, visible, resetSignal = false }: {
   data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
   open: (d: Detail) => void; showTasks: () => void; showCalendar: () => void; showBreakdown: () => void; visible: (id: WidgetId) => boolean;
+  /** True while the panel idles: sizes and the selected day go back to the default. */
+  resetSignal?: boolean;
 }) {
   const calendarOn = visible('calendar'), trainingOn = visible('training');
+  const { zones, setTop, setBottom } = useZones(resetSignal);
   const events = withoutPlanDuplicates(data.calendar.data ?? [], training.data?.workouts ?? []);
-  const ribbon = dayRibbon(events, now);
   const zone = training.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const week = weekDays({ now, timeZone: zone, events: calendarOn ? events : [], workouts: trainingOn ? training.data?.workouts ?? [] : [], activities: training.data?.activities ?? [] });
+  const today = localDate(now, zone);
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => { if (resetSignal) setPicked(null); }, [resetSignal]);
+  const selected = picked && picked >= today ? picked : today;
+  const sources = { now, timeZone: zone, events: calendarOn ? events : [], workouts: trainingOn ? training.data?.workouts ?? [] : [], activities: training.data?.activities ?? [] };
+  const week = weekDays(sources);
+  const month = zones.bottom === 'month' ? monthDays(sources) : [];
+  const day = dayOf(selected, sources);
+  const known = (calendarOn && data.calendar.data !== null) || (trainingOn && training.data !== null);
+  const select = (date: string) => { setPicked(date); if (zones.top === 'off') setTop('std'); };
+
+  const ribbon = dayRibbon(events, now);
+  const isToday = selected === today;
+  // The meeting that is on, or else the next one today; it gets the countdown, and a highlight when it is close.
+  const upcoming = isToday && calendarOn ? ribbon.blocks.find(b => b.ongoing) ?? ribbon.blocks.find(b => !b.past) : undefined;
+  const next = upcoming ? { id: upcoming.event.id, ongoing: upcoming.ongoing, ms: upcoming.ongoing ? upcoming.event.endAt - now : upcoming.event.startAt - now,
+    soon: upcoming.ongoing || upcoming.event.startAt - now <= FOCUS_WITHIN_MS } : null;
+  const yesterday = isToday && trainingOn && training.data
+    ? training.data.workouts.filter(w => w.date === addDays(today, -1) && !w.restDay)
+      .map(w => ({ w, p: workoutProgress(w, training.data!.activities, now, zone) })).filter(({ p }) => p.state === 'partial' || p.state === 'missed')
+      .map(({ w, p }) => ({ id: w.id, label: `Wczoraj · ${w.name}`, badge: p.state === 'partial' ? `${formatDuration(p.doneSec)} z ${formatDuration(w.durationSec ?? 0)}` : 'nie zrobiony' }))
+    : [];
+  const notice = trainingOn && !training.data && training.status !== 'loading' ? (training.status === 'unavailable' ? training.message ?? 'Garmin Connect niedostępny.' : 'Garmin Connect · brak połączenia, ponawiam.')
+    : trainingOn && training.data && !fresh(training, now, MAX_AGE.training) ? 'Garmin: dane nieaktualne'
+    : calendarOn && data.calendar.data && !fresh(data.calendar, now, MAX_AGE.calendar) ? 'Kalendarz: dane nieaktualne' : null;
+
   // No card for a known-empty inbox. It stays for threads, an unreachable or unconsented account, and
   // while the undo bar or an error needs it (also right after the last thread was handled).
   const mailProblem = mail.source.accounts.some(a => a.status !== 'connected' && a.status !== 'loading');
   const mailShown = visible('mail') && !!(mail.threads ? mail.threads.length || mailProblem : mail.source.status !== 'loading') || !!(visible('mail') && (mail.undo || mail.error));
   const cezarBusy = visible('cezar') && (data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running');
-  const alert = visible('system') && systemAlert(data, now) !== null;
-  const side = cezarBusy || mailShown || alert;
   const quotasOn = visible('quotas');
-  const todayOn = calendarOn || trainingOn;
-  const focus = calendarOn && ribbon.focus !== null;
-  const summary = data.calendar.data ? ribbon.summary : data.calendar.status === 'loading' ? 'ładowanie…' : 'kalendarz niedostępny';
-  return <div className="p2-frame" data-side={side} data-focus={focus}>
-    <div className={`p2-main ${todayOn && (quotasOn || side) ? '' : 'single'}`}>
-      {todayOn && <div className="p2-today">
-        {calendarOn && <MeetingFocus ribbon={ribbon} now={now} open={open} />}
-        {trainingOn && <TrainingPanel training={training} now={now} compact={focus} open={open} />}
-        {calendarOn && <DayRibbonView ribbon={ribbon} summary={summary} known={data.calendar.data !== null} now={now} open={open} showCalendar={showCalendar} />}
-        {calendarOn && !fresh(data.calendar, now, MAX_AGE.calendar) && <SourceNote source={data.calendar} now={now} maxAge={MAX_AGE.calendar} refreshEveryMs={60000} />}
-      </div>}
-      {(quotasOn || side) && <aside className="p2-side">
-        {quotasOn && <QuotaRings data={data} now={now} open={open} compact={side} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
-        {alert && <SystemAlertCard data={data} now={now} open={open} />}
-        {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={mailShown} />}
-        {mailShown && <MailFeed mail={mail} now={now} open={open} />}
-      </aside>}
-    </div>
-    {todayOn && <WeekStrip days={week} known={(calendarOn && data.calendar.data !== null) || (trainingOn && training.data !== null)} open={open} />}
+  const cards = [quotasOn, cezarBusy, mailShown].filter(Boolean).length;
+  const work = zones.bottom !== 'month' && cards > 0;
+  return <div className="p3-frame" data-top={zones.top} data-bottom={zones.bottom} data-work={work} data-days={calendarOn || trainingOn}>
+    {(calendarOn || trainingOn) && <DayStrip date={selected} today={today} size={zones.top} now={now} timeZone={zone} items={day.items} activities={sources.activities}
+      next={next} yesterday={yesterday} notice={notice} known={known}
+      cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} grow={() => setTop('std')} open={open} showCalendar={showCalendar} />}
+    {work && <div className="p3-work">
+      {quotasOn && <QuotaBars data={data} now={now} open={open} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
+      {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={cards > 1} />}
+      {mailShown && <MailFeed mail={mail} now={now} open={open} />}
+    </div>}
+    {(calendarOn || trainingOn) && <DaysZone week={week} month={month} size={zones.bottom} known={known} selected={selected} select={select} open={open}
+      cycle={() => setBottom(cycleSize(BOTTOM_SIZES, zones.bottom))} resize={setBottom} showCalendar={showCalendar} />}
   </div>;
 }

@@ -390,7 +390,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                 restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} showRules={() => navigate('events')} />
             </div>
           )}
-          <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} />
+          <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} showPc={visible('system')} />
           {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
@@ -416,7 +416,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {page === 'home' ? (
               <>
                 <Dashboard data={data} training={training} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
-                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} />
+                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} resetSignal={ambient.ambient} />
               </>
             ) : (
               <>

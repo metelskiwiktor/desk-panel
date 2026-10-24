@@ -13,6 +13,7 @@ export function EventRulesView() {
     ['AI · czerwone tempo', `Zużycie wyprzedza czas o ponad ${QUOTA_PACE_WARNING} p.p.`, 'Raz w oknie resetu, także po usuniętym żółtym.'],
     ['AI · mało limitu', `Wykorzystano co najmniej ${EVENT_RULES.quotaHighPercent}% limitu, niezależnie od koloru tempa.`, 'Raz w oknie resetu.'],
     ['System · RAM', `RAM ≥${EVENT_RULES.ramHighPercent}% przez co najmniej ${EVENT_RULES.ramForMinutes} minutę.`, `Po spadku poniżej ${EVENT_RULES.ramHighPercent}% i kolejnym utrzymaniu progu.`],
+    ['System · CPU', `CPU ≥${EVENT_RULES.cpuHighPercent}% przez co najmniej ${EVENT_RULES.cpuForMinutes} minuty. Krótki skok nie tworzy wpisu.`, `Po spadku poniżej ${EVENT_RULES.cpuHighPercent}% i kolejnym utrzymaniu progu.`],
   ];
   return <Card title="Reguły tworzenia" eyebrow="AKTUALNE ZASADY" icon={<ListChecks />}>
     <p className="card-intro">Wpis powstaje po wykryciu warunku w świeżych danych. Limity AI liczymy osobno dla Claude i Codex oraz okien 5h i 7d.</p>

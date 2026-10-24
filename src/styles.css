@@ -955,11 +955,6 @@ nav button.active:after {
 .pulpit-card-head h2 { font-size: 18px; }
 .eyebrow.alert { color: #f2a6a8; }
 
-.system-alert { display: flex; align-items: center; gap: 24px; width: 100%; border-color: #6b3a3d; background: #1a1316; }
-.system-alert-value { display: flex; flex-direction: column; gap: 4px; min-width: 170px; }
-.system-alert-value strong { font-size: 40px; font-weight: 300; color: #ffd6d7; }
-.system-alert .meta { color: #d9b4b6; }
-.system-alert .sparkline { flex: 1; height: 90px; }
 .sparkline.red polyline { stroke: var(--quota-red); }
 
 
@@ -998,16 +993,7 @@ nav button.active:after {
 .quota-sub { grid-column: 2 / 4; font-size: 11px; color: #8d9bb0; }
 
 /* ── Panel events float over the dashboard, tagged with their source ── */
-.events-pill { position: absolute; top: 0; right: 0; z-index: 6; display: flex; align-items: center; gap: 10px; max-width: min(460px, 100%); min-height: 46px; padding: 0 10px; border: 1px solid #3a4a63; border-radius: 999px; background: #182233; color: #e6ebf3; box-shadow: 0 10px 30px #0009; }
-.events-pill-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
-.events-bell { position: relative; display: flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #24324a; }
-.events-count { position: absolute; top: -4px; right: -6px; min-width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--amber); color: #1a140a; font-size: 11px; font-weight: 600; }
-.events-panel { position: absolute; top: 0; right: 0; z-index: 6; display: flex; flex-direction: column; width: min(420px, 100%); max-height: min(calc(100% - var(--nav-space)), calc(100dvh - var(--nav-space) - 24px)); box-sizing: border-box; padding: 14px 16px; border: 1px solid #3a4a63; border-radius: 18px; background: #182233; box-shadow: 0 18px 50px #000b; }
-.events-head { display: flex; justify-content: space-between; align-items: center; }
-.events-head h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #b7c3d4; }
-.events-list { min-height: 0; overflow-y: auto; }
 .source-tag { flex: none; align-self: flex-start; padding: 3px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }
-.events-pill .source-tag { align-self: center; }
 .source-event { background: #1c2b44; color: #a9c6f2; }
 .source-task { background: #3a2f1c; color: #f3d9ab; }
 .source-quota, .source-system { background: #3a1f24; color: #ffc2c4; }
@@ -1021,7 +1007,6 @@ nav button.active:after {
 
 /* Narrow screens: one column, and the dashboard scrolls like any page. */
 @media (max-width: 639px) {
-  .system-alert { flex-direction: column; align-items: stretch; }
 }
 
 .quota-dynamic .quota-window-label { grid-column: 1 / -1; font-family: inherit; overflow-wrap: anywhere; }
@@ -1100,4 +1085,3 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 .pulpit-card-head { position: relative; min-height: 44px; align-items: center; }
 .card-link { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: none; border-radius: 12px; cursor: pointer; }
 .card-link:hover:not(:disabled) { background: #ffffff08; }
-.events-rules-link { padding: 0; margin-left: auto; }

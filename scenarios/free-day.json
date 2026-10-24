@@ -1,0 +1,548 @@
+{
+  "description": "Spokojny dzień bez spotkań: dziś trening, Cezar i poczta puste.",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 0,
+      "queue": 0,
+      "needs-input": 0,
+      "review": 0
+    },
+    "tasks": []
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": []
+  },
+  "training": {
+    "live": true,
+    "name": "Garmin Connect",
+    "status": "connected",
+    "observedAt": "now",
+    "timeZone": "Europe/Warsaw",
+    "data": {
+      "plan": {
+        "name": "Plan fitness",
+        "workoutsPerWeek": 5,
+        "targetDate": "today+55"
+      },
+      "workouts": [
+        {
+          "id": "scenario-sprint",
+          "name": "Sprint",
+          "sport": "cycling",
+          "date": "today-3",
+          "durationSec": 3180,
+          "phrase": "ANAEROBIC_SPEED",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        },
+        {
+          "id": "scenario-thresh",
+          "name": "Próg",
+          "sport": "cycling",
+          "date": "today",
+          "durationSec": 3000,
+          "phrase": "LACTATE_THRESHOLD",
+          "trainingEffect": 3.5,
+          "trainingEffectLabel": "LACTATE_THRESHOLD",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "warmup",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 148,
+                "high": 201
+              }
+            },
+            {
+              "kind": "repeat",
+              "durationSec": null,
+              "target": null,
+              "iterations": 2,
+              "skipLastRest": true,
+              "children": [
+                {
+                  "kind": "interval",
+                  "durationSec": 480,
+                  "target": {
+                    "type": "power",
+                    "low": 242,
+                    "high": 282
+                  }
+                },
+                {
+                  "kind": "recovery",
+                  "durationSec": 240,
+                  "target": {
+                    "type": "power",
+                    "low": 121,
+                    "high": 175
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "cooldown",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-anaerobic",
+          "name": "Beztlenowe",
+          "sport": "cycling",
+          "date": "today+2",
+          "durationSec": 3600,
+          "phrase": "ANAEROBIC_CAPACITY",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        },
+        {
+          "id": "scenario-base",
+          "name": "Baza",
+          "sport": "cycling",
+          "date": "today+3",
+          "durationSec": 4380,
+          "phrase": "BASE",
+          "trainingEffect": 2.5,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 4380,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-long",
+          "name": "Długa jazda",
+          "sport": "cycling",
+          "date": "today+5",
+          "durationSec": 5400,
+          "phrase": "LONG_WORKOUT",
+          "trainingEffect": 2.7,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 5400,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        }
+      ],
+      "activities": []
+    }
+  },
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 0
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 0
+      }
+    ],
+    "total": 0
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now-2m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-110s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-100s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-90s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-80s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-70s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-50s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-40s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-30s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-10s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 92,
+            "observedAt": "now",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 61,
+            "observedAt": "now",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 75,
+            "observedAt": "now-50m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 58,
+            "observedAt": "now-50m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 38,
+            "observedAt": "now",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 24,
+            "observedAt": "now",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 30,
+            "observedAt": "now-40m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 22,
+            "observedAt": "now-40m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "AGY",
+        "snapshots": [
+          {
+            "window": "gemini-5h",
+            "usedPercent": 12,
+            "observedAt": "now",
+            "resetAt": "now+150m",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Five Hour Limit Remaining"
+          },
+          {
+            "window": "gemini-weekly",
+            "usedPercent": 31,
+            "observedAt": "now",
+            "resetAt": "now+3d",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Weekly Limit Remaining"
+          }
+        ],
+        "history": []
+      }
+    ]
+  },
+  "usageBreakdown": {
+    "status": "connected",
+    "observedAt": "now-20s",
+    "providers": [
+      {
+        "provider": "Claude",
+        "usedPercent": 92,
+        "observedAt": "now-20s",
+        "resetAt": "now+2h5m",
+        "segments": [
+          {
+            "kind": "unobserved",
+            "percent": 15
+          },
+          {
+            "kind": "task",
+            "id": "t1",
+            "title": "Naprawa synchronizacji notatek",
+            "percent": 15
+          },
+          {
+            "kind": "session",
+            "id": "session:claude-app:desk-panel",
+            "title": "desk-panel",
+            "origin": "claude-app",
+            "percent": 26
+          },
+          {
+            "kind": "session",
+            "id": "session:cezar",
+            "title": "pomocnicze",
+            "origin": "cezar",
+            "percent": 2
+          },
+          {
+            "kind": "task",
+            "id": "t2",
+            "title": "Przegląd widoku notatki",
+            "percent": 8,
+            "shared": true
+          },
+          {
+            "kind": "other",
+            "percent": 26
+          }
+        ],
+        "timeline": [
+          {
+            "key": "unobserved",
+            "percent": 15,
+            "from": "now-2h55m",
+            "to": "now-2h40m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 6,
+            "from": "now-2h40m",
+            "to": "now-2h20m"
+          },
+          {
+            "key": "t1",
+            "percent": 15,
+            "from": "now-2h20m",
+            "to": "now-1h50m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 12,
+            "from": "now-1h50m",
+            "to": "now-1h10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-1h10m",
+            "to": "now-1h"
+          },
+          {
+            "key": "other",
+            "percent": 26,
+            "from": "now-1h",
+            "to": "now-30m"
+          },
+          {
+            "key": "t2",
+            "percent": 8,
+            "from": "now-30m",
+            "to": "now-20m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 8,
+            "from": "now-20m",
+            "to": "now-10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-10m",
+            "to": "now"
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "usedPercent": 38,
+        "observedAt": "now-20s",
+        "resetAt": "now+3h25m",
+        "segments": [
+          {
+            "kind": "task",
+            "id": "t3",
+            "title": "Refaktor ekranu ustawień",
+            "percent": 6
+          },
+          {
+            "kind": "session",
+            "id": "session:codex-app:notes",
+            "title": "notes",
+            "origin": "codex-app",
+            "percent": 32
+          }
+        ]
+      },
+      {
+        "provider": "Gemini",
+        "usedPercent": null,
+        "observedAt": null,
+        "resetAt": null,
+        "segments": []
+      }
+    ]
+  }
+}
