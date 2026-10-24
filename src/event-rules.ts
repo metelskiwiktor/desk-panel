@@ -5,5 +5,7 @@ export const EVENT_RULES = {
   quotaHighPercent: 90,
   ramHighPercent: 90,
   ramForMinutes: 1,
+  cpuHighPercent: 90,
+  cpuForMinutes: 2,
   undoSeconds: 6,
 } as const;

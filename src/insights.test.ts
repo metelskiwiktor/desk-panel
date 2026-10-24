@@ -92,6 +92,19 @@ describe('Insights: fakty z tych samych źródeł', () => {
     data.system.data = createFixture(now, 'high-ram').system.data!.filter((_, i) => i < 5 || i > 9);
     expect(deriveInsights(data, now)).toEqual([]); // gap > 30 s
   });
+  it('CPU wymaga dwóch minut ciągłego obciążenia; skok nie tworzy zdarzenia', () => {
+    const data = createFixture(now, 'high-ram');
+    data.system.data!.forEach((s) => { s.ramUsedGb = 10; s.cpuPercent = 96; });
+    const facts = deriveInsights(data, now);
+    expect(facts.map((f) => f.id)).toEqual(['system:cpu']);
+    expect(facts[0].title).toBe('CPU ≥90% przez 2 minuty');
+    data.system.data!.at(-3)!.cpuPercent = 40;
+    expect(deriveInsights(data, now)).toEqual([]);
+    const spike = createFixture(now, 'high-ram');
+    spike.system.data!.forEach((s) => { s.ramUsedGb = 10; });
+    spike.system.data!.at(-1)!.cpuPercent = 100;
+    expect(deriveInsights(spike, now)).toEqual([]);
+  });
   it('RAM poniżej progu przerywa serię; stare źródło nie generuje faktu', () => {
     const data = createFixture(now, 'high-ram');
     data.system.data!.at(-2)!.ramUsedGb = 20;

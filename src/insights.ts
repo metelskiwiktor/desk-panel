@@ -1,4 +1,4 @@
-import { fresh, MAX_AGE, MINUTE, quotaState, type DashboardData, type Detail } from './model';
+import { fresh, MAX_AGE, MINUTE, quotaState, type DashboardData, type Detail, type SystemSample } from './model';
 /** Events point at dashboard sources; mail is not an event source. */
 type InsightTarget = Extract<Detail, { kind: 'task' | 'event' | 'quota' | 'system' }>;
 import { quotaPace, quotaResetIn } from './quota-pace';
@@ -95,20 +95,33 @@ export function deriveInsights(data: DashboardData, now: number): Insight[] {
       .filter((s) => s.at <= now)
       .sort((a, b) => a.at - b.at);
     const last = samples.at(-1);
-    // Require a continuous, bounded-gap high-RAM run covering at least 60 seconds.
-    let start = last?.at ?? now;
-    let next = start;
-    for (const s of samples.slice().reverse()) {
-      if (s.ramTotalGb <= 0 || s.ramUsedGb / s.ramTotalGb < EVENT_RULES.ramHighPercent / 100 || next - s.at > 30_000) break;
-      start = s.at;
-      next = s.at;
-    }
-    if (last && now - last.at <= 30_000 && last.at - start >= EVENT_RULES.ramForMinutes * MINUTE)
+    // Require a continuous, bounded-gap high run covering the whole minimum span; a spike is not an event.
+    const sustainedFor = (high: (s: SystemSample) => boolean) => {
+      let start = last?.at ?? now;
+      let next = start;
+      for (const s of samples.slice().reverse()) {
+        if (!high(s) || next - s.at > 30_000) break;
+        start = s.at;
+        next = s.at;
+      }
+      return last !== undefined && now - last.at <= 30_000 ? last.at - start : 0;
+    };
+    const gib = data.system.live ? 'GiB' : 'GB';
+    if (last && sustainedFor(s => s.ramTotalGb > 0 && s.ramUsedGb / s.ramTotalGb >= EVENT_RULES.ramHighPercent / 100) >= EVENT_RULES.ramForMinutes * MINUTE)
       facts.push({
         id: 'system:ram',
         priority: 70,
         title: `RAM ≥${EVENT_RULES.ramHighPercent}% przez ${EVENT_RULES.ramForMinutes} minutę`,
-        context: `${last.ramUsedGb.toLocaleString('pl-PL')} z ${last.ramTotalGb} ${data.system.live ? 'GiB' : 'GB'}`,
+        context: `${last.ramUsedGb.toLocaleString('pl-PL')} z ${last.ramTotalGb} ${gib}`,
+        target: { kind: 'system' },
+        tone: 'amber',
+      });
+    if (last && sustainedFor(s => s.cpuPercent >= EVENT_RULES.cpuHighPercent) >= EVENT_RULES.cpuForMinutes * MINUTE)
+      facts.push({
+        id: 'system:cpu',
+        priority: 70,
+        title: `CPU ≥${EVENT_RULES.cpuHighPercent}% przez ${EVENT_RULES.cpuForMinutes} minuty`,
+        context: `CPU ${Math.round(last.cpuPercent)}% · RAM ${last.ramUsedGb.toLocaleString('pl-PL')} z ${last.ramTotalGb} ${gib}`,
         target: { kind: 'system' },
         tone: 'amber',
       });

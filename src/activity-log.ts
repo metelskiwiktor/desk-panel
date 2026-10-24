@@ -91,9 +91,10 @@ export function recordActivity(log: ActivityLog, data: DashboardData, now: numbe
   }
   if (fresh(data.system, now, MAX_AGE.system)) {
     const latest = data.system.data!.filter(s => s.at <= now).sort((a,b) => b.at-a.at)[0];
-    // Only a real below-threshold sample rearms RAM; gaps/offline do not.
-    if (latest && now - latest.at <= MAX_AGE.system && latest.ramTotalGb > 0 && latest.ramUsedGb / latest.ramTotalGb < EVENT_RULES.ramHighPercent / 100) {
-      active = active.filter(key => key !== 'system:ram');
+    // Only a real below-threshold sample rearms RAM or CPU; gaps/offline do not.
+    if (latest && now - latest.at <= MAX_AGE.system) {
+      if (latest.ramTotalGb > 0 && latest.ramUsedGb / latest.ramTotalGb < EVENT_RULES.ramHighPercent / 100) active = active.filter(key => key !== 'system:ram');
+      if (latest.cpuPercent < EVENT_RULES.cpuHighPercent) active = active.filter(key => key !== 'system:cpu');
     }
   }
   const seen = new Set(log.seen);
@@ -101,7 +102,7 @@ export function recordActivity(log: ActivityLog, data: DashboardData, now: numbe
   const added: ActivityEntry[] = [];
   let sequence = log.sequence;
   for (const fact of deriveInsights(data, now)) {
-    const repeatable = fact.id.startsWith('task:') || fact.id === 'system:ram';
+    const repeatable = fact.id.startsWith('task:') || fact.id === 'system:ram' || fact.id === 'system:cpu';
     if (repeatable ? current.has(fact.id) : signalWasSeen(seen, fact.id, now)) continue;
     if (repeatable) current.add(fact.id); else seen.add(fact.id);
     // A later fall from red to yellow is recovery, not a new warning.
