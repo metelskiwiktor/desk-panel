@@ -19,16 +19,17 @@ const frame = () => document.querySelector('.p3-frame')!;
 describe('zone sizes', () => {
   it('steps along the order and stops at the ends', () => {
     expect(stepSize(TOP_SIZES, 'std', -1)).toBe('cmp');
-    expect(stepSize(TOP_SIZES, 'off', -1)).toBe('off');
+    expect(stepSize(TOP_SIZES, 'cmp', -1)).toBe('cmp');
     expect(stepSize(BOTTOM_SIZES, 'mid', 1)).toBe('month');
     expect(stepSize(BOTTOM_SIZES, 'month', 1)).toBe('month');
   });
   it('cycles round, from the last size to the first', () => {
-    expect([cycleSize(TOP_CYCLE, 'std'), cycleSize(TOP_CYCLE, 'cmp'), cycleSize(TOP_CYCLE, 'off')]).toEqual(['cmp', 'off', 'std']);
+    expect([cycleSize(TOP_CYCLE, 'std'), cycleSize(TOP_CYCLE, 'cmp')]).toEqual(['cmp', 'std']);
     expect([cycleSize(BOTTOM_SIZES, 'short'), cycleSize(BOTTOM_SIZES, 'mid'), cycleSize(BOTTOM_SIZES, 'month')]).toEqual(['mid', 'month', 'short']);
   });
   it('reads only valid saved sizes', () => {
     expect(parseZones('{"top":"cmp","bottom":"short"}')).toEqual({ top: 'cmp', bottom: 'short' });
+    expect(parseZones('{"top":"off","bottom":"mid"}')).toEqual({ top: 'cmp', bottom: 'mid' }); // saved before the hidden strip went
     for (const bad of [null, '', '{', '{"top":"huge","bottom":"mid"}', '{"top":"std"}']) expect(parseZones(bad)).toEqual(DEFAULT_ZONES);
   });
   it('remembers a change and goes back to the default when the panel idles', () => {
@@ -70,18 +71,17 @@ describe('three zones', () => {
     expect(frame().getAttribute('data-bottom')).toBe('mid');
     expect(await screen.findByRole('region', { name: 'Poczta' })).toBeTruthy();
   });
-  it('steps the top through a line and nothing; a tap on a day brings it back showing that day', async () => {
+  it('steps the top between the standard strip and a line', async () => {
     const user = userEvent.setup();
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
     expect(frame().getAttribute('data-top')).toBe('cmp');
-    await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
-    expect(frame().getAttribute('data-top')).toBe('off');
-    expect(screen.getByRole('button', { name: 'Pokaż pasek dnia' })).toBeTruthy();
     await user.click(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getByRole('button', { name: /^Pokaż dzień: Pt/ }));
-    expect(frame().getAttribute('data-top')).toBe('std');
+    expect(frame().getAttribute('data-top')).toBe('cmp');
     expect(screen.getByRole('region', { name: /piątek/ })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
+    expect(frame().getAttribute('data-top')).toBe('std');
   });
   it('shows the selected day on top, and today again from today\'s card; there are no arrows', async () => {
     const user = userEvent.setup();
@@ -117,16 +117,16 @@ describe('dragging the grips', () => {
   it('picks the size nearest to the height', () => {
     expect([nearestSize([40, 60, 124], 10), nearestSize([40, 60, 124], 52), nearestSize([40, 60, 124], 95), nearestSize([40, 60, 124], 900)]).toEqual([0, 1, 2, 2]);
   });
-  it('drags the top edge up to a line and to nothing, and down again to the standard strip', async () => {
+  it('drags the top edge up to a line, and down again to the standard strip', async () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
-    drag(grip(), 300, 230); // 124 - 70 = 54: nearest is the line
+    drag(grip(), 300, 230); // 124 - 70 = 54: nearest is the line (64)
     expect(frame().getAttribute('data-top')).toBe('cmp');
-    drag(grip(), 300, 400); // 60 + 100 = 160, held at the standard height
+    drag(grip(), 300, 400); // 64 + 100 = 164, held at the standard height
     expect(frame().getAttribute('data-top')).toBe('std');
-    drag(grip(), 300, 100); // all the way up
-    expect(frame().getAttribute('data-top')).toBe('off');
+    drag(grip(), 300, 100); // all the way up: held at the line
+    expect(frame().getAttribute('data-top')).toBe('cmp');
     drag(grip(), 300, 460);
     expect(frame().getAttribute('data-top')).toBe('std');
     expect((frame() as HTMLElement).style.getPropertyValue('--p3-top')).toBe('');
@@ -139,6 +139,32 @@ describe('dragging the grips', () => {
     expect(frame().getAttribute('data-bottom')).toBe('month');
     drag(grip(), 100, 700);
     expect(frame().getAttribute('data-bottom')).toBe('short');
+  });
+  it('draws the size the drag would settle on while it goes on, and drops it when the drag is cancelled', async () => {
+    renderWith();
+    await screen.findByRole('region', { name: 'Poczta' });
+    const bottom = screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
+    fireEvent.pointerDown(bottom, { clientY: 500, button: 0 });
+    fireEvent.pointerMove(bottom, { clientY: 100 }); // 224 + 400, held at the month
+    expect(frame().getAttribute('data-bottom')).toBe('month');
+    expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
+    fireEvent.pointerMove(bottom, { clientY: 700 }); // 224 - 200: the shortest
+    expect(frame().getAttribute('data-bottom')).toBe('short');
+    expect(localStorage.getItem(ZONES_KEY)).toBeNull(); // nothing is saved before the grip is let go
+    fireEvent.pointerCancel(bottom);
+    expect(frame().getAttribute('data-bottom')).toBe('mid');
+    const top = screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
+    fireEvent.pointerDown(top, { clientY: 300, button: 0 });
+    fireEvent.pointerMove(top, { clientY: 100 });
+    expect(frame().getAttribute('data-top')).toBe('cmp');
+    expect(frame().hasAttribute('data-dragging')).toBe(true);
+    expect(document.querySelector('.p3-day.cmp .p3-items')).toBeTruthy();
+    fireEvent.pointerMove(top, { clientY: 340 }); // back to the standard strip, with the same grip
+    expect(frame().getAttribute('data-top')).toBe('std');
+    fireEvent.pointerUp(top, { clientY: 340 });
+    expect(frame().hasAttribute('data-dragging')).toBe(false);
+    expect(frame().getAttribute('data-top')).toBe('std');
+    expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).top).toBe('std');
   });
   it('treats a short move as a tap that steps to the next size', async () => {
     renderWith();

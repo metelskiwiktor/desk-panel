@@ -10,7 +10,7 @@
   --p2-faint: #5d6a80;
   --p2-track: #232c3d;
   --p2-cal: #7ca9ff;
-  --p2-train: #f07ab5;
+  --p2-train: #a78bfa;
   --p2-cezar: #b79cff;
 }
 
@@ -107,30 +107,36 @@
 
 
 /* Next days */
-.p2-item { display: flex; flex-direction: column; gap: 2px; min-height: 40px; padding: 4px 4px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; }
-.p2-item-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; line-height: 1.2; }
-.p2-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p2-item-time { margin-left: auto; padding-left: 4px; font-size: 12px; color: var(--p2-muted); }
-.p2-item-check { margin-left: auto; color: var(--p2-train); flex: none; }
-.p2-mark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--p2-cal); }
-.p2-item.workout .p2-mark { border-radius: 3px; background: var(--p2-train); }
+/* A day's entry: what and when above (the clock for a meeting, the length for a workout), the name below in up to two lines */
+.p2-item { display: flex; flex-direction: column; gap: 1px; min-height: 40px; padding: 3px 4px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; }
+.p2-item-meta { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.2; color: var(--p2-cal); }
+.p2-item.workout .p2-item-meta { color: var(--p2-train); }
+.p2-item-meta svg { flex: none; }
+.p2-item-meta .p2-level { height: 12px; transform: scale(0.7); transform-origin: left bottom; margin-right: -4px; }
+.p2-item-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.2; }
+.p2-weekday.crowded .p2-item-title { -webkit-line-clamp: 1; }
 .p2-item.missed .p2-item-title, .p2-item.partial .p2-item-title { color: var(--p2-muted); }
-.p2-item-sub { display: flex; align-items: center; gap: 7px; padding-left: 17px; color: var(--p2-train); }
-.p2-item-sub .p2-level { height: 12px; transform: scale(0.7); transform-origin: left bottom; margin-right: -4px; }
 .p2-more, .p2-free { margin-top: auto; font-size: 13px; color: var(--p2-faint); }
 
 /* Panel events: a bell with a count in the top bar; the list opens under it */
 .top-bar { position: relative; z-index: 20; }
 .events-slot, .events-root { position: relative; }
-.events-icon { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #263246; border-radius: 50%; background: #111824; color: var(--p2-muted); }
-.events-icon.has { border-color: color-mix(in srgb, var(--amber) 55%, #263246); background: color-mix(in srgb, var(--amber) 12%, #111824); color: var(--amber); }
+/* The bell and what is in the list, as a calm grey; amber and a hop only while there is something new (+N). */
+.events-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 40px; height: 40px; padding: 0 12px; border: 1px solid #263246; border-radius: 20px; background: #111824; color: var(--p2-muted); }
+.events-icon.fresh { border-color: color-mix(in srgb, var(--amber) 55%, #263246); background: color-mix(in srgb, var(--amber) 12%, #111824); color: var(--amber); }
 .events-icon[aria-expanded="true"] { background: var(--p2-surface-2); }
-.events-count { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; box-sizing: border-box; border-radius: 10px; background: #2b3548; color: var(--p2-muted); font-size: 12px; font-weight: 700; line-height: 1; }
-.events-icon.has .events-count { background: var(--amber); color: #1a140a; }
+.events-count { font-size: 14px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.events-new { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 20px; display: grid; place-items: center; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--amber); color: #1a140a; font-size: 12px; font-weight: 700; line-height: 1; }
+@keyframes events-hop { 0%, 6%, 12%, 100% { transform: none; } 3%, 9% { transform: translateY(-4px); } }
+.events-icon.fresh svg { animation: events-hop 14s ease-in-out 0.6s infinite; }
+@media (prefers-reduced-motion: reduce) { .events-icon.fresh svg { animation: none; } }
 .events-panel { position: absolute; top: calc(100% + 10px); left: 0; z-index: 30; display: flex; flex-direction: column; gap: 6px; width: 420px; max-height: min(520px, calc(100dvh - 110px)); box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-surface); box-shadow: 0 18px 50px #000b; }
 .events-head { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 8px; }
 .events-head h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--p2-text); }
 .events-total { padding: 1px 8px; border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-muted); font-size: 12px; font-weight: 600; }
+.events-total.fresh { background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); }
+.p2-erow-new { padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); font-size: 11px; font-weight: 600; }
+.p2-erow.new .p2-erow-body strong { color: #fff; }
 .events-close { margin-left: auto; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--p2-muted); }
 .events-list { flex: 1; min-height: 0; max-height: none; margin: 0; overflow-y: auto; }
 .events-list .activity-swipe { border-bottom: 1px solid var(--p2-line); }
@@ -204,26 +210,41 @@
 }
 
 /* ── Three zones: today (top), work area (middle), days (bottom) ─────────────────────────────── */
-.p3-frame { flex: 1; min-height: 0; display: grid; gap: 12px; grid-template-rows: var(--p3-top) minmax(0, 1fr) var(--p3-bottom); font-variant-numeric: tabular-nums; }
+.p3-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; font-variant-numeric: tabular-nums; }
 .p3-frame[data-top="std"] { --p3-top: 124px; }
-.p3-frame[data-top="cmp"] { --p3-top: 60px; }
-.p3-frame[data-top="off"] { --p3-top: 40px; }
+.p3-frame[data-top="cmp"] { --p3-top: 64px; }
 .p3-frame[data-bottom="short"] { --p3-bottom: 112px; }
 .p3-frame[data-bottom="mid"] { --p3-bottom: 224px; }
-/* The month, or no cards to show: the bottom zone takes everything the top leaves. */
-.p3-frame[data-bottom="month"], .p3-frame[data-work="false"] { grid-template-rows: var(--p3-top) minmax(0, 1fr); }
-.p3-frame[data-days="false"] { grid-template-rows: minmax(0, 1fr); }
+/* The month takes everything the top leaves; the work area folds to nothing (its two gaps cancel with the margin). */
+.p3-frame[data-bottom="month"] { --p3-bottom: calc(100% - var(--p3-top) - 12px); }
+/* The zones are flex items with a height of their own, so a change of size can be eased (a grid's rows would jump). */
+@media (min-width: 900px) {
+  .p3-day { flex: none; height: var(--p3-top); transition: height 0.3s ease; }
+  .p3-work { flex: 1 1 0; transition: opacity 0.25s ease, margin-bottom 0.3s ease; }
+  .p3-days { flex: none; height: var(--p3-bottom); transition: height 0.3s ease; }
+  .p3-frame[data-work="false"] .p3-days { flex: 1 1 0; height: auto; }
+  .p3-frame[data-bottom="month"] .p3-work { margin-bottom: -12px; opacity: 0; pointer-events: none; }
+  /* While a grip is dragged the zones follow the pointer at once. */
+  .p3-frame[data-dragging] :is(.p3-day, .p3-work, .p3-days) { transition: none; }
+}
+/* What a new size draws fades in; the two names let a strip that reuses its elements play it again. */
+@keyframes p3-in-a { from { opacity: 0; } }
+@keyframes p3-in-b { from { opacity: 0; } }
+.p3-day.std > :not(.p3-grip) { animation: p3-in-a 0.3s ease both; }
+.p3-day.cmp > :not(.p3-grip) { animation: p3-in-b 0.3s ease both; }
+.p2-week-list, .p3-month { animation: p3-in-a 0.3s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .p3-day, .p3-work, .p3-days { transition: none !important; }
+  .p3-day > *, .p2-week-list, .p3-month { animation: none !important; }
+}
 .p3-frame button:hover:not(:disabled) { background-color: var(--hover-bg, transparent); }
 .p3-frame button:disabled { opacity: 0.3; }
 
 /* Top: the selected day */
 .p3-day { position: relative; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 4px 8px 4px 6px; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-surface); overflow: hidden; }
-.p3-day.off { padding: 0; }
-.p3-off { display: flex; align-items: center; gap: 14px; width: 100%; height: 100%; padding: 0 20px; border: 0; background: transparent; color: inherit; font-size: 15px; text-align: left; }
-.p3-off b { font-weight: 600; }
 .p3-label { display: flex; flex-direction: column; min-width: 150px; max-width: 220px; }
 .p3-label strong { font-size: 18px; font-weight: 600; line-height: 1.2; }
-.p3-label strong::first-letter, .p3-off b::first-letter { text-transform: uppercase; }
+.p3-label strong::first-letter { text-transform: uppercase; }
 .p3-label span { font-size: 13px; color: var(--p2-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p3-items { flex: 1; min-width: 0; max-height: 100%; display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 8px; overflow: hidden; }
 .p3-chip { --hover-bg: var(--p2-surface-2); display: flex; align-items: center; gap: 10px; min-height: 44px; max-width: 100%; padding: 2px 10px; border: 1px solid var(--p2-line); border-radius: 14px; background: transparent; color: inherit; text-align: left; }
@@ -245,7 +266,7 @@
 .p3-day.cmp .p3-chip-text strong { font-size: 14px; }
 
 /* Middle: the work area. Cards share the width; each says what it has and none is cut. */
-.p3-work { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; min-height: 0; min-width: 0; }
+.p3-work { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; min-height: 0; min-width: 0; }
 .p3-work > * { min-width: 0; min-height: 0; overflow: hidden; }
 .p3-work > .p2-card, .p3-work > .p2-quotas { height: 100%; }
 
@@ -255,11 +276,15 @@
 
 /* Bottom: the days */
 .p3-days { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
-.p3-days-head { display: flex; align-items: center; justify-content: space-between; flex: none; min-height: 40px; padding: 0 4px 0 8px; }
+.p3-days-head { display: flex; align-items: center; justify-content: space-between; flex: none; min-height: 28px; padding: 0 4px 0 8px; }
 .p2-week-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
 .p2-weekday { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 10px 12px 8px; border: 1px solid var(--p2-line); border-radius: 18px; background: var(--p2-surface); overflow: hidden; }
 .p2-weekday.today { border-color: color-mix(in srgb, var(--p2-text) 40%, var(--p2-line)); background: var(--p2-surface-2); }
 .p2-weekday.selected { outline: 2px solid var(--p2-cal); outline-offset: -2px; }
+/* A free day shrinks to its head */
+.p2-weekday.free { align-items: center; padding: 10px 0 8px; background: transparent; color: var(--p2-muted); }
+.p2-weekday.free .p2-weekday-head { flex-direction: column; align-items: center; gap: 2px; width: auto; }
+.p2-weekday.free.today { background: var(--p2-surface-2); }
 .p2-weekday-head { display: flex; align-items: baseline; justify-content: space-between; width: 100%; min-height: 28px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
 .p2-week-list.chips li { min-width: 0; min-height: 0; }
 .p3-daychip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; height: 100%; min-height: 56px; padding: 4px; border: 1px solid var(--p2-line); border-radius: 14px; background: var(--p2-surface); color: inherit; font-size: 14px; }
@@ -288,7 +313,7 @@
   .p3-frame { display: flex; flex-direction: column; }
   .p3-day { flex-wrap: wrap; padding: 10px; }
   .p3-ribbon { width: 100%; }
-  .p3-work { grid-template-columns: minmax(0, 1fr); }
+  .p3-work { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
   .p3-work > * { max-height: 520px; }
   .p2-week-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .p3-month-grid { grid-auto-rows: 72px; }
@@ -300,7 +325,6 @@
 
 /* Top, standard: a date tile, the workout in full, the meetings as a list, the countdown. No arrows. */
 .p3-day.std { align-items: stretch; gap: 18px; padding: 10px 16px 16px 14px; }
-.p3-off span { margin-right: auto; color: var(--p2-muted); }
 .p3-date { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 64px; }
 .p3-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 56px; height: 56px; border: 1px solid #34405a; border-radius: 14px; background: var(--p2-surface-2); line-height: 1; }
 .p3-tile small { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--p2-muted); }
@@ -349,7 +373,9 @@
 .p3-grip.bottom { bottom: 0; }
 .p3-grip.top { top: 0; }
 .p3-day.cmp .p3-label { padding-left: 6px; }
-.p3-day.off .p3-grip, .p3-day.cmp .p3-grip { left: auto; right: 14px; bottom: 3px; transform: none; width: 90px; height: 26px; }
+/* The line has the grip in the middle too, in a strip of its own under the chips so it takes no more room than that. */
+.p3-day.cmp { padding: 6px 12px 18px 6px; }
+.p3-day.cmp .p3-grip { width: 120px; height: 18px; }
 
 /* Limits as bars, a block per provider */
 .p3-limits { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-around; gap: 6px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #34405a transparent; }

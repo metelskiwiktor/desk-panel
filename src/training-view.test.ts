@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TrainingStep } from './training-contract';
-import { flattenSteps, formatClock, formatDuration, profileBars, stepLabels, stepsDuration } from './training-view';
+import { flattenSteps, formatDuration, profileBars, stepLabels, stepsDuration } from './training-view';
 
 const power = (low: number, high: number) => ({ type: 'power' as const, low, high });
 /** Garmin's "Próg": 15' warm-up, 2 × (8' hard + 4' easy) with the last rest skipped, 15' cool-down. */
@@ -15,7 +15,6 @@ const longRide: TrainingStep[] = [{ kind: 'interval', durationSec: 5400, target:
 describe('training view', () => {
   it('formats planned time', () => {
     expect([formatDuration(3000), formatDuration(5400), formatDuration(4380), formatDuration(3600)]).toEqual(['50 min', '1 h 30', '1 h 13', '1 h']);
-    expect([formatClock(5400), formatClock(4380), formatClock(3000)]).toEqual(['1:30', '1:13', '0:50']);
   });
   it('describes the steps in a phrase each', () => {
     expect(stepLabels(threshold)).toEqual(['15′ rozgrzewka 148–201 W', '2 × 8′ mocno 242–282 W + 4′ przerwa 121–175 W', '15′ schłodzenie 121–175 W']);

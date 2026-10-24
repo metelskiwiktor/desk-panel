@@ -1,7 +1,7 @@
-import { Bike, Check } from 'lucide-react';
+import { Bike, CalendarDays, Check, Clock } from 'lucide-react';
 import type { Detail } from './model';
 import { LevelBars } from './TrainingCard';
-import { formatClock } from './training-view';
+import { formatDuration } from './training-view';
 import type { WeekDay, WeekItem } from './week';
 
 const MAX_ITEMS = 3;
@@ -12,31 +12,33 @@ function Item({ item, open }: { item: WeekItem; open: (d: Detail) => void }) {
   const w = item.workout;
   const label = `${item.title}${item.at ? `, ${item.at}` : ''}${item.state && stateTitle[item.state] ? `, ${stateTitle[item.state]}` : ''}`;
   return <button className={`p2-item ${item.kind} ${item.state ?? ''}`} aria-label={label} onClick={() => open(w ? { kind: 'workout', id: item.id } : { kind: 'event', id: item.id })}>
-    <span className="p2-item-line">
-      <i className="p2-mark" />
-      <span className="p2-item-title">{item.title}</span>
-      {item.state === 'done' ? <Check size={15} className="p2-item-check" />
-        : <span className="p2-item-time">{item.at ?? (w?.durationSec ? formatClock(w.durationSec) : '')}</span>}
+    <span className="p2-item-meta">
+      {w ? <>
+        {item.state === 'done' ? <Check size={14} /> : <Bike size={14} />}
+        {w.durationSec ? <span>{formatDuration(w.durationSec)}</span> : null}
+        <LevelBars phrase={w.phrase} />
+      </> : item.at ? <><Clock size={14} /><span>{item.at}</span></> : <><CalendarDays size={14} /><span>cały dzień</span></>}
     </span>
-    {w && <span className="p2-item-sub"><Bike size={13} /><LevelBars phrase={w.phrase} /></span>}
+    <span className="p2-item-title">{item.title}</span>
   </button>;
 }
 
 interface Zone { days: WeekDay[]; known: boolean; selected: string; select: (date: string) => void; open: (d: Detail) => void }
 
-/** Seven days from today: what is planned each day, training and calendar together. The head of a day selects it. */
+/** Seven days from today: what is planned each day, training and calendar together. The head of a day selects it; a day with nothing planned shrinks to its head so the others get its room. */
 export function WeekStrip({ days, known, selected, select, open }: Zone) {
-  return <ol className="p2-week-list">
+  const columns = days.map(day => known && !day.items.length ? '48px' : 'minmax(0, 1fr)').join(' ');
+  return <ol className="p2-week-list" style={{ gridTemplateColumns: columns }}>
     {days.map(day => {
       const shown = day.items.slice(0, MAX_ITEMS - (day.items.length > MAX_ITEMS ? 1 : 0));
       const hidden = day.items.length - shown.length;
-      return <li key={day.date} className={`p2-weekday ${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''}`}>
+      return <li key={day.date} className={`p2-weekday ${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''} ${known && !day.items.length ? 'free' : ''} ${day.items.length >= MAX_ITEMS ? 'crowded' : ''}`}>
         <button className="p2-weekday-head" aria-label={`Pokaż dzień: ${dayTitle(day)}`} aria-pressed={day.date === selected} onClick={() => select(day.date)}>
-          <b>{day.label}</b><span>{day.dayOfMonth}{day.today ? ' · dziś' : ''}</span>
+          <b>{day.label}</b><span>{day.dayOfMonth}{day.today && day.items.length ? ' · dziś' : ''}</span>
         </button>
         {shown.map(item => <Item key={`${item.kind}:${item.id}`} item={item} open={open} />)}
         {hidden > 0 && <span className="p2-more">+{hidden} więcej</span>}
-        {!day.items.length && <span className="p2-free">{known ? 'wolne' : '—'}</span>}
+        {!day.items.length && !known && <span className="p2-free">—</span>}
       </li>;
     })}
   </ol>;

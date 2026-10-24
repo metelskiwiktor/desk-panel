@@ -7,11 +7,6 @@ export function formatDuration(sec: number): string {
   const rest = minutes % 60;
   return `${Math.floor(minutes / 60)} h${rest ? ` ${String(rest).padStart(2, '0')}` : ''}`;
 }
-/** "1:30": the same without words, for the narrow day cards. */
-export function formatClock(sec: number): string {
-  const minutes = Math.round(sec / 60);
-  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
-}
 /** Step lengths: "15′" under an hour, "1 h 30" above. */
 const stepTime = (sec: number) => Math.round(sec / 60) < 60 ? `${Math.round(sec / 60)}′` : formatDuration(sec);
 

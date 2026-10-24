@@ -254,17 +254,16 @@ pod drugą, a układ nie zależy od urządzenia:
   zaczęty, ile przejechano z planu; pod spodem uwaga o wczorajszym treningu zrobionym tylko częściowo), kolumna
   **Spotkania** (lista z godzinami, całodniowe jako „cały dzień”, najbliższe w ciągu 15 minut podświetlone, a dalsze
   jako „+N więcej”) i odliczenie do spotkania albo do jego końca. Dotknięcie treningu lub spotkania otwiera szczegóły.
-  Rozmiary: **standard**, **zmniejszona** (jedna linia chipów) i **ukryta** (sam pasek z podsumowaniem; dotknięcie
-  dnia na dole przywraca standard). Rozmiar zmienia uchwyt na dolnej krawędzi paska: przeciągnięcie ciągnie krawędź i zatrzaskuje się na najbliższym rozmiarze, samo dotknięcie wybiera kolejny (przy zmniejszonym i ukrytym pasku uchwyt jest po prawej);
+  Rozmiary: **standard** i **zmniejszona** (jedna linia chipów). Rozmiar zmienia uchwyt na dolnej krawędzi paska, na środku: przeciągnięcie ciągnie krawędź, a widok już w trakcie przełącza się na rozmiar, na którym by się zatrzymał (zatrzaskuje się na najbliższym po puszczeniu); samo dotknięcie wybiera kolejny;
 - **środek: obszar roboczy** z kartami limitów AI (blok na dostawcę: okno 5h jako gruby pasek, 7d jako cienki, biała
   kreska pokazuje, ile czasu okna już upłynęło, a kolor mówi tylko, czy zużycie wyprzedza czas; bloki stoją obok
   siebie, gdy karta jest szeroka, i jeden pod drugim, gdy wąska), Cezara i poczty. Karty dzielą
   szerokość same; Cezar i poczta pojawiają się tylko, gdy mają coś do powiedzenia. Cezar pokazuje najpierw zadania
   czekające na Ciebie, potem te w toku; poczta to lista nadawca / temat / początek wiadomości (w lewo przeczytane,
-  w prawo kosz). Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu znika;
+  w prawo kosz). Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu płynnie się zwija do zera;
 - **dół: dni** (z linkiem „Kalendarz” do pełnej agendy). Rozmiary: **krótki** (chip na dzień: etykieta i kropki treningów i spotkań), **średni** (domyślny: karta
   na dzień z planem, czasem i poziomem, ✓ przy wykonanym) i **miesiąc** (pięć tygodni od poniedziałku tego tygodnia,
-  zajmuje cały ekran pod górą; dni, które minęły, są wygaszone, bo źródła czytamy od dziś). Dotknięcie dnia wybiera go
+  zajmuje cały ekran pod górą, a zmiany rozmiaru (także górnego paska) są płynne; dni, które minęły, są wygaszone, bo źródła czytamy od dziś). Dotknięcie dnia wybiera go
   i góra pokazuje jego plan. Wydarzenia całodniowe z zasubskrybowanego kalendarza Garmin, które dublują trening, są
   pomijane (dotyczy tylko takich, które mają tę samą nazwę i dzień).
 
@@ -286,8 +285,10 @@ dotknięcie otwiera okno (jak lista zdarzeń: Esc lub dotknięcie poza nim zamyk
 progiem 90% i przyciskiem do zakładki Komputer, a utrzymany stan zostawia wpis w zdarzeniach. Dzień bez spotkań i wydarzeń całodniowych
 nie rysuje już niczego osobnego: dzień jest po prostu pusty („Dziś bez treningu i spotkań”).
 Poniżej 900 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona. Zdarzenia panelu
-(dzwonek z licznikiem, także przy zerze; dotknięcie rozwija listę, albo „Brak zdarzeń”, z przyciskiem do zasad;
-nowe zdarzenie rozwija listę na 10 s, Esc lub dotknięcie poza nią zwija) stoją w pasku u góry.
+(dzwonek z liczbą wszystkich, także przy zerze; dotknięcie rozwija listę, albo „Brak zdarzeń”, z przyciskiem do zasad;
+Esc lub dotknięcie poza nią zwija) stoją w pasku u góry. Lista nie otwiera się sama: zdarzenia wykryte od ostatniego jej
+otwarcia dzwonek zgłasza plakietką „+N” i rzadkim, spokojnym podskokiem (co 14 s, wyłączonym przy „zmniejsz ruch”), a w
+otwartej liście są oznaczone „nowe”. Czas ostatniego otwarcia jest zapamiętany w przeglądarce.
 
 Gdy źródło nie jest świeże, sekcja pokazuje częstotliwość odświeżania, czas danych i osobno czas ostatniego
 poprawnego pobrania przez panel, z dokładnością do sekund. Błąd nie przesuwa daty
@@ -354,7 +355,7 @@ Zakładka „Zdarzenia” w dolnej nawigacji opisuje aktualne reguły w krótkie
 warunek utworzenia oraz kiedy dany wpis może pojawić się ponownie. Pokazuje też
 zasady zapisu historii i usuwania. Progi i czasy są współdzielone z detekcją zdarzeń.
 
-Lista zdarzeń panelu rozwija się spod dzwonka na Pulpicie i przewija pionowo.
+Lista zdarzeń panelu rozwija się spod dzwonka na Pulpicie (tylko po dotknięciu) i przewija pionowo.
 Przesunięcie wpisu w lewo lub prawo usuwa go; przycisk × jest alternatywą dla gestu,
 a „Cofnij” działa przez sześć sekund. Dotknięcie wpisu otwiera szczegóły źródła.
 Przewijanie pionowe i przerwany/krótki gest nie usuwają wpisu ani nie otwierają szczegółów.

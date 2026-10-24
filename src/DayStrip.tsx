@@ -84,15 +84,16 @@ export interface DayStripProps {
   notice: string | null;
   known: boolean;
   /** A tap on the grip steps to the next size; a drag settles on the nearest. */
-  cycle: () => void; resize: (size: TopSize) => void; open: (d: Detail) => void; showCalendar: () => void; grow: () => void;
+  cycle: () => void; resize: (size: TopSize) => void; preview: (size: TopSize | null) => void; open: (d: Detail) => void; showCalendar: () => void;
 }
 
 const MEETING_ROWS = 3;
-const topGrip = (p: DayStripProps) => <SizeGrip label="Zmień rozmiar paska dnia" edge="bottom" order={TOP_SIZES} current={p.size} heights={() => TOP_HEIGHTS} cssVar="--p3-top" onChange={p.resize} onTap={p.cycle} />;
+// The key keeps one grip across the three looks of the strip, so a drag survives the strip changing under it.
+const topGrip = (p: DayStripProps) => <SizeGrip key="grip" label="Zmień rozmiar paska dnia" edge="bottom" order={TOP_SIZES} current={p.size} heights={() => TOP_HEIGHTS} cssVar="--p3-top" onChange={p.resize} onPreview={p.preview} onTap={p.cycle} />;
 
 /**
  * The top zone: one day, the selected one, from a tap on the days below. A date tile, the workout in full and the
- * meetings as a list; a line of chips when the strip is shrunk, and a bare label when it is hidden.
+ * meetings as a list; a line of chips when the strip is shrunk.
  */
 export function DayStrip(p: DayStripProps) {
   const offset = daysBetween(p.today, p.date);
@@ -101,13 +102,6 @@ export function DayStrip(p: DayStripProps) {
   const rel = relative(offset);
   const aria = isToday ? 'Dziś' : long;
   const workouts = p.items.filter(i => i.workout), meetings = p.items.filter(i => !i.workout);
-  if (p.size === 'off') return <section className="p3-day off" aria-label={aria}>
-    <button className="p3-off" onClick={p.grow} aria-label="Pokaż pasek dnia">
-      <b>{long}{rel ? ` · ${rel}` : ''}</b>
-      <span>{p.items.length ? `${p.items.length} ${p.items.length === 1 ? 'pozycja' : 'pozycje'}` : 'wolne'}</span>
-    </button>
-    {topGrip(p)}
-  </section>;
   const grip = topGrip(p);
   if (p.size === 'cmp') return <section className="p3-day cmp" aria-label={aria}>
     <div className="p3-label"><strong>{long}</strong>{rel && <span>{rel}</span>}</div>

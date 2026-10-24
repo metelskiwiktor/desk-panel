@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, ChevronRight, Trash2, X } from 'lucide-react';
 import { preciseStamp } from './format';
 import type { ActivityEntry } from './activity-log';
@@ -10,22 +10,43 @@ import { useDismiss } from './popover';
 const sources: Record<ActivityEntry['target']['kind'], string> = { event: 'Kalendarz', task: 'Cezar', quota: 'Limity AI', system: 'Komputer' };
 export const sourceOf = (entry: ActivityEntry) => sources[entry.target.kind];
 const SourceTag = ({ entry }: { entry: ActivityEntry }) => <span className={`source-tag source-${entry.target.kind}`}>{sourceOf(entry)}</span>;
-/** A new event opens the list for this long, then it folds back to the bell. */
-export const EVENTS_AUTO_COLLAPSE_MS = 10_000;
-/** Events found by the first reads after opening the panel are not news: they stay folded. */
-export const EVENTS_SETTLE_MS = 5_000;
+export const EVENTS_SEEN_KEY = 'desk-panel.events-seen';
+/** "1 nowe", "3 nowe", "5 nowych". */
+export const nowe = (n: number) => n === 1 || (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'nowe' : 'nowych';
 
-function ActivityRow({ entry, open, dismiss }: {
-  entry: ActivityEntry; open: (target: Detail) => void; dismiss: (entry: ActivityEntry) => void;
+/**
+ * When the list was last open, kept in the browser: what was detected after that is new. A first run starts from now,
+ * so what is already in the list is not news.
+ */
+function useSeenAt() {
+  const [seenAt, setSeenAt] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem(EVENTS_SEEN_KEY));
+      if (Number.isFinite(stored) && stored > 0) return stored;
+      const start = Date.now();
+      localStorage.setItem(EVENTS_SEEN_KEY, String(start));
+      return start;
+    } catch { return Date.now(); }
+  });
+  const markSeen = useCallback((upTo: number) => {
+    const at = Math.max(Date.now(), upTo);
+    setSeenAt(at);
+    try { localStorage.setItem(EVENTS_SEEN_KEY, String(at)); } catch { /* the mark then lasts until reload */ }
+  }, []);
+  return { seenAt, markSeen };
+}
+
+function ActivityRow({ entry, fresh, open, dismiss }: {
+  entry: ActivityEntry; fresh: boolean; open: (target: Detail) => void; dismiss: (entry: ActivityEntry) => void;
 }) {
   const { offset, handlers, isTap } = useSwipe(() => dismiss(entry));
   return <li className={`activity-swipe ${offset ? 'dragging' : ''}`}>
     <span className="activity-swipe-hint" aria-hidden="true"><Trash2 size={18} /> Usuń</span>
     <div className="activity-row" style={{ transform: `translateX(${offset}px)` }}>
-      <button className={`p2-erow ${entry.tone}`} {...handlers} aria-label={`${sourceOf(entry)}: ${entry.title}`} onClick={event => { if (isTap(event)) open(entry.target); }}>
+      <button className={`p2-erow ${entry.tone} ${fresh ? 'new' : ''}`} {...handlers} aria-label={`${sourceOf(entry)}: ${entry.title}`} onClick={event => { if (isTap(event)) open(entry.target); }}>
         <i className="p2-edot" aria-hidden="true" />
         <span className="p2-erow-body">
-          <span className="p2-erow-top"><SourceTag entry={entry} /><span className="p2-erow-time">{preciseStamp(entry.detectedAt)}</span></span>
+          <span className="p2-erow-top"><SourceTag entry={entry} />{fresh && <span className="p2-erow-new">nowe</span>}<span className="p2-erow-time">{preciseStamp(entry.detectedAt)}</span></span>
           <strong>{entry.title}</strong>
           <span className="p2-erow-context">{entry.context}</span>
         </span>
@@ -37,46 +58,42 @@ function ActivityRow({ entry, open, dismiss }: {
 }
 
 /**
- * Panel events: a bell with the count that is always in the top bar (a zero is a calm answer, not a missing icon).
- * It opens a list under itself, or an empty note; a new event opens it on its own for a few seconds.
+ * Panel events: a bell with the total that is always in the top bar (a zero is a calm answer, not a missing icon).
+ * What was detected since the list was last open is announced on the bell: a "+N" badge and a small hop now and then.
+ * The list opens only when asked, under the bell, with the new entries marked; an empty one says so.
  */
 export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storageError, showRules }: {
   entries: ActivityEntry[]; open: (target: Detail) => void; showRules: () => void;
   dismiss: (entry: ActivityEntry) => void; restore: () => void; canUndo: boolean; storageError: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const latest = entries[0]?.id;
-  const seen = useRef(latest);
-  const mountedAt = useRef(Date.now());
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { seenAt, markSeen } = useSeenAt();
+  // What counted as new when the list was opened stays marked in it until it is closed.
+  const [baseline, setBaseline] = useState<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => {
-    if (!latest || latest === seen.current) return;
-    seen.current = latest;
-    if (Date.now() - mountedAt.current < EVENTS_SETTLE_MS) return;
-    setExpanded(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setExpanded(false), EVENTS_AUTO_COLLAPSE_MS);
-  }, [latest]);
-  const toggle = (next: boolean) => { clearTimeout(timer.current); setExpanded(next); };
-  useDismiss(expanded, () => toggle(false), root);
   const top = entries[0];
-  const label = `Zdarzenia panelu: ${entries.length}${top ? `, najnowsze: ${top.title}` : ''}`;
+  // Open, everything in the list is being seen, including what arrives meanwhile.
+  useEffect(() => { if (expanded) markSeen(top?.detectedAt ?? 0); }, [expanded, top?.id, top?.detectedAt, markSeen]);
+  const toggle = (next: boolean) => { setBaseline(next ? seenAt : null); setExpanded(next); };
+  useDismiss(expanded, () => toggle(false), root);
+  const fresh = expanded ? 0 : entries.filter(e => e.detectedAt > seenAt).length;
+  const label = `Zdarzenia panelu: ${entries.length}${fresh ? `, ${nowe(fresh)}: ${fresh}` : ''}${top ? `, najnowsze: ${top.title}` : ''}`;
   return <div className="events-root" ref={root}>
-    <button className={`events-icon ${entries.length ? 'has' : ''}`} aria-expanded={expanded} aria-label={label} onClick={() => toggle(!expanded)}>
+    <button className={`events-icon ${fresh ? 'fresh' : ''}`} aria-expanded={expanded} aria-label={label} onClick={() => toggle(!expanded)}>
       {entries.length ? <Bell size={20} /> : <BellOff size={20} />}
       <span className="events-count">{entries.length}</span>
+      {fresh > 0 && <span className="events-new" aria-hidden="true" title={`${fresh} ${nowe(fresh)}`}>+{fresh}</span>}
     </button>
     {expanded && <section className="events-panel" aria-labelledby="events-title">
       <div className="events-head">
         <h2 id="events-title">Zdarzenia panelu</h2>
-        <span className="events-total">{entries.length}</span>
+        {baseline !== null && entries.some(e => e.detectedAt > baseline) && <span className="events-total fresh">{entries.filter(e => e.detectedAt > baseline).length} {nowe(entries.filter(e => e.detectedAt > baseline).length)}</span>}
+        <span className="events-total">{entries.length} łącznie</span>
         <button className="events-close" aria-label="Zwiń zdarzenia panelu" aria-expanded="true" onClick={() => toggle(false)}><X size={18} /></button>
       </div>
       {entries.length > 0
         ? <ul className="activity-list events-list" aria-label="Lista zdarzeń">
-          {entries.map(entry => <ActivityRow key={entry.id} entry={entry} open={open} dismiss={dismiss} />)}
+          {entries.map(entry => <ActivityRow key={entry.id} entry={entry} fresh={baseline !== null && entry.detectedAt > baseline} open={open} dismiss={dismiss} />)}
         </ul>
         : <div className="events-empty"><BellOff size={28} aria-hidden="true" /><strong>Brak zdarzeń</strong><span>Panel nie wykrył niczego nowego.</span></div>}
       <div className="events-foot" role="status">

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, it, vi } from 'vitest';
-import { ActivityFeed } from './ActivityFeed';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ActivityFeed, nowe } from './ActivityFeed';
 import { useActivityLog } from './useActivityLog';
 import { createFixture } from './test-fixtures';
 import { emptyActivityLog, recordActivity, type ActivityEntry } from './activity-log';
@@ -100,15 +100,43 @@ it('degrades to an in-memory list when storage is unavailable', () => {
   expect(view.result.current.entries.length).toBe(recordActivity(emptyActivityLog(),data,now).entries.length-1);
 });
 
-it('opens for an event detected after start-up and folds back on its own', () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(now);
+describe('what is new since the list was last open', () => {
   const props = { open: vi.fn(), dismiss: vi.fn(), restore: () => {}, canUndo: false, storageError: false, showRules: () => {} };
-  const view = render(<ActivityFeed entries={[entry]} {...props} />);
-  expect(screen.queryByRole('region',{name:'Zdarzenia panelu'})).toBeNull();
-  act(() => { vi.advanceTimersByTime(6000); });
-  view.rerender(<ActivityFeed entries={[{ ...entry, id: '2', title: 'Nowy alert' }, entry]} {...props} />);
-  expect(screen.getByRole('region',{name:'Zdarzenia panelu'})).toBeTruthy();
-  act(() => { vi.advanceTimersByTime(10_000); });
-  expect(screen.getByRole('button',{name:'Zdarzenia panelu: 2, najnowsze: Nowy alert'})).toBeTruthy();
+  const later = (ms: number): ActivityEntry => ({ ...entry, id: String(ms), title: 'Nowy alert', detectedAt: now + ms });
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now); });
+
+  it('does not open on its own: the bell says there is one new and how many there are in all', () => {
+    const view = render(<ActivityFeed entries={[entry]} {...props} />);
+    expect(screen.queryByText(/^\+\d/)).toBeNull(); // what was there at the start is not news
+    vi.setSystemTime(now + 6000);
+    view.rerender(<ActivityFeed entries={[later(6000), entry]} {...props} />);
+    expect(screen.queryByRole('region', { name: 'Zdarzenia panelu' })).toBeNull();
+    expect(screen.getByText('+1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 2, nowe: 1, najnowsze: Nowy alert' }).textContent).toBe('2+1');
+  });
+  it('marks the new entries in the open list and counts them as seen afterwards', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const view = render(<ActivityFeed entries={[entry]} {...props} />);
+    vi.setSystemTime(now + 6000);
+    view.rerender(<ActivityFeed entries={[later(6000), entry]} {...props} />);
+    await user.click(screen.getByRole('button', { name: /^Zdarzenia panelu:/ }));
+    expect(screen.getByText('1 nowe')).toBeTruthy();
+    expect(screen.getByText('2 łącznie')).toBeTruthy();
+    expect(screen.getAllByText('nowe')).toHaveLength(1);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('+1')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 2, najnowsze: Nowy alert' })).toBeTruthy();
+  });
+  it('keeps what is new through a reload and says nothing about a first start', () => {
+    const first = render(<ActivityFeed entries={[entry]} {...props} />);
+    vi.setSystemTime(now + 6000);
+    first.rerender(<ActivityFeed entries={[later(6000), entry]} {...props} />);
+    first.unmount();
+    render(<ActivityFeed entries={[later(6000), entry]} {...props} />);
+    expect(screen.getByText('+1')).toBeTruthy();
+    expect(localStorage.getItem('desk-panel.events-seen')).toBe(String(now));
+  });
+  it('speaks Polish about the numbers', () => {
+    expect([1, 2, 4, 5, 12, 22, 25].map(nowe)).toEqual(['nowe', 'nowe', 'nowe', 'nowych', 'nowych', 'nowe', 'nowych']);
+  });
 });

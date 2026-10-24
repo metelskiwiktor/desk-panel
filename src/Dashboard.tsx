@@ -89,7 +89,7 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
   resetSignal?: boolean;
 }) {
   const calendarOn = visible('calendar'), trainingOn = visible('training');
-  const { zones, setTop, setBottom } = useZones(resetSignal);
+  const { zones, view, setTop, setBottom, previewTop, previewBottom } = useZones(resetSignal);
   const events = withoutPlanDuplicates(data.calendar.data ?? [], training.data?.workouts ?? []);
   const zone = training.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = localDate(now, zone);
@@ -98,10 +98,10 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
   const selected = picked && picked >= today ? picked : today;
   const sources = { now, timeZone: zone, events: calendarOn ? events : [], workouts: trainingOn ? training.data?.workouts ?? [] : [], activities: training.data?.activities ?? [] };
   const week = weekDays(sources);
-  const month = zones.bottom === 'month' ? monthDays(sources) : [];
+  const month = view.bottom === 'month' ? monthDays(sources) : [];
   const day = dayOf(selected, sources);
   const known = (calendarOn && data.calendar.data !== null) || (trainingOn && training.data !== null);
-  const select = (date: string) => { setPicked(date); if (zones.top === 'off') setTop('std'); };
+  const select = (date: string) => setPicked(date);
 
   const ribbon = dayRibbon(events, now);
   const isToday = selected === today;
@@ -125,17 +125,19 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
   const cezarBusy = visible('cezar') && (data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running');
   const quotasOn = visible('quotas');
   const cards = [quotasOn, cezarBusy, mailShown].filter(Boolean).length;
-  const work = zones.bottom !== 'month' && cards > 0;
-  return <div className="p3-frame" data-top={zones.top} data-bottom={zones.bottom} data-work={work} data-days={calendarOn || trainingOn}>
-    {(calendarOn || trainingOn) && <DayStrip date={selected} today={today} size={zones.top} now={now} timeZone={zone} items={day.items} activities={sources.activities}
+  const work = cards > 0;
+  // In the month the work area folds away to nothing instead of leaving: the zones glide, and the cards are still there.
+  const folded = view.bottom === 'month';
+  return <div className="p3-frame" data-top={view.top} data-bottom={view.bottom} data-work={work} data-days={calendarOn || trainingOn}>
+    {(calendarOn || trainingOn) && <DayStrip date={selected} today={today} size={view.top} now={now} timeZone={zone} items={day.items} activities={sources.activities}
       next={next} yesterday={yesterday} notice={notice} known={known}
-      cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} grow={() => setTop('std')} open={open} showCalendar={showCalendar} />}
-    {work && <div className="p3-work">
+      cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} preview={previewTop} open={open} showCalendar={showCalendar} />}
+    {work && <div className="p3-work" aria-hidden={folded || undefined} inert={folded}>
       {quotasOn && <QuotaBars data={data} now={now} open={open} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
       {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={cards > 1} />}
       {mailShown && <MailFeed mail={mail} now={now} open={open} />}
     </div>}
-    {(calendarOn || trainingOn) && <DaysZone week={week} month={month} size={zones.bottom} known={known} selected={selected} select={select} open={open}
-      cycle={() => setBottom(cycleSize(BOTTOM_SIZES, zones.bottom))} resize={setBottom} showCalendar={showCalendar} />}
+    {(calendarOn || trainingOn) && <DaysZone week={week} month={month} size={view.bottom} known={known} selected={selected} select={select} open={open}
+      cycle={() => setBottom(cycleSize(BOTTOM_SIZES, zones.bottom))} resize={setBottom} preview={previewBottom} showCalendar={showCalendar} />}
   </div>;
 }
