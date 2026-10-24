@@ -1,7 +1,7 @@
 # Garmin Connect: jakie dane są dostępne
 
 Notatka na później (np. przygotowania do triathlonu). Panel czyta dziś z Garmina tylko plan, kroki treningów i
-podstawy nagrań (patrz README, „Garmin Connect”). To konto zwraca jednak znacznie więcej. Poniżej katalog tego,
+podstawy nagrań (patrz [garmin.md](garmin.md)). To konto zwraca jednak znacznie więcej. Poniżej katalog tego,
 co sprawdzono, żeby nie trzeba było tego odkrywać od nowa.
 
 ## Jak to sprawdzono
@@ -108,7 +108,7 @@ Priorytet pod triathlon i regularne treningi:
 
 Zasady przy dodawaniu: nowe pole najpierw do kontraktu (`src/training-contract.ts`), walidacja zod w
 `server/garmin.ts`, scenariusze w `scenarios/` i testy. Dane o śnie, ciele i regeneracji wymagają najpierw zmiany
-zasady w `AGENTS.md` i README (sekcja „Garmin Connect”) oraz decyzji, kto widzi ekran.
+zasady w `AGENTS.md` i [garmin.md](garmin.md) oraz decyzji, kto widzi ekran.
 
 ## Jak powtórzyć sondę
 

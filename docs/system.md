@@ -2,29 +2,12 @@
 
 ## Uruchamianie i usługa Windows
 
-Wymagany Node.js 22.12+ i npm. Uruchom Cezara, następnie w katalogu Desk Panelu:
-
-```powershell
-npm install
-npm run dev
-```
-
-To uruchamia lokalne API na `http://127.0.0.1:5174` i Vite (domyślnie port 5173).
-Do zwykłego używania wystarczy jeden proces, serwujący również frontend:
-
-```powershell
-npm run build
-npm start
-```
-
-Otwórz `http://127.0.0.1:5174`. Bez Cezara panel działa ze stanem niedostępności;
-nie wstawia przykładowych zadań zamiast prawdziwych.
+Uruchomienie lokalne i `npm run dev` są w [README.md](../README.md).
 
 Autostart Windows obsługuje Servy: `just install` buduje projekt i rejestruje
 usługę. Szczegóły i logi opisano w [servy/README.md](../servy/README.md).
 `just` wyświetla krótki zestaw komend; `just check` uruchamia testy i build,
 a `just service RESTART` przeładowuje działający serwer po zmianach.
-
 
 ## CPU i RAM
 
