@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CezarState } from './useCezar';
 import { CezarPanel } from './CezarCard';
 import { FOCUS_WITHIN_MS, dayRibbon } from './day-ribbon';
 import { DayStrip } from './DayStrip';
@@ -82,7 +83,9 @@ export function StatusChips({ data, mail, now, open, navigate, showPc = true }: 
  * something to say. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
  * top and bottom zones are one step each way and are remembered.
  */
-export function Dashboard({ data, training, snapshot, mail, now, open, showTasks, showCalendar, showBreakdown, visible, resetSignal = false }: {
+export function Dashboard({ data, training, snapshot, cezar, mail, now, open, showTasks, showCalendar, showBreakdown, visible, resetSignal = false }: {
+  /** Finished tasks and the actions on them; without it only the active tasks show. */
+  cezar?: CezarState;
   data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
   open: (d: Detail) => void; showTasks: () => void; showCalendar: () => void; showBreakdown: () => void; visible: (id: WidgetId) => boolean;
   /** True while the panel idles: sizes and the selected day go back to the default. */
@@ -122,7 +125,7 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
   // while the undo bar or an error needs it (also right after the last thread was handled).
   const mailProblem = mail.source.accounts.some(a => a.status !== 'connected' && a.status !== 'loading');
   const mailShown = visible('mail') && !!(mail.threads ? mail.threads.length || mailProblem : mail.source.status !== 'loading') || !!(visible('mail') && (mail.undo || mail.error));
-  const cezarBusy = visible('cezar') && (data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running');
+  const cezarBusy = visible('cezar') && ((data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running') || !!cezar && (cezar.finished.length > 0 || cezar.undo || !!cezar.error));
   const quotasOn = visible('quotas');
   const cards = [quotasOn, cezarBusy, mailShown].filter(Boolean).length;
   const work = cards > 0;
@@ -134,7 +137,8 @@ export function Dashboard({ data, training, snapshot, mail, now, open, showTasks
       cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} preview={previewTop} open={open} showCalendar={showCalendar} />}
     {work && <div className="p3-work" aria-hidden={folded || undefined} inert={folded}>
       {quotasOn && <QuotaBars data={data} now={now} open={open} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
-      {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={cards > 1} />}
+      {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={cards > 1}
+        finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />}
       {mailShown && <MailFeed mail={mail} now={now} open={open} />}
     </div>}
     {(calendarOn || trainingOn) && <DaysZone week={week} month={month} size={view.bottom} known={known} selected={selected} select={select} open={open}

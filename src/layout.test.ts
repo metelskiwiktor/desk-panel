@@ -45,14 +45,17 @@ describe('wersjonowany układ', () => {
       ['quotas', false],
       ['breakdown', false],
       ['mail', false],
-      ['ambient', false],
     ]);
   });
+  it('wczytuje układ zapisany ze starą kartą zegara, bez niej', () => {
+    const saved = { version: 2, widgets: [...defaultLayout().widgets, { id: 'ambient', visible: false, displayMode: 'expanded', priority: 'normal' }] };
+    expect(parseLayout(JSON.stringify(saved))).toEqual(defaultLayout());
+  });
   it('dopisuje karty dodane po zapisaniu układu, zachowując kolejność użytkownika', () => {
-    const saved = { version: 2, widgets: defaultLayout().widgets.filter((w) => w.id !== 'mail' && w.id !== 'ambient').reverse() };
+    const saved = { version: 2, widgets: defaultLayout().widgets.filter((w) => w.id !== 'mail').reverse() };
     saved.widgets[0] = { ...saved.widgets[0], visible: false };
     const layout = parseLayout(JSON.stringify(saved));
-    expect(layout.widgets.map((w) => w.id)).toEqual(['insights', 'breakdown', 'quotas', 'training', 'calendar', 'system', 'cezar', 'mail', 'ambient']);
+    expect(layout.widgets.map((w) => w.id)).toEqual(['insights', 'breakdown', 'quotas', 'training', 'calendar', 'system', 'cezar', 'mail']);
     expect(layout.widgets[0].visible).toBe(false);
     expect(layout.widgets.at(-1)!.visible).toBe(true);
   });

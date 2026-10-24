@@ -39,7 +39,7 @@ export const taskCurrentStepSchema = z.object({
 
 export const taskSchema = z.object({
   id: z.string(), title: z.string(), project: z.string(),
-  status: z.enum(['needs-input', 'review', 'running', 'queue', 'done']),
+  status: z.enum(['needs-input', 'review', 'running', 'queue', 'done', 'failed']),
   checkedAt: z.number().finite(), startedAt: z.number().finite().optional(),
   completedAt: z.number().finite().optional(), description: z.string(),
   sourceUrl: z.url(), activity: z.string().optional(),
@@ -53,9 +53,19 @@ export const taskSchema = z.object({
   diffStat: taskDiffStatSchema.optional(),
   question: z.string().nullable().optional(),
   lastMessage: z.string().optional(),
+  /** Finished tasks only: Cezar has no read receipt for it yet. */
+  unread: z.boolean().optional(),
+  pullRequestUrl: z.string().optional(),
 });
+/** A task that ended and is not archived yet; it stays on the dashboard until it is archived. */
+export const finishedTaskSchema = taskSchema.extend({ status: z.enum(['done', 'failed']) });
+export type FinishedTask = z.infer<typeof finishedTaskSchema>;
+/** The only writes to Cezar: archive or restore a task, mark it read or unread. */
+export const cezarActions = ['archive', 'unarchive', 'read', 'unread'] as const;
+export type CezarAction = typeof cezarActions[number];
+export const cezarActionSchema = z.object({ id: z.string().regex(/^[^/\s]{1,128}\/[0-9A-Za-z-]{1,128}$/), action: z.enum(cezarActions) }).strict();
 export const cezarSchema = z.object({
-  observedAt: z.number().finite(), tasks: z.array(taskSchema),
+  observedAt: z.number().finite(), tasks: z.array(taskSchema), finished: z.array(finishedTaskSchema).default([]),
   counts: z.object({ running: count, queue: count, 'needs-input': count, review: count }),
   partial: z.boolean().default(false), scheduled: count.default(0),
 });

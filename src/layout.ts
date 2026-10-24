@@ -7,7 +7,6 @@ export const widgetNames = {
   breakdown: 'Podział zużycia AI',
   insights: 'Zdarzenia panelu',
   mail: 'Poczta',
-  ambient: 'Zegar po bezczynności (10 min, w nocy 2 min)',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 /** Order, displayMode and priority are kept from earlier layouts; the dashboard sizes sections by content. */
@@ -22,6 +21,8 @@ export interface Layout {
   widgets: WidgetConfig[];
 }
 export const STORAGE_KEY = 'desk-panel.layout';
+/** Cards that no longer exist; a layout saved with them still loads, without them. */
+const RETIRED_WIDGETS = ['ambient'];
 export function defaultLayout(): Layout {
   return {
     version: 2,
@@ -41,7 +42,7 @@ export function parseLayout(raw: string | null): Layout {
     if (
       parsed.version === 1 &&
       Array.isArray(parsed.order) &&
-      parsed.order.every(
+      (parsed.order = parsed.order.filter((id: unknown) => !RETIRED_WIDGETS.includes(id as string))).every(
         (id: unknown) => typeof id === 'string' && Object.hasOwn(widgetNames, id),
       ) &&
       new Set(parsed.order).size === parsed.order.length
@@ -58,6 +59,7 @@ export function parseLayout(raw: string | null): Layout {
       };
     }
     if (parsed.version !== 2 || !Array.isArray(parsed.widgets)) return defaultLayout();
+    parsed.widgets = parsed.widgets.filter((w: WidgetConfig) => !RETIRED_WIDGETS.includes(w?.id));
     const valid = parsed.widgets.every(
       (w: WidgetConfig) =>
         w &&

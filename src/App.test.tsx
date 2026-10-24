@@ -205,7 +205,7 @@ describe('interaktywny panel', () => {
     expect(within(cezar).getByRole('button', { name: /Poprawa wyszukiwania po etykietach/ })).toBeTruthy();
     expect(within(await screen.findByRole('region', { name: 'Poczta' })).getAllByRole('button', { name: /^(Anna|GitHub)/ }).length).toBeGreaterThan(0);
   });
-  it('przycisk dzień/noc przyciemnia pulpit, a pełny ekran jest tylko tam, gdzie przeglądarka go ma', async () => {
+  it('przycisk dzień/noc przyciemnia pulpit, a przycisku pełnego ekranu nie ma', async () => {
     const user = userEvent.setup();
     renderWith();
     await user.click(await screen.findByRole('button', { name: 'Przełącz na tryb nocny' }));

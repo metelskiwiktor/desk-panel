@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
+import { cezarActionSchema } from '../src/cezar-contract';
 import { mailActionSchema } from '../src/mail-contract';
 import { warmupEditFor, warmupProviderSchema, warmupRunInputSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
@@ -45,7 +46,7 @@ export function createPanelServer(sources: PanelSources, root: string) {
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== `http://${host}`) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -54,6 +55,10 @@ export function createPanelServer(sources: PanelSources, root: string) {
         if (url.pathname === '/api/google/connect') {
           const { email } = await readJson(req, connectSchema);
           res.end(JSON.stringify({ authorizationUrl: await sources.googleConnect(email) }));
+        } else if (url.pathname === '/api/cezar/action') {
+          const { id, action } = await readJson(req, cezarActionSchema);
+          await sources.cezarAction(id, action);
+          res.end(JSON.stringify({ ok: true }));
         } else {
           const { account, threadId, action } = await readJson(req, mailActionSchema);
           await sources.mailAction(account, threadId, action);

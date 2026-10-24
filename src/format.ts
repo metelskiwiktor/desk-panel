@@ -109,6 +109,8 @@ export function formatModelName(model: string): string {
   if (trimmed === 'haiku' || trimmed === 'claude-3-5-haiku') {
     return 'Claude 3.5 Haiku';
   }
+  const claude = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?(?:-\d{8})?$/.exec(trimmed);
+  if (claude) return `Claude ${claude[1][0].toUpperCase()}${claude[1].slice(1)} ${claude[2]}${claude[3] ? `.${claude[3]}` : ''}`;
   if (trimmed.includes('gemini-3.8-flash') || trimmed.includes('gemini-2.5-flash')) {
     return 'Gemini 3.8 Flash';
   }
@@ -130,3 +132,12 @@ export function formatModelLabel(runner?: string, model?: string): string {
   return `${runner} · ${cleanModel}`;
 }
 
+
+/** "przed chwilą", "5 min temu", "3 godz. temu" within a day; older than that "23 paź 15:47". */
+export function agoOrDate(at: number, now = Date.now()): string {
+  const minutes = Math.floor((now - at) / 60_000);
+  if (minutes < 1 && now >= at - 60_000) return 'przed chwilą';
+  if (minutes < 60 && minutes >= 0) return `${minutes} min temu`;
+  if (minutes < 24 * 60 && minutes >= 0) return `${Math.floor(minutes / 60)} godz. temu`;
+  return `${new Date(at).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })} ${time(at)}`;
+}

@@ -14,6 +14,9 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   idle clock instead of walking the pages.
 - `just devices`: target screens from devices.json with derived CSS sizes.
   Screen sizes live only there; the layout is fluid and never reads it.
+- `just kiosk [DISPLAY]` / `just kiosk-autostart ON|OFF|STATUS`: the dashboard as a bare full-screen Chrome
+  window on one monitor (own Chrome profile), and starting it at sign-in. Windows PowerShell 5.1 reads these
+  scripts as ANSI: keep them ASCII.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
   DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
 - `just check`: all tests, typecheck and frontend build. Run before publishing.
@@ -31,7 +34,9 @@ Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
 lives only in scenarios/ — add a file there instead of branching in the UI. Contract schemas validate provider data. Preserve
-real observation timestamps on failures. Quota reads must never send model prompts
+real observation timestamps on failures. Cezar is read-only except
+`POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked); never start,
+resume or answer tasks. Quota reads must never send model prompts
 or start agent turns. Gmail uses `gmail.modify` only: metadata reads, read/unread
 and Trash/untrash — never message bodies, sending or permanent deletion. Garmin Connect
 (unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and

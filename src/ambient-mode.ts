@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { countdown } from './day-ribbon';
 import { time } from './format';
 import type { CalendarEvent, Task } from './model';
@@ -7,9 +7,6 @@ import { addDays, localDate, workoutProgress } from './training-progress';
 import { formatDuration } from './training-view';
 
 const MINUTE = 60_000;
-/** The panel falls back to a quiet clock after this long without a touch; at night sooner. */
-export const AMBIENT_AFTER_MS = 10 * MINUTE;
-export const AMBIENT_AFTER_NIGHT_MS = 2 * MINUTE;
 /** Between these hours (local) the clock is dimmer still. */
 export const NIGHT_FROM = 23, NIGHT_TO = 6;
 /** The picture drifts a few pixels each minute, so a clock left on for weeks does not burn into the panel. */
@@ -58,27 +55,16 @@ export function useNight(now: number) {
   return { night, toggle };
 }
 
-export interface AmbientState { ambient: boolean; night: boolean; wake: () => void; /** The clock at once, by the button; works with idle switching turned off. */ enter: () => void }
+export interface AmbientState { ambient: boolean; night: boolean; wake: () => void; /** The quiet clock, by the button. */ enter: () => void }
 /**
- * Idle detection. While the clock shows, only `wake` (the tap on the clock itself) ends it, so the tap that wakes the
- * panel never lands on a button underneath. Polling and the data underneath keep running.
+ * The quiet clock shows only when asked for (the button, or `?ambient=`); the panel never falls asleep by itself.
+ * While it shows, only `wake` (the tap on the clock itself) ends it, so the tap that wakes the panel never lands on a
+ * button underneath. Polling and the data underneath keep running.
  */
-export function useAmbient(enabled: boolean, now: number, night = isNight(now)): AmbientState {
+export function useAmbient(now: number, night = isNight(now)): AmbientState {
   const forced = forcedAmbient();
-  const lastTouch = useRef(Date.now());
   const [asleep, setAsleep] = useState(false);
-  useEffect(() => {
-    if (!enabled) { setAsleep(false); return; }
-    const touched = () => { lastTouch.current = Date.now(); };
-    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
-    for (const name of events) window.addEventListener(name, touched, { passive: true });
-    const timer = window.setInterval(() => {
-      const after = isNight(Date.now()) ? AMBIENT_AFTER_NIGHT_MS : AMBIENT_AFTER_MS;
-      if (Date.now() - lastTouch.current >= after) setAsleep(true);
-    }, 5000);
-    return () => { for (const name of events) window.removeEventListener(name, touched); window.clearInterval(timer); };
-  }, [enabled]);
-  const wake = useCallback(() => { lastTouch.current = Date.now(); setAsleep(false); }, []);
+  const wake = useCallback(() => setAsleep(false), []);
   const enter = useCallback(() => setAsleep(true), []);
   return { ambient: forced !== null || asleep, night: forced ? forced === 'night' : night, wake, enter };
 }

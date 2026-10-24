@@ -81,6 +81,63 @@
 .p2-crow.runs .p2-crow-side b { color: var(--p2-cezar); }
 .p2-crow-side small { font-size: 12px; color: var(--p2-muted); }
 .p2-crow-side small.bad { color: var(--quota-red); }
+/* Finished tasks wait to be archived: a scrolling list under the active ones, a swipe either way archives */
+.p2-cezar { min-height: 0; }
+.p2-cbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overscroll-behavior: contain; }
+.p2-cbody > * { flex: none; }
+/* One scroll for the card (.p2-cbody): the shared list rule would add a second one here. */
+.p2-fin { max-height: none; overflow: visible; margin: 4px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--p2-line); }
+.p2-fin .activity-swipe { border-radius: 12px; border-bottom: 1px solid var(--p2-line); }
+.p2-fin .activity-swipe:last-child { border-bottom: 0; }
+.p2-fin .activity-row { background: var(--p2-surface); }
+.p2-arch-hint { color: var(--p2-muted); background: var(--p2-surface-2); }
+.p2-arch-hint.from-left { justify-content: flex-start; padding-left: 20px; }
+.p2-arch-hint.from-right { justify-content: flex-end; padding-right: 20px; }
+.p2-frow { --hover-bg: var(--p2-surface-2); position: relative; display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 52px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; touch-action: pan-y; user-select: none; }
+/* Unread: a bar on the left edge and brighter text; read: the same two lines, muted */
+.p2-frow.unread::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--p2-cezar); }
+.p2-fmark { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: color-mix(in srgb, var(--quota-green) 14%, transparent); color: var(--quota-green); }
+.p2-frow.failed .p2-fmark { background: color-mix(in srgb, var(--quota-red) 14%, transparent); color: var(--quota-red); }
+.p2-frow-body { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.p2-frow-body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; color: var(--p2-muted); }
+.p2-frow.unread .p2-frow-body strong { font-weight: 600; color: #f1f4fb; }
+.p2-frow-sub { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--p2-faint); white-space: nowrap; overflow: hidden; }
+.p2-frow-sub b, .p2-frow-sub i { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-style: normal; font-weight: 500; }
+.p2-frow.unread .p2-frow-sub { color: var(--p2-muted); }
+.p2-frow.unread .p2-frow-sub .wf { color: #aac4ff; }
+.p2-frow.unread .p2-frow-sub .md { color: var(--p2-cezar); }
+.p2-frow-sub em { font-style: normal; }
+.p2-frow-sub .plus { color: color-mix(in srgb, var(--quota-green) 70%, var(--p2-faint)); }
+.p2-frow-sub .minus { color: color-mix(in srgb, var(--quota-red) 70%, var(--p2-faint)); }
+.p2-frow.unread .p2-frow-sub .plus { color: var(--quota-green); }
+.p2-frow.unread .p2-frow-sub .minus { color: var(--quota-red); }
+.p2-frow-side { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex: none; font-size: 12px; line-height: 1.3; color: var(--p2-faint); white-space: nowrap; }
+.p2-frow.unread .p2-frow-side { color: var(--p2-muted); }
+/* A running task: head, title with its chips, and a terminal */
+.p2-crow.full { align-items: flex-start; padding: 8px; }
+.p2-crow.full .p2-crow-body { gap: 4px; }
+.p2-run-head { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--p2-muted); white-space: nowrap; }
+.p2-run-id { color: var(--p2-faint); }
+.p2-run-time { margin-left: auto; padding-left: 8px; font-size: 14px; font-weight: 600; color: var(--p2-cezar); }
+.p2-run-time.long { color: var(--quota-yellow); }
+.p2-run-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.p2-run-title strong { flex: 0 1 auto; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 600; }
+.p2-chip { flex: none; padding: 1px 8px; border-radius: 7px; font-size: 11px; font-weight: 600; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.p2-chip.branch { background: var(--p2-surface-2); color: var(--p2-muted); font-weight: 500; flex: 0 1 auto; min-width: 0; }
+.p2-chip.workflow { background: color-mix(in srgb, var(--p2-cal) 16%, transparent); color: #aac4ff; }
+.p2-chip.model { background: color-mix(in srgb, var(--p2-cezar) 20%, transparent); color: var(--p2-cezar); }
+.p2-term { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-top: 2px; padding: 6px 10px; border-left: 2px solid #3a4666; border-radius: 0 8px 8px 0; background: color-mix(in srgb, #000 28%, var(--p2-surface)); font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #c9d2e8; }
+.p2-term.thinking { border-left-color: var(--p2-cezar); }
+.p2-term-cmd { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.p2-term-cmd i { flex: none; font-style: normal; color: var(--p2-cezar); }
+.p2-term-cmd b { flex: none; font-weight: 600; color: var(--p2-cal); }
+.p2-term-cmd code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font: inherit; }
+.p2-term-step { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: inherit; color: var(--p2-muted); }
+.p2-term-foot { display: flex; align-items: center; gap: 10px; font-family: system-ui, sans-serif; font-size: 11px; color: var(--p2-muted); }
+.p2-term-foot > span:last-child:not(:first-child) { margin-left: auto; }
+.p2-term-foot em { font-style: normal; }
+.p2-term-foot .plus, .p2-term-foot .good { color: var(--quota-green); }
+.p2-term-foot .minus, .p2-term-foot .bad { color: var(--quota-red); }
 @media (prefers-reduced-motion: no-preference) {
   .p2-crow.runs .p2-cdot { animation: p2-pulse 2.4s ease-in-out infinite; }
   @keyframes p2-pulse { 50% { opacity: 0.35; } }
@@ -215,13 +272,13 @@
 .p3-frame[data-top="cmp"] { --p3-top: 64px; }
 .p3-frame[data-bottom="short"] { --p3-bottom: 112px; }
 .p3-frame[data-bottom="mid"] { --p3-bottom: 224px; }
-/* The month takes everything the top leaves; the work area folds to nothing (its two gaps cancel with the margin). */
-.p3-frame[data-bottom="month"] { --p3-bottom: calc(100% - var(--p3-top) - 12px); }
+/* The month takes everything the top leaves; the work area folds to nothing (its two gaps cancel with the margins). */
+.p3-frame[data-bottom="month"] { --p3-bottom: calc(100% - var(--p3-top) - 8px); }
 /* The zones are flex items with a height of their own, so a change of size can be eased (a grid's rows would jump). */
 @media (min-width: 900px) {
   .p3-day { flex: none; height: var(--p3-top); transition: height 0.3s ease; }
   .p3-work { flex: 1 1 0; transition: opacity 0.25s ease, margin-bottom 0.3s ease; }
-  .p3-days { flex: none; height: var(--p3-bottom); transition: height 0.3s ease; }
+  .p3-days { flex: none; height: var(--p3-bottom); margin-top: -4px; transition: height 0.3s ease; }
   .p3-frame[data-work="false"] .p3-days { flex: 1 1 0; height: auto; }
   .p3-frame[data-bottom="month"] .p3-work { margin-bottom: -12px; opacity: 0; pointer-events: none; }
   /* While a grip is dragged the zones follow the pointer at once. */
@@ -275,8 +332,8 @@
 .p2-quotas-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
 
 /* Bottom: the days */
-.p3-days { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
-.p3-days-head { display: flex; align-items: center; justify-content: space-between; flex: none; min-height: 28px; padding: 0 4px 0 8px; }
+.p3-days { position: relative; display: flex; flex-direction: column; gap: 2px; min-height: 0; min-width: 0; }
+.p3-days-head { display: flex; align-items: center; justify-content: space-between; flex: none; min-height: 20px; padding: 0 4px 0 8px; }
 .p2-week-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
 .p2-weekday { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 10px 12px 8px; border: 1px solid var(--p2-line); border-radius: 18px; background: var(--p2-surface); overflow: hidden; }
 .p2-weekday.today { border-color: color-mix(in srgb, var(--p2-text) 40%, var(--p2-line)); background: var(--p2-surface-2); }
@@ -366,7 +423,7 @@
 .p3-count b { font-size: 26px; font-weight: 500; letter-spacing: -1px; color: var(--p2-muted); }
 .p3-count small { display: block; font-size: 11px; color: var(--p2-muted); }
 .p3-count.soon b { color: var(--p2-cal); }
-.p3-cal { flex: none; min-height: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--p2-cal); font-size: 14px; }
+.p3-cal { flex: none; min-height: 24px; margin: -2px 0; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--p2-cal); font-size: 14px; }
 .p3-grip { position: absolute; left: 50%; z-index: 2; display: grid; place-items: center; width: 140px; height: 30px; padding: 0; border: 0; background: transparent; cursor: ns-resize; touch-action: none; transform: translateX(-50%); }
 .p3-grip i { display: block; width: 44px; height: 5px; border-radius: 3px; background: #34405a; transition: background-color 0.15s, width 0.15s; }
 .p3-grip:hover i, .p3-grip:active i { width: 64px; background: #7f8ca3; }
@@ -415,3 +472,5 @@
   .p3-limit-head .p2-meta { font-size: 13px; }
   .p3-limits .p2-note { margin: auto; }
 }
+/* The days header is one slim line; its grip reaches up into the gap above, so it is still easy to take hold of. */
+.p3-days .p3-grip.top { top: -8px; height: 30px; }

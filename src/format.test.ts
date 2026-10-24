@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanCommand, formatElapsed, formatModelLabel } from './format';
+import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel } from './format';
 
 describe('formatElapsed', () => {
   it('formats short durations (< 60s)', () => {
@@ -56,6 +56,11 @@ describe('formatModelLabel', () => {
     expect(formatModelLabel('claude', 'sonnet')).toBe('Claude 3.7 Sonnet');
     expect(formatModelLabel('opencode', 'google/gemini-3.8-flash')).toBe('opencode · Gemini 3.8 Flash');
   });
+  it('reads the version out of a Claude model id', () => {
+    expect(formatModelLabel('Claude', 'claude-opus-5-5')).toBe('Claude Opus 5.5');
+    expect(formatModelLabel('Claude', 'claude-sonnet-5-5-20260101')).toBe('Claude Sonnet 5.5');
+    expect(formatModelLabel('Claude', 'claude-haiku-5')).toBe('Claude Haiku 5');
+  });
 
   it('avoids repetition when model contains runner name', () => {
     expect(formatModelLabel('codex', 'gpt-5.1-codex')).toBe('gpt-5.1-codex');
@@ -68,3 +73,16 @@ describe('formatModelLabel', () => {
   });
 });
 
+
+describe('agoOrDate', () => {
+  const now = new Date('2026-10-24T20:00:00').getTime();
+  const ago = (ms: number) => agoOrDate(now - ms, now);
+  it('says how long ago within a day', () => {
+    expect([ago(20_000), ago(60_000), ago(5 * 60_000), ago(59 * 60_000), ago(60 * 60_000), ago(5 * 3_600_000), ago(23.9 * 3_600_000)])
+      .toEqual(['przed chwilą', '1 min temu', '5 min temu', '59 min temu', '1 godz. temu', '5 godz. temu', '23 godz. temu']);
+  });
+  it('gives the date and time once it is older than a day, and tolerates a clock a little behind', () => {
+    expect(ago(24 * 3_600_000)).toMatch(/^23 paź 20:00$/);
+    expect(ago(-30_000)).toBe('przed chwilą');
+  });
+});

@@ -17,8 +17,6 @@ import {
   Moon,
   Clock,
   Sun,
-  Maximize,
-  Minimize,
 } from 'lucide-react';
 import { useActivityLog } from './useActivityLog';
 import { ActivityFeed } from './ActivityFeed';
@@ -52,7 +50,6 @@ import { WorkoutDetail } from './TrainingCard';
 import { usePollingEnabled } from './polling';
 import { Ambient } from './AmbientClock';
 import { ambientLines, useAmbient, useNight } from './ambient-mode';
-import { useFullscreen } from './fullscreen';
 import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
 
@@ -199,8 +196,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   );
   const visible = (id: WidgetId) => layout.widgets.find((w) => w.id === id)?.visible ?? true;
   const dayNight = useNight(now);
-  const fullscreen = useFullscreen();
-  const ambient = useAmbient(pollingEnabled && visible('ambient'), now, dayNight.night);
+  const ambient = useAmbient(now, dayNight.night);
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')
@@ -229,7 +225,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
         </Card>
       );
     if (detail.kind === 'task') {
-      const task = tasks.find((t) => t.id === detail.id);
+      const task = tasks.find((t) => t.id === detail.id) ?? cezar.finished.find((t) => t.id === detail.id);
       return task ? (
         <Card title={task.title} icon={<ListTodo />}>
           <span className={`badge ${task.status}`}>{taskLabels[task.status]}</span>
@@ -396,9 +392,6 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button className="top-button" aria-label="Pokaż zegar (tryb ambient)" onClick={ambient.enter}><Clock size={20} /></button>
-          {fullscreen.supported && <button className="top-button" aria-label={fullscreen.active ? 'Wyjdź z pełnego ekranu' : 'Pełny ekran'} onClick={fullscreen.toggle}>
-            {fullscreen.active ? <Minimize size={20} /> : <Maximize size={20} />}
-          </button>}
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>
@@ -415,7 +408,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} training={training} snapshot={cezar.snapshot} mail={mail} now={now} open={open}
+                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} now={now} open={open}
                   showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} resetSignal={ambient.ambient} />
               </>
             ) : (

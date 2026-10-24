@@ -10,7 +10,7 @@ export interface Source<T> {
   loadedAt?: number;
   data: T | null;
 }
-export type TaskStatus = 'needs-input' | 'review' | 'running' | 'queue' | 'done';
+export type TaskStatus = 'needs-input' | 'review' | 'running' | 'queue' | 'done' | 'failed';
 
 export interface TaskActivityDetail {
   state: 'executing_tool' | 'thinking' | 'waiting_for_input' | 'completed' | 'queued';
@@ -48,6 +48,8 @@ export interface Task {
   currentStep?: { id: string; name?: string; status: string } | null;
   question?: string | null;
   lastMessage?: string;
+  unread?: boolean;
+  pullRequestUrl?: string;
   status: TaskStatus;
   startedAt?: number;
   checkedAt: number;
@@ -165,6 +167,7 @@ export const taskLabels: Record<TaskStatus, string> = {
   running: 'W toku',
   queue: 'W kolejce',
   done: 'Zakończone',
+  failed: 'Nieudane',
 };
 export const taskOrder: Record<TaskStatus, number> = {
   'needs-input': 0,
@@ -172,6 +175,7 @@ export const taskOrder: Record<TaskStatus, number> = {
   running: 2,
   queue: 3,
   done: 4,
+  failed: 5,
 };
 export function orderedTasks(tasks: Task[]): Task[] {
   return [...tasks].sort(

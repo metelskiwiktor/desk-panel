@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { readCezar } from '../server/cezar';
 import { App } from './App';
 import { useCezar } from './useCezar';
+import { scenarioFetch } from './test-fixtures';
 
 const asOf = new Date().toISOString();
 const coverage = { projects: [{ state: 'complete' }] };
@@ -71,5 +72,60 @@ describe('Cezar integration', () => {
     view.unmount();
     await vi.advanceTimersByTimeAsync(15000);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('finished tasks on the dashboard', () => {
+  const setup = () => { vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); const fetchMock = vi.fn(scenarioFetch('standard')); vi.stubGlobal('fetch', fetchMock); render(<App />); return fetchMock; };
+  const posts = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls
+    .filter(([url, init]) => String(url) === '/api/cezar/action' && (init as RequestInit | undefined)?.method === 'POST')
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+  const REVIEW = 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', CAPTURE = 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000002';
+
+  it('lists what is done or failed and not archived, with the unread ones marked', async () => {
+    setup();
+    const list = await screen.findByRole('list', { name: 'Zakończone zadania' });
+    expect(within(list).getAllByRole('button', { name: /^(Zakończone|Nieudane):/ }).map(b => b.getAttribute('aria-label'))).toEqual([
+      'Zakończone: Widok notatki: zrzut ekranu i testy, nieprzeczytane', 'Nieudane: tabnote-capture:v1, nieprzeczytane',
+      'Zakończone: Przegląd PR #41: dokumentacja workflow zrzutów', 'Zakończone: Etykiety w wyszukiwarce',
+    ]);
+    // Every task says what it was; the unread ones carry a bar and no label.
+    expect(within(list).getAllByRole('button', { name: /nieprzeczytane$/ })).toHaveLength(2);
+    expect(within(list).getAllByText('implement-review')).toHaveLength(2);
+    expect(within(list).getByText('review')).toBeTruthy();
+    expect(within(list).queryByText('nowe')).toBeNull();
+  });
+  it('archives a task in Cezar, hides it at once and brings it back with Cofnij', async () => {
+    const user = userEvent.setup();
+    const fetchMock = setup();
+    const list = await screen.findByRole('list', { name: 'Zakończone zadania' });
+    await user.click(within(list).getByRole('button', { name: 'Archiwizuj: tabnote-capture:v1' }));
+    expect(posts(fetchMock)).toEqual([{ id: CAPTURE, action: 'archive' }]);
+    expect(within(list).queryByRole('button', { name: /^Nieudane:/ })).toBeNull();
+    expect(screen.getByText('Zarchiwizowano w Cezarze.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Cofnij' }));
+    expect(posts(fetchMock).at(-1)).toEqual({ id: CAPTURE, action: 'unarchive' });
+    expect(within(list).getByRole('button', { name: /^Nieudane: tabnote-capture:v1/ })).toBeTruthy();
+  });
+  it('marks an unread task read in Cezar when it is opened, and leaves a read one alone', async () => {
+    const user = userEvent.setup();
+    const fetchMock = setup();
+    await user.click(await screen.findByRole('button', { name: 'Zakończone: Widok notatki: zrzut ekranu i testy, nieprzeczytane' }));
+    expect(posts(fetchMock)).toEqual([{ id: REVIEW, action: 'read' }]);
+    expect(screen.getByRole('heading', { name: 'Widok notatki: zrzut ekranu i testy' })).toBeTruthy();
+    cleanup();
+    const again = setup();
+    await user.click(await screen.findByRole('button', { name: 'Zakończone: Etykiety w wyszukiwarce' }));
+    expect(posts(again)).toEqual([]);
+  });
+  it('says so when Cezar refuses to archive and puts the task back', async () => {
+    const user = userEvent.setup();
+    const real = scenarioFetch('standard');
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => String(input) === '/api/cezar/action' ? new Response('', { status: 502 }) : real(input, init)));
+    render(<App />);
+    const list = await screen.findByRole('list', { name: 'Zakończone zadania' });
+    await user.click(within(list).getByRole('button', { name: 'Archiwizuj: Etykiety w wyszukiwarce' }));
+    expect(await screen.findByText('Cezar nie zarchiwizował zadania.')).toBeTruthy();
+    expect(within(list).getByRole('button', { name: 'Zakończone: Etykiety w wyszukiwarce' })).toBeTruthy();
   });
 });

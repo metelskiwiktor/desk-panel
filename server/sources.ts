@@ -1,4 +1,4 @@
-import type { CezarSnapshot } from '../src/cezar-contract';
+import type { CezarAction, CezarSnapshot } from '../src/cezar-contract';
 import type { CalendarSource } from '../src/calendar-contract';
 import type { GoogleAccountStatus } from '../src/google-contract';
 import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
@@ -14,6 +14,8 @@ import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } fr
  */
 export interface PanelSources {
   cezar(): Promise<CezarSnapshot>;
+  /** Archive or restore a finished task, or mark it read or unread, in Cezar itself. */
+  cezarAction(id: string, action: CezarAction): Promise<void>;
   calendar(): Promise<CalendarSource>;
   /** Garmin Connect plan, the coming workouts' steps and recent recordings. */
   training(): Promise<TrainingSource>;

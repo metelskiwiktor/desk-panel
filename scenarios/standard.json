@@ -39,7 +39,32 @@
         "startedAt": "now-24m",
         "checkedAt": "now",
         "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-1",
-        "description": "Zadanie w trakcie pracy."
+        "description": "Zadanie w trakcie pracy.",
+        "runner": "Claude",
+        "model": "claude-opus-5-5",
+        "branch": "feat/label-search",
+        "workflow": "implement-review",
+        "activityDetail": {
+          "state": "executing_tool",
+          "activeTool": "BASH",
+          "activeToolInput": "npm test -- labels"
+        },
+        "currentStep": {
+          "id": "impl",
+          "name": "Implementacja",
+          "status": "running"
+        },
+        "diffStat": {
+          "adds": 142,
+          "dels": 18,
+          "files": 6
+        },
+        "checks": {
+          "executed": true,
+          "total": 12,
+          "passed": 12,
+          "failed": 0
+        }
       },
       {
         "id": "review-2",
@@ -79,7 +104,20 @@
         "startedAt": "now-24m",
         "checkedAt": "now",
         "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-2",
-        "description": "Zadanie w trakcie pracy."
+        "description": "Zadanie w trakcie pracy.",
+        "runner": "Codex",
+        "model": "gpt-5",
+        "branch": "fix/board-regressions",
+        "workflow": "fix",
+        "activityDetail": {
+          "state": "thinking",
+          "message": "Porównuje zrzuty widoku tablicy z wzorcem"
+        },
+        "currentStep": {
+          "id": "verify",
+          "name": "Weryfikacja",
+          "status": "running"
+        }
       },
       {
         "id": "running-3",
@@ -89,7 +127,27 @@
         "startedAt": "now-24m",
         "checkedAt": "now",
         "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-3",
-        "description": "Zadanie w trakcie pracy."
+        "description": "Zadanie w trakcie pracy.",
+        "runner": "Claude",
+        "model": "claude-sonnet-5-5",
+        "branch": "chore/filters",
+        "workflow": "implement-review",
+        "activityDetail": {
+          "state": "executing_tool",
+          "activeTool": "EDIT",
+          "activeToolInput": "src/filters/FilterBar.tsx"
+        },
+        "diffStat": {
+          "adds": 9,
+          "dels": 31,
+          "files": 2
+        },
+        "checks": {
+          "executed": true,
+          "total": 8,
+          "passed": 6,
+          "failed": 2
+        }
       },
       {
         "id": "queue-1",
@@ -119,6 +177,78 @@
         "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/done-1",
         "description": "Zadanie w trakcie pracy.",
         "completedAt": "now-4m"
+      }
+    ],
+    "finished": [
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001",
+        "title": "Widok notatki: zrzut ekranu i testy",
+        "project": "tabnote-poc-rn",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Widok notatki: zrzut ekranu i testy",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000001",
+        "completedAt": "now-6m",
+        "startedAt": "now-18m",
+        "unread": true,
+        "branch": "feat/note-view",
+        "workflow": "implement-review",
+        "diffStat": {
+          "adds": 214,
+          "dels": 36,
+          "files": 9
+        },
+        "runner": "Claude",
+        "model": "claude-opus-5-5"
+      },
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000002",
+        "title": "tabnote-capture:v1",
+        "project": "tabnote-poc-rn",
+        "status": "failed",
+        "checkedAt": "now",
+        "description": "tabnote-capture:v1",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000002",
+        "completedAt": "now-41m",
+        "startedAt": "now-53m",
+        "unread": true,
+        "branch": "feat/capture-v1",
+        "workflow": "implement-review",
+        "runner": "Codex",
+        "model": "gpt-5"
+      },
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000003",
+        "title": "Przegląd PR #41: dokumentacja workflow zrzutów",
+        "project": "tabnote-poc-rn",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Przegląd PR #41: dokumentacja workflow zrzutów",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000003",
+        "completedAt": "now-2h",
+        "startedAt": "now-2h",
+        "unread": false,
+        "workflow": "review",
+        "runner": "Claude",
+        "model": "claude-sonnet-5-5"
+      },
+      {
+        "id": "desk-panel/7c1d9a02-aaaa-4bbb-8ccc-000000000004",
+        "title": "Etykiety w wyszukiwarce",
+        "project": "desk-panel",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Etykiety w wyszukiwarce",
+        "sourceUrl": "http://127.0.0.1:4321/p/desk-panel/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000004",
+        "completedAt": "now-1d",
+        "startedAt": "now-1d",
+        "unread": false,
+        "branch": "fix/label-search",
+        "diffStat": {
+          "adds": 42,
+          "dels": 7,
+          "files": 3
+        }
       }
     ]
   },

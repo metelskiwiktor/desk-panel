@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { createScenarioSources, loadScenario } from '../server/scenario';
 import { jsonRoutes } from '../server/sources';
 import type { DashboardData, Source } from './model';
+import { cezarActionSchema } from './cezar-contract';
 import { mailActionSchema } from './mail-contract';
 import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 
@@ -43,6 +44,11 @@ export function scenarioFetch(name: ScenarioName): typeof fetch {
         }
         const provider=warmupProviderSchema.parse(url.pathname.split('/').at(-1));
         return Response.json(await sources.saveWarmup!(provider,warmupEditSchema.parse(JSON.parse(String(init.body)))));
+      }
+      if (init?.method === 'POST' && url.pathname === '/api/cezar/action') {
+        const { id, action } = cezarActionSchema.parse(JSON.parse(String(init.body)));
+        await sources.cezarAction(id, action);
+        return Response.json({ ok: true });
       }
       if (init?.method === 'POST' && url.pathname === '/api/mail/action') {
         const { account, threadId, action } = mailActionSchema.parse(JSON.parse(String(init.body)));

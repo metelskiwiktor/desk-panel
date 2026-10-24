@@ -1,8 +1,7 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Ambient } from './AmbientClock';
-import { AMBIENT_AFTER_MS, AMBIENT_AFTER_NIGHT_MS, ambientLines, forcedAmbient, isNight, pixelShift, useAmbient, useNight } from './ambient-mode';
-import { useFullscreen } from './fullscreen';
+import { ambientLines, forcedAmbient, isNight, pixelShift, useAmbient, useNight } from './ambient-mode';
 import type { CalendarEvent, Task } from './model';
 import type { TrainingActivity, TrainingWorkout } from './training-contract';
 
@@ -66,43 +65,26 @@ describe('ambient mode', () => {
   });
 });
 
-describe('idle detection', () => {
+describe('the quiet clock', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
   const idle = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
-  it('falls asleep after ten minutes without a touch and wakes only on wake()', () => {
-    vi.setSystemTime(at(12));
-    const { result } = renderHook(() => useAmbient(true, Date.now()));
-    expect(result.current.ambient).toBe(false);
-    idle(AMBIENT_AFTER_MS - 60_000);
-    expect(result.current.ambient).toBe(false);
-    act(() => { window.dispatchEvent(new Event('pointerdown')); });
-    idle(AMBIENT_AFTER_MS - 60_000);
-    expect(result.current.ambient).toBe(false);
-    idle(120_000);
-    expect(result.current.ambient).toBe(true);
-    act(() => { window.dispatchEvent(new Event('pointerdown')); });
-    expect(result.current.ambient).toBe(true);
-    act(() => result.current.wake());
+  it('never shows by itself, however long nobody touches the panel, and wakes only on wake()', () => {
+    vi.setSystemTime(at(23, 30));
+    const { result } = renderHook(() => useAmbient(Date.now()));
+    idle(3 * 60 * 60_000);
     expect(result.current.ambient).toBe(false);
   });
-  it('enters at once by the button, even with idle switching off', () => {
+  it('shows by the button, ignores touches meanwhile and ends on wake()', () => {
     vi.setSystemTime(at(12));
-    const { result } = renderHook(() => useAmbient(false, Date.now()));
-    expect(result.current.ambient).toBe(false);
+    const { result } = renderHook(() => useAmbient(Date.now()));
     act(() => result.current.enter());
     expect(result.current.ambient).toBe(true);
+    act(() => { window.dispatchEvent(new Event('pointerdown')); });
+    expect(result.current.ambient).toBe(true);
     act(() => result.current.wake());
     expect(result.current.ambient).toBe(false);
-  });
-  it('sleeps sooner at night and never when switched off', () => {
-    vi.setSystemTime(at(23, 30));
-    const night = renderHook(() => useAmbient(true, Date.now()));
-    const off = renderHook(() => useAmbient(false, Date.now()));
-    idle(AMBIENT_AFTER_NIGHT_MS + 6000);
-    expect(night.result.current).toMatchObject({ ambient: true, night: true });
-    expect(off.result.current.ambient).toBe(false);
   });
 });
 
@@ -137,31 +119,8 @@ describe('day and night button', () => {
   it('lets an ambient clock follow the chosen night', () => {
     vi.useFakeTimers();
     vi.setSystemTime(at(12));
-    const { result } = renderHook(() => useAmbient(true, Date.now(), true));
+    const { result } = renderHook(() => useAmbient(Date.now(), true));
     expect(result.current.night).toBe(true);
     vi.useRealTimers();
-  });
-});
-
-describe('fullscreen', () => {
-  afterEach(() => { Reflect.deleteProperty(document, 'fullscreenEnabled'); Reflect.deleteProperty(document, 'fullscreenElement'); vi.restoreAllMocks(); });
-  it('is unsupported where the browser has no fullscreen', () => {
-    expect(renderHook(() => useFullscreen()).result.current.supported).toBe(false);
-  });
-  it('enters, follows the browser and exits', () => {
-    Object.defineProperty(document, 'fullscreenEnabled', { value: true, configurable: true });
-    Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true, writable: true });
-    const enter = vi.fn(async () => {});
-    const exit = vi.fn(async () => {});
-    document.documentElement.requestFullscreen = enter;
-    document.exitFullscreen = exit;
-    const { result } = renderHook(() => useFullscreen());
-    expect(result.current).toMatchObject({ supported: true, active: false });
-    act(() => result.current.toggle());
-    expect(enter).toHaveBeenCalledTimes(1);
-    act(() => { (document as { fullscreenElement: Element | null }).fullscreenElement = document.documentElement; document.dispatchEvent(new Event('fullscreenchange')); });
-    expect(result.current.active).toBe(true);
-    act(() => result.current.toggle());
-    expect(exit).toHaveBeenCalledTimes(1);
   });
 });

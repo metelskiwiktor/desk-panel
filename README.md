@@ -141,8 +141,15 @@ Odczytuje wszystkie projekty zarejestrowane w działającym Cezarze.
   przekroczenie limitu lub niepełne coverage oznacza jawną listę częściową.
 - Grupowanie Cezara rozstrzyga oczekiwanie na odpowiedź, także failed z pytaniem.
   Monitoring pozostaje w toku. Zaplanowane wznowienia mają osobną informację.
-- Dashboard pokazuje do trzech zadań według priorytetu; Zadania zawierają
-  dostępne aktywne grupy, bez historii zakończonych zadań.
+- Dashboard pokazuje najpierw zadania czekające na Ciebie i w toku (do kilku, resztę zbiera „i N więcej”), a pod nimi
+  zakończone i jeszcze niezarchiwizowane. Zakładka Zadania zawiera dostępne aktywne grupy, bez historii.
+- **Zakończone zadania** (`done` i `failed`, do 30 ostatnich z 30 dni, najnowsze pierwsze) panel czyta z lekkiego
+  `/api/v1/workspace/dashboard/overview` (strony po 20 wierszy, około 8 KB, zamiast 1,1 MB pełnej listy runów) co 30 s,
+  a szczegóły zadania (potwierdzenie odczytu `seenAt`, gałąź, workflow, model, diff, link do PR) z pojedynczego runu,
+  z pamięcią podręczną (przeczytane 10 min, nieprzeczytane 1 min). Znika z dashboardu dopiero zarchiwizowane zadanie
+  (`archived`). Nieprzeczytane (bez `seenAt`) mają znacznik „nowe”. Przesunięcie wiersza w dowolną stronę archiwizuje
+  zadanie w Cezarze (z cofnięciem przez 6 s), a otwarcie szczegółów oznacza je jako przeczytane. Starsze niż 30 dni
+  zostają w Cezarze.
 - Szczegół pokazuje tekst dostępny w dashboardzie (może być skrócony), projekt,
   daty i link do dokładnego zadania w lokalnym Cezarze. Runner nie jest zgadywany:
   obecny zbiorczy kontrakt go nie dostarcza.
@@ -154,8 +161,11 @@ Odczytuje wszystkie projekty zarejestrowane w działającym Cezarze.
   Brak odczytu to kreski, nigdy zera. Runtime JSON jest walidowany na obu granicach.
 
 Serwer nasłuchuje tylko na 127.0.0.1, sprawdza Host i nie otwiera CORS.
-Odczyty to GET do konkretnych projekcji; rozpoczęcie OAuth i akcje poczty to POST
-z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Nie pozwala na ogólne proxy lub akcje tasków.
+Odczyty to GET do konkretnych projekcji; rozpoczęcie OAuth, akcje poczty i akcje na zakończonych zadaniach Cezara to POST
+z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Do Cezara panel zapisuje wyłącznie
+`POST /api/cezar/action` z `{id, action}`, gdzie akcja to `archive`, `unarchive`, `read` albo `unread` na jednym runie
+(odpowiednie `POST …/runs/:id/archive`, `/read`, `/unread` Cezara). Nie ma ogólnego proxy ani innych akcji tasków
+(start, wznowienie, odpowiedź).
 Private api-client Cezara nie jest publikowany: integracja waliduje dokumentowany
 podzbiór kontraktu bez importów do sąsiedniego checkoutu.
 
@@ -244,6 +254,21 @@ Garmin (pola, pułapki, pomysły na później) opisuje [docs/garmin-data.md](doc
 Garmin w Google (`DESK_EXTRA_CALENDARS`) nie jest już potrzebny do planu; zostaje dla zwykłych
 wydarzeń, np. zawodów w głównym kalendarzu Google.
 
+## Tryb kiosku (okno bez przeglądarki)
+
+`just kiosk` otwiera Pulpit w Chrome jako gołe okno na całym monitorze: bez kart, paska adresu i przycisku „wyjdź z pełnego
+ekranu”, który Chrome pokazuje po najechaniu na górę (zamknięcie: Alt+F4). Numer monitora to `\.DISPLAYn` (`just monitor`
+pokazuje je jako zrzuty), domyślnie 1: `just kiosk 2`. Skrypt czeka, aż usługa odpowie, więc może startować razem z systemem.
+`just kiosk-autostart ON` (albo `OFF`, `STATUS`) rejestruje zadanie użytkownika w Harmonogramie zadań, które uruchamia kiosk
+20 s po zalogowaniu; nie wymaga uprawnień administratora. Start bez wpisywania hasła wymaga automatycznego logowania
+Windows (`netplwiz`), co jest kompromisem bezpieczeństwa.
+
+Okno ma własny profil Chrome (`%LOCALAPPDATA%desk-panelkiosk-chrome`), bo uruchomiony już Chrome przejmuje każde nowe
+uruchomienie i ignoruje tryb kiosku oraz monitor. Ustawienia Pulpitu zapisywane w przeglądarce (układ widżetów, rozmiary
+stref, czas ostatniego otwarcia zdarzeń) są więc osobne. `just kiosk-setup` zamyka kiosk i otwiera ten profil jako zwykłe
+okno: wystarczy raz zalogować się na konto Google (np. żeby linki do Gmaila i Kalendarza otwierały się zalogowane) i ustawić
+układ Pulpitu, a potem `just kiosk`.
+
 ## Interfejs
 
 Pulpit mieści się na poziomym ekranie (1280×720 CSS) bez przewijania. Pod paskiem z zegarem są trzy strefy jedna
@@ -274,13 +299,12 @@ naprzód, plan Garmin na pięć; dalej jest pusto.
 
 Status treningu (wykonany / częściowo / nie zrobiony) wynika z nagrań z danego dnia, patrz Garmin Connect
 powyżej. Dopóki źródło nie odpowie, dni pokazują kreskę zamiast „wolne”.
-Po 10 minutach bez dotyku (w nocy, 23–6, po 2) panel przechodzi w ciemny zegar: duża godzina, data i do czterech
-linii tego, co się liczy (najbliższe spotkanie, trening, Cezar czeka, nieprzeczytana poczta). Obraz dryfuje o kilka
-pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w to, co pod spodem. Wyłącza go odznaczenie
-„Zegar po bezczynności” w Ustawieniach; `?ambient=day|night` w adresie pokazuje go od razu.
+Przycisk zegara w pasku włącza ciemny zegar (tryb ambient): duża godzina, data i do czterech linii tego, co się liczy
+(najbliższe spotkanie, trening, Cezar czeka, nieprzeczytana poczta). Panel nie przechodzi w niego sam po bezczynności.
+Obraz dryfuje o kilka pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w to, co pod spodem;
+`?ambient=day|night` w adresie pokazuje zegar od razu.
 W pasku u góry są trzy przyciski: księżyc / słońce przełącza dzień i noc (noc przyciemnia cały pulpit i zegar; bez
-wyboru decyduje godzina 23–6, a ręczny wybór trwa do najbliższego świtu lub zmierzchu) przycisk zegara, który od razu pokazuje tryb ambient (także gdy samoczynne przechodzenie jest wyłączone), oraz pełny ekran / wyjście z niego
-(tylko tam, gdzie przeglądarka go udostępnia).
+wyboru decyduje godzina 23–6, a ręczny wybór trwa do najbliższego świtu lub zmierzchu) oraz przycisk zegara, który pokazuje tryb ambient. Pełnoekranowe okno daje `just kiosk`.
 Obciążenie komputera nie ma własnej karty: chip „PC” w pasku czerwieni się dopiero po 20 s ≥90% (krótki skok go nie rusza),
 dotknięcie otwiera okno (jak lista zdarzeń: Esc lub dotknięcie poza nim zamyka) z wykresami CPU i RAM z ostatnich 5 minut,
 progiem 90% i przyciskiem do zakładki Komputer, a utrzymany stan zostawia wpis w zdarzeniach. Dzień bez spotkań i wydarzeń całodniowych

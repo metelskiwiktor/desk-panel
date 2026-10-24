@@ -86,6 +86,8 @@ export function loadScenario(file: string, now = Date.now()): Scenario {
  */
 export function createScenarioSources(file: string): PanelSources {
   const handled = new Set<string>();
+  /** What the panel changed on finished Cezar tasks, so a scenario answers like Cezar would. */
+  const finishedChanges = new Map<string, { archived?: boolean; unread?: boolean }>();
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   async function serve<K extends ScenarioEndpoint>(key: K) {
     const value = loadScenario(file)[key];
@@ -94,7 +96,24 @@ export function createScenarioSources(file: string): PanelSources {
     return value as Exclude<Scenario[K], z.infer<typeof special>>;
   }
   return {
-    cezar: () => serve('cezar'),
+    async cezar() {
+      const source = await serve('cezar');
+      if (!('finished' in source)) return source;
+      const finished = source.finished.flatMap(task => {
+        const change = finishedChanges.get(task.id);
+        return change?.archived ? [] : [change?.unread === undefined ? task : { ...task, unread: change.unread }];
+      });
+      return { ...source, finished };
+    },
+    async cezarAction(id, action) {
+      const source = await serve('cezar');
+      if (!('finished' in source) || !source.finished.some(t => t.id === id)) throw new SourceError(404);
+      const change = finishedChanges.get(id) ?? {};
+      if (action === 'archive') change.archived = true;
+      else if (action === 'unarchive') change.archived = false;
+      else change.unread = action === 'unread';
+      finishedChanges.set(id, change);
+    },
     calendar: () => serve('calendar'),
     training: () => serve('training'),
     googleAccounts: () => serve('googleAccounts'),

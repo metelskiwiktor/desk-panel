@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readCezar } from './cezar';
+import { cezarAction, createFinishedReader } from './cezar-finished';
 import { createCalendarReader } from './calendar';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
@@ -41,13 +42,22 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
   let fetchedAt = 0;
+  const finishedReader = createFinishedReader(options.cezarUrl);
+  let lastFinished: Awaited<ReturnType<typeof finishedReader.read>> = [];
   return {
     async cezar() {
       if (!cache || Date.now() - fetchedAt >= 4000) {
         pending ??= readCezar(options.cezarUrl).then(value => { cache = value; fetchedAt = Date.now(); return value; }).finally(() => { pending = undefined; });
         await pending;
       }
-      return cache!;
+      // Finished tasks are a bonus: a Cezar that cannot list them still shows the rest, with the last list it gave.
+      lastFinished = await finishedReader.read().catch(() => lastFinished);
+      return { ...cache!, finished: lastFinished };
+    },
+    async cezarAction(id, action) {
+      try { await cezarAction(options.cezarUrl, id, action); }
+      catch { throw new SourceError(502); }
+      finishedReader.invalidate(id);
     },
     calendar: () => readCalendar(),
     training: () => readTraining(),

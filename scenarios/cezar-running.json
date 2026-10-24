@@ -1,0 +1,755 @@
+{
+  "description": "Cezar: one running task with its branch, workflow, model, terminal, diff and checks.",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": {
+      "running": 1,
+      "queue": 0,
+      "needs-input": 0,
+      "review": 0
+    },
+    "tasks": [
+      {
+        "id": "running-1",
+        "title": "tabnote-capture:v1",
+        "project": "tabnote-poc-rn",
+        "status": "running",
+        "startedAt": "now-7s",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-1",
+        "description": "Zadanie w trakcie pracy.",
+        "runner": "Claude",
+        "model": "claude-opus-5-5",
+        "branch": "feat/label-search",
+        "workflow": "implement-review",
+        "activityDetail": {
+          "state": "executing_tool",
+          "activeTool": "BASH",
+          "activeToolInput": "npm test -- labels"
+        },
+        "currentStep": {
+          "id": "impl",
+          "name": "Implementacja",
+          "status": "running"
+        },
+        "diffStat": {
+          "adds": 142,
+          "dels": 18,
+          "files": 6
+        },
+        "checks": {
+          "executed": true,
+          "total": 12,
+          "passed": 12,
+          "failed": 0
+        }
+      }
+    ],
+    "finished": [
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001",
+        "title": "Widok notatki: zrzut ekranu i testy",
+        "project": "tabnote-poc-rn",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Widok notatki: zrzut ekranu i testy",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000001",
+        "completedAt": "now-6m",
+        "startedAt": "now-18m",
+        "unread": true,
+        "branch": "feat/note-view",
+        "workflow": "implement-review",
+        "diffStat": {
+          "adds": 214,
+          "dels": 36,
+          "files": 9
+        },
+        "runner": "Claude",
+        "model": "claude-opus-5-5"
+      },
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000002",
+        "title": "tabnote-capture:v1",
+        "project": "tabnote-poc-rn",
+        "status": "failed",
+        "checkedAt": "now",
+        "description": "tabnote-capture:v1",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000002",
+        "completedAt": "now-41m",
+        "startedAt": "now-53m",
+        "unread": true,
+        "branch": "feat/capture-v1",
+        "workflow": "implement-review",
+        "runner": "Codex",
+        "model": "gpt-5"
+      },
+      {
+        "id": "tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000003",
+        "title": "Przegląd PR #41: dokumentacja workflow zrzutów",
+        "project": "tabnote-poc-rn",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Przegląd PR #41: dokumentacja workflow zrzutów",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote-poc-rn/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000003",
+        "completedAt": "now-2h",
+        "startedAt": "now-2h",
+        "unread": false,
+        "workflow": "review",
+        "runner": "Claude",
+        "model": "claude-sonnet-5-5"
+      },
+      {
+        "id": "desk-panel/7c1d9a02-aaaa-4bbb-8ccc-000000000004",
+        "title": "Etykiety w wyszukiwarce",
+        "project": "desk-panel",
+        "status": "done",
+        "checkedAt": "now",
+        "description": "Etykiety w wyszukiwarce",
+        "sourceUrl": "http://127.0.0.1:4321/p/desk-panel/tasks/7c1d9a02-aaaa-4bbb-8ccc-000000000004",
+        "completedAt": "now-1d",
+        "startedAt": "now-1d",
+        "unread": false,
+        "branch": "fix/label-search",
+        "diffStat": {
+          "adds": 42,
+          "dels": 7,
+          "files": 3
+        }
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "planning",
+        "title": "Planowanie Tabnote",
+        "startAt": "now+12m",
+        "endAt": "now+42m",
+        "location": "Biurko · sesja robocza",
+        "description": "Priorytety, regresje i zakres kolejnej iteracji.",
+        "allDay": false
+      },
+      {
+        "id": "design",
+        "title": "Przegląd interfejsu",
+        "startAt": "now+90m",
+        "endAt": "now+2h",
+        "description": "Czytelność panelu na ekranie pionowym.",
+        "allDay": false
+      },
+      {
+        "id": "focus",
+        "title": "Czas na pracę własną",
+        "startAt": "now+3h",
+        "endAt": "now+4h",
+        "description": "Blok skupienia.",
+        "allDay": false
+      }
+    ]
+  },
+  "training": {
+    "live": true,
+    "name": "Garmin Connect",
+    "status": "connected",
+    "observedAt": "now",
+    "timeZone": "Europe/Warsaw",
+    "data": {
+      "plan": {
+        "name": "Plan fitness",
+        "workoutsPerWeek": 5,
+        "targetDate": "today+55"
+      },
+      "workouts": [
+        {
+          "id": "scenario-sprint",
+          "name": "Sprint",
+          "sport": "cycling",
+          "date": "today-1",
+          "durationSec": 3180,
+          "phrase": "ANAEROBIC_SPEED",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        },
+        {
+          "id": "scenario-long",
+          "name": "Długa jazda",
+          "sport": "cycling",
+          "date": "today",
+          "durationSec": 5400,
+          "phrase": "LONG_WORKOUT",
+          "trainingEffect": 2.7,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 5400,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-base",
+          "name": "Baza",
+          "sport": "cycling",
+          "date": "today+1",
+          "durationSec": 4380,
+          "phrase": "BASE",
+          "trainingEffect": 2.5,
+          "trainingEffectLabel": "AEROBIC_BASE",
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "interval",
+              "durationSec": 4380,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-thresh",
+          "name": "Próg",
+          "sport": "cycling",
+          "date": "today+2",
+          "durationSec": 3000,
+          "phrase": "LACTATE_THRESHOLD",
+          "trainingEffect": 3.5,
+          "trainingEffectLabel": "LACTATE_THRESHOLD",
+          "keyWorkout": true,
+          "restDay": false,
+          "race": false,
+          "steps": [
+            {
+              "kind": "warmup",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 148,
+                "high": 201
+              }
+            },
+            {
+              "kind": "repeat",
+              "durationSec": null,
+              "target": null,
+              "iterations": 2,
+              "skipLastRest": true,
+              "children": [
+                {
+                  "kind": "interval",
+                  "durationSec": 480,
+                  "target": {
+                    "type": "power",
+                    "low": 242,
+                    "high": 282
+                  }
+                },
+                {
+                  "kind": "recovery",
+                  "durationSec": 240,
+                  "target": {
+                    "type": "power",
+                    "low": 121,
+                    "high": 175
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "cooldown",
+              "durationSec": 900,
+              "target": {
+                "type": "power",
+                "low": 121,
+                "high": 175
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario-anaerobic",
+          "name": "Beztlenowe",
+          "sport": "cycling",
+          "date": "today+4",
+          "durationSec": 3600,
+          "phrase": "ANAEROBIC_CAPACITY",
+          "trainingEffect": null,
+          "trainingEffectLabel": null,
+          "keyWorkout": false,
+          "restDay": false,
+          "race": false,
+          "steps": null
+        }
+      ],
+      "activities": [
+        {
+          "startAt": "today-1@22:10",
+          "durationSec": 600,
+          "sport": "indoor_cycling",
+          "avgPower": 132,
+          "avgHeartRate": 134,
+          "trainingStress": 7.4
+        },
+        {
+          "startAt": "today-1@22:25",
+          "durationSec": 62,
+          "sport": "indoor_cycling",
+          "avgPower": 132,
+          "avgHeartRate": 86,
+          "trainingStress": 0.3
+        }
+      ]
+    }
+  },
+  "googleAccounts": [
+    {
+      "email": "owner@gmail.com",
+      "status": "connected",
+      "services": [
+        "calendar",
+        "mail"
+      ],
+      "missing": []
+    },
+    {
+      "email": "praca@gmail.com",
+      "status": "connected",
+      "services": [
+        "mail"
+      ],
+      "missing": []
+    }
+  ],
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d401",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d401",
+        "from": "Anna Nowak",
+        "subject": "Spotkanie w czwartek",
+        "snippet": "Cześć, czy możemy przesunąć spotkanie na 15:00? Mam konflikt w kalendarzu.",
+        "receivedAt": "now-6m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d401"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d402",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d402",
+        "from": "GitHub",
+        "subject": "[desk-panel] PR #3: Gmail w panelu",
+        "snippet": "metelskiwiktor requested your review on this pull request.",
+        "receivedAt": "now-25m",
+        "messages": 2,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d402"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d403",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d403",
+        "from": "Bank Millennium",
+        "subject": "Potwierdzenie przelewu",
+        "snippet": "Przelew na kwotę 120,00 zł został zrealizowany.",
+        "receivedAt": "now-1h10m",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d403"
+      },
+      {
+        "id": "praca@gmail.com:18c2f0a1b2c3d404",
+        "account": "praca@gmail.com",
+        "threadId": "18c2f0a1b2c3d404",
+        "from": "Jira",
+        "subject": "Nowe zadanie przypisane do Ciebie",
+        "snippet": "DESK-42 Przegląd układu na ekranie pionowym.",
+        "receivedAt": "now-3h",
+        "messages": 1,
+        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404"
+      },
+      {
+        "id": "owner@gmail.com:18c2f0a1b2c3d405",
+        "account": "owner@gmail.com",
+        "threadId": "18c2f0a1b2c3d405",
+        "from": "Allegro",
+        "subject": "Twoja paczka jest w drodze",
+        "snippet": "Przesyłka zostanie dostarczona jutro do paczkomatu.",
+        "receivedAt": "now-1d2h",
+        "messages": 3,
+        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d405"
+      }
+    ],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 3
+      },
+      {
+        "email": "praca@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 2
+      }
+    ],
+    "total": 5
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now-2m",
+        "cpuPercent": 32,
+        "ramUsedGb": 20.2,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-110s",
+        "cpuPercent": 39,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-100s",
+        "cpuPercent": 35,
+        "ramUsedGb": 20.3,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-90s",
+        "cpuPercent": 51,
+        "ramUsedGb": 20.4,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-80s",
+        "cpuPercent": 43,
+        "ramUsedGb": 20.5,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-70s",
+        "cpuPercent": 38,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-1m",
+        "cpuPercent": 47,
+        "ramUsedGb": 20.6,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-50s",
+        "cpuPercent": 42,
+        "ramUsedGb": 20.7,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-40s",
+        "cpuPercent": 36,
+        "ramUsedGb": 20.8,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-30s",
+        "cpuPercent": 41,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-20s",
+        "cpuPercent": 33,
+        "ramUsedGb": 20.9,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now-10s",
+        "cpuPercent": 34,
+        "ramUsedGb": 21,
+        "ramTotalGb": 32
+      },
+      {
+        "at": "now",
+        "cpuPercent": 38,
+        "ramUsedGb": 21.1,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 92,
+            "observedAt": "now",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 61,
+            "observedAt": "now",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 75,
+            "observedAt": "now-50m",
+            "resetAt": "now+125m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 58,
+            "observedAt": "now-50m",
+            "resetAt": "now+4300m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          {
+            "window": "5h",
+            "usedPercent": 38,
+            "observedAt": "now",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 24,
+            "observedAt": "now",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ],
+        "history": [
+          {
+            "window": "5h",
+            "usedPercent": 30,
+            "observedAt": "now-40m",
+            "resetAt": "now+205m",
+            "stale": false,
+            "source": null
+          },
+          {
+            "window": "7d",
+            "usedPercent": 22,
+            "observedAt": "now-40m",
+            "resetAt": "now+6100m",
+            "stale": false,
+            "source": null
+          }
+        ]
+      },
+      {
+        "provider": "AGY",
+        "snapshots": [
+          {
+            "window": "gemini-5h",
+            "usedPercent": 12,
+            "observedAt": "now",
+            "resetAt": "now+150m",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Five Hour Limit Remaining"
+          },
+          {
+            "window": "gemini-weekly",
+            "usedPercent": 31,
+            "observedAt": "now",
+            "resetAt": "now+3d",
+            "stale": false,
+            "source": null,
+            "model": "Gemini Models",
+            "label": "Weekly Limit Remaining"
+          }
+        ],
+        "history": []
+      }
+    ]
+  },
+  "usageBreakdown": {
+    "status": "connected",
+    "observedAt": "now-20s",
+    "providers": [
+      {
+        "provider": "Claude",
+        "usedPercent": 92,
+        "observedAt": "now-20s",
+        "resetAt": "now+2h5m",
+        "segments": [
+          {
+            "kind": "unobserved",
+            "percent": 15
+          },
+          {
+            "kind": "task",
+            "id": "t1",
+            "title": "Naprawa synchronizacji notatek",
+            "percent": 15
+          },
+          {
+            "kind": "session",
+            "id": "session:claude-app:desk-panel",
+            "title": "desk-panel",
+            "origin": "claude-app",
+            "percent": 26
+          },
+          {
+            "kind": "session",
+            "id": "session:cezar",
+            "title": "pomocnicze",
+            "origin": "cezar",
+            "percent": 2
+          },
+          {
+            "kind": "task",
+            "id": "t2",
+            "title": "Przegląd widoku notatki",
+            "percent": 8,
+            "shared": true
+          },
+          {
+            "kind": "other",
+            "percent": 26
+          }
+        ],
+        "timeline": [
+          {
+            "key": "unobserved",
+            "percent": 15,
+            "from": "now-2h55m",
+            "to": "now-2h40m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 6,
+            "from": "now-2h40m",
+            "to": "now-2h20m"
+          },
+          {
+            "key": "t1",
+            "percent": 15,
+            "from": "now-2h20m",
+            "to": "now-1h50m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 12,
+            "from": "now-1h50m",
+            "to": "now-1h10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-1h10m",
+            "to": "now-1h"
+          },
+          {
+            "key": "other",
+            "percent": 26,
+            "from": "now-1h",
+            "to": "now-30m"
+          },
+          {
+            "key": "t2",
+            "percent": 8,
+            "from": "now-30m",
+            "to": "now-20m"
+          },
+          {
+            "key": "session:claude-app:desk-panel",
+            "percent": 8,
+            "from": "now-20m",
+            "to": "now-10m"
+          },
+          {
+            "key": "session:cezar",
+            "percent": 1,
+            "from": "now-10m",
+            "to": "now"
+          }
+        ]
+      },
+      {
+        "provider": "Codex",
+        "usedPercent": 38,
+        "observedAt": "now-20s",
+        "resetAt": "now+3h25m",
+        "segments": [
+          {
+            "kind": "task",
+            "id": "t3",
+            "title": "Refaktor ekranu ustawień",
+            "percent": 6
+          },
+          {
+            "kind": "session",
+            "id": "session:codex-app:notes",
+            "title": "notes",
+            "origin": "codex-app",
+            "percent": 32
+          }
+        ]
+      },
+      {
+        "provider": "Gemini",
+        "usedPercent": null,
+        "observedAt": null,
+        "resetAt": null,
+        "segments": []
+      }
+    ]
+  }
+}
