@@ -30,6 +30,13 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 - `just install`: first-time Servy registration; may need Windows credentials
   entered by the user in the native dialog. See servy/README.md.
 
+Phone access: Tailscale (installed on this PC and the phone, account metelski.wiktor@gmail.com) runs
+`tailscale serve --bg 5174`, giving `https://desktop-sgur9l8.tail244683.ts.net` inside the tailnet only.
+The server stays on 127.0.0.1; `DESK_ALLOWED_HOST` (in `%USERPROFILE%\.desk-panel\panel.env`, outside Git)
+admits that one name and its https Origin. CLI: `C:\Program Files\Tailscale\tailscale.exe` (`status`,
+`serve status`). Never use `tailscale funnel` (public) or share the tailnet: the panel has no login of its own.
+Setup steps are in README.md ("Telefon").
+
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
