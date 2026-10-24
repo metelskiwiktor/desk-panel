@@ -29,6 +29,42 @@ function cezar(groups: { completed?: ReturnType<typeof run>[]; failed?: ReturnTy
 }
 
 describe('finished Cezar tasks', () => {
+  it('reads the list again at once for a task that just left the active lists, until it shows up', async () => {
+    let time = 0;
+    const groups: { completed: ReturnType<typeof run>[] } = { completed: [run('a', 10)] };
+    const { request, calls } = cezar(groups);
+    const reader = createFinishedReader('http://127.0.0.1:4321', request, () => time);
+    expect((await reader.read()).map(t => t.id)).toEqual(['p/a']);
+    time = 10_000;
+    reader.expect(['p/new']);
+    // Cezar has not listed it yet: still waiting, but no faster than every couple of seconds.
+    expect((await reader.read()).map(t => t.id)).toEqual(['p/a']);
+    const afterFirst = calls.length;
+    time = 11_000;
+    await reader.read();
+    expect(calls).toHaveLength(afterFirst);
+    groups.completed.unshift(run('new', 0));
+    time = 13_000;
+    expect((await reader.read()).map(t => t.id)).toEqual(['p/new', 'p/a']);
+    // Found: back to the 30 s rhythm.
+    const afterFound = calls.length;
+    time = 16_000;
+    await reader.read();
+    expect(calls).toHaveLength(afterFound);
+  });
+  it('gives up waiting for a task that never finishes, e.g. one that was archived or deleted', async () => {
+    let time = 0;
+    const { request, calls } = cezar({ completed: [run('a', 10)] });
+    const reader = createFinishedReader('http://127.0.0.1:4321', request, () => time);
+    await reader.read();
+    reader.expect(['p/gone']);
+    time = 61_000;
+    await reader.read();
+    const after = calls.length;
+    time = 64_000;
+    await reader.read();
+    expect(calls).toHaveLength(after);
+  });
   it('lists done and failed tasks that are not archived, newest first, with the read receipt and the details', async () => {
     const { request } = cezar(
       { completed: [run('a', 10), run('old', 90, true), run('b', 300)], failed: [{ ...run('f', 30), status: 'failed' }] },
@@ -39,6 +75,11 @@ describe('finished Cezar tasks', () => {
     expect(tasks[0]).toMatchObject({ title: 'Summary a', project: 'p', branch: 'feat/a', workflow: 'implement-review', runner: 'Claude', model: 'claude-opus-5-5',
       diffStat: { adds: 5, dels: 1, files: 2 }, pullRequestUrl: 'https://github.com/x/y/pull/3', sourceUrl: 'http://127.0.0.1:4321/p/p/tasks/a' });
     expect(tasks[0].completedAt).toBe(Date.parse(at(10)));
+  });
+  it('shows the model the run resolved to, not the alias it asked for', async () => {
+    const { request } = cezar({ completed: [run('a', 10), run('b', 20)] }, { a: { model: 'sonnet', modelIdentity: 'anthropic/sonnet', resolvedModel: 'claude-sonnet-5-5' }, b: { model: 'sonnet' } });
+    const tasks = await createFinishedReader('http://127.0.0.1:4321', request).read();
+    expect(tasks.map(t => t.model)).toEqual(['claude-sonnet-5-5', 'sonnet']);
   });
   it('reads on past a page of archived tasks, and stops at the end of the list', async () => {
     const archived = Array.from({ length: 20 }, (_, i) => run(`x${i}`, 1000 + i, true));

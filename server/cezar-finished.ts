@@ -12,7 +12,7 @@ const row = z.object({
 const overview = z.object({ asOf: iso, page: z.object({ rows: z.array(row).max(20), total: count, nextOffset: count.nullable() }) });
 const detailSchema = z.object({
   seenAt: iso.optional(), branch: z.string().optional(), workflow: z.string().optional(), runner: z.string().optional(),
-  model: z.string().optional(), modelIdentity: z.string().optional(),
+  model: z.string().optional(), modelIdentity: z.string().optional(), resolvedModel: z.string().optional(),
   diffStat: z.object({ adds: z.number(), dels: z.number(), files: z.number() }).optional(),
   pullRequestUrl: z.string().optional(),
 });
@@ -22,6 +22,8 @@ type Detail = z.infer<typeof detailSchema>;
 export const FINISHED_LIMIT = 30;
 const PAGES = 8, PERIOD = '30d', DETAIL_PARALLEL = 5;
 const LIST_TTL_MS = 30_000, SEEN_TTL_MS = 10 * 60_000, UNSEEN_TTL_MS = 60_000;
+/** A task that just left the active lists is waited for this long; meanwhile the list is read again at most this often. */
+const EXPECT_MS = 60_000, EXPECT_REFETCH_MS = 2_000;
 const groups = [['completed', 'done'], ['failed', 'failed']] as const;
 
 const runPath = (project: string, run: string) => `/api/v1/p/${encodeURIComponent(project)}/runs/${encodeURIComponent(run)}`;
@@ -36,6 +38,7 @@ export function createFinishedReader(base: string, request: typeof fetch = fetch
   const details = new Map<string, { at: number; value: Detail | null }>();
   let cache: { at: number; tasks: FinishedTask[] } | undefined;
   let pending: Promise<FinishedTask[]> | undefined;
+  const expected = new Map<string, number>();
 
   async function detailOf(project: string, run: string): Promise<Detail | null> {
     const key = `${project}/${run}`;
@@ -69,7 +72,8 @@ export function createFinishedReader(base: string, request: typeof fetch = fetch
     for (const key of details.keys()) if (!alive.has(key)) details.delete(key);
     return shown.map(({ r, status, asOf }, i) => {
       const d = found[i];
-      const model = d?.model || d?.modelIdentity;
+      // The model that served the run; for runs recorded before Cezar kept it, the alias that was asked for.
+      const model = d?.resolvedModel || d?.model || d?.modelIdentity;
       return {
         id: `${r.projectId}/${r.id}`, title: r.titleSummary || r.title, project: r.projectId, status,
         checkedAt: Date.parse(asOf), description: r.title,
@@ -85,11 +89,25 @@ export function createFinishedReader(base: string, request: typeof fetch = fetch
     });
   }
 
+  /** Expected tasks that have shown up, or whose wait is over, stop being waited for. */
+  function settle() {
+    for (const [id, deadline] of expected) if (now() > deadline || cache?.tasks.some(t => t.id === id)) expected.delete(id);
+  }
+
   return {
     async read(): Promise<FinishedTask[]> {
-      if (cache && now() - cache.at < LIST_TTL_MS) return cache.tasks;
-      pending ??= load().then(tasks => { cache = { at: now(), tasks }; return tasks; }).finally(() => { pending = undefined; });
+      settle();
+      const age = cache ? now() - cache.at : Infinity;
+      if (cache && age < (expected.size ? EXPECT_REFETCH_MS : LIST_TTL_MS)) return cache.tasks;
+      pending ??= load().then(tasks => { cache = { at: now(), tasks }; settle(); return tasks; }).finally(() => { pending = undefined; });
       return pending;
+    },
+    /**
+     * Tasks that were just active and are not any more have most likely finished. Until each one is in the list (or a minute
+     * has passed) the list is read again every couple of seconds instead of every 30, so the task does not vanish in between.
+     */
+    expect(ids: string[]) {
+      for (const id of ids) expected.set(id, now() + EXPECT_MS);
     },
     /** After a change made through the panel: the next read asks Cezar again. */
     invalidate(id?: string) {

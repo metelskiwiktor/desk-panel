@@ -44,10 +44,18 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   let fetchedAt = 0;
   const finishedReader = createFinishedReader(options.cezarUrl);
   let lastFinished: Awaited<ReturnType<typeof finishedReader.read>> = [];
+  let active = new Set<string>();
   return {
     async cezar() {
       if (!cache || Date.now() - fetchedAt >= 4000) {
-        pending ??= readCezar(options.cezarUrl).then(value => { cache = value; fetchedAt = Date.now(); return value; }).finally(() => { pending = undefined; });
+        pending ??= readCezar(options.cezarUrl).then(value => {
+          cache = value; fetchedAt = Date.now();
+          // A task that left the active lists most likely finished: have the finished list ready for it at once, not up to 30 s later.
+          const ids = new Set(value.tasks.map(t => t.id));
+          if (!value.partial) finishedReader.expect([...active].filter(id => !ids.has(id)));
+          active = ids;
+          return value;
+        }).finally(() => { pending = undefined; });
         await pending;
       }
       // Finished tasks are a bonus: a Cezar that cannot list them still shows the rest, with the last list it gave.

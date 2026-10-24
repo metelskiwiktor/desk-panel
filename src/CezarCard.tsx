@@ -1,7 +1,7 @@
 import { Archive, Check, ChevronRight, X } from 'lucide-react';
 import { SourceNote } from './components';
 import type { CezarSnapshot } from './cezar-contract';
-import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel } from './format';
+import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel, formatRunningModel } from './format';
 import { formatDuration } from './training-view';
 import type { FinishedTask } from './cezar-contract';
 import { useSwipe } from './useSwipe';
@@ -83,7 +83,7 @@ function RunningRow({ task, now, open }: { task: Task; now: number; open: (d: De
   const elapsed = formatElapsed(task.startedAt, now);
   const rawId = task.id.split('/')[1] || task.id;
   const shortId = rawId.length > 10 ? rawId.slice(0, 8) : rawId;
-  const model = formatModelLabel(task.runner, task.model);
+  const model = formatRunningModel(task.runner, task.model);
   const thinking = task.activityDetail?.state === 'thinking';
   const command = cleanCommand(task.activityDetail?.activeToolInput || task.activityDetail?.message || task.activity);
   const diff = task.diffStat;

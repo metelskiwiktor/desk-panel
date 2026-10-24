@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel } from './format';
+import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel, formatRunningModel } from './format';
 
 describe('formatElapsed', () => {
   it('formats short durations (< 60s)', () => {
@@ -53,8 +53,15 @@ describe('cleanCommand', () => {
 describe('formatModelLabel', () => {
   it('combines runner and model nicely', () => {
     expect(formatModelLabel('codex', 'gpt-6.1-sol')).toBe('codex · gpt-6.1-sol');
-    expect(formatModelLabel('claude', 'sonnet')).toBe('Claude 3.7 Sonnet');
     expect(formatModelLabel('opencode', 'google/gemini-3.8-flash')).toBe('opencode · Gemini 3.8 Flash');
+  });
+  it('does not invent a version for a bare Claude alias', () => {
+    expect(formatModelLabel('claude', 'sonnet')).toBe('Claude Sonnet');
+    expect(formatModelLabel('claude', 'opus')).toBe('Claude Opus');
+    expect(formatModelLabel('claude', 'haiku')).toBe('Claude Haiku');
+  });
+  it('keeps the version of explicit legacy Claude ids', () => {
+    expect(formatModelLabel('claude', 'claude-3-7-sonnet-latest')).toBe('Claude 3.7 Sonnet');
   });
   it('reads the version out of a Claude model id', () => {
     expect(formatModelLabel('Claude', 'claude-opus-5-5')).toBe('Claude Opus 5.5');
@@ -84,5 +91,15 @@ describe('agoOrDate', () => {
   it('gives the date and time once it is older than a day, and tolerates a clock a little behind', () => {
     expect(ago(24 * 3_600_000)).toMatch(/^23 paź 20:00$/);
     expect(ago(-30_000)).toBe('przed chwilą');
+  });
+});
+
+describe('formatRunningModel', () => {
+  it('shows the model when the session reported one', () => {
+    expect(formatRunningModel('claude', 'claude-sonnet-5-5')).toBe('Claude Sonnet 5.5');
+  });
+  it('says the model is unknown instead of guessing', () => {
+    expect(formatRunningModel('codex')).toBe('codex · ? nieznany model');
+    expect(formatRunningModel()).toBe('? nieznany model');
   });
 });

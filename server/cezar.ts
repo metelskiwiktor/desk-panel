@@ -20,7 +20,7 @@ const snapshot = z.object({
 const groupPage = z.object({ snapshotId: z.string(), asOf: iso, coverage, page });
 const statuses = { questions: 'needs-input', reviews: 'review', running: 'running', queued: 'queue' } as const;
 
-async function enrichTask(task: any, get: (p: string) => Promise<any>, defaultModels: Record<string, string> = {}) {
+async function enrichTask(task: any, get: (p: string) => Promise<any>) {
   try {
     const rawId = task.id.includes('/') ? task.id.split('/')[1] : task.id;
     const run = await get(`/api/v1/p/${encodeURIComponent(task.project)}/runs/${encodeURIComponent(rawId)}`);
@@ -28,8 +28,8 @@ async function enrichTask(task: any, get: (p: string) => Promise<any>, defaultMo
     if (run.branch) enriched.branch = run.branch;
     if (run.workflow) enriched.workflow = run.workflow;
     if (run.runner) enriched.runner = run.runner;
-    const resolvedModel = run.model || run.modelIdentity || defaultModels[run.runner] || defaultModels[task.runner];
-    if (resolvedModel) enriched.model = resolvedModel;
+    // What actually served the run (Cezar records it from the session); the run's `model` is only the requested alias.
+    if (typeof run.resolvedModel === 'string' && run.resolvedModel) enriched.model = run.resolvedModel;
     if (run.diffStat) enriched.diffStat = run.diffStat;
     if (run.currentStepId) {
       const step = run.steps?.find((s: any) => s.id === run.currentStepId);
@@ -47,6 +47,10 @@ async function enrichTask(task: any, get: (p: string) => Promise<any>, defaultMo
     try {
       const hist = await get(`/api/v1/p/${encodeURIComponent(task.project)}/runs/${encodeURIComponent(rawId)}/history`);
       const events: any[] = Array.isArray(hist?.events) ? hist.events : [];
+      // Runs from a Cezar that does not record `resolvedModel` yet: the started session in the history says it. The run's
+      // own `model` is only the requested alias ("sonnet"), so it is never shown; no model known, the UI says so.
+      const started = events.filter((e: any) => e.type === 'session.started' && typeof e.model === 'string' && e.model).at(-1);
+      if (started && !enriched.model) enriched.model = started.model;
       if (events.length > 0) {
         const toolEvents = events.filter((e: any) => e.type === 'tool-call' || (e.type === 'item.started' && e.item?.kind === 'tool'));
         const lastTool = toolEvents.at(-1);
@@ -114,26 +118,12 @@ export async function readCezar(base: string, request: typeof fetch = fetch) {
     return tasks;
   }));
 
-  let defaultModels: Record<string, string> = {
-    claude: 'sonnet',
-    codex: 'gpt-6.1-sol',
-    opencode: 'google/gemini-3.8-flash',
-  };
-  try {
-    const config = await get('/api/v1/config');
-    if (config?.defaultModels && typeof config.defaultModels === 'object') {
-      defaultModels = { ...defaultModels, ...config.defaultModels };
-    }
-  } catch {
-    // optional config
-  }
-
   const flatTasks = groups.flat();
   // Enrich active tasks (running or needs-input) with rich live details
   const enrichedTasks = await Promise.all(
     flatTasks.map(async (t) => {
       if (t.status === 'running' || t.status === 'needs-input') {
-        return enrichTask(t, get, defaultModels);
+        return enrichTask(t, get);
       }
       return t;
     })

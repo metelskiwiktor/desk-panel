@@ -100,15 +100,15 @@ export function cleanCommand(raw?: string): string {
 export function formatModelName(model: string): string {
   if (!model) return '';
   const trimmed = model.trim();
-  if (trimmed === 'sonnet' || trimmed === 'claude-3-7-sonnet' || trimmed === 'claude-3-7-sonnet-latest') {
+  // Bare aliases always point at the newest model, so no version is claimed.
+  if (trimmed === 'sonnet') return 'Claude Sonnet';
+  if (trimmed === 'opus') return 'Claude Opus';
+  if (trimmed === 'haiku') return 'Claude Haiku';
+  if (trimmed === 'claude-3-7-sonnet' || trimmed === 'claude-3-7-sonnet-latest') {
     return 'Claude 3.7 Sonnet';
   }
-  if (trimmed === 'opus' || trimmed === 'claude-3-opus') {
-    return 'Claude 3 Opus';
-  }
-  if (trimmed === 'haiku' || trimmed === 'claude-3-5-haiku') {
-    return 'Claude 3.5 Haiku';
-  }
+  if (trimmed === 'claude-3-opus') return 'Claude 3 Opus';
+  if (trimmed === 'claude-3-5-haiku') return 'Claude 3.5 Haiku';
   const claude = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?(?:-\d{8})?$/.exec(trimmed);
   if (claude) return `Claude ${claude[1][0].toUpperCase()}${claude[1].slice(1)} ${claude[2]}${claude[3] ? `.${claude[3]}` : ''}`;
   if (trimmed.includes('gemini-3.8-flash') || trimmed.includes('gemini-2.5-flash')) {
@@ -132,6 +132,12 @@ export function formatModelLabel(runner?: string, model?: string): string {
   return `${runner} · ${cleanModel}`;
 }
 
+
+/** A running task's model: the real one, or an explicit "unknown" when the session never reported it. */
+export function formatRunningModel(runner?: string, model?: string): string {
+  if (model) return formatModelLabel(runner, model);
+  return runner ? `${runner} · ? nieznany model` : '? nieznany model';
+}
 
 /** "przed chwilą", "5 min temu", "3 godz. temu" within a day; older than that "23 paź 15:47". */
 export function agoOrDate(at: number, now = Date.now()): string {
