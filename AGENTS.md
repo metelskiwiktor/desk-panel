@@ -1,7 +1,7 @@
 # Desk Panel
 
-Local React/TypeScript dashboard with a Node HTTP server. Read README.md for
-integration details. Keep the server bound to loopback; credentials stay on the
+Local React/TypeScript dashboard with a Node HTTP server. Read README.md, then the matching file in docs/
+(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel) for integration details. Keep the server bound to loopback; credentials stay on the
 backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 
 - `just setup`: install locked dependencies and Playwright Chromium.
@@ -35,7 +35,7 @@ Phone access: Tailscale (installed on this PC and the phone, account metelski.wi
 The server stays on 127.0.0.1; `DESK_ALLOWED_HOST` (in `%USERPROFILE%\.desk-panel\panel.env`, outside Git)
 admits that one name and its https Origin. CLI: `C:\Program Files\Tailscale\tailscale.exe` (`status`,
 `serve status`). Never use `tailscale funnel` (public) or share the tailnet: the panel has no login of its own.
-Setup steps are in README.md ("Telefon").
+Details and setup from scratch: docs/tailscale.md.
 
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and
