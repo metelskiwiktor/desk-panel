@@ -30,6 +30,18 @@ devices:
 monitor display="0":
     & ./scripts/monitor-shot.ps1 -Display {{display}}
 
+# The dashboard as a bare full-screen Chrome window on one monitor (default 1, see `just monitor`); Alt+F4 closes it.
+kiosk display="1":
+    & ./scripts/kiosk.ps1 -Display {{display}}
+
+# Open the kiosk's Chrome profile as an ordinary window: sign in to Google once, set the dashboard's layout. Then `just kiosk`.
+kiosk-setup:
+    & ./scripts/kiosk.ps1 -Setup
+
+# Start the kiosk window at sign-in: ON, OFF or STATUS.
+kiosk-autostart action="STATUS" display="1":
+    & ./scripts/kiosk-autostart.ps1 -Action '{{action}}' -Display {{display}}
+
 # Sign in to Garmin Connect once; e-mail, password and MFA are typed in the terminal, only DPAPI-encrypted tokens are saved.
 garmin-login:
     npx tsx scripts/garmin-login.ts
