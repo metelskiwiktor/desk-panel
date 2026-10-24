@@ -59,6 +59,21 @@ DESK_MAIL_ACCOUNTS=pierwszy@gmail.com,drugi@gmail.com
 
 Zmiany w nim działają po `just service RESTART`. Zobacz [servy/README.md](servy/README.md).
 
+## Telefon (Tailscale)
+
+Panel działa na telefonie poza domową siecią przez Tailscale (prywatna sieć Twoich urządzeń,
+bez otwierania portów). Serwer nadal słucha tylko na `127.0.0.1`; `tailscale serve` wystawia go
+po HTTPS wyłącznie w tailnecie.
+
+1. Zainstaluj Tailscale na komputerze i telefonie i zaloguj to samo konto.
+2. `tailscale serve --bg 5174` — pokaże adres `https://<komputer>.<tailnet>.ts.net`.
+3. Dopisz do `%USERPROFILE%\.desk-panel\panel.env`: `DESK_ALLOWED_HOST=<komputer>.<tailnet>.ts.net`
+   (bez `https://`), potem `just service RESTART`.
+4. Na telefonie otwórz ten adres; w Chrome „Dodaj do ekranu głównego" daje ikonę i pełny ekran.
+
+Nigdy nie używaj `tailscale funnel` (wystawia panel publicznie) i nie dodawaj do tailnetu cudzych
+urządzeń: panel nie ma własnego logowania.
+
 ## Google Calendar
 
 Integracja loguje się na własne konto użytkownika przez OAuth Google.

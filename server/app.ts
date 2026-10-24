@@ -20,15 +20,18 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string) {
   const routes = jsonRoutes(sources);
   return createServer(async (req, res) => {
     const host = req.headers.host;
-    if (!host || !/^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host)) { res.writeHead(403).end(); return; }
+    // `allowedHost` is the one extra name (Tailscale Serve, HTTPS) that reaches this loopback listener through a local proxy.
+    const proxied = !!allowedHost && host === allowedHost;
+    if (!host || !(proxied || /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host))) { res.writeHead(403).end(); return; }
+    const ownOrigin = `${proxied ? 'https' : 'http'}://${host}`;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
-      if(req.headers.origin!==`http://${host}`){res.writeHead(403).end();return;}
+      if(req.headers.origin!==ownOrigin){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
       try{
         const action=url.pathname.slice('/api/quotas/warmup/'.length).split('/');
@@ -48,7 +51,7 @@ export function createPanelServer(sources: PanelSources, root: string) {
     }
     if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
-      if (req.headers.origin !== `http://${host}`) { res.writeHead(403).end(); return; }
+      if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
       try {
