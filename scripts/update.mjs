@@ -1,5 +1,6 @@
 // `just update`: bring origin/main into this checkout (never over a conflict),
 // verify it, and serve the result — committed and uncommitted local changes included.
+// On another branch it serves the checkout as it is, without pulling anything.
 //   node scripts/update.mjs [--force]   --force redeploys even when nothing changed
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -47,13 +48,15 @@ function fingerprint() {
   return hash.digest('hex');
 }
 
-if (git('rev-parse', '--abbrev-ref', 'HEAD') !== BRANCH) fail(`Usługa jest aktualizowana z gałęzi ${BRANCH}. Przełącz się na nią: git switch ${BRANCH}`);
-if (!run('git', ['fetch', 'origin', BRANCH])) fail('Nie udało się pobrać zmian z origin.');
+const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+const onMain = branch === BRANCH;
+if (onMain && !run('git', ['fetch', 'origin', BRANCH])) fail('Nie udało się pobrać zmian z origin.');
 
 // 1. Bring in remote commits, but only when that cannot conflict with anything local.
 const before = git('rev-parse', 'HEAD');
-const incoming = Number(git('rev-list', '--count', `HEAD..${REMOTE}`));
-if (incoming) {
+const incoming = onMain ? Number(git('rev-list', '--count', `HEAD..${REMOTE}`)) : 0;
+if (!onMain) console.log(`Gałąź ${branch}: wdrażam ten katalog bez zaciągania ${REMOTE}.`);
+else if (incoming) {
   const remoteFiles = lines(git('diff', '--name-only', `HEAD...${REMOTE}`));
   const overlap = localChanges().filter(file => remoteFiles.includes(file));
   if (overlap.length) fail(`Nic nie zaciągnięto: ${REMOTE} zmienia pliki, które masz zmienione lokalnie (niezacommitowane).`,

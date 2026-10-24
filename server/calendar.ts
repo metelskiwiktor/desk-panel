@@ -33,6 +33,8 @@ export function projectEvents(payload: unknown, timeZone: string) {
   }) };
 }
 type Request = (path: string, params?: Record<string, string>) => Promise<unknown>;
+/** How far ahead events are read: the month view shows five weeks from this week's Monday. */
+export const CALENDAR_DAYS = 42;
 /** `extra` are further calendars of the same account (e.g. a subscribed Garmin one); the main calendar's failures still fail the read. */
 export function createCalendarReader(calendarId: string, request: Request, now = Date.now, extra: Request[] = []) {
   let cache: CalendarSource | undefined;
@@ -43,7 +45,7 @@ export function createCalendarReader(calendarId: string, request: Request, now =
     let pageToken: string | undefined;
     for (let i = 0; i < 10; i++) {
       const result = projectEvents(await send('/events', {
-        timeMin: start.toUTC().toISO()!, timeMax: start.plus({ days: 7 }).toUTC().toISO()!,
+        timeMin: start.toUTC().toISO()!, timeMax: start.plus({ days: CALENDAR_DAYS }).toUTC().toISO()!,
         singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
         ...(pageToken ? { pageToken } : {}),
       }), timeZone);

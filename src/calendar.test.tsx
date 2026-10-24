@@ -20,14 +20,14 @@ describe('Google Calendar', () => {
     expect(result.events[1].endAt - result.events[1].startAt).toBe(23 * 3600_000);
     expect(allDayDate('2026-03-29', '2026-03-30')).toBe('29 marca');
   });
-  it('fetches recurrence instances over seven calendar days, paginates and caches successful reads', async () => {
+  it('fetches recurrence instances over six weeks of calendar days, paginates and caches successful reads', async () => {
     const request = vi.fn(async (path: string, params?: Record<string, string>) => path === '' ? { timeZone: 'Europe/Warsaw' } : params?.pageToken ? { items: [timed] } : { items: [allDay], nextPageToken: 'next' });
     const now = () => Date.parse('2026-03-29T09:00:00Z');
     const read = createCalendarReader('owner@gmail.com', request, now);
     const value = await read();
     expect(value.status).toBe('connected');
     expect(value.data).toHaveLength(2);
-    expect(request.mock.calls[1][1]).toMatchObject({ singleEvents: 'true', orderBy: 'startTime', timeMin: '2026-03-28T23:00:00.000Z', timeMax: '2026-04-04T22:00:00.000Z' });
+    expect(request.mock.calls[1][1]).toMatchObject({ singleEvents: 'true', orderBy: 'startTime', timeMin: '2026-03-28T23:00:00.000Z', timeMax: '2026-05-09T22:00:00.000Z' });
     await read();
     expect(request).toHaveBeenCalledTimes(3);
   });

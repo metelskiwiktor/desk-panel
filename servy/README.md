@@ -28,6 +28,8 @@ http://127.0.0.1:5174, także bez otwartej sesji terminala.
 1. Pobiera `origin/main`. Jeśli zdalne zmiany dotykają plików zmienionych lokalnie
    albo lokalne commity konfliktują ze zdalnymi, nic nie zaciąga — wypisuje pliki.
    W przeciwnym razie scala (lokalne niezacommitowane zmiany zostają na miejscu).
+   Commit nie jest potrzebny: wdrażane są też zmiany niezacommitowane. Na innej gałęzi niż `main`
+   nic nie zaciąga i wdraża katalog taki, jaki jest.
 2. Gdy nic się nie zmieniło od ostatniego wdrożenia (commit + lokalne zmiany),
    kończy bez restartu. `just update --force` wdraża mimo to.
 3. Gdy `package-lock.json` różni się od zainstalowanego (znacznik

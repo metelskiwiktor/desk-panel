@@ -94,7 +94,7 @@ const RETRY_AFTER_MS = 5 * 60_000;
 const RATE_LIMITED_RETRY_MS = 30 * 60_000;
 const STEPS_TTL_MS = 6 * 60 * 60_000;
 /** Plan entries read: a week back (to judge what was done) to two weeks ahead; steps only for the coming week. */
-const PAST_DAYS = 7, AHEAD_DAYS = 14, STEPS_AHEAD_DAYS = 7;
+const PAST_DAYS = 7, AHEAD_DAYS = 35, STEPS_AHEAD_DAYS = 7;
 const LOGIN = 'Uruchom „just garmin-login".';
 
 interface WorkoutDetail { at: number; steps: TrainingStep[] | null; trainingEffect: number | null; label: string | null; key: boolean }
