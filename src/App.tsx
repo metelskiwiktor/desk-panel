@@ -15,6 +15,7 @@ import {
   Trash2,
   Settings2,
   Moon,
+  Clock,
   Sun,
   Maximize,
   Minimize,
@@ -394,6 +395,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
+          <button className="top-button" aria-label="Pokaż zegar (tryb ambient)" onClick={ambient.enter}><Clock size={20} /></button>
           {fullscreen.supported && <button className="top-button" aria-label={fullscreen.active ? 'Wyjdź z pełnego ekranu' : 'Pełny ekran'} onClick={fullscreen.toggle}>
             {fullscreen.active ? <Minimize size={20} /> : <Maximize size={20} />}
           </button>}

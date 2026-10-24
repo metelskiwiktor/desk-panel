@@ -87,6 +87,15 @@ describe('idle detection', () => {
     act(() => result.current.wake());
     expect(result.current.ambient).toBe(false);
   });
+  it('enters at once by the button, even with idle switching off', () => {
+    vi.setSystemTime(at(12));
+    const { result } = renderHook(() => useAmbient(false, Date.now()));
+    expect(result.current.ambient).toBe(false);
+    act(() => result.current.enter());
+    expect(result.current.ambient).toBe(true);
+    act(() => result.current.wake());
+    expect(result.current.ambient).toBe(false);
+  });
   it('sleeps sooner at night and never when switched off', () => {
     vi.setSystemTime(at(23, 30));
     const night = renderHook(() => useAmbient(true, Date.now()));

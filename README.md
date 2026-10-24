@@ -274,8 +274,8 @@ Po 10 minutach bez dotyku (w nocy, 23–6, po 2) panel przechodzi w ciemny zegar
 linii tego, co się liczy (najbliższe spotkanie, trening, Cezar czeka, nieprzeczytana poczta). Obraz dryfuje o kilka
 pikseli na minutę, a dotknięcie dowolnego miejsca budzi panel bez klikania w to, co pod spodem. Wyłącza go odznaczenie
 „Zegar po bezczynności” w Ustawieniach; `?ambient=day|night` w adresie pokazuje go od razu.
-W pasku u góry są dwa przyciski: księżyc / słońce przełącza dzień i noc (noc przyciemnia cały pulpit i zegar; bez
-wyboru decyduje godzina 23–6, a ręczny wybór trwa do najbliższego świtu lub zmierzchu) oraz pełny ekran / wyjście z niego
+W pasku u góry są trzy przyciski: księżyc / słońce przełącza dzień i noc (noc przyciemnia cały pulpit i zegar; bez
+wyboru decyduje godzina 23–6, a ręczny wybór trwa do najbliższego świtu lub zmierzchu) przycisk zegara, który od razu pokazuje tryb ambient (także gdy samoczynne przechodzenie jest wyłączone), oraz pełny ekran / wyjście z niego
 (tylko tam, gdzie przeglądarka go udostępnia).
 Poniżej 900 CSS px Pulpit przechodzi do jednej kolumny i przewija się jak strona. Zdarzenia panelu
 (zwinięte: liczba i najnowsze z etykietą źródła, nowe rozwijają listę na 10 s) stoją w pasku u góry.

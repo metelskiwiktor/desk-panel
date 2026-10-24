@@ -205,6 +205,14 @@ describe('interaktywny panel', () => {
     expect(document.querySelector('.app-shell')!.getAttribute('data-night')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Pełny ekran' })).toBeNull();
   });
+  it('przycisk zegara od razu pokazuje tryb ambient, a dotknięcie go kończy', async () => {
+    const user = userEvent.setup();
+    renderWith();
+    await user.click(await screen.findByRole('button', { name: 'Pokaż zegar (tryb ambient)' }));
+    await user.click(screen.getByRole('button', { name: 'Wybudź panel' }));
+    expect(screen.queryByRole('button', { name: 'Wybudź panel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Pokaż zegar (tryb ambient)' })).toBeTruthy();
+  });
   it('nawiguje dotknięciem paneli i przyciskami u góry zamiast paska na dole', async () => {
     const user = userEvent.setup();
     renderWith();

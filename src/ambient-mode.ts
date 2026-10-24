@@ -58,7 +58,7 @@ export function useNight(now: number) {
   return { night, toggle };
 }
 
-export interface AmbientState { ambient: boolean; night: boolean; wake: () => void }
+export interface AmbientState { ambient: boolean; night: boolean; wake: () => void; /** The clock at once, by the button; works with idle switching turned off. */ enter: () => void }
 /**
  * Idle detection. While the clock shows, only `wake` (the tap on the clock itself) ends it, so the tap that wakes the
  * panel never lands on a button underneath. Polling and the data underneath keep running.
@@ -79,7 +79,8 @@ export function useAmbient(enabled: boolean, now: number, night = isNight(now)):
     return () => { for (const name of events) window.removeEventListener(name, touched); window.clearInterval(timer); };
   }, [enabled]);
   const wake = useCallback(() => { lastTouch.current = Date.now(); setAsleep(false); }, []);
-  return { ambient: enabled && (forced !== null || asleep), night: forced ? forced === 'night' : night, wake };
+  const enter = useCallback(() => setAsleep(true), []);
+  return { ambient: forced !== null || asleep, night: forced ? forced === 'night' : night, wake, enter };
 }
 
 export interface AmbientLine { kind: 'meeting' | 'training' | 'cezar' | 'mail'; text: string; strong?: string }
