@@ -8,7 +8,7 @@ implementacje: `server/real-sources.ts` (usługa: Cezar, Google, komputer, adapt
 limitów) i `server/scenario.ts` (plik JSON). UI nie wie, która odpowiada.
 
 Scenariusz w `scenarios/*.json` zawiera po jednej odpowiedzi na endpoint (`cezar`,
-`calendar`, `calendarConnection`, `training`, `system`, `quotas`) dokładnie w kształcie API.
+`calendar`, `calendarConnection`, `training`, `system`, `quotas`; opcjonalnie `todos`, zob. [docs/zadania.md](zadania.md)) dokładnie w kształcie API.
 Czasy zapisuje się względem chwili zapytania: `"now"`, `"now-20m"`, `"now+1h30m"`
 (ms, s, m, h, d). Dni kalendarzowe: `"today"`, `"today+2"`, `"today-1"` (data lokalna), a
 `"today-1@22:10"` to ta godzina tego dnia. Scenariusze `training-*` pokazują dzień z interwałami,
@@ -63,6 +63,8 @@ zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odr
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
+Katalog `.ai/` (worktree zadań Cezara: inne gałęzie, starszy kod) jest wyłączony z uruchamiania testów w `vite.config.ts`: jego testy czytają `scenarios/` tego
+checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny

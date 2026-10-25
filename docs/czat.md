@@ -100,15 +100,16 @@ scenariusza):
 | `cezar` | | liczniki, zadania aktywne i zakończone, niezarchiwizowane (do 40, każde zakończone z `id=projekt/uuid` do akcji poniżej) |
 | `mail` | `limit` (1–50, domyślnie 10) | nieprzeczytane z 30 dni: nadawca, temat, początek; bez treści |
 | `quotas`, `system` | | limity AI z resetami w czasie lokalnym; CPU i RAM |
+| `todos` | `list` (id lub fragment nazwy), `ukonczone=1` | listy zadań użytkownika z id list i zadań; ukończone tylko policzone (zob. [docs/zadania.md](zadania.md)) |
 
 Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie
 pustą listę. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany
 czasu). Odczyty GET nie wymagają `Origin`, więc zwykłe `curl.exe` działa; w PowerShellu `curl` to alias, dlatego instrukcja podaje
 `curl.exe`, a adres w cudzysłowie (jest w nim `&`). Zakres danych jest ten sam co w UI. Zwykłe trasy JSON (`/api/calendar` itd.) zostają
-dla UI, a instrukcja każe agentowi ich nie używać. Do panelu agent ma słać tylko GET, z jednym wyjątkiem opisanym w instrukcji: na prośbę użytkownika może zmieniać **zakończone zadania
+dla UI, a instrukcja każe agentowi ich nie używać. Do panelu agent ma słać tylko GET, z dwoma wyjątkami opisanymi w instrukcji. (1) Na prośbę użytkownika może zmieniać **zakończone zadania
 Cezara** (`archive`, `unarchive`, `read`, `unread`) przez `POST /api/cezar/action` z nagłówkiem `Origin` równym adresowi panelu i ciałem
 `{"id":"projekt/uuid","action":"archive"}` (id z widoku `cezar`; odpowiedź `{"ok":true}`). Archiwizacja jest odwracalna, a zadań nie da się
-usunąć. Inne zapisy (`POST` poczty, czat) są technicznie możliwe, bo `Origin` chroni przeglądarkę, a nie `curl`, więc ogranicza agenta
+usunąć. (2) **Listy zadań użytkownika** (`POST /api/todos/action`, tak samo z `Origin`; akcje i zasady w [docs/zadania.md](zadania.md)): agent tworzy listy, dodaje zadania z `"by":"agent"`, zaznacza je i przenosi. Samo „zadanie” oznacza zadanie z listy, a Cezar tylko wtedy, gdy użytkownik go nazwie albo wskaże jego kafelek. Inne zapisy (`POST` poczty, czat) są technicznie możliwe, bo `Origin` chroni przeglądarkę, a nie `curl`, więc ogranicza agenta
 wyłącznie instrukcja. **Nowe pole lub widok, który agent ma znać,
 dopisz zarówno do `agent-views.ts`, jak i do instrukcji.**
 
@@ -206,4 +207,4 @@ strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
 ## Dalsze kroki (jeszcze nie zrobione)
 
 Własne skille w czacie (menu po `/`; natywne skille `agy` leżą w `<katalog roboczy>/.agents/skills/<nazwa>/SKILL.md` i rozwijają
-się przez `/nazwa`), lokalne zadania dnia i notatki oraz zapisy z poziomu agenta (dziś agent tylko czyta).
+się przez `/nazwa`), notatki oraz widget list zadań w interfejsie i wskazywanie go w czacie (dane i dostęp agenta już są, zob. [docs/zadania.md](zadania.md)).

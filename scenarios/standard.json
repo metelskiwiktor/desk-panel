@@ -751,6 +751,34 @@
       }
     ]
   },
+  "todos": {
+    "live": true,
+    "name": "Zadania",
+    "status": "connected",
+    "observedAt": "now",
+    "data": {
+      "lists": [
+        {
+          "id": "l-1a2b3c4d",
+          "name": "Do poprawy - Chat Agy",
+          "createdAt": "now-3d",
+          "tasks": [
+            { "id": "t-a0000001", "title": "Agent nie wie, ile ma limitu na dziś", "note": "Dodać limity AI do widoku dla agenta.", "done": false, "createdAt": "now-2h", "completedAt": null, "by": "agent" },
+            { "id": "t-a0000002", "title": "Odpowiedź bez sformułowania „nie mam dostępu”", "note": "", "done": false, "createdAt": "now-1d", "completedAt": null, "by": "user" },
+            { "id": "t-a0000003", "title": "Komunikat o pustej odpowiedzi", "note": "", "done": true, "createdAt": "now-2d", "completedAt": "now-1d", "by": "user" }
+          ]
+        },
+        {
+          "id": "l-5e6f7a8b",
+          "name": "Dom",
+          "createdAt": "now-10d",
+          "tasks": [
+            { "id": "t-b0000001", "title": "Kupić żarówki do przedpokoju", "note": "", "done": false, "createdAt": "now-5d", "completedAt": null, "by": "user" }
+          ]
+        }
+      ]
+    }
+  },
   "usageBreakdown": {
     "status": "connected",
     "observedAt": "now-20s",

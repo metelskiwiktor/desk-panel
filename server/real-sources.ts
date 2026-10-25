@@ -9,6 +9,7 @@ import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
 import { createMailReader } from './gmail';
 import { createSystemReader } from './system';
+import { createTodoStore } from './todos';
 import { createQuotaReader } from './quotas';
 import { createUsageBreakdownReader } from './usageBreakdown';
 import { createWarmupClient } from './warmup';
@@ -36,6 +37,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const readTraining = createGarminReader({ api: createGarminApi(garminTokenFile(env)), timeZone: env.DESK_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone });
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
   const readSystem = createSystemReader();
+  const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const readUsageBreakdown = createUsageBreakdownReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -77,6 +79,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
+    todos: () => todoStore.read(),
+    todoAction: action => todoStore.apply(action),
     usageBreakdown: readUsageBreakdown,
     warmup:warmup.read,
     saveWarmup:warmup.save,

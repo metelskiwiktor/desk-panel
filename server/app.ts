@@ -10,10 +10,13 @@ import { jsonRoutes, SourceError, type PanelSources } from './sources';
 import type { ChatService } from './agent-chat';
 import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
+import { todoActionSchema } from '../src/todo-contract';
+import { TodoError } from './todos';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
   let body = '';
+  req.setEncoding('utf8'); // a Polish letter split between two chunks must not break
   for await (const chunk of req) { body += chunk; if (body.length > 4096) throw new SourceError(413); }
   const parsed = schema.safeParse(JSON.parse(body || 'null'));
   if (!parsed.success) throw new SourceError(400);
@@ -54,7 +57,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -67,6 +70,8 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           const { id, action } = await readJson(req, cezarActionSchema);
           await sources.cezarAction(id, action);
           res.end(JSON.stringify({ ok: true }));
+        } else if (url.pathname === '/api/todos/action') {
+          res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
         } else {
           const { account, threadId, action } = await readJson(req, mailActionSchema);
           await sources.mailAction(account, threadId, action);
@@ -74,7 +79,11 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         }
       } catch (error) {
         const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' ? 409 : 502;
-        res.writeHead(status).end(JSON.stringify({ error: status === 409 ? 'Dodaj plik klienta OAuth Google.' : 'Nie udało się wykonać akcji.' }));
+        // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
+        const reason = error instanceof TodoError ? error.message
+          : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'
+          : status === 409 && url.pathname === '/api/google/connect' ? 'Dodaj plik klienta OAuth Google.' : 'Nie udało się wykonać akcji.';
+        res.writeHead(status).end(JSON.stringify({ error: reason }));
       }
       return;
     }

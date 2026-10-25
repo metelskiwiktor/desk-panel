@@ -7,6 +7,8 @@ import { trainingSourceSchema } from '../src/training-contract';
 import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
+import { todoSourceSchema } from '../src/todo-contract';
+import { createTodoStore, type TodoStore } from './todos';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { SourceError, type PanelSources } from './sources';
@@ -35,6 +37,8 @@ export const scenarioSchema = z.object({
   mail: endpoint(mailSourceSchema),
   system: endpoint(systemSourceSchema),
   quotas: endpoint(quotaSourceSchema),
+  /** The lists the scenario starts with; the actions taken in this session are remembered in memory. Empty when left out. */
+  todos: z.union([special, todoSourceSchema]).default({ live: true, name: 'Zadania', status: 'connected', observedAt: null, data: { lists: [] } }),
   warmup: endpoint(warmupStatusSchema),
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
@@ -89,6 +93,13 @@ export function createScenarioSources(file: string): PanelSources {
   /** What the panel changed on finished Cezar tasks, so a scenario answers like Cezar would. */
   const finishedChanges = new Map<string, { archived?: boolean; unread?: boolean }>();
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
+  /** Made from the scenario the first time the lists are asked for, so they stay as the session changed them. */
+  let todoStore: TodoStore | undefined;
+  const todos = async () => {
+    const source = await serve('todos');
+    todoStore ??= createTodoStore({ initial: source.data ?? { lists: [] } });
+    return todoStore;
+  };
   async function serve<K extends ScenarioEndpoint>(key: K) {
     const value = loadScenario(file)[key];
     if ('$error' in value) throw new SourceError(value.$error);
@@ -131,6 +142,8 @@ export function createScenarioSources(file: string): PanelSources {
     },
     system: () => serve('system'),
     quotas: () => serve('quotas'),
+    async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
+    async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
     warmup:async()=>warmup ?? serve('warmup'),
     runWarmup:async(provider)=>(await serve('warmupRun'))[provider],

@@ -163,6 +163,26 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       return [header, ...(lines.length ? lines : ['Brak odczytów.'])].join('\n');
     },
 
+    async todos(url) {
+      const source = await sources.todos();
+      const zone = DEFAULT_ZONE;
+      const withDone = url.searchParams.get('ukonczone') === '1';
+      const header = `Listy zadań użytkownika (zadania do zrobienia, nie zadania Cezara), stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). ${withDone ? 'Ukończone są pokazane.' : 'Ukończone są tylko policzone; ukonczone=1 je pokazuje.'}`;
+      const none = unavailable('Zadania', source.status, !!source.data, source.message);
+      if (none) return `${header}\n${none}`;
+      const wanted = url.searchParams.get('list')?.trim().toLowerCase();
+      const lists = source.data!.lists.filter(l => !wanted || l.id === wanted || l.name.toLowerCase().includes(wanted));
+      if (!lists.length) return `${header}\n${wanted ? `Nie ma listy „${clip(wanted, 60)}”.` : 'Brak list. Utwórz listę akcją createList.'}${source.data!.lists.length ? ` Są: ${source.data!.lists.map(l => `„${l.name}” (${l.id})`).join(', ')}.` : ''}`;
+      const task = (t: (typeof lists)[number]['tasks'][number]) => {
+        const meta = [t.by === 'agent' ? 'dodał agent' : null, dateOf(t.createdAt, zone), t.done && t.completedAt ? `ukończone ${stamp(t.completedAt, zone)}` : null].filter(Boolean).join(', ');
+        return `  [${t.done ? 'x' : ' '}] ${t.id}  ${clip(t.title, 200)} (${meta})${t.note ? ` — ${clip(t.note, 300)}` : ''}`;
+      };
+      return [header, ...lists.flatMap(list => {
+        const open = list.tasks.filter(t => !t.done), done = list.tasks.filter(t => t.done);
+        return [`Lista „${list.name}” (id=${list.id}): do zrobienia ${open.length}, ukończonych ${done.length}`, ...(open.length ? open.map(task) : ['  (brak zadań do zrobienia)']), ...(withDone ? done.map(task) : [])];
+      })].join('\n');
+    },
+
     async system() {
       const source = await sources.system();
       const none = unavailable('Komputer', source.status, !!source.data?.length, source.message);

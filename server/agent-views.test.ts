@@ -77,7 +77,7 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
   const view = (name: string, query = '') => agentViews(sources)[name](new URL(`http://x/api/agent/${name}${query}`), now);
 
   it('każdy widok to krótki tekst bez epoki i bez JSON-a', async () => {
-    for (const name of ['calendar', 'training', 'cezar', 'mail', 'quotas', 'system']) {
+    for (const name of ['calendar', 'training', 'cezar', 'mail', 'quotas', 'system', 'todos']) {
       const text = await view(name);
       // Task ids (` id=…`) may hold long digit runs; everything else must be readable time, not epoch milliseconds.
       expect(text.replace(/ id=\S+/g, ''), name).not.toMatch(/\d{12,}|^[{[]/);

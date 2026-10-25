@@ -5,6 +5,7 @@ import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contrac
 import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
 import type { TrainingSource } from '../src/training-contract';
+import type { TodoAction, TodoResult, TodoSource } from '../src/todo-contract';
 import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } from '../src/warmup-contract';
 
@@ -25,6 +26,9 @@ export interface PanelSources {
   googleAccounts(): Promise<GoogleAccountStatus[]>;
   system(): Promise<SystemSource>;
   quotas(): Promise<QuotaSource>;
+  /** The user's to-do lists: the panel's own data, changed only by `todoAction`. */
+  todos(): Promise<TodoSource>;
+  todoAction(action: TodoAction): Promise<TodoResult>;
   usageBreakdown?(): Promise<UsageBreakdown>;
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
@@ -49,6 +53,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/google/accounts': () => sources.googleAccounts(),
     '/api/system': () => sources.system(),
     '/api/quotas': () => sources.quotas(),
+    '/api/todos': () => sources.todos(),
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };

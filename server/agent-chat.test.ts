@@ -325,6 +325,15 @@ describe('uruchamianie agy', () => {
     expect(text).toContain(`Origin równym ${DEFAULT_PANEL_URL}`);
     expect(text).toContain('{"id":"projekt/uuid","action":"archive"}');
     expect(text).toMatch(/archive, unarchive, read albo unread/);
+    // To-do lists: a bare "zadanie" is a list item, never Cezar; the agent knows the view, the action and the one rule for adding.
+    expect(text).toContain('/api/agent/todos');
+    expect(text).toContain(`POST ${DEFAULT_PANEL_URL}/api/todos/action`);
+    for (const action of ['createList', 'addTask', 'updateTask', 'moveTask', 'renameList', 'deleteTask', 'clearDone', 'deleteList']) expect(text).toContain(`"action":"${action}"`);
+    expect(text).toContain('"by":"agent"');
+    expect(text).toContain('charset=utf-8');
+    expect(text).toMatch(/nie przez zagnieżdżone `powershell -Command/);
+    expect(text).toMatch(/bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara/);
+    expect(text).toMatch(/Usuwaj \(deleteTask, clearDone, deleteList\)/);
     expect(text).toMatch(/id w postaci `projekt\/uuid`/);
     expect(text).toContain('Europe/Warsaw');
     expect(text).toMatch(/nie przeliczaj ich/);
