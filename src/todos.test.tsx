@@ -158,40 +158,109 @@ describe('the Zadania tile', () => {
     expect(titles(tile)).toEqual(['Odpowiedź bez sformułowania „nie mam dostępu”', 'Komunikat o pustej odpowiedzi', 'Agent nie wie, ile ma limitu na dziś']);
   });
 
-  it('edits the title and the note in place, saving only what changed, and Escape drops the edit', async () => {
+  it('opens a task in a dialog over the panel: saves only what changed, Escape and Anuluj drop the edit, and focus goes back to the task', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
+    arrange(todo(1, 0, 0, 1, 1, { list: A })); // even the smallest tile edits in the same dialog
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
-    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Odpowiedź bez sformułowania „nie mam dostępu”' }));
-    const title = within(tile).getByRole('textbox', { name: 'Tytuł zadania' });
+    const row = await within(tile).findByRole('button', { name: 'Edytuj zadanie: Odpowiedź bez sformułowania „nie mam dostępu”' });
+    await user.click(row);
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    expect(dialog.parentElement!.parentElement).toBe(document.body); // not inside the tile
+    expect(within(dialog).getByRole('heading').textContent).toBe('Zadanie · Do poprawy - Chat Agy');
+    const title = within(dialog).getByRole('textbox', { name: 'Tytuł' }) as HTMLInputElement;
+    expect(document.activeElement).toBe(title);
+    expect(title.value).toBe('Odpowiedź bez sformułowania „nie mam dostępu”');
+    expect((within(dialog).getByRole('textbox', { name: 'Notatka' }) as HTMLTextAreaElement).value).toBe('');
     await user.clear(title);
     await user.type(title, 'Odpowiedź bez „nie mam dostępu”{Escape}');
     expect(posts()).toEqual([]);
-    expect(within(tile).queryByRole('textbox', { name: 'Tytuł zadania' })).toBeNull();
-    expect(titles(tile)).toContain('Odpowiedź bez sformułowania „nie mam dostępu”');
-    await user.click(within(tile).getByRole('button', { name: 'Edytuj zadanie: Odpowiedź bez sformułowania „nie mam dostępu”' }));
-    await user.clear(within(tile).getByRole('textbox', { name: 'Tytuł zadania' }));
-    await user.type(within(tile).getByRole('textbox', { name: 'Tytuł zadania' }), 'Krótszy tytuł');
-    await user.type(within(tile).getByRole('textbox', { name: 'Notatka do zadania' }), 'z notatką');
-    await user.click(within(tile).getByRole('button', { name: 'Zapisz' }));
-    expect(posts()).toEqual([{ action: 'updateTask', task: 't-a0000002', title: 'Krótszy tytuł', note: 'z notatką' }]);
-    expect(await within(tile).findByText('z notatką')).toBeTruthy();
-    expect(titles(tile)).toContain('Krótszy tytuł');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(row);
+    expect(titles(tile)).toContain('Odpowiedź bez sformułowania „nie mam dostępu”'); // nothing was saved
+    await user.click(row);
+    await user.click(screen.getByRole('button', { name: 'Anuluj' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await user.click(row);
+    const again = screen.getByRole('dialog', { name: 'Zadanie' });
+    await user.clear(within(again).getByRole('textbox', { name: 'Tytuł' }));
+    expect((within(again).getByRole('button', { name: 'Zapisz' }) as HTMLButtonElement).disabled).toBe(true); // a title is needed
+    await user.type(within(again).getByRole('textbox', { name: 'Tytuł' }), 'Krótszy tytuł');
+    await user.type(within(again).getByRole('textbox', { name: 'Notatka' }), 'Jeszcze to.');
+    await user.click(within(again).getByRole('button', { name: 'Zapisz' }));
+    expect(posts()).toEqual([{ action: 'updateTask', task: 't-a0000002', title: 'Krótszy tytuł', note: 'Jeszcze to.' }]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(titles(tile)).toContain('Krótszy tytuł'));
   });
 
-  it('deletes a task from its edit view, and only on the second tap', async () => {
+  it('saves with Enter in the title and sends only the title when only that changed', async () => {
+    const user = userEvent.setup();
+    arrange(todo(1, 0, 0, 2, 2, { list: A }));
+    const { posts } = renderApp();
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
+    await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), '!{Enter}');
+    expect(posts()).toEqual([{ action: 'updateTask', task: 't-a0000003', title: 'Komunikat o pustej odpowiedzi!' }]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('closes on a tap on the dimmed panel only while nothing was typed, and keeps focus inside with Tab', async () => {
+    const user = userEvent.setup();
+    arrange(todo(1, 0, 0, 2, 2, { list: A }));
+    renderApp();
+    const open = async () => user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
+    await open();
+    const scrim = screen.getByRole('dialog').parentElement!;
+    await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), 'x');
+    await user.click(scrim);
+    expect(screen.queryByRole('dialog')).not.toBeNull(); // there is something typed: not lost by a stray tap
+    await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), '{Backspace}');
+    await user.click(scrim);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await open();
+    const dialog = screen.getByRole('dialog');
+    const save = within(dialog).getByRole('button', { name: 'Zapisz' });
+    save.focus();
+    await user.tab(); // from the last control to the first
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Zamknij' }));
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(save);
+  });
+
+  it('deletes a task from its dialog, and only on the second tap', async () => {
     const user = userEvent.setup();
     arrange(todo(1, 0, 0, 2, 2, { list: A }));
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
     expect(within(tile).queryByRole('button', { name: /^Usuń zadanie/ })).toBeNull(); // no X on every row
     await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
-    await user.click(within(tile).getByRole('button', { name: 'Usuń zadanie: Komunikat o pustej odpowiedzi' }));
+    await user.click(screen.getByRole('button', { name: 'Usuń zadanie: Komunikat o pustej odpowiedzi' }));
     expect(posts()).toEqual([]);
-    await user.click(within(tile).getByRole('button', { name: 'Usunąć?' }));
+    await user.click(screen.getByRole('button', { name: 'Usunąć?' }));
     expect(posts()).toEqual([{ action: 'deleteTask', task: 't-a0000003' }]);
+    expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(titles(tile)).not.toContain('Komunikat o pustej odpowiedzi'));
+  });
+
+  it('stays open and keeps what was typed when the list is read again, even if the task is hidden meanwhile; closes if the task is gone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    arrange(todo(1, 0, 0, 2, 2, { list: A }));
+    const { fetcher } = renderApp();
+    const tile = tileOf('todo#1');
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    await user.type(screen.getByRole('textbox', { name: 'Notatka' }), 'Wpisane w trakcie');
+    // Meanwhile somebody else ticks this task and the list hides what is done: its row leaves the tile.
+    const post = (body: object) => fetcher('/api/todos/action', { method: 'POST', body: JSON.stringify(body) });
+    await post({ action: 'updateTask', task: 't-a0000001', done: true });
+    await post({ action: 'setListOptions', list: A, hideDone: true });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
+    await waitFor(() => expect(titles(tile)).not.toContain('Agent nie wie, ile ma limitu na dziś'));
+    expect((screen.getByRole('textbox', { name: 'Notatka' }) as HTMLTextAreaElement).value).toBe('Dodać limity AI do widoku dla agenta.Wpisane w trakcie');
+    await post({ action: 'deleteTask', task: 't-a0000001' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('manages lists from the menu: new, rename, clear done, delete (after a second tap)', async () => {

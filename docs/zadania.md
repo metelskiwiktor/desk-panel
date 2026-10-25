@@ -18,8 +18,14 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
   dwa kafelki mogą pokazywać różne listy. Jeśli zapisana lista zniknęła, kafelek pokazuje pierwszą.
 - **Menu ⋯** (ustawienia listy): „Ukryj ukończone” i „Pokaż, co dodał agent” (pola wyboru), nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie
   potwierdza i mówi, ile zadań zniknie).
-- **Zadania**: pole wyboru przy zadaniu (zaznaczenie widać od razu), dotknięcie tytułu otwiera edycję tytułu i notatki (Zapisz / Anuluj / Esc) z przyciskiem
-  „Usuń” (usuwa po drugim dotknięciu; w wierszu nie ma X). Otwarte są przed ukończonymi (te skreślone, na końcu); ikona ✦ przy zadaniu (domyślnie niewidoczna, włącza ją „Pokaż, co dodał agent” w menu ⋯) oznacza, że dodał je agent. Tytuł ma jedną linię (w wąskim, wysokim kafelku dwie). Licznik „ukończone/wszystkie” jest w nagłówku.
+- **Zadania**: pole wyboru przy zadaniu (zaznaczenie widać od razu); dotknięcie tytułu otwiera zadanie w **oknie nad całym pulpitem** (`src/TodoDialog.tsx`,
+  poza kafelkiem, więc wygląda tak samo w kafelku każdego rozmiaru). Okno ma tytuł, notatkę i przyciski „Usuń” (drugie dotknięcie potwierdza), „Anuluj”
+  i „Zapisz”; zapis wysyła tylko to, co się zmieniło, Enter w tytule i Ctrl+Enter w notatce zapisują, Esc i „Anuluj” porzucają zmiany, a dotknięcie
+  przyciemnionego tła zamyka okno tylko wtedy, gdy nic nie wpisano. Fokus zostaje w oknie (Tab krąży) i wraca na zadanie. Okno trzyma stan w kafelku
+  (po id zadania), więc odczyt co 5 s go nie zamyka ani nie gubi wpisanego tekstu, nawet gdy zadanie zniknie z widoku (np. ukończone przy „Ukryj
+  ukończone”); zamyka się dopiero, gdy zadanie zostało usunięte gdzie indziej. Wiersz edytowanego zadania jest podświetlony. Otwarte zadania są przed
+  ukończonymi (te skreślone, na końcu); ikona ✦ (domyślnie niewidoczna, włącza ją „Pokaż, co dodał agent” w menu ⋯) oznacza, że dodał je agent. Tytuł ma
+  jedną linię (w wąskim, wysokim kafelku dwie). Licznik „ukończone/wszystkie” jest w nagłówku.
 - **Dodawanie**: „+” w nagłówku pokazuje pole „Dodaj zadanie…” pływające nad dołem kafelka (zadania przewijają się pod nim). Enter zapisuje, a pole zostaje
   otwarte na kolejne; zamyka je dopiero ponowne dotknięcie „+” (albo Esc).
 - **„Ukryj ukończone”** jest ustawieniem **listy**, nie kafelka: leży w danych listy (`hideDone`, akcja `setListOptions`), więc każdy kafelek, który ją pokazuje (także na

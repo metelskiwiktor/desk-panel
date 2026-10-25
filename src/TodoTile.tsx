@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Check, ListChecks, MoreHorizontal, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useDismiss } from './popover';
 import { TODO_LIMITS, type TodoList, type TodoTask } from './todo-contract';
+import { TodoDialog } from './TodoDialog';
 import type { TileConfig } from './tile-grid';
 import { taskContext } from './todo-context';
 import { ctx } from './chat-context';
@@ -14,40 +15,14 @@ export const todoConfigOf = (config: TileConfig | undefined): TodoConfig => ({
 });
 const NEW_LIST = '__new__';
 
-function TodoRow({ list, task, notes, act }: { list: TodoList; task: TodoTask; notes: boolean; act: TodosState['act'] }) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(task.title);
-  const [note, setNote] = useState(task.note);
-  const [removing, setRemoving] = useState(false);
+function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: TodoTask; notes: boolean; hot: boolean; act: TodosState['act']; edit: (opener: HTMLElement) => void }) {
   const toggle = () => void act({ action: 'updateTask', task: task.id, done: !task.done }, data => ({
     lists: data.lists.map(l => ({ ...l, tasks: l.tasks.map(t => t.id === task.id ? { ...t, done: !task.done, completedAt: task.done ? null : Date.now() } : t) })),
   }));
-  const save = () => {
-    const next = title.trim();
-    setEditing(false);
-    setRemoving(false);
-    if (!next) { setTitle(task.title); return; }
-    if (next !== task.title || note !== task.note) void act({ action: 'updateTask', task: task.id, ...(next !== task.title ? { title: next } : {}), ...(note !== task.note ? { note } : {}) });
-  };
-  const cancel = () => { setEditing(false); setRemoving(false); setTitle(task.title); setNote(task.note); };
   const point = (() => { const c = taskContext(list, task); return ctx('todo', c.id, c.title, c.text); })();
-  if (editing) return <li className="todo-row editing" {...point}>
-    <div className="todo-edit" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); cancel(); } }}>
-      <input aria-label="Tytuł zadania" value={title} maxLength={TODO_LIMITS.title} autoFocus onChange={e => setTitle(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save(); } }} />
-      <textarea aria-label="Notatka do zadania" value={note} maxLength={TODO_LIMITS.note} rows={2} placeholder="Notatka" onChange={e => setNote(e.target.value)} />
-      <span className="todo-edit-actions">
-        <button type="button" onClick={save}>Zapisz</button>
-        <button type="button" className="quiet" onClick={cancel}>Anuluj</button>
-        {removing
-          ? <button type="button" className="todo-del danger" onClick={() => void act({ action: 'deleteTask', task: task.id })} onBlur={() => setRemoving(false)} autoFocus>Usunąć?</button>
-          : <button type="button" className="todo-del" aria-label={`Usuń zadanie: ${task.title}`} onClick={() => setRemoving(true)}><Trash2 size={15} aria-hidden="true" /> Usuń</button>}
-      </span>
-    </div>
-  </li>;
-  return <li className={`todo-row${task.done ? ' done' : ''}`} {...point}>
+  return <li className={`todo-row${task.done ? ' done' : ''}${hot ? ' hot' : ''}`} {...point}>
     <input type="checkbox" className="todo-check" checked={task.done} aria-label={task.title} onChange={toggle} />
-    <button type="button" className="todo-title" aria-label={`Edytuj zadanie: ${task.title}`} onClick={() => { setTitle(task.title); setNote(task.note); setEditing(true); }}>
+    <button type="button" className="todo-title" aria-label={`Edytuj zadanie: ${task.title}`} onClick={e => edit(e.currentTarget)}>
       <span className="todo-text">{task.title}</span>
       {notes && task.note && <span className="todo-note">{task.note}</span>}
     </button>
@@ -56,7 +31,7 @@ function TodoRow({ list, task, notes, act }: { list: TodoList; task: TodoTask; n
 }
 
 /**
- * A to-do tile: one list at a time, chosen from a drop-down, with its tasks to tick, edit and delete. Several tiles can
+ * A to-do tile: one list at a time, chosen from a drop-down, with its tasks to tick; a tap on a task opens it in a dialog (edit, delete). Several tiles can
  * stand on the grid, each with its own list. The list's own settings ("Ukryj ukończone") are in the ⋯ menu and are kept on
  * the list, so they follow it to every tile. The + in the head shows the add field floating over the foot of the tile (the
  * tasks scroll under it) until the + is pressed again. What fits follows the tile's cells (`wide`: two or more columns,
@@ -71,6 +46,9 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
   const list: TodoList | null = lists?.find(l => l.id === wanted) ?? lists?.[0] ?? null;
   // The add field floats over the foot of the tile; it opens and closes with the + in the head and stays open while tasks are added.
   const [adding, setAdding] = useState(false);
+  // The task open in the dialog (its id; the dialog is closed if the task is gone) and the button that opened it, to give focus back.
+  const [editing, setEditing] = useState<string | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const [mode, setMode] = useState<'view' | 'new' | 'rename'>('view');
   const [name, setName] = useState('');
   const [draft, setDraft] = useState('');
@@ -117,6 +95,8 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
   };
 
   const hideDone = list?.hideDone ?? false;
+  const editTask = list?.tasks.find(t => t.id === editing);
+  const closeEditor = () => { setEditing(null); opener.current?.focus(); };
   const open = list?.tasks.filter(t => !t.done) ?? [], done = list?.tasks.filter(t => t.done) ?? [];
   const shown = hideDone ? open : [...open, ...done];
   const naming = mode !== 'view';
@@ -163,7 +143,8 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
     {error && <p className="p2-note warn todo-error" role="alert">{error}<button type="button" aria-label="Zamknij komunikat" onClick={clearError}><X size={13} aria-hidden="true" /></button></p>}
     {list ? <>
       {shown.length
-        ? <ul className="todo-list" aria-label={`Zadania: ${list.name}`}>{shown.map(task => <TodoRow key={task.id} list={list} task={task} notes={wide && tall} act={act} />)}</ul>
+        ? <ul className="todo-list" aria-label={`Zadania: ${list.name}`}>{shown.map(task => <TodoRow key={task.id} list={list} task={task} notes={wide && tall} hot={task.id === editing} act={act}
+          edit={el => { opener.current = el; setEditing(task.id); }} />)}</ul>
         : <p className="p2-empty">{list.tasks.length && hideDone ? 'Wszystkie zadania są ukończone.' : 'Brak zadań na tej liście.'}</p>}
       {adding && <form className="todo-add" onSubmit={add}>
         <input aria-label="Nowe zadanie" placeholder="Dodaj zadanie…" maxLength={TODO_LIMITS.title} value={draft} autoFocus onChange={e => setDraft(e.target.value)}
@@ -174,5 +155,6 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
       <p className="p2-empty">Nie ma jeszcze żadnej listy.</p>
       {!naming && <button type="button" className="todo-create" onClick={() => startNaming('new')}><Plus size={16} aria-hidden="true" /> Utwórz listę</button>}
     </div> : <p className="p2-empty">{source.status === 'loading' ? 'Ładowanie zadań…' : source.message || 'Zadania są niedostępne.'}</p>}
+    {list && editTask && <TodoDialog key={editTask.id} list={list} task={editTask} act={act} close={closeEditor} />}
   </section>;
 }
