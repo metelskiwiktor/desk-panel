@@ -17,13 +17,15 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 - **Lista** wybierana jest z rozwijanej listy w nagłówku (ostatnia pozycja „＋ Nowa lista…”); wybór zapisuje się w ustawieniach kafelka (`config.list`), więc
   dwa kafelki mogą pokazywać różne listy. Jeśli zapisana lista zniknęła, kafelek pokazuje pierwszą.
 - **Menu ⋯**: nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie potwierdza i mówi, ile zadań zniknie).
-- **Zadania**: pole „Dodaj zadanie…” (Enter), pole wyboru przy zadaniu (zaznaczenie widać od razu), dotknięcie tytułu otwiera edycję tytułu i notatki
-  (Zapisz / Anuluj / Esc), X usuwa po drugim dotknięciu. Otwarte są przed ukończonymi (te skreślone, na końcu), notatka i plakietka „agent” (zadanie dodał
-  agent) są pod tytułem.
-- **„Ukryj ukończone”**: pole w stopce kafelka, zapamiętane **per kafelek** w jego ustawieniach (`config.hideDone`); obok licznik „ukończone/wszystkie”.
-  Ukończone zostają na liście, dopóki ich nie wyczyścisz.
-- **Kafelek jednokomórkowy** nie ma miejsca na pole dodawania i stopkę: pole pokazuje przycisk „+” w nagłówku, a „Ukryj ukończone” jest w menu ⋯; notatek i
-  plakietek nie widać.
+- **Zadania**: pole „Dodaj zadanie…” (Enter) jest zawsze na dole kafelka, pole wyboru przy zadaniu (zaznaczenie widać od razu), dotknięcie tytułu otwiera
+  edycję tytułu i notatki (Zapisz / Anuluj / Esc) z przyciskiem „Usuń” (usuwa po drugim dotknięciu; w wierszu nie ma X). Otwarte są przed ukończonymi (te
+  skreślone, na końcu); ikona ✦ przy zadaniu oznacza, że dodał je agent. Tytuł ma jedną linię (w wąskim, wysokim kafelku dwie).
+- **„Ukryj ukończone”**: pole zapamiętane **per kafelek** w jego ustawieniach (`config.hideDone`). Ukończone zostają na liście, dopóki ich nie wyczyścisz.
+  Licznik „ukończone/wszystkie” jest w nagłówku.
+- **Rozmiar kafelka** (liczony w komórkach siatki, `wide` = 2+ kolumny, `tall` = 2+ wiersze) decyduje o układzie: „Ukryj ukończone” stoi obok pola dodawania
+  w kafelku szerokim, w osobnej stopce w wąskim i wysokim, a w kafelku jednokomórkowym jest w menu ⋯. Szeroki i niski kafelek układa zadania w dwóch
+  kolumnach. Notatki widać tylko wtedy, gdy kafelek jest i szeroki, i wysoki (do 2 linii); w mniejszych są w edycji. Ikona listy w nagłówku jest tylko w
+  kafelku szerokim.
 - **Odświeżanie**: lista jest czytana co 5 s, więc to, co dopisze agent czatu, pojawia się w kilka sekund; po własnej zmianie odczyt następuje od razu.
   Odrzucona zmiana pokazuje powód z serwera (np. „Lista o takiej nazwie już jest.”) nad listą.
 

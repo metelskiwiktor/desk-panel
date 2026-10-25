@@ -48,7 +48,7 @@ describe('the Zadania tile', () => {
     expect((within(tile).getByRole('checkbox', { name: 'Komunikat o pustej odpowiedzi' }) as HTMLInputElement).checked).toBe(true);
     expect((within(tile).getByRole('checkbox', { name: 'Odpowiedź bez sformułowania „nie mam dostępu”' }) as HTMLInputElement).checked).toBe(false);
     expect(within(tile).getByText('Dodać limity AI do widoku dla agenta.')).toBeTruthy(); // the note
-    expect(within(tile).getAllByText('agent')).toHaveLength(1); // only what the agent added is marked
+    expect(within(tile).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1); // only what the agent added is marked
     expect(within(tile).getByTitle('Ukończone z wszystkich').textContent).toBe('1/3');
     const select = within(tile).getByRole('combobox', { name: 'Lista zadań' }) as HTMLSelectElement;
     expect([...select.options].map(o => o.textContent)).toEqual(['Do poprawy - Chat Agy', 'Dom', '＋ Nowa lista…']);
@@ -147,12 +147,14 @@ describe('the Zadania tile', () => {
     expect(titles(tile)).toContain('Krótszy tytuł');
   });
 
-  it('deletes a task only on the second tap', async () => {
+  it('deletes a task from its edit view, and only on the second tap', async () => {
     const user = userEvent.setup();
     arrange(todo(1, 0, 0, 2, 2, { list: A }));
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
-    await user.click(await within(tile).findByRole('button', { name: 'Usuń zadanie: Komunikat o pustej odpowiedzi' }));
+    expect(within(tile).queryByRole('button', { name: /^Usuń zadanie/ })).toBeNull(); // no X on every row
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
+    await user.click(within(tile).getByRole('button', { name: 'Usuń zadanie: Komunikat o pustej odpowiedzi' }));
     expect(posts()).toEqual([]);
     await user.click(within(tile).getByRole('button', { name: 'Usunąć?' }));
     expect(posts()).toEqual([{ action: 'deleteTask', task: 't-a0000003' }]);
@@ -252,23 +254,37 @@ describe('the Zadania tile', () => {
     expect(await within(tile).findByText('Wszystkie zadania są ukończone.')).toBeTruthy();
   });
 
-  it('in a tile of one cell leaves out notes and authors, and stays usable', async () => {
+  it('in a tile of one cell leaves out notes, keeps the add field, and has "Ukryj ukończone" in the menu', async () => {
     const user = userEvent.setup();
     arrange(todo(1, 0, 0, 1, 1, { list: A }));
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(within(tile).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
-    expect(within(tile).queryByText('agent')).toBeNull();
-    // The field is not there until it is asked for, so the tasks have the room.
-    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull();
-    await user.click(within(tile).getByRole('button', { name: 'Pokaż pole nowego zadania' }));
+    expect(within(tile).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1);
+    expect(within(tile).getByTitle('Ukończone z wszystkich').textContent).toBe('1/3');
     await user.type(within(tile).getByRole('textbox', { name: 'Nowe zadanie' }), 'Mały kafelek{Enter}');
     expect(posts()).toEqual([{ action: 'addTask', list: A, title: 'Mały kafelek' }]);
-    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull(); // folded again after adding
-    await user.click(within(tile).getByRole('button', { name: 'Pokaż pole nowego zadania' }));
-    await user.keyboard('{Escape}');
-    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull();
+    expect(within(tile).queryByRole('checkbox', { name: 'Ukryj ukończone' })).toBeNull();
+    await user.click(within(tile).getByRole('button', { name: 'Zarządzaj listą' }));
+    await user.click(within(tile).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
+    expect(titles(tile)).not.toContain('Komunikat o pustej odpowiedzi');
+    expect(arranged()[0].config).toEqual({ list: A, hideDone: true });
+  });
+
+  it('puts "Ukryj ukończone" where the size has room: next to the field when wide, in a foot when tall and narrow', async () => {
+    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 1, 2, { list: A }), todo(3, 3, 0, 1, 1, { list: A }));
+    renderApp();
+    const [wide, tall, one] = [tileOf('todo#1'), tileOf('todo#2'), tileOf('todo#3')];
+    await within(wide).findByText('Komunikat o pustej odpowiedzi');
+    expect(wide.querySelector('.todo-bar .todo-hide')).toBeTruthy();
+    expect(wide.querySelector('.todo-foot')).toBeNull();
+    expect(tall.querySelector('.todo-bar .todo-hide')).toBeNull();
+    expect(tall.querySelector('.todo-foot .todo-hide')).toBeTruthy();
+    expect(one.querySelector('.todo-hide')).toBeNull();
+    // Notes need room both ways: a wide short tile and a tall narrow one leave them out.
+    expect(within(wide).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
+    expect(within(tall).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
   });
 });
 

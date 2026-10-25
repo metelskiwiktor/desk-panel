@@ -161,7 +161,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showT
       finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />;
     if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={open} compact={!roomy} />;
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={open} roomy={roomy} threshold={systemThreshold} />;
-    if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} compact={!roomy}
+    if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);
     return card ? <QuotaTile card={card} data={data} now={now} open={open} showBreakdown={showBreakdown} roomy={roomy} />
