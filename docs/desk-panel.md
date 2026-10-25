@@ -31,8 +31,8 @@ pomniejszania, a powiększenie przeglądarki działa jak zwykle. Jego style doty
 zewnętrznej warstwy; dashboard używa tego samego układu co na docelowym ekranie.
 Ukryty panel zachowuje stronę i stan, ale wstrzymuje odpytywanie API i anuluje
 trwające odczyty. Po zamknięciu podglądu odczyty wznawiają się od razu.
-Limity AI są zawsze bezpośrednio pod kartami. Wysokość kart wynika z zawartości,
-a długie listy poczty przewijają się wewnątrz karty.
+Na wąskim ekranie kafelki obszaru roboczego stoją jeden pod drugim, a długie listy
+(poczta, zadania Cezara) przewijają się wewnątrz kafelka.
 
 ## Interfejs
 
@@ -46,12 +46,25 @@ pod drugą, a układ nie zależy od urządzenia:
   **Spotkania** (lista z godzinami, całodniowe jako „cały dzień”, najbliższe w ciągu 15 minut podświetlone, a dalsze
   jako „+N więcej”) i odliczenie do spotkania albo do jego końca. Dotknięcie treningu lub spotkania otwiera szczegóły.
   Rozmiary: **standard** i **zmniejszona** (jedna linia chipów). Rozmiar zmienia uchwyt na dolnej krawędzi paska, na środku: przeciągnięcie ciągnie krawędź, a widok już w trakcie przełącza się na rozmiar, na którym by się zatrzymał (zatrzaskuje się na najbliższym po puszczeniu); samo dotknięcie wybiera kolejny;
-- **środek: obszar roboczy** z kartami limitów AI (blok na dostawcę: okno 5h jako gruby pasek, 7d jako cienki, biała
-  kreska pokazuje, ile czasu okna już upłynęło, a kolor mówi tylko, czy zużycie wyprzedza czas; bloki stoją obok
-  siebie, gdy karta jest szeroka, i jeden pod drugim, gdy wąska), Cezara i poczty. Karty dzielą
-  szerokość same; Cezar i poczta pojawiają się tylko, gdy mają coś do powiedzenia. Cezar pokazuje najpierw zadania
-  czekające na Ciebie, potem te w toku; poczta to lista nadawca / temat / początek wiadomości (w lewo przeczytane,
-  w prawo kosz). Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu płynnie się zwija do zera;
+- **środek: obszar roboczy**, siatka 4 kolumn × 2 wierszy kafelków. Kafelek zajmuje jedną komórkę albo kilka i jest jedną rzeczą:
+  jednym limitem AI (osobny kafelek dla Claude, Codex, Gemini i każdej grupy Antigravity, np. „Claude & GPT” czy frontier;
+  okno 5h jako gruby pasek, 7d jako cienki, biała kreska pokazuje, ile czasu okna już upłynęło, a kolor mówi tylko, czy
+  zużycie wyprzedza czas; przycisk w rogu otwiera podział zużycia), Cezarem (najpierw zadania czekające na Ciebie, potem
+  te w toku i zakończone), pocztą (lista nadawca / temat / początek wiadomości, w lewo przeczytane, w prawo kosz; w
+  kafelku jednokomórkowym tylko nadawca i temat) albo komputerem (CPU i RAM jako dwa paski, od dwóch komórek jako wykresy
+  z ostatnich 5 minut). Kafelek zawsze rysuje się w całości: jeśli źródło milczy, mówi to spokojnie, zamiast znikać.
+  Cały obszar to jedna karta, a kafelki dzielą tylko cienkie linie. Komórka bez kafelka to pusty kafelek z ikonami tego, co można w niej postawić (bez tego, co już stoi na siatce i co
+  wyłączono w Ustawieniach); dotknięcie ikony stawia kafelek 1×1.
+  Dopóki niczego nie ułożysz, układ jest automatyczny: limity i poczta po lewej, Cezar po prawej na dwa wiersze, a przy
+  większej liczbie limitów na jeden wiersz, żeby wszystko się zmieściło. Kafelki układa się od razu, bez trybu edycji:
+  uchwyt u góry kafelka przesuwa go (kafelek upuszczony na inny odsuwa go do najbliższych wolnych komórek, a gdy to właśnie
+  jego dawne miejsce, kafelki się zamieniają; zielona obwódka pokazuje, gdzie wylądują, czerwona, że nie ma miejsca),
+  prawa i dolna krawędź oraz róg zmieniają rozmiar (w trakcie kafelek pokazuje swój rozmiar), a X w rogu wyłącza kafelek
+  i zwalnia komórki. Rosnący kafelek sam odsuwa sąsiadów na wolne komórki; gdy nie mają dokąd, rośnie tylko
+  tak daleko, jak się da, i mówi, dlaczego dalej nie. Układ jest zapamiętany w przeglądarce (`desk-panel.workspace`; telefon
+  i kiosk mają osobne), a Ustawienia → Pulpit przywracają automatyczny. Poniżej 900 CSS px kafelki stoją jeden pod drugim
+  w kolejności czytania, bez pustych kafelków i edycji. Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu
+  płynnie się zwija do zera;
 - **dół: dni** (z linkiem „Kalendarz” do pełnej agendy). Rozmiary: **krótki** (chip na dzień: etykieta i kropki treningów i spotkań), **średni** (domyślny: karta
   na dzień z planem, czasem i poziomem, ✓ przy wykonanym) i **miesiąc** (pięć tygodni od poniedziałku tego tygodnia,
   zajmuje cały ekran pod górą, a zmiany rozmiaru (także górnego paska) są płynne; dni, które minęły, są wygaszone, bo źródła czytamy od dziś). Dotknięcie dnia wybiera go
@@ -85,7 +98,8 @@ ostatniego sukcesu. Świeżość jest sprawdzana względem bieżącego czasu ren
 również gdy pomiar nadejdzie pomiędzy jednosekundowymi tickami zegara interfejsu.
 
 Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Widoczność sekcji
-Pulpitu zapisuje się w localStorage (Ustawienia → Pulpit). Brak procentów postępu, ETA i danych dysku.
+Pulpitu zapisuje się w localStorage (Ustawienia → Pulpit); wyłączona sekcja (albo limit w „Widoczności limitów AI”)
+znika też z kafelków i z ikon w pustych kafelkach. Brak procentów postępu, ETA i danych dysku.
 
 Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
 demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.

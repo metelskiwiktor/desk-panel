@@ -5,6 +5,7 @@ import { agoOrDate, cleanCommand, formatElapsed, formatModelLabel, formatRunning
 import { formatDuration } from './training-view';
 import type { FinishedTask } from './cezar-contract';
 import { useSwipe } from './useSwipe';
+import { ctx } from './chat-context';
 import { MAX_AGE, fresh, orderedTasks, taskLabels, type DashboardData, type Detail, type Task } from './model';
 
 /**
@@ -14,6 +15,13 @@ import { MAX_AGE, fresh, orderedTasks, taskLabels, type DashboardData, type Deta
 export const CEZAR_BUDGET = 8, CEZAR_BUDGET_BESIDE_MAIL = 4;
 const WAIT_COST = 2, RUN_COST = 4;
 const waits = (t: Task) => t.status === 'needs-input' || t.status === 'review';
+
+/** What the agent is told about a task the user pointed at. */
+function taskContext(task: { id: string; title: string; project?: string; status: string; description?: string | null; question?: string | null; lastMessage?: string | null }) {
+  const status = (taskLabels as Record<string, string>)[task.status] ?? task.status;
+  const text = [`Status: ${status}`, task.project ? `Projekt: ${task.project}` : '', task.description ?? '', task.question ? `Pytanie Cezara: ${task.question}` : '', task.lastMessage ? `Ostatnia wiadomość: ${task.lastMessage}` : ''].filter(Boolean).join('\n');
+  return ctx('task', task.id, task.title, text);
+}
 
 /** "1 nieudane", "3 nieudane", "5 nieudanych". */
 const plural = (n: number, few: string, many: string) => n === 1 || (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? few : many;
@@ -34,7 +42,7 @@ function FinishedRow({ task, now, open, archive, markRead }: {
   const model = formatModelLabel(task.runner, task.model);
   const ended = task.completedAt ? agoOrDate(task.completedAt, now) : '';
   const took = task.startedAt && task.completedAt && task.completedAt >= task.startedAt ? tookFor(task.startedAt, task.completedAt) : '';
-  return <li className={`activity-swipe ${offset ? 'dragging' : ''}`}>
+  return <li className={`activity-swipe ${offset ? 'dragging' : ''}`} {...taskContext(task)}>
     {offset !== 0 && <span className={`activity-swipe-hint p2-arch-hint ${offset > 0 ? 'from-left' : 'from-right'}`} aria-hidden="true"><Archive size={18} /> Archiwizuj</span>}
     <div className="activity-row" style={{ transform: `translateX(${offset}px)` }}>
       <button className={`p2-frow ${failed ? 'failed' : 'done'} ${task.unread ? 'unread' : 'read'}`} {...handlers}
@@ -90,7 +98,7 @@ function RunningRow({ task, now, open }: { task: Task; now: number; open: (d: De
   const hasDiff = !!diff && (diff.adds > 0 || diff.dels > 0);
   const checks = task.checks && task.checks.total > 0 ? task.checks : null;
   const step = task.currentStep?.name;
-  return <li>
+  return <li {...taskContext(task)}>
     <button className="p2-crow runs full" onClick={() => open({ kind: 'task', id: task.id })}>
       <i className="p2-cdot" aria-hidden="true" />
       <span className="p2-crow-body">
@@ -124,7 +132,7 @@ function CezarRow({ task, now, open }: { task: Task; now: number; open: (d: Deta
   const elapsed = formatElapsed(task.startedAt, now);
   const rawId = task.id.split('/')[1] || task.id;
   const shortId = rawId.length > 10 ? rawId.slice(0, 8) : rawId;
-  return <li>
+  return <li {...taskContext(task)}>
     <button className={`p2-crow ${needsYou ? 'waits' : 'runs'}`} onClick={() => open({ kind: 'task', id: task.id })}>
       <i className="p2-cdot" aria-hidden="true" />
       <span className="p2-crow-body">
@@ -179,6 +187,7 @@ export function CezarPanel({ data, snapshot, now, open, showAll, beside = false,
       </button>}
     {/* The active tasks and the finished ones scroll together in what the card has left. */}
     <div className="p2-cbody">
+      {!rows.length && !finished.length && <p className="p2-empty">{data.tasks.data === null ? (data.tasks.status === 'loading' ? 'Ładowanie zadań…' : 'Cezar jest niedostępny.') : 'Nic nie czeka ani nie trwa.'}</p>}
       <ul className="p2-crows">{shown.map(task => <CezarRow key={task.id} task={task} now={now} open={open} />)}</ul>
       {rows.length > shown.length && <button className="p2-more-link" onClick={showAll}>i {rows.length - shown.length} więcej</button>}
       {finished.length > 0 && archive && markRead && <ul className="activity-list p2-fin" aria-label="Zakończone zadania">

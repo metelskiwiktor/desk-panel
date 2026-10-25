@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CezarState } from './useCezar';
-import { CezarPanel } from './CezarCard';
 import { FOCUS_WITHIN_MS, dayRibbon } from './day-ribbon';
 import { DayStrip } from './DayStrip';
 import { DaysZone } from './DaysZone';
 import { MAX_AGE, fresh, type DashboardData, type Detail, type SystemSample } from './model';
 import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
-import { MailFeed } from './MailFeed';
 import type { WidgetId } from './layout';
 import { useDismiss } from './popover';
-import { QuotaBars } from './QuotaBars';
+import type { QuotaVisibility } from './quota-visibility';
 import { SystemPopover } from './SystemPopover';
 import { addDays, localDate, workoutProgress } from './training-progress';
 import { formatDuration } from './training-view';
 import { dayOf, monthDays, weekDays, withoutPlanDuplicates } from './week';
 import type { TrainingState } from './useTraining';
+import { Workspace } from './Workspace';
+import { kindAvailable } from './workspace-kinds';
 import { BOTTOM_SIZES, TOP_CYCLE, cycleSize, useZones } from './zones';
 
 export { splitFor } from './quota-cards';
@@ -79,15 +79,17 @@ export function StatusChips({ data, mail, now, open, navigate, showPc = true }: 
 
 /**
  * Three zones one above the other. Top: the selected day (today at first) as training, meetings and what is about to
- * start. Middle: the work area (limits, Cezar, mail), which takes what the other two leave and shows only what has
- * something to say. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
+ * start. Middle: the work area, a grid of tiles (one limit, Cezar, mail or the computer each) that takes what the other
+ * two leave; see Workspace. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
  * top and bottom zones are one step each way and are remembered.
  */
-export function Dashboard({ data, training, snapshot, cezar, mail, now, open, showTasks, showCalendar, showBreakdown, visible, resetSignal = false }: {
+export function Dashboard({ data, training, snapshot, cezar, mail, now, open, showTasks, showCalendar, showBreakdown, visible, quotaHidden, resetSignal = false }: {
   /** Finished tasks and the actions on them; without it only the active tasks show. */
   cezar?: CezarState;
   data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
   open: (d: Detail) => void; showTasks: () => void; showCalendar: () => void; showBreakdown: () => void; visible: (id: WidgetId) => boolean;
+  /** The limits the settings hide: their tiles are not drawn and not offered. */
+  quotaHidden: QuotaVisibility;
   /** True while the panel idles: sizes and the selected day go back to the default. */
   resetSignal?: boolean;
 }) {
@@ -121,14 +123,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, now, open, sh
     : trainingOn && training.data && !fresh(training, now, MAX_AGE.training) ? 'Garmin: dane nieaktualne'
     : calendarOn && data.calendar.data && !fresh(data.calendar, now, MAX_AGE.calendar) ? 'Kalendarz: dane nieaktualne' : null;
 
-  // No card for a known-empty inbox. It stays for threads, an unreachable or unconsented account, and
-  // while the undo bar or an error needs it (also right after the last thread was handled).
-  const mailProblem = mail.source.accounts.some(a => a.status !== 'connected' && a.status !== 'loading');
-  const mailShown = visible('mail') && !!(mail.threads ? mail.threads.length || mailProblem : mail.source.status !== 'loading') || !!(visible('mail') && (mail.undo || mail.error));
-  const cezarBusy = visible('cezar') && ((data.tasks.data ?? []).some(t => t.status === 'needs-input' || t.status === 'review' || t.status === 'running') || !!cezar && (cezar.finished.length > 0 || cezar.undo || !!cezar.error));
-  const quotasOn = visible('quotas');
-  const cards = [quotasOn, cezarBusy, mailShown].filter(Boolean).length;
-  const work = cards > 0;
+  const work = (['cezar', 'mail', 'system', 'quotas'] as const).some(visible);
   // In the month the work area folds away to nothing instead of leaving: the zones glide, and the cards are still there.
   const folded = view.bottom === 'month';
   return <div className="p3-frame" data-top={view.top} data-bottom={view.bottom} data-work={work} data-days={calendarOn || trainingOn}>
@@ -136,10 +131,9 @@ export function Dashboard({ data, training, snapshot, cezar, mail, now, open, sh
       next={next} yesterday={yesterday} notice={notice} known={known}
       cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} preview={previewTop} open={open} showCalendar={showCalendar} />}
     {work && <div className="p3-work" aria-hidden={folded || undefined} inert={folded}>
-      {quotasOn && <QuotaBars data={data} now={now} open={open} showBreakdown={visible('breakdown') ? showBreakdown : undefined} />}
-      {cezarBusy && <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={cards > 1}
-        finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />}
-      {mailShown && <MailFeed mail={mail} now={now} open={open} />}
+      <Workspace data={data} now={now} open={open} cezar={cezar} snapshot={snapshot} mail={mail} showTasks={showTasks}
+        showBreakdown={visible('breakdown') ? showBreakdown : undefined} available={kind => kindAvailable(kind, visible, quotaHidden)}
+        systemThreshold={SYSTEM_ALERT_PERCENT} />
     </div>}
     {(calendarOn || trainingOn) && <DaysZone week={week} month={month} size={view.bottom} known={known} selected={selected} select={select} open={open}
       cycle={() => setBottom(cycleSize(BOTTOM_SIZES, zones.bottom))} resize={setBottom} preview={previewBottom} showCalendar={showCalendar} />}

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createAgentChat } from './agent-chat';
 import { createPanelServer } from './app';
 import { createRealSources } from './real-sources';
 
@@ -15,4 +16,7 @@ const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
 // Gmail accounts shown in the mail list; the calendar account by default.
 const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env });
-createPanelServer(sources, root, allowedHost).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+const chat = createAgentChat();
+const server = createPanelServer(sources, root, allowedHost, chat).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+// The service stops with its agents: no `agy` is left running behind it.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

@@ -4,6 +4,7 @@ import { TabletPreview } from './TabletPreview';
 import { watchForNewBuild } from './auto-reload';
 import './styles.css';
 import './pulpit.css';
+import './chat.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { chromium, type Browser } from 'playwright';
 import { createPanelServer } from '../server/app';
 import { createScenarioSources, loadScenario } from '../server/scenario';
+import { createScenarioChat } from '../server/scenario-chat';
 import { devices, viewportsOf, type Viewport } from '../src/devices';
 
 const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', ustawienia: 'Ustawienia' } as const;
@@ -31,7 +32,9 @@ const file = name.endsWith('.json') ? resolve(name) : join(process.cwd(), 'scena
 const label = name.replace(/^.*[\\/]/, '').replace(/\.json$/, '');
 try { loadScenario(file); } catch (error) { console.error((error as Error).message); process.exit(1); }
 
-const api = createPanelServer(createScenarioSources(file), join(process.cwd(), 'dist')).listen(0, '127.0.0.1');
+// The chat answers from a script (no agy, no limit spent), so it can be tried and photographed.
+const chat = createScenarioChat();
+const api = createPanelServer(createScenarioSources(file), join(process.cwd(), 'dist'), undefined, chat).listen(0, '127.0.0.1');
 await new Promise(done => api.once('listening', done));
 // Read by vite.config.ts, so it must be set before Vite loads the config.
 process.env.DESK_API_URL = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
@@ -39,7 +42,7 @@ const { createServer } = await import('vite');
 const vite = await createServer({ server: { port: 5180 }, logLevel: 'warn' });
 await vite.listen();
 const url = vite.resolvedUrls!.local[0];
-async function stop() { await vite.close(); api.closeAllConnections(); api.close(); }
+async function stop() { await vite.close(); api.closeAllConnections(); api.close(); chat.dispose(); }
 
 if (!values.shot) {
   console.log(`Scenariusz ${label}: ${url}  (plik czytany przy każdym zapytaniu; Ctrl+C kończy)`);

@@ -99,8 +99,8 @@ describe('interaktywny panel', () => {
     const user = userEvent.setup();
     renderWith();
     expect(screen.queryByRole('region', { name: 'Legenda wykresu limitów' })).toBeNull();
-    const strip = await screen.findByRole('region', { name: 'Limity AI' });
-    await user.click(await within(strip).findByRole('button', { name: /^Claude/ }));
+    // The tile first says it is loading; the button is there once the limits have been read.
+    await user.click(await screen.findByRole('button', { name: /^Claude: 5h/ }));
     expect(screen.getByRole('heading', { name: 'Claude · limity konta' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Legenda wykresu limitów' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Historia obserwacji' })).toBeTruthy();
@@ -109,8 +109,8 @@ describe('interaktywny panel', () => {
   });
   it('rysuje limity jako paski 5h i 7d ze znacznikiem czasu i kolorem tempa', async () => {
     renderWith();
-    const strip = await screen.findByRole('region', { name: 'Limity AI' });
-    const claude = await within(strip).findByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
+    const claude = await screen.findByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
+    expect(claude.closest('section')!.getAttribute('aria-label')).toBe('Claude');
     // Two bars (5h thick, 7d thin), each with the tick of how far its window has run; 92% used at 58% of the time is red.
     expect(claude.querySelectorAll('.p3-lbar')).toHaveLength(2);
     expect(claude.querySelectorAll('.p3-lbar u')).toHaveLength(2);
@@ -118,15 +118,17 @@ describe('interaktywny panel', () => {
     expect(claude.querySelectorAll('.p3-lrow.thin')).toHaveLength(1);
     expect(within(claude).getByText(/reset za/)).toBeTruthy();
   });
-  it('pokazuje wszystkich dostawców, także Gemini', async () => {
+  it('pokazuje każdy limit w osobnym kafelku, także Gemini', async () => {
     renderWith();
-    const strip = await screen.findByRole('region', { name: 'Limity AI' });
-    for (const name of ['Claude', 'Codex', 'Gemini']) expect(await within(strip).findByRole('button', { name: new RegExp(`^${name}: 5h \\d`) })).toBeTruthy();
+    for (const name of ['Claude', 'Codex', 'Gemini']) {
+      const limit = await screen.findByRole('button', { name: new RegExp(`^${name}: 5h \\d`) });
+      expect(limit.closest('section')!.getAttribute('aria-label')).toBe(name);
+    }
   });
   it('otwiera podział zużycia AI z limitów', async () => {
     const user = userEvent.setup();
     renderWith();
-    await user.click(await screen.findByRole('button', { name: 'Podział zużycia' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Podział zużycia' }))[0]);
     expect(screen.getByRole('heading', { name: 'Podział zużycia AI' })).toBeTruthy();
   });
   it('wszystkie zakładki działają; agenda prowadzi do szczegółów', async () => {
@@ -179,24 +181,22 @@ describe('interaktywny panel', () => {
     expect((await screen.findAllByText(/Nieaktualn/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 0' })).toBeTruthy();
   });
-  it('zwija puste źródła', async () => {
+  it('puste źródła mówią to spokojnie w swoich kafelkach, zamiast znikać', async () => {
     renderWith('empty');
     expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
+    expect(within(await screen.findByRole('region', { name: 'Cezar' })).getByText('Nic nie czeka ani nie trwa.')).toBeTruthy();
+    expect(within(await screen.findByRole('region', { name: 'Poczta' })).getByText('Brak nieprzeczytanych wiadomości.')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('bez spotkań')).toBeTruthy();
   });
-  it('dopasowuje tryb układu do tego, co się dzieje', async () => {
-    const quiet = renderWith('empty');
-    await screen.findByText(/Cezar · nic nie czeka/);
-    // Nothing waits: the work area holds the limits alone.
-    const work = document.querySelector('.p3-work')!;
-    expect(work.children).toHaveLength(1);
-    expect(within(work as HTMLElement).getByRole('region', { name: 'Limity AI' })).toBeTruthy();
-    quiet.unmount();
+  it('obszar roboczy to zawsze siatka 4×2: kafelki i pola do wyboru zajmują każdą komórkę', async () => {
     renderWith('standard');
     await screen.findByRole('region', { name: 'Poczta' });
-    // Cezar and mail have something: they join the limits in the same area.
-    expect(document.querySelector('.p3-work')!.children).toHaveLength(3);
+    const grid = document.querySelector('.wk-grid')!;
+    // Three limits and mail beside Cezar over the right half: nothing is left empty, and nothing is cut.
+    expect(grid.querySelectorAll('.wk-cell')).toHaveLength(5);
+    expect(grid.querySelectorAll('.wk-empty')).toHaveLength(0);
+    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--w: 2');
+    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--h: 2');
   });
   it('jedno zadanie Cezara w toku to jedna linia obok poczty, bez nagłówka z licznikami', async () => {
     renderWith('inbox');

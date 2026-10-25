@@ -1,8 +1,9 @@
+import { ChartPie } from 'lucide-react';
 import { SourceNote, quotaReason } from './components';
 import { time } from './format';
 import { MAX_AGE, fresh, quotaState, type DashboardData, type Detail, type QuotaSnapshot } from './model';
 import { normalizeQuotaWindow, quotaPace, quotaPaceLabels, quotaResetIn } from './quota-pace';
-import { getQuotaCards, type QuotaCardItem } from './quota-cards';
+import type { QuotaCardItem } from './quota-cards';
 
 const percent = (n: number) => `${Number(n.toFixed(1))}%`;
 
@@ -28,7 +29,7 @@ function WindowRow({ name, arc, lead }: { name: string; arc: Arc; lead: boolean 
   </span>;
 }
 
-function LimitCard({ card, now, connected, open }: { card: QuotaCardItem; now: number; connected: boolean; open: (d: Detail) => void }) {
+export function LimitCard({ card, now, connected, open }: { card: QuotaCardItem; now: number; connected: boolean; open: (d: Detail) => void }) {
   const five = card.snapshots.find(s => normalizeQuotaWindow(s.window) === '5h');
   const seven = card.snapshots.find(s => normalizeQuotaWindow(s.window) === '7d');
   const other = card.snapshots.filter(s => s !== five && s !== seven);
@@ -55,25 +56,25 @@ function LimitCard({ card, now, connected, open }: { card: QuotaCardItem; now: n
 }
 
 /**
- * AI limits, a block per provider: the 5h window as a thick bar, the 7d window (and any other) as thin ones; a white tick
- * shows how far each window's time has got, and the colour says only whether use is ahead of it. The blocks stand side by
- * side when the card is wide and one under another when it is narrow.
+ * One AI limit as a tile of the work area: the 5h window as a thick bar, the 7d window (and any other) as thin ones; a
+ * white tick shows how far each window's time has got, and the colour says only whether use is ahead of it. The button
+ * in the corner opens the usage breakdown.
  */
-export function QuotaBars({ data, now, open, showBreakdown }: {
-  data: DashboardData; now: number; open: (d: Detail) => void; showBreakdown?: () => void;
+export function QuotaTile({ card, data, now, open, showBreakdown, roomy }: {
+  card: QuotaCardItem; data: DashboardData; now: number; open: (d: Detail) => void; showBreakdown?: () => void; roomy: boolean;
 }) {
-  const cards = getQuotaCards(data.quotas.data);
   const connected = fresh(data.quotas, now, MAX_AGE.quotas);
-  // Four or more limits (Antigravity adds groups) do not fit as full blocks: they get tighter instead of being cut.
-  return <section className={`p2-quotas ${cards.length > 3 ? 'dense' : ''}`} aria-label="Limity AI">
-    <div className="p2-quotas-head">
-      <h2 className="p2-eyebrow">Limity AI</h2>
-      {showBreakdown && cards.length > 0 && <button className="p2-link" onClick={showBreakdown}>Podział zużycia</button>}
-    </div>
-    <div className="p3-limits">
-      {cards.length ? cards.map(card => <LimitCard key={card.id} card={card} now={now} connected={connected} open={open} />)
-        : <p className="p2-note">{data.quotas.status === 'loading' ? 'Ładowanie limitów…' : 'Brak limitów AI.'}</p>}
-    </div>
+  return <section className={`p2-card wk-limit ${roomy ? 'roomy' : ''}`} aria-label={card.title}>
+    <LimitCard card={card} now={now} connected={connected} open={open} />
+    {showBreakdown && <button className="wk-split" aria-label="Podział zużycia" title="Podział zużycia" onClick={showBreakdown}><ChartPie size={18} aria-hidden="true" /></button>}
     {!connected && <SourceNote source={data.quotas} now={now} maxAge={MAX_AGE.quotas} refreshEveryMs={60000} />}
+  </section>;
+}
+
+/** A limit tile whose limit is not in the data: still loading, or the account does not report it (any more). */
+export function MissingLimit({ title, loading }: { title: string; loading: boolean }) {
+  return <section className="p2-card wk-limit" aria-label={title}>
+    <h2 className="p2-eyebrow">{title}</h2>
+    <p className="p2-note">{loading ? 'Ładowanie limitu…' : 'Brak pomiaru tego limitu.'}</p>
   </section>;
 }

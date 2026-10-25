@@ -38,6 +38,7 @@ wdraża do usługi Windows. Autostart, usługa i kiosk: [docs/system.md](docs/sy
 | [docs/calendar.md](docs/calendar.md) | Google Calendar i OAuth (też dla Gmaila) |
 | [docs/garmin.md](docs/garmin.md) | Plan treningowy z Garmin Connect; katalog danych w [docs/garmin-data.md](docs/garmin-data.md) |
 | [docs/zdarzenia.md](docs/zdarzenia.md) | Reguły i historia zdarzeń panelu |
+| [docs/czat.md](docs/czat.md) | Czat z agentem (agy): rozmowy, wskazywanie elementów pulpitu, API, protokół |
 | [docs/tailscale.md](docs/tailscale.md) | Dostęp z telefonu przez Tailscale |
 | [docs/testowanie.md](docs/testowanie.md) | Scenariusze, zrzuty ekranu, testy i CI |
 | [servy/README.md](servy/README.md) | Rejestracja usługi Servy i logi |

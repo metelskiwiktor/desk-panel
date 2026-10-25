@@ -6,6 +6,7 @@ import {
   Cpu,
   House,
   Layers3,
+  MessageSquare,
   ListTodo,
   ListChecks,
   MemoryStick,
@@ -52,6 +53,7 @@ import { Ambient } from './AmbientClock';
 import { ambientLines, useAmbient, useNight } from './ambient-mode';
 import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
+import { ChatWindow } from './ChatWindow';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -87,6 +89,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!pollingEnabled) return;
@@ -392,6 +395,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button className="top-button" aria-label="Pokaż zegar (tryb ambient)" onClick={ambient.enter}><Clock size={20} /></button>
+          <button className="top-button" aria-label="Otwórz czat z agentem" aria-haspopup="dialog" onClick={() => setChatOpen(true)}><MessageSquare size={20} /></button>
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>
@@ -409,7 +413,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {page === 'home' ? (
               <>
                 <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} now={now} open={open}
-                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} resetSignal={ambient.ambient} />
+                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} />
               </>
             ) : (
               <>
@@ -478,6 +482,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           DESK PANEL <span>Limity AI bez wywołań modelu</span>
         </footer>
       )}
+      {chatOpen && <ChatWindow onClose={() => setChatOpen(false)} />}
       <nav aria-label="Główna nawigacja">
         {(Object.keys(pageNames) as Page[]).map((id) => {
           const Icon = navIcons[id];

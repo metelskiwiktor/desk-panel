@@ -1,9 +1,9 @@
 export const widgetNames = {
   cezar: 'Cezar',
-  system: 'Komputer · CPU i RAM w pasku',
+  system: 'Komputer · kafelek oraz CPU i RAM w pasku',
   calendar: 'Kalendarz · dziś i kolejne dni',
   training: 'Trening (Garmin Connect)',
-  quotas: 'Limity AI',
+  quotas: 'Limity AI · kafelki (które, wybierasz niżej)',
   breakdown: 'Podział zużycia AI',
   insights: 'Zdarzenia panelu',
   mail: 'Poczta',

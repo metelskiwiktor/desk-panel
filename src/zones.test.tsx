@@ -59,13 +59,13 @@ describe('three zones', () => {
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('month');
-    expect(screen.queryByRole('region', { name: 'Limity AI' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Claude' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
     expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(35);
     expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).bottom).toBe('month');
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('short');
-    expect(screen.getByRole('region', { name: 'Limity AI' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Claude' })).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('mid');

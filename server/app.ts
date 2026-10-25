@@ -7,6 +7,8 @@ import { cezarActionSchema } from '../src/cezar-contract';
 import { mailActionSchema } from '../src/mail-contract';
 import { warmupEditFor, warmupProviderSchema, warmupRunInputSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
+import type { ChatService } from './agent-chat';
+import { handleChatRoute } from './chat-routes';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
@@ -20,7 +22,7 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService) {
   const routes = jsonRoutes(sources);
   return createServer(async (req, res) => {
     const host = req.headers.host;
@@ -30,6 +32,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
     const ownOrigin = `${proxied ? 'https' : 'http'}://${host}`;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat)) return;
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
       if(req.headers.origin!==ownOrigin){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');

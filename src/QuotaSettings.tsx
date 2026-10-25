@@ -9,7 +9,7 @@ import { usePollingEnabled } from './polling';
 export function QuotaVisibilitySettings({accounts,value,change,error}:{accounts:QuotaAccount[]|null;value:QuotaVisibility;change:(value:QuotaVisibility)=>void;error:boolean}) {
   const groups=[...new Set([...(accounts?.find(a=>a.provider==='AGY')?.snapshots.flatMap(s=>s.model ? [s.model] : []) || []),...value.hiddenAgyGroups])];
   return <Card title="Widoczność limitów AI" icon={<Settings2 />}>
-    <p className="card-intro">Wybierz limity widoczne na pulpicie i w szczegółach. Odczyt danych działa dalej. Ustawienie dotyczy tej przeglądarki.</p>
+    <p className="card-intro">Każdy limit to osobny kafelek na pulpicie. Wyłączony znika z pulpitu, z listy wyboru w pustych kafelkach i ze szczegółów; odczyt danych działa dalej. Ustawienie dotyczy tej przeglądarki.</p>
     {(['Claude','Codex'] as const).map(provider=><label className="visibility-toggle widget-setting" key={provider}>
       <input type="checkbox" checked={!value.hiddenProviders.includes(provider)} onChange={e=>change({...value,hiddenProviders:e.target.checked ? value.hiddenProviders.filter(p=>p!==provider) : [...value.hiddenProviders,provider]})}/><span>{provider === 'Codex' ? 'ChatGPT / Codex' : 'Claude'}</span>
     </label>)}

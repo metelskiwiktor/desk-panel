@@ -82,8 +82,8 @@
 .p2-crow-side small { font-size: 12px; color: var(--p2-muted); }
 .p2-crow-side small.bad { color: var(--quota-red); }
 /* Finished tasks wait to be archived: a scrolling list under the active ones, a swipe either way archives */
-.p2-cezar { min-height: 0; }
-.p2-cbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overscroll-behavior: contain; }
+.p2-cezar { container-type: inline-size; min-height: 0; }
+.p2-cbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #34405a transparent; }
 .p2-cbody > * { flex: none; }
 /* One scroll for the card (.p2-cbody): the shared list rule would add a second one here. */
 .p2-fin { max-height: none; overflow: visible; margin: 4px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--p2-line); }
@@ -116,7 +116,7 @@
 /* A running task: head, title with its chips, and a terminal */
 .p2-crow.full { align-items: flex-start; padding: 8px; }
 .p2-crow.full .p2-crow-body { gap: 4px; }
-.p2-run-head { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--p2-muted); white-space: nowrap; }
+.p2-run-head { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--p2-muted); white-space: nowrap; }
 .p2-run-id { color: var(--p2-faint); }
 .p2-run-time { margin-left: auto; padding-left: 8px; font-size: 14px; font-weight: 600; color: var(--p2-cezar); }
 .p2-run-time.long { color: var(--quota-yellow); }
@@ -138,6 +138,15 @@
 .p2-term-foot em { font-style: normal; }
 .p2-term-foot .plus, .p2-term-foot .good { color: var(--quota-green); }
 .p2-term-foot .minus, .p2-term-foot .bad { color: var(--quota-red); }
+/* A narrow Cezar tile (one column): the same rows with what is secondary left out, and titles on two lines instead of cut. */
+@container (max-width: 440px) {
+  .p2-cezar .p2-card-head .p2-meta, .p2-run-head .p2-chip.branch, .p2-frow-sub .wf, .p2-frow-sub .md, .p2-frow-side span:nth-child(2) { display: none; }
+  .p2-run-title strong, .p2-frow-body strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
+  .p2-run-title strong { font-size: 15px; }
+  .p2-frow-body strong, .p2-crow-body > strong { font-size: 14px; }
+  .p2-frow { gap: 8px; }
+  .p2-term-foot { flex-wrap: wrap; gap: 2px 10px; }
+}
 @media (prefers-reduced-motion: no-preference) {
   .p2-crow.runs .p2-cdot { animation: p2-pulse 2.4s ease-in-out infinite; }
   @keyframes p2-pulse { 50% { opacity: 0.35; } }
@@ -161,6 +170,11 @@
 .p2-undo:empty { display: none; }
 .p2-undo button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-cal); font-size: 14px; }
 .p2-hint { font-size: 12px; color: var(--p2-faint); }
+/* One cell of mail: the head, then sender and subject of the newest messages; the rest is a tile away. */
+.p2-mail.compact .p2-card-head .p2-meta, .p2-mail.compact .mail-accounts, .p2-mail.compact .p2-mrow-snippet, .p2-mail.compact .p2-mrow-side { display: none; }
+.p2-mail.compact .p2-card-head { min-height: 32px; }
+.p2-mail.compact .p2-mrow { min-height: 46px; padding: 4px 8px; align-items: center; }
+.p2-mail.compact .p2-undo { min-height: 0; }
 
 
 /* Next days */
@@ -322,14 +336,80 @@
 .p3-day.cmp .p3-chip { min-height: 38px; padding: 2px 10px; }
 .p3-day.cmp .p3-chip-text strong { font-size: 14px; }
 
-/* Middle: the work area. Cards share the width; each says what it has and none is cut. */
-.p3-work { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; min-height: 0; min-width: 0; }
-.p3-work > * { min-width: 0; min-height: 0; overflow: hidden; }
-.p3-work > .p2-card, .p3-work > .p2-quotas { height: 100%; }
+/* Middle: the work area, a grid of 4 × 2 cells. A tile covers one or more of them (--c, --r, --w, --h); a cell without
+   a tile offers to become one. Each says what it has and none is cut. */
+.p3-work { display: flex; min-height: 0; min-width: 0; }
+/* One plate: the grid is the card, and the tiles in it are divided by a hairline (the 1px gap shows the grid's own colour). */
+.wk-grid { position: relative; flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 1px; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-line); }
+.wk-cell, .wk-empty, .wk-hl { grid-column: var(--c) / span var(--w); grid-row: var(--r) / span var(--h); min-width: 0; min-height: 0; }
+.wk-cell, .wk-empty { background: var(--p2-surface); }
+.wk-cell { position: relative; display: flex; }
+.wk-body { flex: 1; display: flex; min-width: 0; min-height: 0; }
+/* The cards inside lose their own frames and backgrounds: the plate is the card. */
+.wk-body > * { flex: 1; min-width: 0; min-height: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; }
+.wk-body .p2-card-head { padding-right: 30px; }
 
-/* Limits as rings; their layout follows the width of their own card */
-.p2-quotas { container-type: inline-size; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border: 1px solid var(--p2-line); border-radius: 20px; background: var(--p2-surface); }
-.p2-quotas-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+/* Arranging, always at hand and quiet until the pointer is on the tile: a grip at the top moves it, the X in the corner
+   switches it off, the right and bottom edges and the corner stretch it. While one is held the tile shows its size. */
+.wk-grip { --hover-bg: transparent; position: absolute; top: 0; left: 50%; z-index: 4; width: 96px; height: 20px; padding: 0; border: 0; background: transparent; cursor: grab; touch-action: none; transform: translateX(-50%); }
+.wk-grip i { display: block; width: 40px; height: 4px; margin: 5px auto 0; border-radius: 2px; background: #34405a; transition: background-color 0.15s, width 0.15s; }
+.wk-cell:hover .wk-grip i, .wk-grip:hover i, .wk-cell.active .wk-grip i { width: 56px; background: #7f8ca3; }
+.wk-x { --hover-bg: color-mix(in srgb, var(--quota-red) 22%, transparent); position: absolute; top: 5px; right: 5px; z-index: 5; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--p2-muted); opacity: 0.5; transition: opacity 0.15s, color 0.15s; }
+.wk-cell:hover .wk-x, .wk-x:focus-visible { opacity: 1; }
+.wk-x:hover { color: var(--quota-red); opacity: 1; }
+@media (hover: none) { .wk-x { opacity: 0.85; } }
+.wk-size { position: absolute; top: 24px; left: 50%; z-index: 5; padding: 2px 12px; border-radius: 10px; background: var(--p2-cal); color: #0b1020; font-size: 14px; font-weight: 700; pointer-events: none; transform: translateX(-50%); }
+.wk-cell.dragging { z-index: 6; opacity: 0.96; background: var(--p2-surface-2); box-shadow: 0 14px 36px #000d; }
+.wk-cell.dragging .wk-grip { cursor: grabbing; }
+.wk-cell.dragging, .wk-cell.active { outline: 2px solid var(--p2-cal); outline-offset: -2px; }
+.wk-cell.active { z-index: 2; }
+.wk-rz { --rz: #34405a; position: absolute; z-index: 4; touch-action: none; }
+.wk-cell:hover .wk-rz, .wk-cell.active .wk-rz { --rz: #7f8ca3; }
+.wk-rz:hover, .wk-rz:active { --rz: var(--p2-cal); }
+.wk-rz::after { content: ""; position: absolute; border-radius: 2px; background: var(--rz); transition: background-color 0.15s; }
+.wk-rz.r { top: 30%; right: 0; bottom: 30%; width: 18px; cursor: ew-resize; }
+.wk-rz.r::after { top: 30%; right: 4px; bottom: 30%; width: 4px; }
+.wk-rz.b { right: 30%; bottom: 0; left: 30%; height: 18px; cursor: ns-resize; }
+.wk-rz.b::after { right: 30%; bottom: 4px; left: 30%; height: 4px; }
+.wk-rz.rb { right: 0; bottom: 0; width: 28px; height: 28px; cursor: nwse-resize; }
+.wk-rz.rb::after { right: 6px; bottom: 6px; width: 10px; height: 10px; border-radius: 0 0 6px 0; background: none; border-right: 3px solid var(--rz); border-bottom: 3px solid var(--rz); }
+/* Where the dragged tile would land (green), and where the tiles it pushes would go; red when there is no room. */
+.wk-hl { z-index: 5; pointer-events: none; border: 2px solid var(--quota-green); border-radius: 0; background: color-mix(in srgb, var(--quota-green) 14%, transparent); }
+.wk-hl.bad { border-color: var(--quota-red); background: color-mix(in srgb, var(--quota-red) 14%, transparent); }
+.wk-notice { position: absolute; bottom: 10px; left: 50%; z-index: 8; margin: 0; padding: 8px 14px; border: 1px solid var(--quota-yellow); border-radius: 12px; background: var(--p2-surface-2); box-shadow: 0 8px 24px #000a; color: var(--quota-yellow); font-size: 13px; transform: translateX(-50%); }
+/* An empty cell: what could stand here, as icons; the name of the one under the pointer is below them. */
+.wk-empty { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px; }
+.wk-empty::before { content: ""; position: absolute; inset: 6px; border: 1.5px dashed var(--p2-line); border-radius: 14px; pointer-events: none; }
+.wk-picks { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; max-width: 100%; max-height: calc(100% - 22px); overflow-y: auto; }
+.wk-pick { --hover-bg: var(--p2-surface-2); display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--p2-line); border-radius: 14px; background: var(--p2-surface); color: var(--p2-muted); }
+.wk-pick:hover, .wk-pick:focus-visible { border-color: var(--p2-cal); color: var(--p2-cal); }
+.wk-caption { min-height: 16px; font-size: 12px; color: var(--p2-faint); text-align: center; }
+/* One limit: the name and the reset above, the window bars under them; more room makes the bars thicker. */
+.wk-limit { position: relative; justify-content: center; }
+.wk-limit .p3-limit { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 4px 6px; }
+.wk-limit .p3-limit-head { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 10px; padding-right: 78px; }
+.wk-limit .p3-limit-head strong { flex: none; }
+.wk-limit .p3-limit-head .p2-meta { flex: 0 1 auto; min-width: 0; font-size: 12px; }
+.wk-limit .p3-lrows { gap: 8px; }
+.wk-limit.roomy .p3-limit { gap: 16px; }
+.wk-limit.roomy .p3-lrows { gap: 12px; }
+.wk-limit.roomy .p3-limit-head strong { font-size: 20px; }
+.wk-limit.roomy .p3-limit-head .p2-meta { font-size: 14px; }
+.wk-limit.roomy .p3-lbar { height: 14px; border-radius: 7px; }
+.wk-limit.roomy .p3-lbar i { border-radius: 7px; }
+.wk-limit.roomy .p3-lrow.thin .p3-lbar { height: 8px; }
+.wk-limit.roomy .p3-lrow b { font-size: 18px; }
+.wk-limit.roomy .p3-lrow.thin b { font-size: 14px; }
+.wk-split { --hover-bg: var(--p2-surface-2); position: absolute; top: 4px; right: 36px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--p2-muted); }
+/* The computer: two bars, or the charts of the last minutes side by side (stacked in a narrow tile). */
+.wk-sys { container-type: inline-size; }
+.wk-sys .wk-meters { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 0 6px 6px; }
+.wk-sys .p3-lname { width: 36px; }
+.wk-sys .wk-charts { flex: 1; min-height: 0; display: flex; gap: 10px; }
+.wk-sys .wk-charts .sys-chart { flex: 1; min-width: 0; min-height: 0; padding: 8px 10px 6px; }
+.wk-sys .sys-chart svg.sys-plot { flex: 1; min-height: 36px; height: auto; }
+.wk-sys .sys-chart-head strong { font-size: 24px; }
+@container (max-width: 420px) { .wk-sys .wk-charts { flex-direction: column; } }
 
 /* Bottom: the days */
 .p3-days { position: relative; display: flex; flex-direction: column; gap: 2px; min-height: 0; min-width: 0; }
@@ -370,8 +450,10 @@
   .p3-frame { display: flex; flex-direction: column; }
   .p3-day { flex-wrap: wrap; padding: 10px; }
   .p3-ribbon { width: 100%; }
-  .p3-work { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
-  .p3-work > * { max-height: 520px; }
+  .p3-work { display: block; }
+  .wk-grid { display: flex; flex-direction: column; }
+  .wk-cell { min-height: 200px; max-height: 520px; }
+  .wk-empty, .wk-hl, .wk-notice, .wk-grip, .wk-x, .wk-rz, .wk-size { display: none; }
   .p2-week-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .p3-month-grid { grid-auto-rows: 72px; }
   .p3-days { min-height: 0; }
@@ -435,8 +517,7 @@
 .p3-day.cmp .p3-grip { width: 120px; height: 18px; }
 
 /* Limits as bars, a block per provider */
-.p3-limits { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-around; gap: 6px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #34405a transparent; }
-/* Narrow card: the name and the reset on the left, the bars on the right, so three providers fit one under another. */
+/* A limit: the name and the reset on the left, the bars on the right (a tile puts them one under the other). */
 .p3-limit { --hover-bg: var(--p2-surface-2); display: grid; grid-template-columns: minmax(96px, 30%) minmax(0, 1fr); align-items: center; gap: 4px 14px; width: 100%; padding: 4px 8px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; }
 .p3-lrows { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .p3-limit-head { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
@@ -456,21 +537,5 @@
 .p3-lrow.thin .p3-lbar u { top: -2px; bottom: -2px; opacity: 0.7; }
 .p3-lrow b { flex: none; min-width: 46px; text-align: right; font-size: 15px; font-weight: 600; }
 .p3-lrow.thin b { font-size: 13px; font-weight: 500; color: var(--p2-muted); }
-.p2-quotas.dense .p3-limit { padding: 1px 8px; }
-.p2-quotas.dense .p3-lrows { gap: 3px; }
-.p2-quotas.dense .p3-limits { gap: 2px; justify-content: flex-start; }
-.p2-quotas.dense .p3-lbar { height: 8px; }
-.p2-quotas.dense .p3-lrow.thin .p3-lbar { height: 5px; }
-.p2-quotas.dense .p3-lrow b { font-size: 14px; }
-.p2-quotas.dense .p3-lrow.thin b { font-size: 12px; }
-.p2-quotas.dense .p3-limit-head strong { font-size: 14px; }
-/* Wide card: the providers stand side by side */
-@container (min-width: 760px) {
-  .p3-limits { flex-direction: row; align-items: center; justify-content: stretch; gap: 22px; }
-  .p3-limit { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 0; min-width: 0; padding: 8px 10px; gap: 10px; }
-  .p3-limit-head { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .p3-limit-head .p2-meta { font-size: 13px; }
-  .p3-limits .p2-note { margin: auto; }
-}
 /* The days header is one slim line; its grip reaches up into the gap above, so it is still easy to take hold of. */
 .p3-days .p3-grip.top { top: -8px; height: 30px; }

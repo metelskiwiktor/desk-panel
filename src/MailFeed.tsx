@@ -6,6 +6,7 @@ import { MAX_AGE, fresh, type Detail } from './model';
 import type { MailThread } from './mail-contract';
 import type { MailState } from './useMail';
 import { useSwipe } from './useSwipe';
+import { ctx } from './chat-context';
 
 /** Local part only: the two accounts differ there, and it keeps rows short. */
 export const accountLabel = (email: string) => email.split('@')[0];
@@ -18,7 +19,9 @@ function MailRow({ thread, open, act, tone }: {
 }) {
   // Left marks read (the frequent, harmless action); right moves to Trash.
   const { offset, handlers, isTap } = useSwipe(direction => act(thread, direction === 'left' ? 'read' : 'trash'));
-  return <li className={`activity-swipe ${offset ? 'dragging' : ''}`}>
+  const context = ctx('mail', thread.id, `${thread.from}: ${thread.subject}`,
+    [`Od: ${thread.from}`, `Temat: ${thread.subject}`, `Skrzynka: ${thread.account}`, `Otrzymano: ${stamp(thread.receivedAt)}`, thread.messages > 1 ? `Wiadomości w wątku: ${thread.messages}` : '', '', thread.snippet].filter((line, i) => line || i === 5).join('\n'));
+  return <li className={`activity-swipe ${offset ? 'dragging' : ''}`} {...context}>
     {offset > 0 && <span className="activity-swipe-hint mail-hint-trash" aria-hidden="true"><Trash2 size={18} /> Do kosza</span>}
     {offset < 0 && <span className="activity-swipe-hint mail-hint-read" aria-hidden="true"><MailOpen size={18} /> Przeczytane</span>}
     <div className="activity-row" style={{ transform: `translateX(${offset}px)` }}>
@@ -40,8 +43,11 @@ function MailRow({ thread, open, act, tone }: {
   </li>;
 }
 
-/** Unread inbox conversations; the list scrolls inside the space the dashboard leaves it. */
-export function MailFeed({ mail, now, open }: { mail: MailState; now: number; open: (target: Detail) => void }) {
+/**
+ * Unread inbox conversations; the list scrolls inside the space the dashboard leaves it. `compact` is for a tile of one
+ * cell: sender and subject only, the account tags and the hint left out, so a couple of messages are in view.
+ */
+export function MailFeed({ mail, now, open, compact = false }: { mail: MailState; now: number; open: (target: Detail) => void; compact?: boolean }) {
   const { source, threads, hasMore, loadMore, act, undo, restore, error } = mail;
   const more = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -54,7 +60,7 @@ export function MailFeed({ mail, now, open }: { mail: MailState; now: number; op
   }, [hasMore, threads?.length, loadMore]);
   const many = source.accounts.length > 1;
   const problems = source.accounts.filter(a => a.status !== 'connected' && a.status !== 'loading');
-  return <section className="p2-card p2-mail" aria-labelledby="mail-title">
+  return <section className={`p2-card p2-mail ${compact ? 'compact' : ''}`} aria-labelledby="mail-title">
     <div className="p2-card-head static">
       <h2 id="mail-title">Poczta</h2>
       <span className="p2-meta">nieprzeczytane · 30 dni</span>
@@ -69,7 +75,7 @@ export function MailFeed({ mail, now, open }: { mail: MailState; now: number; op
     <div className="p2-undo" role="status">
       {undo && <><span>{undo === 'read' ? 'Oznaczono jako przeczytane.' : 'Przeniesiono do kosza.'}</span><button onClick={restore}>Cofnij</button></>}
       {error && <span className="p2-note warn">{error}</span>}
-      {!undo && !error && threads?.length ? <span className="p2-hint">← przeczytane · do kosza →</span> : null}
+      {!undo && !error && !compact && threads?.length ? <span className="p2-hint">← przeczytane · do kosza →</span> : null}
     </div>
     {!fresh(source, now, MAX_AGE.mail) && <SourceNote source={source} now={now} maxAge={MAX_AGE.mail} refreshEveryMs={30000} />}
   </section>;

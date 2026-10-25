@@ -22,7 +22,7 @@ export function loadChart(samples: SystemSample[], value: (s: SystemSample) => n
   };
 }
 
-function LoadChart({ title, icon, value, detail, samples, pick, threshold, id }: {
+export function LoadChart({ title, icon, value, detail, samples, pick, threshold, id }: {
   title: string; icon: ReactNode; value: number; detail: string; samples: SystemSample[]; pick: (s: SystemSample) => number; threshold: number; id: string;
 }) {
   const chart = loadChart(samples, pick);

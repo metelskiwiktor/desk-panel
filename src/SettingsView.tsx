@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Check, Layers3, Settings2 } from 'lucide-react';
 import { defaultLayout, widgetNames, type Layout } from './layout';
 import { Card } from './components';
@@ -6,6 +7,7 @@ import { ScreenCard } from './ScreenCard';
 import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
 import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
+import { resetWorkspace } from './tile-grid';
 
 export function SettingsView({
   layout,
@@ -25,6 +27,7 @@ export function SettingsView({
   quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
 }) {
   const warmup = useWarmupStatus();
+  const [arrangement, setArrangement] = useState<'kept' | 'reset' | 'failed'>('kept');
   return (
     <div className="settings-stack">
       <Card title="Połączenia" icon={<Layers3 />}>
@@ -42,7 +45,7 @@ export function SettingsView({
       <GoogleAccounts />
       <Card title="Pulpit" icon={<Settings2 />}>
         <p className="card-intro">
-          Które sekcje pokazuje Pulpit. Ich wielkość dopasowuje się do zawartości i ekranu; zapis dotyczy tylko tej przeglądarki.
+          Co może pokazać Pulpit. Kafelki obszaru roboczego (limity, Cezar, poczta, komputer) wybierasz i rozmieszczasz na Pulpicie, przyciskiem układu w pasku u góry; tutaj wyłączasz to, czego nie chcesz tam widzieć. Zapis dotyczy tylko tej przeglądarki.
         </p>
         {layout.widgets.map((w) => (
           <div className="widget-setting" key={w.id}>
@@ -73,6 +76,12 @@ export function SettingsView({
         <button className="button" onClick={() => configure(defaultLayout())}>
           Pokaż wszystkie sekcje
         </button>
+        <button className="button" onClick={() => setArrangement(resetWorkspace() ? 'reset' : 'failed')}>
+          Przywróć domyślny układ kafelków
+        </button>
+        {arrangement !== 'kept' && <p className={arrangement === 'failed' ? 'warning' : 'meta'} role="status">
+          {arrangement === 'failed' ? 'Nie udało się przywrócić układu.' : 'Układ kafelków wróci do domyślnego po powrocie na Pulpit.'}
+        </p>}
       </Card>
       <Card title="Źródła danych" icon={<Layers3 />}>
         <p className="card-intro">

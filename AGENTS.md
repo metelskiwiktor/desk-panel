@@ -1,7 +1,7 @@
 # Desk Panel
 
 Local React/TypeScript dashboard with a Node HTTP server. Read README.md, then the matching file in docs/
-(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel) for integration details. Keep the server bound to loopback; credentials stay on the
+(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel, czat) for integration details. Keep the server bound to loopback; credentials stay on the
 backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 
 - `just setup`: install locked dependencies and Playwright Chromium.
@@ -50,3 +50,5 @@ and Trash/untrash — never message bodies, sending or permanent deletion. Garmi
 recordings' basics reach the UI (no body, sleep, places or ids); what else the account returns is catalogued in
 docs/garmin-data.md. Do not commit .env, OAuth clients, tokens, logs, screenshots,
 node_modules or dist. Do not print credentials in tool output.
+
+Chat (docs/czat.md): POST/PATCH/DELETE /api/chats… is a second write capability, Origin-checked like the actions above. It launches the user's own `agy` (Antigravity CLI) in headless stream-json mode, one process per conversation, working directory `~/.desk-panel/agent`, conversations in `~/.desk-panel/chats`. The agent gets only the dashboard elements the user points at (`ctx()` / `data-ctx-*` in src/chat-context.ts), never the whole mailbox or calendar. Only a message the user sends starts an agent turn; nothing in the panel may send prompts on its own, and the quota rule above is unchanged. `agy` runs commands without asking and is not sandboxed (a hobby project; revisit before the panel leaves this PC). Scenario mode answers from a scripted agent (server/scenario-chat.ts), so the chat can be tried and photographed without spending any limit.
