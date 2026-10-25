@@ -4,9 +4,10 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { createChatLog, type ChatLog, type TurnSummary, type TurnTool } from './chat-log';
 import {
   titleFrom, withContext,
-  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary,
+  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
 } from '../src/chat-contract';
 
 /** A failure the HTTP layer answers with this status. */
@@ -14,17 +15,35 @@ export class ChatError extends Error {
   constructor(readonly status: number, message = `chat failed with ${status}`) { super(message); }
 }
 
-/** What the agent is told once, when a conversation starts. The dashboard elements the user points at come with each message. */
-export const PREAMBLE = [
-  'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, limitami AI i stanem komputera.',
-  'Odpowiadasz po polsku, zwięźle i konkretnie.',
-  'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to wszystko, co widzisz z pulpitu. Nie zgaduj brakujących danych, powiedz, czego brakuje.',
-  'Panel nie ma jeszcze własnych narzędzi (zadania dnia, notatki). Gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako pomysł na później.',
-  'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie uruchamiaj poleceń w systemie i nie zmieniaj plików, jeśli użytkownik nie poprosi o to wprost.',
-].join('\n');
+export const DEFAULT_PANEL_URL = 'http://127.0.0.1:5174';
+
+/**
+ * What the agent is told once, when a conversation starts. The dashboard elements the user points at come with each
+ * message; what they do not cover the agent reads itself from the panel's own read-only API at `panelUrl`.
+ */
+export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
+  return [
+    'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, limitami AI i stanem komputera.',
+    'Odpowiadasz po polsku, zwięźle i konkretnie.',
+    'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to podpowiedź, o co pyta, a nie wszystko, co możesz wiedzieć. Gdy pytanie wymaga danych, których tam nie ma (np. wydarzeń z przyszłego tygodnia), pobierz je sam i nie proś użytkownika o ich podanie.',
+    `Masz powłokę i możesz uruchamiać polecenia. Dane panelu czytasz z jego lokalnego API (tylko GET), przez widoki dla agenta: krótki tekst po polsku, z czasem lokalnym (Europe/Warsaw), np. \`curl.exe -s "${panelUrl}/api/agent/calendar?from=2026-10-26&to=2026-10-30"\` (adres w cudzysłowie; w PowerShellu \`curl\` to alias, używaj \`curl.exe\`):`,
+    '- /api/agent/calendar?from=RRRR-MM-DD&to=RRRR-MM-DD: wydarzenia Google (z opisami po dopisaniu &opisy=1). Zakres to dni włącznie, domyślnie dziś i sześć kolejnych, najwyżej 42 dni.',
+    '- /api/agent/training?from=…&to=…: plan i zapisane aktywności Garmin w zakresie jak wyżej (kroki treningów po dopisaniu &kroki=1).',
+    '- /api/agent/cezar: zadania Cezara (aktywne i zakończone, niezarchiwizowane); przy zakończonych jest id w postaci `projekt/uuid` (do akcji poniżej).',
+    '- /api/agent/mail?limit=N: nieprzeczytane wątki Gmail z 30 dni (nadawca, temat, początek), bez treści wiadomości; N od 1 do 50, domyślnie 10.',
+    '- /api/agent/quotas: limity AI. /api/agent/system: CPU i RAM komputera.',
+    'Nagłówek widoku mówi, jaki jest dziś (kalendarz, trening) i z kiedy są dane; wiersz „brak danych” znaczy, że źródło milczy: powiedz to wprost. Czasy są już lokalne, nie przeliczaj ich.',
+    'Oszczędzaj kontekst: wszystko, co wydrukujesz, zostaje w rozmowie do jej końca. Pobieraj tylko źródła potrzebne do pytania, jednym poleceniem na źródło, z zakresem dat dopasowanym do pytania, i nie pobieraj ponownie tego, co już jest w rozmowie. Surowy JSON panelu (/api/calendar, /api/mail itd.) jest długi i z czasem w milisekundach: nie używaj go, chyba że widoki nie mają potrzebnego pola.',
+    `Do panelu wysyłaj tylko zapytania GET, z jednym wyjątkiem: na prośbę użytkownika możesz zmieniać zakończone zadania Cezara (action: archive, unarchive, read albo unread) przez POST ${panelUrl}/api/cezar/action z nagłówkiem Origin równym ${panelUrl} i ciałem JSON {"id":"projekt/uuid","action":"archive"}, gdzie id bierzesz z widoku cezar. W PowerShellu np. \`Invoke-RestMethod -Method Post -Uri "${panelUrl}/api/cezar/action" -Headers @{Origin="${panelUrl}"} -ContentType "application/json" -Body (@{id="projekt/uuid";action="archive"} | ConvertTo-Json -Compress)\`; odpowiedź {"ok":true} znaczy, że się udało. Wiele zadań zmieniaj jednym poleceniem z pętlą, a po wszystkim napisz, które i ile zadań zmieniłeś (zadań nie da się usunąć, archiwizację cofa unarchive). Nie wywołuj żadnych innych POST, PATCH ani DELETE (poczta, czat) bez wyraźnej prośby użytkownika.`,
+    'Panel nie ma jeszcze własnych narzędzi zapisu (zadania dnia, notatki). Gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako pomysł na później.',
+    'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost.',
+  ].join('\n');
+}
 
 /** One running `agy` for one conversation. A test replaces it with a script of events. */
 export interface AgentProcess {
+  /** The full command line, for the diagnostic log. */
+  readonly command?: readonly string[];
   write(line: string): void;
   /** Close stdin: the agent finishes the turn it is on and exits. */
   end(): void;
@@ -46,16 +65,37 @@ export function agyExecutable(env: NodeJS.ProcessEnv = process.env, home = homed
   return candidates.find(existsSync) ?? bin;
 }
 
+/** The model every conversation runs on unless `DESK_AGY_MODEL` says otherwise (`agy models` lists the ids; the id carries the reasoning level). */
+export const DEFAULT_AGY_MODEL = 'gemini-3.8-flash-medium';
+
+/** `--model` from `DESK_AGY_MODEL`, and `--effort` (low|medium|high|xhigh|max) only when `DESK_AGY_EFFORT` is set, since a model id already has its level. */
+/**
+ * Headless `agy` cannot ask for permission, so a tool that needs it (reading a file outside the working directory) is
+ * denied and the turn ends without an answer. The chat runs with `--dangerously-skip-permissions`, as `run_command`
+ * already does, unless `DESK_AGY_SKIP_PERMISSIONS` is 0, false, no or off. Only the launch arguments change, never agy's own settings.
+ */
+export function agyPermissionArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  return /^(0|false|no|off)$/i.test(env.DESK_AGY_SKIP_PERMISSIONS?.trim() ?? '') ? [] : ['--dangerously-skip-permissions'];
+}
+
+export function agyModelArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const model = env.DESK_AGY_MODEL?.trim() || DEFAULT_AGY_MODEL;
+  const effort = env.DESK_AGY_EFFORT?.trim();
+  return ['--model', model, ...(effort ? ['--effort', effort] : [])];
+}
+
 /** Shell-free, as the adapter does it; the whole process tree goes with the kill. */
 export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
   return (args, cwd) => {
-    const child = spawn(agyExecutable(env), args, { cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const argv = [...agyModelArgs(env), ...agyPermissionArgs(env), ...args];
+    const child = spawn(agyExecutable(env), argv, { cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let exited = false, stderr = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdin.on('error', () => { /* the exit handler tells what happened */ });
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-600); });
     return {
+      command: [path.basename(agyExecutable(env)), ...argv],
       write: line => { child.stdin.write(line); },
       end: () => { child.stdin.end(); },
       kill: () => {
@@ -81,7 +121,17 @@ export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
 }
 
 interface Stored { id: string; title: string; createdAt: number; updatedAt: number; agy: string | null; items: ChatMessage[] }
-interface Session { proc: AgentProcess; agent: ChatMessage | null; steps: Map<number, number>; stopping: boolean; idle?: ReturnType<typeof setTimeout> }
+/** What the diagnostic log needs to know about the turn that is running. */
+interface TurnTrace {
+  number: number; startedAt: number; ask: string; context: string[];
+  lastStep: string | null; result: { status: string | null; responseChars: number } | null;
+  /** True size of each tool's output (the stored part is shortened), by step id. */
+  outputChars: Map<string, number>;
+  /** Why a tool failed, by step id, and what agy refused to run for lack of permission. */
+  toolErrors: Map<string, string>;
+  denied: string[];
+}
+interface Session { proc: AgentProcess; agent: ChatMessage | null; steps: Map<number, number>; stopping: boolean; idle?: ReturnType<typeof setTimeout>; model: string | null; turn?: TurnTrace }
 
 export interface ChatService {
   list(): Promise<ChatSummary[]>;
@@ -102,18 +152,37 @@ export interface ChatOptions {
   /** Where chats and the agent's working directory live; `~/.desk-panel` by default. */
   dir?: string;
   launch?: Launcher;
+  /** Where the agent reads the panel's API from (the service's own loopback address); `DEFAULT_PANEL_URL` by default. */
+  panelUrl?: string;
+  /** Where raw events and per-turn summaries go for later analysis; `<dir>/chat-logs` by default. */
+  log?: ChatLog;
   now?: () => number;
   /** How long an idle agent process is kept before it is closed. The next message resumes the conversation. */
   idleMs?: number;
 }
 
 const ID = /^[0-9a-f-]{36}$/;
+/** `Command exited with code 1.` is how agy ends the output of a shell command. */
+const exitCodeOf = (output: string | undefined) => { const code = /exited with code (-?\d+)/.exec(output ?? '')?.[1]; return code === undefined ? null : Number(code); };
+const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
+
+/** The turn's cost from the `result` event's `usage`; `calls` and `tools` are the agent's streamed steps (read before empty ones are dropped). */
+function usageOf(raw: unknown, parts: ChatPart[]): ChatUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const usage = raw as Record<string, unknown>;
+  return {
+    input: count(usage.input_tokens), output: count(usage.output_tokens), thinking: count(usage.thinking_tokens), cached: count(usage.cache_read_tokens),
+    calls: parts.filter(p => p.type === 'text').length, tools: parts.filter(p => p.type === 'tool').length,
+  };
+}
 const asRecord = (value: unknown): Record<string, any> => (value && typeof value === 'object' ? value as Record<string, any> : {});
 
 export function createAgentChat(options: ChatOptions = {}): ChatService {
   const dir = options.dir ?? path.join(homedir(), '.desk-panel');
   const launch = options.launch ?? agyLauncher();
+  const intro = preamble(options.panelUrl);
   const now = options.now ?? Date.now;
+  const log = options.log ?? createChatLog(dir, now);
   const idleMs = options.idleMs ?? 10 * 60_000;
   const chatsDir = path.join(dir, 'chats'), agentDir = path.join(dir, 'agent');
   const chats = new Map<string, Stored>();
@@ -186,20 +255,49 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
 
   const armIdle = (chat: Stored, session: Session) => {
     clearTimeout(session.idle);
-    session.idle = setTimeout(() => { if (!session.agent) session.proc.end(); }, idleMs);
+    session.idle = setTimeout(() => { if (!session.agent) { log.trace(chat.id, { turn: session.turn?.number ?? 0, src: 'panel', kind: 'idle' }); session.proc.end(); } }, idleMs);
     session.idle.unref?.();
   };
 
-  const finish = (chat: Stored, session: Session, status: ChatMessage['status'], error?: string, response?: string) => {
+  /** One summary line per finished turn and the closing line of its trace (see chat-log.ts). */
+  const record = (chat: Stored, session: Session, agent: ChatMessage, status: ChatMessage['status'], error: string | undefined, emptyAnswer: boolean, answerChars: number, calls: number, endedBy: TurnSummary['endedBy']) => {
+    const trace = session.turn;
+    if (!trace || (status !== 'done' && status !== 'error' && status !== 'stopped')) return;
+    const tools: TurnTool[] = (agent.parts ?? []).filter((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool').slice(0, 30).map(p => ({
+      name: p.name, input: p.input.slice(0, 200),
+      exitCode: exitCodeOf(p.output),
+      outputChars: trace.outputChars.get(p.id) ?? null,
+      error: trace.toolErrors.get(p.id) ?? null,
+    }));
+    log.trace(chat.id, { turn: trace.number, src: 'panel', kind: 'finish', status, error: error ?? null, emptyAnswer, endedBy });
+    log.turn({
+      at: now(), chat: chat.id, title: chat.title, turn: trace.number, model: session.model, ask: trace.ask, context: trace.context,
+      status, error: error ?? null, endedBy, emptyAnswer, answerChars, seconds: Math.round((now() - trace.startedAt) / 100) / 10,
+      lastStep: trace.lastStep, denied: trace.denied, result: trace.result,
+      usage: agent.usage ? { ...agent.usage, calls: agent.usage.calls || calls } : null, tools,
+    });
+  };
+
+  const finish = (chat: Stored, session: Session, status: ChatMessage['status'], error: string | undefined, response: string | undefined, endedBy: TurnSummary['endedBy']) => {
     const agent = session.agent;
     if (!agent) return;
     const parts = agent.parts ?? [];
     // Text the agent only gave as the final result (no streamed steps) still belongs in the answer.
     if (response?.trim() && !parts.some(p => p.type === 'text' && p.text.trim())) parts.push({ type: 'text', text: response });
+    const calls = parts.filter(p => p.type === 'text').length;
     agent.parts = parts.filter(p => p.type !== 'text' || p.text.trim());
     for (const part of agent.parts) if (part.type === 'tool' && part.state === 'running') part.state = 'done';
+    // A turn the agent ended without a word is not a finished answer: say so instead of leaving the message blank.
+    const answerChars = agent.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
+    const emptyAnswer = status === 'done' && answerChars === 0;
+    if (emptyAnswer) {
+      status = 'error';
+      const denied = session.turn?.denied ?? [];
+      error = denied.length ? `Agent zakończył bez odpowiedzi: narzędzie ${denied.join(', ')} zostało zablokowane, bo tryb bez interakcji nie może pytać o zgodę.` : 'Agent zakończył bez odpowiedzi.';
+    }
     agent.status = status;
     if (error) agent.error = error;
+    record(chat, session, agent, status, error, emptyAnswer, answerChars, calls, endedBy);
     session.agent = null;
     chat.updatedAt = now();
     save(chat);
@@ -220,6 +318,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
       const step = asRecord(ev.step_update);
       const parts = (agent.parts ??= []);
       const index = Number(step.step_index);
+      if (session.turn && step.step_type !== 'user_input') session.turn.lastStep = `${step.step_type}${step.tool_name ? `:${step.tool_name}` : ''}:${step.state}`;
       if (step.step_type === 'agent_response') {
         let at = session.steps.get(index);
         if (at === undefined) { parts.push({ type: 'text', text: '' }); at = parts.length - 1; session.steps.set(index, at); }
@@ -232,26 +331,51 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
           part = { type: 'tool', id, name: String(step.tool_name ?? info.name ?? 'narzędzie'), input: JSON.stringify(info.parameters ?? {}).slice(0, 600), state: 'running' };
           parts.push(part);
         }
-        if (step.state === 'DONE') { part.state = 'done'; if (typeof info.output === 'string') part.output = info.output.slice(0, 4000); }
+        if (step.state === 'ERROR') {
+          // A tool that failed (e.g. denied for lack of permission) is over, and the user sees why.
+          const raw = asRecord(info.error).message;
+          const message = typeof raw === 'string' && raw ? raw.split('\n')[0] : 'Narzędzie zakończyło się błędem.';
+          part.state = 'done';
+          part.output = `Błąd: ${message}`.slice(0, 600);
+          session.turn?.toolErrors.set(id, message.slice(0, 300));
+        }
+        if (step.state === 'DONE') {
+          part.state = 'done';
+          if (typeof info.output === 'string') { part.output = info.output.slice(0, 4000); session.turn?.outputChars.set(id, info.output.length); }
+        }
       } else return;
       touch(chat, agent);
     } else if (ev.event === 'result') {
       const result = asRecord(ev.result);
-      if (result.status === 'SUCCESS') finish(chat, session, 'done', undefined, typeof result.response === 'string' ? result.response : undefined);
-      else finish(chat, session, 'error', typeof result.error === 'string' && result.error ? result.error : 'Agent nie dokończył odpowiedzi.');
+      const usage = usageOf(result.usage, agent.parts ?? []);
+      if (usage) agent.usage = usage;
+      if (session.turn && Array.isArray(result.denied_actions)) session.turn.denied = result.denied_actions.map((d: unknown) => String(asRecord(d).action ?? '')).filter(Boolean);
+      if (session.turn) session.turn.result = { status: typeof result.status === 'string' ? result.status : null, responseChars: typeof result.response === 'string' ? result.response.length : 0 };
+      if (result.status === 'SUCCESS') finish(chat, session, 'done', undefined, typeof result.response === 'string' ? result.response : undefined, 'result');
+      else finish(chat, session, 'error', typeof result.error === 'string' && result.error ? result.error : 'Agent nie dokończył odpowiedzi.', undefined, 'result');
     }
   };
 
   const open = (chat: Stored): Session => {
     const args = ['--output-format', 'stream-json', '--input-format', 'stream-json', ...(chat.agy ? ['--conversation', chat.agy] : []), '-p', ''];
     const proc = launch(args, agentDir);
-    const session: Session = { proc, agent: null, steps: new Map(), stopping: false };
+    const command = proc.command ?? args;
+    const modelAt = command.indexOf('--model');
+    const session: Session = { proc, agent: null, steps: new Map(), stopping: false, model: modelAt >= 0 ? command[modelAt + 1] ?? null : null };
     sessions.set(chat.id, session);
-    proc.onLine(line => { try { onEvent(chat, session, JSON.parse(line)); } catch { /* not an event: ignore */ } });
+    log.trace(chat.id, { turn: 0, src: 'panel', kind: 'spawn', command, resumed: !!chat.agy });
+    proc.onLine(line => {
+      const turn = session.turn?.number ?? 0;
+      let event: unknown;
+      try { event = JSON.parse(line); } catch { log.trace(chat.id, { turn, src: 'agy', kind: 'raw', line: line.slice(0, 500) }); return; }
+      log.trace(chat.id, { turn, src: 'agy', kind: String(asRecord(event).event ?? 'event'), event });
+      try { onEvent(chat, session, event); } catch { /* an event the service cannot use: ignore */ }
+    });
     proc.onExit(reason => {
       clearTimeout(session.idle);
       if (sessions.get(chat.id) === session) sessions.delete(chat.id);
-      if (session.agent) finish(chat, session, session.stopping ? 'stopped' : 'error', session.stopping ? undefined : reason ?? 'Agent zakończył pracę przed odpowiedzią.');
+      log.trace(chat.id, { turn: session.turn?.number ?? 0, src: 'panel', kind: 'exit', reason, duringTurn: !!session.agent });
+      if (session.agent) finish(chat, session, session.stopping ? 'stopped' : 'error', session.stopping ? undefined : reason ?? 'Agent zakończył pracę przed odpowiedzią.', undefined, session.stopping ? 'stop' : 'exit');
     });
     return session;
   };
@@ -286,13 +410,17 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
       touch(chat, user);
       touch(chat, agent, true);
       const prompt = withContext(input.text, context);
-      session.proc.write(`${JSON.stringify({ event: 'user', message: { content: chat.agy ? prompt : `${PREAMBLE}\n\n${prompt}` } })}\n`);
+      const content = chat.agy ? prompt : `${intro}\n\n${prompt}`;
+      session.turn = { number: chat.items.filter(m => m.role === 'user').length, startedAt: at, ask: input.text.replace(/\s+/g, ' ').slice(0, 200), context: context.map(c => c.kind), lastStep: null, result: null, outputChars: new Map(), toolErrors: new Map(), denied: [] };
+      log.trace(id, { turn: session.turn.number, src: 'panel', kind: 'sent', chars: content.length, preamble: !chat.agy, contextItems: context.length, ask: session.turn.ask });
+      session.proc.write(`${JSON.stringify({ event: 'user', message: { content } })}\n`);
     },
     async stop(id) {
       await need(id);
       const session = sessions.get(id);
       if (!session?.agent) return;
       session.stopping = true;
+      log.trace(id, { turn: session.turn?.number ?? 0, src: 'panel', kind: 'stop' });
       session.proc.kill();
     },
     async rename(id, title) {
@@ -306,11 +434,12 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
       const chat = await need(id);
       const session = sessions.get(id);
       if (session) { session.stopping = true; session.proc.kill(); }
+      log.trace(id, { turn: session?.turn?.number ?? 0, src: 'panel', kind: 'chat-deleted' });
       chats.delete(chat.id);
       await writes.get(chat.id);
       await rm(file(chat.id), { force: true });
     },
-    async drain() { while (writes.size) await Promise.all([...writes.values()]); },
+    async drain() { while (writes.size) await Promise.all([...writes.values()]); await log.drain(); },
     async subscribe(id, listener) {
       const chat = await need(id);
       let set = listeners.get(id);

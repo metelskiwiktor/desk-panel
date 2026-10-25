@@ -8,6 +8,7 @@ import { mailActionSchema } from '../src/mail-contract';
 import { warmupEditFor, warmupProviderSchema, warmupRunInputSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
 import type { ChatService } from './agent-chat';
+import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
@@ -24,6 +25,7 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
 export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService) {
   const routes = jsonRoutes(sources);
+  const agent = agentViews(sources);
   return createServer(async (req, res) => {
     const host = req.headers.host;
     // `allowedHost` is the one extra name (Tailscale Serve, HTTPS) that reaches this loopback listener through a local proxy.
@@ -77,6 +79,14 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       return;
     }
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
+    if (url.pathname.startsWith('/api/agent/')) {
+      const answer = await serveAgentView(agent, url, Date.now());
+      if (answer) {
+        res.setHeader('Cache-Control', 'no-store');
+        res.writeHead(answer.status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(answer.body);
+        return;
+      }
+    }
     const route = routes[url.pathname];
     if (route) {
       res.setHeader('Cache-Control', 'no-store');

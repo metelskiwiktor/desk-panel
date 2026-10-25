@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatEvent, ContextItem } from '../src/chat-contract';
-import { agyExecutable, createAgentChat, PREAMBLE, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
+import { agyExecutable, agyModelArgs, agyPermissionArgs, createAgentChat, DEFAULT_AGY_MODEL, preamble, DEFAULT_PANEL_URL, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
 import { handleChatRoute } from './chat-routes';
 
 /** Stands in for `agy`: the test says what the agent prints and when it exits. Events below are the shapes agy 1.4.7 prints. */
@@ -16,6 +16,7 @@ class FakeAgent implements AgentProcess {
   private line?: (line: string) => void;
   private exit?: (reason: string | null) => void;
   constructor(readonly args: string[]) {}
+  get command() { return ['agy.exe', '--model', 'gemini-3.8-flash-medium', ...this.args]; }
   write(line: string) { this.written.push(line); }
   end() { this.ended = true; queueMicrotask(() => this.close(null)); }
   kill() { this.killed = true; queueMicrotask(() => this.close('killed')); }
@@ -27,7 +28,7 @@ class FakeAgent implements AgentProcess {
   get prompt(): string { return JSON.parse(this.written.at(-1)!).message.content; }
 }
 const init = (id: string) => ({ event: 'init', conversation_id: id, init: { cwd: 'C:\\agent', tools: ['run_command'], permission_mode: 'request-review' } });
-const step = (index: number, type: string, state: 'ACTIVE' | 'DONE', extra: object = {}) =>
+const step = (index: number, type: string, state: 'ACTIVE' | 'DONE' | 'ERROR', extra: object = {}) =>
   ({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: index, state, step_type: type, ...extra } });
 const answer = (response: string, extra: object = {}) => ({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response, duration_seconds: 2, num_turns: 1, ...extra } });
 
@@ -63,7 +64,7 @@ describe('czat z agentem', () => {
     const { id } = await service.create({ text: 'Zrób z tego zadanie', context: [mail] });
     expect(agents).toHaveLength(1);
     expect(agents[0].args).toEqual(['--output-format', 'stream-json', '--input-format', 'stream-json', '-p', '']);
-    expect(agents[0].prompt).toContain(PREAMBLE);
+    expect(agents[0].prompt).toContain(preamble());
     expect(agents[0].prompt).toContain('1. Mail: Anna Nowak: Spotkanie w czwartek');
     expect(agents[0].prompt).toContain('[Wiadomość]\nZrób z tego zadanie');
     expect((await service.get(id)).running).toBe(true);
@@ -191,10 +192,197 @@ describe('czat z agentem', () => {
   });
 });
 
+describe('dziennik diagnostyczny czatu', () => {
+  const read = async (name: string) => {
+    await service.drain();
+    return (await readFile(path.join(dir, 'chat-logs', name), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Record<string, any>);
+  };
+  const toolStep = (index: number, state: 'ACTIVE' | 'DONE', name: string, parameters: object, output?: string) =>
+    step(index, 'tool', state, { tool_name: name, tool_info: { name, parameters, ...(output === undefined ? {} : { output }) } });
+  const settle = async () => { await new Promise(resolve => setTimeout(resolve, 0)); };
+
+  it('tura bez słowa do użytkownika to błąd „Agent zakończył bez odpowiedzi”, z narzędziami i śladem, dlaczego', async () => {
+    const { id } = await service.create({ text: 'Zarchiwizuj stare zadania', context: [mail] });
+    const agent = agents[0];
+    agent.print(init('c1'));
+    agent.print(toolStep(1, 'ACTIVE', 'read_file', { Path: 'cezar.ts', StartLine: 1, EndLine: 100 }));
+    agent.print(toolStep(1, 'DONE', 'read_file', { Path: 'cezar.ts' }));
+    agent.print(answer('', { usage: { input_tokens: 5000, output_tokens: 20, thinking_tokens: 5, cache_read_tokens: 0 } }));
+    const message = (await service.get(id)).items.at(-1)!;
+    expect(message.status).toBe('error');
+    expect(message.error).toBe('Agent zakończył bez odpowiedzi.');
+    expect(message.parts?.map(p => p.type)).toEqual(['tool']);
+    const [turn] = await read('turns.jsonl');
+    expect(turn).toMatchObject({
+      chat: id, turn: 1, model: 'gemini-3.8-flash-medium', ask: 'Zarchiwizuj stare zadania', context: ['mail'],
+      status: 'error', endedBy: 'result', emptyAnswer: true, answerChars: 0, lastStep: 'tool:read_file:DONE',
+      result: { status: 'SUCCESS', responseChars: 0 }, usage: { input: 5000, output: 20, thinking: 5, cached: 0, tools: 1 },
+      tools: [{ name: 'read_file', exitCode: null, outputChars: null }],
+    });
+  });
+
+  it('odmowa uprawnień w trybie bez interakcji (kształt z prawdziwego agy): komunikat z nazwą narzędzia, błąd narzędzia i denied w podsumowaniu', async () => {
+    const { id } = await service.create({ text: 'Zarchiwizuj wszystkie starsze niż 6h', context: [] });
+    const agent = agents[0];
+    agent.print(init('c1'));
+    agent.print(toolStep(1, 'ACTIVE', 'read_file', { Path: 'C:/x/cezar-finished.ts', StartLine: 1, EndLine: 100 }));
+    agent.print(step(1, 'tool', 'ERROR', { tool_name: 'read_file', tool_info: { name: 'read_file', parameters: {}, error: { type: 'TOOL_ERROR', message: 'permission check failed for read_file "C:/x/cezar-finished.ts"\nDo not attempt to circumvent this denial' } } }));
+    agent.print(answer('', { usage: { input_tokens: 100 }, denied_actions: [{ action: 'read_file', display_name: 'ReadFile' }] }));
+    const message = (await service.get(id)).items.at(-1)!;
+    expect(message.status).toBe('error');
+    expect(message.error).toContain('read_file');
+    expect(message.error).toContain('zablokowane');
+    const tool = message.parts![0] as { state: string; output: string };
+    expect(tool.state).toBe('done');
+    expect(tool.output).toBe('Błąd: permission check failed for read_file "C:/x/cezar-finished.ts"');
+    const [turn] = await read('turns.jsonl');
+    expect(turn).toMatchObject({ emptyAnswer: true, denied: ['read_file'], lastStep: 'tool:read_file:ERROR', tools: [{ name: 'read_file', error: 'permission check failed for read_file "C:/x/cezar-finished.ts"' }] });
+  });
+
+  it('zwykła tura: podsumowanie z kodem wyjścia i rozmiarem wyniku oraz surowy ślad z poleceniem, wysłanym promptem i zdarzeniami agy', async () => {
+    const { id } = await service.create({ text: 'Ile to 17 razy 23?', context: [] });
+    const agent = agents[0];
+    const output = 'Command exited with code 0.\n\nCommand output:\n391';
+    agent.print(init('c1'));
+    agent.print(toolStep(1, 'ACTIVE', 'run_command', { CommandLine: 'echo 391' }));
+    agent.print(toolStep(1, 'DONE', 'run_command', { CommandLine: 'echo 391' }, output));
+    agent.print(step(2, 'agent_response', 'ACTIVE', { text_delta: 'To 391.' }));
+    agent.print(step(2, 'agent_response', 'DONE', { text_delta: '\n' }));
+    agent.print(answer('To 391.\n', { usage: { input_tokens: 9000, output_tokens: 40, thinking_tokens: 0, cache_read_tokens: 100 } }));
+    const [turn] = await read('turns.jsonl');
+    expect(turn).toMatchObject({ status: 'done', emptyAnswer: false, endedBy: 'result', answerChars: 8, lastStep: 'agent_response:DONE', tools: [{ name: 'run_command', input: '{"CommandLine":"echo 391"}', exitCode: 0, outputChars: output.length }] });
+    const trace = await read(`${id}.jsonl`);
+    expect(trace[0]).toMatchObject({ src: 'panel', kind: 'spawn', turn: 0, resumed: false });
+    expect(trace[0].command).toContain('--model');
+    expect(trace[1]).toMatchObject({ src: 'panel', kind: 'sent', turn: 1, preamble: true, contextItems: 0, ask: 'Ile to 17 razy 23?' });
+    expect(trace.filter(line => line.src === 'agy').map(line => line.kind)).toEqual(['init', 'step_update', 'step_update', 'step_update', 'step_update', 'result']);
+    expect(trace.find(line => line.kind === 'result')!.event.result.usage.input_tokens).toBe(9000);
+    expect(trace.at(-1)).toMatchObject({ src: 'panel', kind: 'finish', status: 'done', emptyAnswer: false, endedBy: 'result' });
+    expect(await readFile(path.join(dir, 'chat-logs', 'README.md'), 'utf8')).toContain('turns.jsonl');
+  });
+
+  it('proces, który pada w trakcie tury, i zatrzymanie przez użytkownika mają w podsumowaniu, co je zakończyło', async () => {
+    const first = await service.create({ text: 'Pierwsze', context: [] });
+    agents[0].print(init('c1'));
+    agents[0].close('agy zakończył pracę kodem 1.');
+    await settle();
+    const second = await service.create({ text: 'Drugie', context: [] });
+    agents[1].print(init('c2'));
+    await service.stop(second.id);
+    await settle();
+    const turns = await read('turns.jsonl');
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toMatchObject({ status: 'error', endedBy: 'exit', error: 'agy zakończył pracę kodem 1.', emptyAnswer: false });
+    expect(turns[1]).toMatchObject({ status: 'stopped', endedBy: 'stop' });
+    expect((await read(`${first.id}.jsonl`)).find(line => line.kind === 'exit')).toMatchObject({ reason: 'agy zakończył pracę kodem 1.', duringTurn: true });
+    expect((await read(`${second.id}.jsonl`)).some(line => line.kind === 'stop')).toBe(true);
+  });
+
+  it('bardzo długi wynik narzędzia jest w śladzie skrócony, a jego prawdziwy rozmiar zostaje w podsumowaniu', async () => {
+    const { id } = await service.create({ text: 'Pokaż wszystko', context: [] });
+    const huge = 'x'.repeat(30_000);
+    agents[0].print(init('c1'));
+    agents[0].print(toolStep(1, 'ACTIVE', 'run_command', { CommandLine: 'dir' }));
+    agents[0].print(toolStep(1, 'DONE', 'run_command', { CommandLine: 'dir' }, huge));
+    agents[0].print(step(2, 'agent_response', 'ACTIVE', { text_delta: 'Gotowe.' }));
+    agents[0].print(answer('Gotowe.'));
+    const line = (await read(`${id}.jsonl`)).find(entry => entry.event?.truncated);
+    expect(line).toMatchObject({ src: 'agy', kind: 'step_update', event: { event: 'step_update', truncated: true } });
+    expect(line!.event.bytes).toBeGreaterThan(30_000);
+    expect(line!.event.head.length).toBe(2000);
+    const [turn] = await read('turns.jsonl');
+    expect(turn.tools[0].outputChars).toBe(30_000);
+    const chat = (await service.get(id)).items.at(-1)!;
+    expect((chat.parts![0] as { output: string }).output).toHaveLength(4000);
+  });
+
+  it('rozmowy zostają lekkie: dziennik leży w osobnym katalogu, a usunięcie rozmowy nie kasuje śladu', async () => {
+    const { id } = await service.create({ text: 'Hej', context: [] });
+    agents[0].print(init('c1'));
+    agents[0].print(step(1, 'agent_response', 'ACTIVE', { text_delta: 'Cześć.' }));
+    agents[0].print(answer('Cześć.'));
+    await service.drain();
+    expect(await readdir(path.join(dir, 'chats'))).toEqual([`${id}.json`]);
+    expect(await readFile(path.join(dir, 'chats', `${id}.json`), 'utf8')).not.toContain('step_update');
+    await service.remove(id);
+    const trace = await read(`${id}.jsonl`);
+    expect(trace.some(line => line.kind === 'chat-deleted')).toBe(true);
+  });
+});
+
 describe('uruchamianie agy', () => {
   it('wskazuje plik z DESK_AGY_BIN, a bez niego szuka agy w katalogu użytkownika', () => {
     expect(agyExecutable({ DESK_AGY_BIN: 'C:\\narzedzia\\agy.exe' }, 'C:\\Users\\x')).toBe('C:\\narzedzia\\agy.exe');
     expect(agyExecutable({ LOCALAPPDATA: path.join(dir, 'brak') }, path.join(dir, 'dom'))).toMatch(/agy(\.exe)?$/);
+  });
+
+  it('instrukcja pozwala agentowi czytać widoki panelu (tylko GET), pod adresem usługi, i oszczędzać kontekst', () => {
+    const text = preamble();
+    for (const view of ['calendar', 'training', 'cezar', 'mail', 'quotas', 'system']) expect(text).toContain(`/api/agent/${view}`);
+    expect(text).toContain(`curl.exe -s "${DEFAULT_PANEL_URL}/api/agent/calendar?from=`);
+    expect(text).toMatch(/tylko zapytania GET/);
+    expect(text).toContain(`POST ${DEFAULT_PANEL_URL}/api/cezar/action`);
+    expect(text).toContain(`Origin równym ${DEFAULT_PANEL_URL}`);
+    expect(text).toContain('{"id":"projekt/uuid","action":"archive"}');
+    expect(text).toMatch(/archive, unarchive, read albo unread/);
+    expect(text).toMatch(/id w postaci `projekt\/uuid`/);
+    expect(text).toContain('Europe/Warsaw');
+    expect(text).toMatch(/nie przeliczaj ich/);
+    expect(text).toMatch(/Oszczędzaj kontekst/);
+    expect(text).not.toMatch(/Nie uruchamiaj poleceń/);
+    expect(preamble('http://127.0.0.1:6000')).toContain('"http://127.0.0.1:6000/api/agent/calendar?from=');
+  });
+
+  it('zapisuje zużycie tury z wyniku agy: tokeny, wywołania modelu i polecenia', async () => {
+    const { id } = await service.create({ text: 'Co mam w przyszłym tygodniu?', context: [] });
+    const agent = agents[0];
+    agent.print(init('c1'));
+    agent.print(step(1, 'agent_response', 'DONE', { usage: { input_tokens: 8401 } }));
+    agent.print(step(2, 'tool', 'ACTIVE', { tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'curl.exe -s x' } } }));
+    agent.print(step(2, 'tool', 'DONE', { tool_name: 'run_command', tool_info: { name: 'run_command', parameters: {}, output: '[]' } }));
+    agent.print(step(3, 'agent_response', 'ACTIVE', { text_delta: 'Nic.' }));
+    agent.print(step(3, 'agent_response', 'DONE', { text_delta: '\n' }));
+    agent.print(answer('Nic.\n', { usage: { input_tokens: 11200, output_tokens: 300, thinking_tokens: 120, cache_read_tokens: 4000, total_tokens: 11500 } }));
+    await vi.waitFor(async () => expect((await service.get(id)).running).toBe(false));
+    const stored = (await service.get(id)).items.at(-1)!;
+    expect(stored.usage).toEqual({ input: 11200, output: 300, thinking: 120, cached: 4000, calls: 2, tools: 1 });
+  });
+
+  it('bez usage w wyniku nie zmyśla zużycia', async () => {
+    const { id } = await service.create({ text: 'Ile to 17 razy 23?', context: [] });
+    simpleTurn(agents[0]);
+    await vi.waitFor(async () => expect((await service.get(id)).running).toBe(false));
+    expect((await service.get(id)).items.at(-1)!.usage).toBeUndefined();
+  });
+
+  it('rozmowa dostaje instrukcję z adresem panelu z opcji', async () => {
+    const custom = createAgentChat({ dir, launch, idleMs: 60_000, panelUrl: 'http://127.0.0.1:6000' });
+    try {
+      await custom.create({ text: 'Co mam jutro?', context: [] });
+      expect(agents.at(-1)!.prompt).toContain('curl.exe -s "http://127.0.0.1:6000/api/agent/calendar');
+    } finally {
+      custom.close();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await custom.drain();
+    }
+  });
+
+  it('agy dostaje zgodę na narzędzia, bo tryb bez interakcji nie może o nią pytać; DESK_AGY_SKIP_PERMISSIONS=0 to wyłącza', () => {
+    expect(agyPermissionArgs({})).toEqual(['--dangerously-skip-permissions']);
+    expect(agyPermissionArgs({ DESK_AGY_SKIP_PERMISSIONS: '1' })).toEqual(['--dangerously-skip-permissions']);
+    expect(agyPermissionArgs({ DESK_AGY_SKIP_PERMISSIONS: '' })).toEqual(['--dangerously-skip-permissions']);
+    for (const off of ['0', 'false', 'No', ' off ']) expect(agyPermissionArgs({ DESK_AGY_SKIP_PERMISSIONS: off }), off).toEqual([]);
+  });
+
+  it('domyślnie używa Gemini 3.8 Flash (Medium) i nie podaje --effort', () => {
+    expect(DEFAULT_AGY_MODEL).toBe('gemini-3.8-flash-medium');
+    expect(agyModelArgs({})).toEqual(['--model', 'gemini-3.8-flash-medium']);
+    expect(agyModelArgs({ DESK_AGY_MODEL: '  ', DESK_AGY_EFFORT: '' })).toEqual(['--model', 'gemini-3.8-flash-medium']);
+  });
+
+  it('bierze model z DESK_AGY_MODEL, a --effort dodaje tylko z DESK_AGY_EFFORT', () => {
+    expect(agyModelArgs({ DESK_AGY_MODEL: 'claude-sonnet-5-5-high' })).toEqual(['--model', 'claude-sonnet-5-5-high']);
+    expect(agyModelArgs({ DESK_AGY_MODEL: ' gemini-4-argon-low ', DESK_AGY_EFFORT: ' high ' })).toEqual(['--model', 'gemini-4-argon-low', '--effort', 'high']);
   });
 });
 

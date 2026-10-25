@@ -1,7 +1,8 @@
 # Czat z agentem
 
 Okno rozmowy z agentem (Antigravity CLI, `agy`) otwierane przyciskiem w pasku u góry pulpitu. Agent wie, kim jest, czym jest
-panel i skąd bierze dane, ale **nie dostaje całej poczty ani kalendarza**: dostaje to, co użytkownik sam wskaże na pulpicie.
+panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje razem z wiadomością (to podpowiedź, o co pyta); resztę
+(kalendarz, poczta, Cezar, trening, limity, komputer) **czyta sam** z lokalnego API panelu, tylko przez GET.
 
 ## Jak się tego używa
 
@@ -24,9 +25,9 @@ panel i skąd bierze dane, ale **nie dostaje całej poczty ani kalendarza**: dos
 
 ## Co widzi agent
 
-Pierwsza wiadomość rozmowy zaczyna się od instrukcji (`PREAMBLE` w `server/agent-chat.ts`: kim jest, czym jest Desk Panel,
-źródła danych, że ma odpowiadać po polsku i zwięźle). Kolejne wiadomości jej nie powtarzają: ten sam proces `agy` pamięta rozmowę.
-Wskazane elementy idą przed pytaniem:
+Pierwsza wiadomość rozmowy zaczyna się od instrukcji (`preamble()` w `server/agent-chat.ts`: kim jest, czym jest Desk Panel,
+że ma odpowiadać po polsku i zwięźle, jakie endpointy API panelu może czytać i jak). Kolejne wiadomości jej nie powtarzają: ten
+sam proces `agy` pamięta rozmowę, więc **zmiana instrukcji dotyczy tylko nowych rozmów**. Wskazane elementy idą przed pytaniem:
 
 ```
 [Kontekst: elementy pulpitu wskazane przez użytkownika]
@@ -61,7 +62,7 @@ ChatWindow ── useChat ── /api/chats… ── ChatService (server/agent-
 ```
 
 - **Identyfikator rozmowy należy do panelu** (uuid); identyfikator rozmowy `agy` jest zapisany obok jako `agy`. Dzięki temu
-  inny silnik niż `agy` nie wymagałby zmian w UI: UI zna tylko `ChatMessage` z `src/chat-contract.ts` (tekst i kroki narzędzi
+  inny silnik niż `agy` nie wymagałby zmian w UI (zmiany byłyby po stronie serwera, zob. „Szwy do rozszerzania”): UI zna tylko `ChatMessage` z `src/chat-contract.ts` (tekst i kroki narzędzi
   w kolejności, status `streaming | done | error | stopped`).
 - **Proces na rozmowę**: `agy --output-format stream-json --input-format stream-json [--conversation <id>] -p ''`. Wiadomość to
   linia `{"event":"user","message":{"content":"…"}}` na stdin. Proces obsługuje wiele tur. Po 10 minutach bezczynności
@@ -76,15 +77,101 @@ ChatWindow ── useChat ── /api/chats… ── ChatService (server/agent-
   od nowa, więc nic nie ginie po przerwie.
 - **Zapis**: `~/.desk-panel/chats/<id>.json` (zapisy jednej rozmowy są szeregowane). Wiadomość „w trakcie” z poprzedniego
   uruchomienia panelu jest po starcie oznaczana jako przerwana. Katalog roboczy agenta: `~/.desk-panel/agent`.
+- **Model i reasoning**: każdy proces dostaje `--model`. Domyślnie `gemini-3.8-flash-medium` (Gemini 3.8 Flash, Medium); zmienia go
+  `DESK_AGY_MODEL` (lista identyfikatorów: `agy models`). Poziom reasoningu jest częścią identyfikatora modelu (`-low|-medium|-high`),
+  więc `--effort` (`low|medium|high|xhigh|max`) jest dodawany tylko wtedy, gdy ustawiono `DESK_AGY_EFFORT`. Zmienne
+  (jak `DESK_AGY_BIN`, np. w `panel.env`) obowiązują po restarcie usługi i dotyczą każdego nowo uruchamianego procesu `agy`, także
+  wznowień starych rozmów: model nie jest zapisany w rozmowie.
 - `agy` jest szukany w `DESK_AGY_BIN`, potem w `%LOCALAPPDATA%\agy\bin\agy.exe`, `~/.agy/bin`, `~/.local/bin`. Przy zatrzymaniu
   lub zamknięciu serwisu proces i jego dzieci są kończone (`taskkill /T` na Windows).
+
+### Agent czyta dane panelu sam
+
+Instrukcja mówi agentowi, że ma powłokę i może pobierać dane z API panelu pod adresem usługi (`DEFAULT_PANEL_URL` albo opcja
+`panelUrl`; `server/index.ts` podaje `127.0.0.1:<DESK_PORT>`). Nie dostaje surowego JSON-a dla UI (czasy w milisekundach UTC,
+identyfikatory, adresy, całe opisy), tylko **widoki dla agenta**: `GET /api/agent/<widok>` zwraca krótki tekst po polsku z czasem
+lokalnym (`server/agent-views.ts`, jeden moduł, widoki są czystymi funkcjami nad `PanelSources`, więc działają też w trybie
+scenariusza):
+
+| Widok | Parametry | Co w nim jest |
+| --- | --- | --- |
+| `calendar` | `from`, `to` (RRRR-MM-DD, włącznie; domyślnie dziś i sześć dni, najwyżej 42), `opisy=1` | wydarzenia z dniem tygodnia, godzinami, miejscem; całodniowe jako zakres dni |
+| `training` | `from`, `to`, `kroki=1` | plan Garmin, zaplanowane treningi i zapisane aktywności z zakresu |
+| `cezar` | | liczniki, zadania aktywne i zakończone, niezarchiwizowane (do 40, każde zakończone z `id=projekt/uuid` do akcji poniżej) |
+| `mail` | `limit` (1–50, domyślnie 10) | nieprzeczytane z 30 dni: nadawca, temat, początek; bez treści |
+| `quotas`, `system` | | limity AI z resetami w czasie lokalnym; CPU i RAM |
+
+Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie
+pustą listę. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany
+czasu). Odczyty GET nie wymagają `Origin`, więc zwykłe `curl.exe` działa; w PowerShellu `curl` to alias, dlatego instrukcja podaje
+`curl.exe`, a adres w cudzysłowie (jest w nim `&`). Zakres danych jest ten sam co w UI. Zwykłe trasy JSON (`/api/calendar` itd.) zostają
+dla UI, a instrukcja każe agentowi ich nie używać. Do panelu agent ma słać tylko GET, z jednym wyjątkiem opisanym w instrukcji: na prośbę użytkownika może zmieniać **zakończone zadania
+Cezara** (`archive`, `unarchive`, `read`, `unread`) przez `POST /api/cezar/action` z nagłówkiem `Origin` równym adresowi panelu i ciałem
+`{"id":"projekt/uuid","action":"archive"}` (id z widoku `cezar`; odpowiedź `{"ok":true}`). Archiwizacja jest odwracalna, a zadań nie da się
+usunąć. Inne zapisy (`POST` poczty, czat) są technicznie możliwe, bo `Origin` chroni przeglądarkę, a nie `curl`, więc ogranicza agenta
+wyłącznie instrukcja. **Nowe pole lub widok, który agent ma znać,
+dopisz zarówno do `agent-views.ts`, jak i do instrukcji.**
+
+**Koszt odpowiedzi.** Zdarzenie `result` z `agy` niesie `usage` dla całej tury (suma wszystkich wywołań modelu): serwis zapisuje je przy
+wiadomości agenta jako `usage` (`ChatUsage` w kontrakcie: `input`, `output`, `thinking`, `cached`, plus liczba wywołań modelu `calls` i
+poleceń `tools`). `input` to tokeny czytane świeżo, `cached` to dodatkowo odczyt z cache'u promptu, a `thinking` jest częścią `output`.
+Widać to w `GET /api/chats/<id>`; UI tego jeszcze nie pokazuje. Przy pomiarach liczy się głównie liczba wywołań modelu w turze:
+każde czyta całą dotychczasową rozmowę (sam `agy` dokłada ok. 8 tys. tokenów już w pierwszym wywołaniu), więc tura z pobraniem danych
+i kilkoma poleceniami kosztuje dziesiątki tysięcy tokenów wejścia. Pomiar (pytanie „co mam w przyszłym tygodniu?”, `gemini-3.8-flash-medium`, po jednym przebiegu): z surowym JSON-em i bez opisu
+kształtu 9 wywołań modelu, 8 poleceń i ≈91 tys. tokenów wejścia (≈37 s); po dopisaniu zasad oszczędzania do instrukcji 7 wywołań,
+6 poleceń i ≈86 tys.; z widokami dla agenta 4 wywołania, 3 polecenia (po jednym na źródło) i ≈38 tys. (≈16 s). Ostatni pomiar szedł
+na danych scenariusza (na żywo wcześniejsze), więc porównanie jest przybliżone, ale kierunek jest wyraźny: agent przestał zgadywać
+kształt odpowiedzi i przeliczać czasy.
 
 ### Znane właściwości `agy`
 
 - W trybie `-p` agent ma powłokę (`run_command`) i **nie pyta o zgodę**. Katalog roboczy to `~/.desk-panel/agent`, ale to nie jest
   piaskownica. Projekt jest hobbystyczny i zabezpieczenia świadomie odłożono; zmieni się to, gdy panel wyjdzie poza własny komputer.
+- **Uprawnienia**: tryb bez interakcji nie może pytać o zgodę, więc narzędzie, które jej wymaga (np. `read_file` poza katalogiem roboczym), jest
+  automatycznie odmawiane, a **cała tura kończy się bez odpowiedzi** (wynik `SUCCESS`, pusta odpowiedź, `denied_actions`). Dlatego Launcher dodaje
+  `--dangerously-skip-permissions` (`agyPermissionArgs`; jak `run_command`, który i tak działał bez pytania). Zmienia to tylko argumenty uruchomienia,
+  nigdy ustawień `agy`; `DESK_AGY_SKIP_PERMISSIONS=0` (albo `false`, `no`, `off`) wyłącza flagę, wtedy odmowy wracają i widać je w oknie oraz w `denied`.
 - `-p` zjada następny token, stąd `-p ''` na końcu argumentów. Pomoc drukuje na stderr. Zamknięcie stdin kończy proces.
-- Każda wiadomość zużywa limit konta `agy`; nie ma tu żadnych odczytów w tle.
+- Każda wiadomość zużywa limit konta `agy`. Panel nie odpytuje agenta w tle: tura zaczyna się tylko od wiadomości użytkownika.
+
+## Szwy do rozszerzania
+
+Dwa miejsca, w których czat można zmieniać, nie ruszając reszty. Opisane przez role, nie przez układ plików.
+
+**Silnik agenta (`Launcher` / `AgentProcess`).** Serwis czatu (`createAgentChat`) nie uruchamia `agy` sam: dostaje `Launcher`, który
+zwraca `AgentProcess` (zapis linii, zamknięcie stdin, zabicie, odbiór linii i wyjścia). Podmienia się go w testach i w trybie
+scenariusza. Co to daje przy innym silniku:
+
+- UI i API nie zmieniają się: znają tylko `ChatService` i `ChatMessage`.
+- **Format zdarzeń `agy` (stream-json) nie jest za szwem**, tylko wewnątrz serwisu: to on zamienia `step_update`/`result` na
+  `ChatMessage`. Silnik z innym protokołem musi albo mówić tym samym protokołem (adapter w `Launcher`), albo wymaga uogólnienia
+  tego tłumaczenia w serwisie. Pierwsze jest tańsze.
+- Zapisane rozmowy trzymają identyfikator rozmowy `agy` (`agy`), więc inny silnik oznacza też decyzję, co zrobić z wznawianiem.
+
+**Agent skryptowy (tryb scenariusza).** Odtwarza zdarzenia `agy` i przechodzi przez ten sam serwis i zapis. Skutek: **każda
+zmiana w protokole zdarzeń albo w tym, co serwis czyta z `agy`, musi iść w parze ze zmianą agenta skryptowego**, inaczej
+`just scenario` i zrzuty ekranu przestaną pokazywać czat zgodnie z prawdziwym. Podobnie nowy rodzaj kroku (np. nowe narzędzie
+w UI) warto dodać do skryptu, żeby dało się go zobaczyć bez `agy` i bez zużywania limitu. Test serwisu ma własnego fałszywego
+agenta (`FakeAgent`), który też trzeba utrzymać zgodnie z protokołem.
+
+## Diagnostyka rozmów (dla analizy przez człowieka lub innego agenta)
+
+Rozmowy w `~/.desk-panel/chats` są lekkie: tylko to, co widać w oknie (plus `usage`). Diagnostyka leży **osobno** w
+`~/.desk-panel/chat-logs` (`server/chat-log.ts`), więc czytanie rozmów jej nie ciągnie, a analizujący agent nie zaśmieca sobie kontekstu:
+
+- **`README.md`**: opis formatów, zapisywany przy starcie usługi. Czytaj go pierwszy.
+- **`turns.jsonl`**: jedna krótka linia na zakończoną turę (pytanie, model, status i `error`, co zakończyło turę: `result`/`exit`/`stop`,
+  `emptyAnswer`, `lastStep`, `denied` (narzędzia zablokowane przez tryb bez interakcji), wynik agy, tokeny, wywołania modelu, lista narzędzi z kodem wyjścia, rozmiarem wyniku i `error`). Od tego zacznij
+  pytania typu „z czym agent ma problem”, „które narzędzia zawodzą”, „ile kosztują tury”.
+- **`<id rozmowy>.jsonl`**: surowy ślad jednej rozmowy: każde zdarzenie z `agy` (linie dłuższe niż 16 000 znaków skrócone), plus to, co zrobił
+  serwis (`spawn` z pełnym poleceniem i modelem, `sent`, `stop`, `idle`, `exit` z powodem, `finish`, `chat-deleted`). Otwieraj tylko dla tury
+  wybranej z `turns.jsonl` i filtruj po polu `turn`; pliki są ograniczone do 4 MB, a starsze niż 30 dni usuwane przy starcie.
+
+Dziennik zawiera prywatne treści (poczta, kalendarz, polecenia agenta), leży poza Gitem i **nie znika razem z usuniętą rozmową**
+(usunięta, zepsuta rozmowa jest najciekawsza do analizy). Zapis nigdy nie psuje czatu: błędy dziennika są połykane. Tura, w której agent
+skończył bez żadnego tekstu (status `done`, brak odpowiedzi), jest w oknie błędem „Agent zakończył bez odpowiedzi.” (z widocznymi narzędziami; gdy `agy` zgłosił `denied_actions`, komunikat podaje zablokowane narzędzie, a nieudane narzędzie pokazuje powód), a w
+`turns.jsonl` ma `emptyAnswer: true` i `lastStep`, czyli gdzie agent skończył. Zmieniając sposób czytania zdarzeń `agy`, zmień też to, co dziennik
+z nich bierze (`record()` w serwisie czatu) i opis w `LOG_README`.
 
 ## API
 
@@ -119,4 +206,4 @@ strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
 ## Dalsze kroki (jeszcze nie zrobione)
 
 Własne skille w czacie (menu po `/`; natywne skille `agy` leżą w `<katalog roboczy>/.agents/skills/<nazwa>/SKILL.md` i rozwijają
-się przez `/nazwa`), lokalne zadania dnia i notatki z narzędziami panelu dla agenta, wirtualne pulpity.
+się przez `/nazwa`), lokalne zadania dnia i notatki oraz zapisy z poziomu agenta (dziś agent tylko czyta).

@@ -16,7 +16,7 @@ const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
 // Gmail accounts shown in the mail list; the calendar account by default.
 const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env });
-const chat = createAgentChat();
+const chat = createAgentChat({ panelUrl: `http://127.0.0.1:${port}` });
 const server = createPanelServer(sources, root, allowedHost, chat).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

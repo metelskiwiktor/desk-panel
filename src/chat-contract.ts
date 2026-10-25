@@ -28,6 +28,12 @@ export type ChatPart =
   | { type: 'tool'; id: string; name: string; input: string; output?: string; state: 'running' | 'done' };
 
 export type MessageStatus = 'streaming' | 'done' | 'error' | 'stopped';
+/**
+ * What one answer cost, as the agent reports it for the whole turn: `input` is the tokens read fresh (all model calls
+ * together), `cached` the tokens read from its prompt cache on top of that, `thinking` is part of `output`.
+ * `calls` is how many times the model was called and `tools` how many commands it ran.
+ */
+export interface ChatUsage { input: number; output: number; thinking: number; cached: number; calls: number; tools: number }
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent';
@@ -37,6 +43,7 @@ export interface ChatMessage {
   context?: ContextItem[];
   /** Agent messages: the steps. */
   parts?: ChatPart[];
+  usage?: ChatUsage;
   status?: MessageStatus;
   error?: string;
 }
