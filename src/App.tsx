@@ -54,6 +54,8 @@ import { ambientLines, useAmbient, useNight } from './ambient-mode';
 import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
 import { ChatWindow } from './ChatWindow';
+import { PulpitMenu } from './PulpitMenu';
+import { usePulpits } from './pulpits';
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -90,6 +92,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [page, setPage] = useState<Page>('home');
   const [detail, setDetail] = useState<Detail | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const pulpits = usePulpits();
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!pollingEnabled) return;
@@ -391,11 +394,12 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} showPc={visible('system')} />
           {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
+          {page === 'home' && !detail && <PulpitMenu pulpits={pulpits} />}
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button className="top-button" aria-label="Pokaż zegar (tryb ambient)" onClick={ambient.enter}><Clock size={20} /></button>
-          <button className="top-button" aria-label="Otwórz czat z agentem" aria-haspopup="dialog" onClick={() => setChatOpen(true)}><MessageSquare size={20} /></button>
+          <button className="top-button" aria-label="Otwórz czat z agentem" aria-haspopup="dialog" aria-expanded={chatOpen} onClick={() => setChatOpen(open => !open)}><MessageSquare size={20} /></button>
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>
@@ -413,7 +417,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {page === 'home' ? (
               <>
                 <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} now={now} open={open}
-                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} />
+                  showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} pulpit={pulpits.active} />
               </>
             ) : (
               <>
@@ -469,6 +473,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                     onTabletPreviewChange={onTabletPreviewChange}
                     layout={layout}
                     configure={configure}
+                    resetArrangement={pulpits.resetActive}
                     storageError={storageError}
                   />
                 )}

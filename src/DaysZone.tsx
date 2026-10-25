@@ -1,4 +1,5 @@
 import type { Detail } from './model';
+import { ctx } from './chat-context';
 import { SizeGrip } from './SizeGrip';
 import { MonthGrid, WeekChips, WeekStrip } from './WeekStrip';
 import type { WeekDay } from './week';
@@ -25,7 +26,7 @@ export function DaysZone({ week, month, size, known, selected, select, open, cyc
   open: (d: Detail) => void; cycle: () => void; resize: (size: BottomSize) => void; preview: (size: BottomSize | null) => void; showCalendar: () => void;
 }) {
   const zone = { known, selected, select, open };
-  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni">
+  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni" {...ctx('tile', 'days', size === 'month' ? monthTitle(month) : 'Najbliższe dni')}>
     <div className="p3-days-head">
       <h2 className="p2-eyebrow">{size === 'month' ? monthTitle(month) : 'Najbliższe dni'}</h2>
       <button className="p3-cal" aria-label="Otwórz kalendarz" onClick={showCalendar}>Kalendarz</button>

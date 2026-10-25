@@ -1,0 +1,28 @@
+.pulpit-menu { position: relative; flex: none; }
+.pulpit-button.named { width: auto; max-width: 190px; padding: 0 12px; gap: 8px; display: inline-flex; align-items: center; }
+.pulpit-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+.pulpit-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 280px; padding: 8px;
+  background: var(--p2-surface-2, #1b2230); border: 1px solid var(--p2-line, #273044); border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+.pulpit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pulpit-list li { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.pulpit-list li.is-current { background: color-mix(in srgb, var(--p2-cal, #7ca9ff) 14%, transparent); }
+.pulpit-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px; border: 0; background: none; color: inherit; font: inherit; text-align: left; border-radius: 8px; cursor: pointer; }
+.pulpit-pick:hover { background: color-mix(in srgb, var(--p2-cal, #7ca9ff) 10%, transparent); }
+.pulpit-check { width: 16px; display: inline-flex; color: var(--p2-cal, #7ca9ff); }
+.pulpit-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pulpit-act { flex: none; min-width: 36px; height: 36px; padding: 0 8px; border: 0; background: none; color: inherit; opacity: 0.65; font: inherit; font-size: 0.8rem; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.pulpit-act:hover { opacity: 1; background: color-mix(in srgb, var(--p2-cal, #7ca9ff) 12%, transparent); }
+.pulpit-act.danger { opacity: 1; color: #ff8d8d; }
+.pulpit-input { flex: 1; min-width: 0; height: 36px; margin: 2px 4px; padding: 0 10px; font: inherit; color: inherit; background: var(--p2-surface, #141922); border: 1px solid var(--p2-cal, #7ca9ff); border-radius: 8px; }
+.pulpit-new { width: 100%; margin-top: 6px; min-height: 40px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--p2-line, #273044); background: none; color: inherit; font: inherit; border-radius: 8px; cursor: pointer; }
+.pulpit-new:hover:not(:disabled) { border-color: var(--p2-cal, #7ca9ff); }
+.pulpit-new:disabled { opacity: 0.4; cursor: default; }
+/* A phone: the button sits mid-row, so the list is a sheet at the bottom of the screen instead of hanging off its corner. */
+@media (max-width: 640px) {
+  .pulpit-pop { position: fixed; left: 12px; right: 12px; bottom: 12px; top: auto; width: auto; z-index: 60; padding: 10px; }
+  .pulpit-pick, .pulpit-act, .pulpit-new { min-height: 46px; }
+  .pulpit-act { min-width: 46px; }
+}

@@ -14,6 +14,7 @@ import type { CezarState } from './useCezar';
 import type { MailState } from './useMail';
 import { kindOfCard, limitKinds, pickable } from './workspace-kinds';
 import { ctx } from './chat-context';
+import { workspaceKey } from './pulpits';
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
 const sameLayout = (a: Tile[], b: Tile[]) => a.length === b.length && a.every(t => b.some(o => o.kind === t.kind && o.c === t.c && o.r === t.r && o.w === t.w && o.h === t.h));
@@ -74,18 +75,20 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
  * stretch it, and the X in its corner switches it off. A tile that grows over others asks them to move to free cells,
  * and only stops where they have nowhere to go. The arrangement is kept in the browser.
  */
-export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, showBreakdown, available, systemThreshold }: {
+export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
   data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState;
   showTasks: () => void; showBreakdown?: () => void; available: (kind: string) => boolean; systemThreshold: number;
+  /** The virtual desktop whose arrangement this is (pulpits.ts); each one is kept under its own key. */
+  pulpit?: string;
 }) {
-  const [stored, setStored] = useState(readWorkspace);
+  const [stored, setStored] = useState(() => readWorkspace(workspaceKey(pulpit)));
   const cards = getQuotaCards(data.quotas.data);
   // Until the panel is arranged by hand the layout follows what there is to show; then the saved one is kept as it is.
   // A tile of a kind the settings switched off is not drawn, and the next change drops it from the saved layout for good.
   const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar'].filter(available))).filter(t => available(t.kind));
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
-  const commit = (next: Tile[]) => { tilesRef.current = next; setStored(next); saveWorkspace(next); };
+  const commit = (next: Tile[]) => { tilesRef.current = next; setStored(next); saveWorkspace(next, workspaceKey(pulpit)); };
   const grid = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [notice, setNotice] = useState('');

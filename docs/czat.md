@@ -5,15 +5,22 @@ panel i skąd bierze dane, ale **nie dostaje całej poczty ani kalendarza**: dos
 
 ## Jak się tego używa
 
-- **Okno**: lista rozmów po lewej (grupy Dziś / Wczoraj / Ostatnie 7 dni / Starsze, wyszukiwarka, „Nowy czat”), rozmowa po prawej.
+- **Okno**: domyślnie małe, **pływające** przy prawej krawędzi, pod górnym paskiem. Zasłania część pulpitu, ale go nie
+  blokuje i nie przyciemnia: można dalej klikać. Ikona rozmów w nagłówku wysuwa listę rozmów (grupy Dziś / Wczoraj / Ostatnie
+  7 dni / Starsze, wyszukiwarka, „Nowy czat”). Ikona ze strzałkami **powiększa** okno do dużego, modalnego, z listą rozmów
+  po lewej (i z powrotem); wybór jest pamiętany w przeglądarce (`desk-panel.chat-wide`). Przycisk czatu w górnym pasku
+  otwiera i zamyka okno. `Esc` zamyka pływające okno tylko, gdy fokus jest w nim.
   Wybranie rozmowy z listy ją **kontynuuje**; agent pamięta wcześniejsze wiadomości, także po restarcie panelu.
-- **Wskaż element**: zwija czat do panelu przy prawej krawędzi, a pulpit przesuwa się obok. Każdy kliknięty element (mail, zadanie
-  Cezara, spotkanie, trening albo cały kafelek: Poczta, Cezar, limity, pasek dnia) trafia do wiadomości jako chip. Kliknięcie
-  jeszcze raz zdejmuje go z kontekstu. W tym trybie kliknięcia **nie uruchamiają** niczego na pulpicie. `Esc`, „Gotowe” lub
-  strzałka w nagłówku kończą wskazywanie.
+- **Wskaż element**: okno przykleja się do prawej krawędzi na całą wysokość, a pulpit **zsuwa się w lewo** obok niego (tylko
+  w tym trybie; górny pasek zawija się pod zegar). Każdy kliknięty element (mail, zadanie Cezara, spotkanie, trening albo cały
+  kafelek: Poczta, Cezar, limity, pasek dnia, cała strefa „Najbliższe dni” i pojedynczy dzień w niej) trafia do wiadomości
+  jako chip. Kliknięcie jeszcze raz zdejmuje go z kontekstu. W tym trybie kliknięcia **nie uruchamiają** niczego na pulpicie,
+  z wyjątkiem elementów oznaczonych `data-pick-through` (menu pulpitów wirtualnych): można przełączyć pulpit i wskazać kafelek
+  z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i wracają do okna sprzed niego.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
 - Rozmowę można zmienić nazwę (ołówek) i usunąć (kosz, wymaga drugiego dotknięcia).
-- Wąski ekran (telefon przez Tailscale): lista rozmów jest szufladą, okno zajmuje cały ekran, a panel wskazywania jest u dołu.
+- Wąski ekran (telefon przez Tailscale): lista rozmów jest szufladą, okno zajmuje cały ekran (bez przycisku powiększania), a
+  panel wskazywania jest u dołu.
 
 ## Co widzi agent
 

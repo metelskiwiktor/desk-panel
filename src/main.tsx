@@ -5,6 +5,7 @@ import { watchForNewBuild } from './auto-reload';
 import './styles.css';
 import './pulpit.css';
 import './chat.css';
+import './pulpits.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

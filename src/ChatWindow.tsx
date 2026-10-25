@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, Mail, Pencil, Plus, Search, Sparkles, Square, Trash2, Wrench, X,
+  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, Mail, Maximize2, Minimize2, Pencil, Plus, Search, Sparkles, Square, Trash2, Wrench, X,
   type LucideIcon,
 } from 'lucide-react';
 import { MAX_CONTEXT, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
@@ -16,6 +16,10 @@ const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   workout: { label: 'Trening', icon: Activity },
   tile: { label: 'Kafelek', icon: LayoutGrid },
 };
+
+const WIDE_KEY = 'desk-panel.chat-wide';
+const readWide = () => { try { return localStorage.getItem(WIDE_KEY) === '1'; } catch { return false; } };
+const saveWide = (wide: boolean) => { try { localStorage.setItem(WIDE_KEY, wide ? '1' : '0'); } catch { /* a per-viewer convenience, the chat works without it */ } };
 
 /** A dashboard element in the conversation: the small label the user picked, with a remove button while it is still a draft. */
 function Chip({ item, remove }: { item: ContextItem; remove?: () => void }) {
@@ -139,13 +143,16 @@ function useStickToEnd(dep: unknown) {
 }
 
 /**
- * The chat with the agent. A window over the dashboard; while the user points at elements it docks to the right edge
- * and the dashboard narrows beside it, so it can be clicked. What is pointed at becomes chips on the next message.
+ * The chat with the agent. By default a small window floating at the right, under the top bar: it covers part of the
+ * dashboard, which stays usable. The button in its header widens it into a big window with the list of conversations
+ * beside it. While the user points at elements it docks to the right edge and the dashboard narrows beside it, so all of
+ * it can be clicked. What is pointed at becomes chips on the next message.
  */
 export function ChatWindow({ onClose }: { onClose: () => void }) {
   const chat = useChat();
   const [context, setContext] = useState<ContextItem[]>([]);
   const [picking, setPicking] = useState(false);
+  const [wide, setWide] = useState(readWide);
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
   const [listOpen, setListOpen] = useState(false);
@@ -181,7 +188,8 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!picking) return;
     document.body.setAttribute('data-picking', '');
-    const outside = (target: EventTarget | null) => !(target instanceof Element && target.closest('.chat-root'));
+    // The chat itself and whatever is marked data-pick-through (the menu of virtual desktops) keep working while pointing.
+    const outside = (target: EventTarget | null) => !(target instanceof Element && target.closest('.chat-root, [data-pick-through]'));
     let hot: HTMLElement | null = null;
     const heat = (el: HTMLElement | null) => { if (el === hot) return; hot?.removeAttribute('data-ctx-hot'); hot = el; hot?.setAttribute('data-ctx-hot', ''); };
     const click = (e: MouseEvent) => {
@@ -219,11 +227,13 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (picking) setPicking(false); else onClose();
+      if (picking) { setPicking(false); return; }
+      // The floating chat does not own the keyboard: Esc closes it from inside it (the dashboard's popovers use Esc too).
+      if (wide || (e.target instanceof Element && e.target.closest('.chat-root'))) onClose();
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
-  }, [picking, onClose]);
+  }, [picking, wide, onClose]);
 
   const submit = async () => {
     const body = draft.trim();
@@ -241,6 +251,8 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
     if (next && next !== chat.active?.title) void chat.rename(next);
   };
   const pickToggle = () => setPicking(on => !on);
+  const toggleWide = () => { const next = !wide; setWide(next); saveWide(next); setListOpen(false); };
+  const mode = picking ? 'dock' : wide ? 'window' : 'float';
 
   const composer = <div className="chat-composer">
     {(context.length > 0 || picking) && <div className="chat-chips">
@@ -251,7 +263,7 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
       aria-label="Wiadomość do agenta" placeholder={picking ? 'Co z tym zrobić?' : 'Napisz wiadomość… (Enter wysyła, Shift+Enter nowa linia)'} />
     <div className="chat-tools">
       {picking
-        ? <><button type="button" className="chat-done" onClick={() => setPicking(false)}>Gotowe</button><span className="chat-tools-note">Kończy wskazywanie</span></>
+        ? <><button type="button" className="chat-done" onClick={() => setPicking(false)}>Gotowe</button><span className="chat-tools-note">Kończy wskazywanie (Esc)</span></>
         : <button type="button" className="chat-pick" onClick={pickToggle}><Crosshair size={18} aria-hidden="true" />Wskaż element</button>}
       <span className="chat-agy" title="Agent: agy"><i className={running ? 'run' : ''} aria-hidden="true" />agy</span>
       {running
@@ -274,10 +286,9 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
 
   const meta = chat.active ? `${running ? 'agent odpowiada' : 'agy'} · ${messageCount(chat.active.messages)}` : 'agy';
   return createPortal(
-    <div className="chat-root" data-mode={picking ? 'dock' : 'window'} data-list={listOpen ? 'open' : undefined}>
-      {!picking && <div className="chat-scrim" aria-hidden="true" />}
-      {picking && <div className="chat-pickbar" role="status"><Crosshair size={18} aria-hidden="true" />Wskaż element, który dodać do rozmowy<kbd>Esc</kbd></div>}
-      <section className="chat-panel" role={picking ? 'complementary' : 'dialog'} aria-modal={picking ? undefined : true} aria-label="Czat z agentem">
+    <div className="chat-root" data-mode={mode} data-compact={wide && !picking ? undefined : ''} data-list={listOpen ? 'open' : undefined}>
+      {mode === 'window' && <div className="chat-scrim" aria-hidden="true" />}
+      <section className="chat-panel" role={picking ? 'complementary' : 'dialog'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem">
         {!picking && <Sidebar chat={chat} now={now} query={query} setQuery={setQuery} choose={choose} />}
         <div className="chat-main">
           <header className="chat-head">
@@ -298,6 +309,9 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
                     ? <button type="button" className="chat-confirm" onClick={() => { setConfirmDelete(false); void chat.remove(); }}>Usunąć?</button>
                     : <button type="button" className="chat-icon" aria-label="Usuń rozmowę" onClick={() => setConfirmDelete(true)}><Trash2 size={18} aria-hidden="true" /></button>}
                 </>}
+                <button type="button" className="chat-icon chat-size-toggle" aria-label={wide ? 'Zmniejsz okno czatu' : 'Powiększ okno czatu'} onClick={toggleWide}>
+                  {wide ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
+                </button>
                 <button type="button" className="chat-icon" aria-label="Zamknij czat" onClick={onClose}><X size={20} aria-hidden="true" /></button>
               </>}
           </header>

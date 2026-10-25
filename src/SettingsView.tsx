@@ -17,6 +17,7 @@ export function SettingsView({
   onTabletPreviewChange,
   quotaAccounts,
   quotaVisibility,
+  resetArrangement = resetWorkspace,
 }: {
   layout: Layout;
   configure: (next: Layout) => void;
@@ -25,6 +26,8 @@ export function SettingsView({
   onTabletPreviewChange?: () => void;
   quotaAccounts?:QuotaAccount[]|null;
   quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
+  /** Forgets the arrangement of the open virtual desktop; false when it could not be saved. */
+  resetArrangement?: () => boolean;
 }) {
   const warmup = useWarmupStatus();
   const [arrangement, setArrangement] = useState<'kept' | 'reset' | 'failed'>('kept');
@@ -76,7 +79,7 @@ export function SettingsView({
         <button className="button" onClick={() => configure(defaultLayout())}>
           Pokaż wszystkie sekcje
         </button>
-        <button className="button" onClick={() => setArrangement(resetWorkspace() ? 'reset' : 'failed')}>
+        <button className="button" onClick={() => setArrangement(resetArrangement() ? 'reset' : 'failed')}>
           Przywróć domyślny układ kafelków
         </button>
         {arrangement !== 'kept' && <p className={arrangement === 'failed' ? 'warning' : 'meta'} role="status">

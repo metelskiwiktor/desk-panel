@@ -62,9 +62,9 @@ pod drugą, a układ nie zależy od urządzenia:
   prawa i dolna krawędź oraz róg zmieniają rozmiar (w trakcie kafelek pokazuje swój rozmiar), a X w rogu wyłącza kafelek
   i zwalnia komórki. Rosnący kafelek sam odsuwa sąsiadów na wolne komórki; gdy nie mają dokąd, rośnie tylko
   tak daleko, jak się da, i mówi, dlaczego dalej nie. Układ jest zapamiętany w przeglądarce (`desk-panel.workspace`; telefon
-  i kiosk mają osobne), a Ustawienia → Pulpit przywracają automatyczny. Poniżej 900 CSS px kafelki stoją jeden pod drugim
+  i kiosk mają osobne), a Ustawienia → Pulpit przywracają automatyczny układ otwartego pulpitu wirtualnego (na dodatkowym: pusty). Poniżej 900 CSS px kafelki stoją jeden pod drugim
   w kolejności czytania, bez pustych kafelków i edycji. Obszar bierze to, co zostawią pozostałe strefy, a przy miesiącu
-  płynnie się zwija do zera;
+  płynnie się zwija do zera. **Pulpity wirtualne**: ta siatka ma kilka stron (do 8), np. jedną o AI, drugą o poczcie i Cezarze. Przycisk z ikoną pulpitów w górnym pasku (tylko na stronie głównej) otwiera menu: wybór pulpitu, ołówek zmienia nazwę (Enter zapisuje, Esc odrzuca), kosz usuwa po drugim dotknięciu (nigdy ostatni), „Nowy pulpit” dodaje pusty i od razu go otwiera. Przy więcej niż jednym pulpicie przycisk pokazuje nazwę otwartego. Tylko siatka jest osobna: zegar, górny pasek dnia i dolna strefa dni są wspólne, a ten sam kafelek może stać na kilku pulpitach. Pulpity i otwarty pulpit pamięta przeglądarka (`desk-panel.pulpits`; układ pierwszego, „Główny”, jest w dawnym `desk-panel.workspace`, więc zapisany wcześniej układ po prostu jest pierwszym pulpitem, a pozostałych w `desk-panel.workspace.<id>`). Na wąskim ekranie menu otwiera się u dołu ekranu (kod: `src/pulpits.ts`, `src/PulpitMenu.tsx`);
 - **dół: dni** (z linkiem „Kalendarz” do pełnej agendy). Rozmiary: **krótki** (chip na dzień: etykieta i kropki treningów i spotkań), **średni** (domyślny: karta
   na dzień z planem, czasem i poziomem, ✓ przy wykonanym) i **miesiąc** (pięć tygodni od poniedziałku tego tygodnia,
   zajmuje cały ekran pod górą, a zmiany rozmiaru (także górnego paska) są płynne; dni, które minęły, są wygaszone, bo źródła czytamy od dziś). Dotknięcie dnia wybiera go

@@ -3,15 +3,28 @@ import type { Detail } from './model';
 import { LevelBars } from './TrainingCard';
 import { formatDuration } from './training-view';
 import type { WeekDay, WeekItem } from './week';
+import { ctx } from './chat-context';
 
 const MAX_ITEMS = 3;
 const stateTitle: Partial<Record<NonNullable<WeekItem['state']>, string>> = { done: 'wykonany', partial: 'częściowo', missed: 'nie zrobiony' };
 const dayTitle = (day: WeekDay) => `${day.label} ${day.dayOfMonth}${day.today ? ', dziś' : ''}`;
 
+/** What the agent is told when a day is pointed at: its date and what is planned in it. */
+function dayContext(day: WeekDay) {
+  const lines = day.items.map(i => `- ${i.workout ? 'Trening: ' : ''}${i.title}${i.at ? `, ${i.at}` : i.workout ? '' : ', cały dzień'}${i.workout?.durationSec ? `, ${formatDuration(i.workout.durationSec)}` : ''}`);
+  return ctx('tile', `day:${day.date}`, `Dzień: ${dayTitle(day)}`, [`Dzień: ${day.date} (${dayTitle(day)})`, ...(lines.length ? lines : ['Brak pozycji'])].join('\n'));
+}
+/** A workout or a meeting inside a day: pointed at on its own, it wins over the day. */
+function itemContext(item: WeekItem) {
+  return item.workout
+    ? ctx('workout', item.id, item.title, [`Trening: ${item.title}`, item.workout.durationSec ? `Czas: ${formatDuration(item.workout.durationSec)}` : ''].filter(Boolean).join('\n'))
+    : ctx('event', item.id, item.title, `${item.title}\n${item.at ? `Godzina: ${item.at}` : 'Cały dzień'}`);
+}
+
 function Item({ item, open }: { item: WeekItem; open: (d: Detail) => void }) {
   const w = item.workout;
   const label = `${item.title}${item.at ? `, ${item.at}` : ''}${item.state && stateTitle[item.state] ? `, ${stateTitle[item.state]}` : ''}`;
-  return <button className={`p2-item ${item.kind} ${item.state ?? ''}`} aria-label={label} onClick={() => open(w ? { kind: 'workout', id: item.id } : { kind: 'event', id: item.id })}>
+  return <button className={`p2-item ${item.kind} ${item.state ?? ''}`} aria-label={label} {...itemContext(item)} onClick={() => open(w ? { kind: 'workout', id: item.id } : { kind: 'event', id: item.id })}>
     <span className="p2-item-meta">
       {w ? <>
         {item.state === 'done' ? <Check size={14} /> : <Bike size={14} />}
@@ -32,7 +45,7 @@ export function WeekStrip({ days, known, selected, select, open }: Zone) {
     {days.map(day => {
       const shown = day.items.slice(0, MAX_ITEMS - (day.items.length > MAX_ITEMS ? 1 : 0));
       const hidden = day.items.length - shown.length;
-      return <li key={day.date} className={`p2-weekday ${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''} ${known && !day.items.length ? 'free' : ''} ${day.items.length >= MAX_ITEMS ? 'crowded' : ''}`}>
+      return <li key={day.date} {...dayContext(day)} className={`p2-weekday ${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''} ${known && !day.items.length ? 'free' : ''} ${day.items.length >= MAX_ITEMS ? 'crowded' : ''}`}>
         <button className="p2-weekday-head" aria-label={`Pokaż dzień: ${dayTitle(day)}`} aria-pressed={day.date === selected} onClick={() => select(day.date)}>
           <b>{day.label}</b><span>{day.dayOfMonth}{day.today && day.items.length ? ' · dziś' : ''}</span>
         </button>
@@ -50,7 +63,7 @@ export function WeekChips({ days, known, selected, select }: Zone) {
     {days.map(day => {
       const trainings = day.items.filter(i => i.workout).length;
       const events = day.items.length - trainings;
-      return <li key={day.date} className={`${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''}`}>
+      return <li key={day.date} {...dayContext(day)} className={`${day.today ? 'today' : ''} ${day.date === selected ? 'selected' : ''}`}>
         <button className="p3-daychip" aria-label={`Pokaż dzień: ${dayTitle(day)}${day.items.length ? `, ${day.items.length} pozycji` : ''}`} aria-pressed={day.date === selected} onClick={() => select(day.date)}>
           <b>{day.label}</b><span>{day.dayOfMonth}</span>
           <span className="p3-dots" aria-hidden="true">
@@ -73,7 +86,7 @@ export function MonthGrid({ days, known, selected, select }: Zone) {
     <ol className="p3-month-grid">
       {days.map(day => {
         const shown = day.items.slice(0, 2), hidden = day.items.length - shown.length;
-        return <li key={day.date} className={`${day.today ? 'today' : ''} ${day.past ? 'past' : ''} ${day.date === selected ? 'selected' : ''}`}>
+        return <li key={day.date} {...dayContext(day)} className={`${day.today ? 'today' : ''} ${day.past ? 'past' : ''} ${day.date === selected ? 'selected' : ''}`}>
           <button aria-label={`Pokaż dzień: ${dayTitle(day)}${day.items.length ? `, ${day.items.length} pozycji` : ''}`} aria-pressed={day.date === selected} onClick={() => select(day.date)}>
             <b>{day.dayOfMonth}</b>
             {shown.map(item => <span key={`${item.kind}:${item.id}`} className={`p3-cell-item ${item.workout ? 'train' : 'event'}`}><i />{item.title}</span>)}

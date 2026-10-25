@@ -133,13 +133,14 @@ export function parseWorkspace(raw: string | null): Tile[] | null {
     return null;
   }
 }
-export function readWorkspace(): Tile[] | null {
-  try { return parseWorkspace(localStorage.getItem(WORKSPACE_KEY)); } catch { return null; }
+/** `key` is the storage key of one virtual desktop (see pulpits.ts); the first one keeps the original key. */
+export function readWorkspace(key = WORKSPACE_KEY): Tile[] | null {
+  try { return parseWorkspace(localStorage.getItem(key)); } catch { return null; }
 }
-export function saveWorkspace(tiles: Tile[]): boolean {
-  try { localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, tiles })); return true; } catch { return false; }
+export function saveWorkspace(tiles: Tile[], key = WORKSPACE_KEY): boolean {
+  try { localStorage.setItem(key, JSON.stringify({ version: 1, tiles })); return true; } catch { return false; }
 }
 /** Forgets the arrangement: the next time the work area is drawn it is the automatic one again. */
-export function resetWorkspace(): boolean {
-  try { localStorage.removeItem(WORKSPACE_KEY); return true; } catch { return false; }
+export function resetWorkspace(key = WORKSPACE_KEY): boolean {
+  try { localStorage.removeItem(key); return true; } catch { return false; }
 }
