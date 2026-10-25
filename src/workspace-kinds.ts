@@ -20,7 +20,17 @@ export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, 
 const LIMITS_OF_EVERY_ACCOUNT = ['quota:Claude', 'quota:Codex'];
 export const limitKinds = (cards: QuotaCardItem[]) => [...new Set([...LIMITS_OF_EVERY_ACCOUNT, ...cards.map(kindOfCard)])];
 
-/** What an empty tile offers, in this order: the limits, then Cezar, mail and the computer; nothing that is already placed. */
-export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean): string[] {
-  return [...limitKinds(cards), 'cezar', 'mail', 'system'].filter(kind => !placed.includes(kind) && available(kind));
+/**
+ * Widgets that can stand on the grid several times, each tile with its own settings (its own id, see tile-grid.ts).
+ * Every other widget is one thing and stands once. None yet: the to-do lists will be the first.
+ */
+export const MULTI_KINDS: readonly string[] = [];
+
+/**
+ * What an empty tile offers, in this order: the limits, then Cezar, mail and the computer, then the widgets that may
+ * repeat. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
+ */
+export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean, multi: readonly string[] = MULTI_KINDS): string[] {
+  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', ...multi])];
+  return kinds.filter(kind => (multi.includes(kind) || !placed.includes(kind)) && available(kind));
 }

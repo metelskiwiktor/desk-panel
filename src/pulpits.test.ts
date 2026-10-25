@@ -71,7 +71,7 @@ describe('virtual desktops: storage', () => {
   });
   it('reads a layout of a given desktop from its own key', () => {
     localStorage.setItem(workspaceKey('pa'), JSON.stringify({ version: 1, tiles: [{ kind: 'mail', c: 0, r: 0, w: 1, h: 1 }] }));
-    expect(readWorkspace(workspaceKey('pa'))).toEqual([{ kind: 'mail', c: 0, r: 0, w: 1, h: 1 }]);
+    expect(readWorkspace(workspaceKey('pa'))).toEqual([{ id: 'mail', kind: 'mail', c: 0, r: 0, w: 1, h: 1 }]); // a layout saved before ids gets one: the kind
     expect(readWorkspace()).toBeNull();
   });
 });

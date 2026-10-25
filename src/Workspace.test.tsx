@@ -19,7 +19,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const t = (kind: string, c: number, r: number, w = 1, h = 1): Tile => ({ kind, c, r, w, h });
+const t = (kind: string, c: number, r: number, w = 1, h = 1): Tile => ({ id: kind, kind, c, r, w, h });
 const arrange = (...tiles: Tile[]) => localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, tiles }));
 const arranged = (): Tile[] => JSON.parse(localStorage.getItem(WORKSPACE_KEY)!).tiles;
 const at = (kind: string) => arranged().find(x => x.kind === kind)!;
@@ -196,5 +196,20 @@ describe('arranging with the pointer', () => {
     expect(await screen.findByRole('status', { name: '' })).toBeTruthy();
     expect(screen.getByText(/Nie ma tam miejsca/)).toBeTruthy();
     expect(JSON.parse(localStorage.getItem(WORKSPACE_KEY)!).tiles).toEqual([t('quota:Claude', 0, 0, 1, 2), t('cezar', 1, 0, 3, 2)]);
+  });
+});
+
+describe('a layout saved before tiles had ids', () => {
+  it('is drawn as it was and gets an id per tile (the kind) with the first change', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, tiles: [{ kind: 'cezar', c: 2, r: 0, w: 2, h: 2 }, { kind: 'mail', c: 0, r: 0, w: 1, h: 1 }, { kind: 'system', c: 1, r: 0, w: 1, h: 1 }] }));
+    renderWith();
+    await screen.findByRole('region', { name: 'Poczta' });
+    expect(grid().querySelectorAll('.wk-cell')).toHaveLength(3);
+    expect(cell('mail').getAttribute('data-tile')).toBe('mail');
+    await user.click(screen.getByRole('button', { name: 'Wyłącz kafelek: Komputer' }));
+    expect(arranged()).toEqual([
+      { id: 'cezar', kind: 'cezar', c: 2, r: 0, w: 2, h: 2 }, { id: 'mail', kind: 'mail', c: 0, r: 0, w: 1, h: 1 },
+    ]);
   });
 });

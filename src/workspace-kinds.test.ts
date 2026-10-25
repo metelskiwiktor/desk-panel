@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WidgetId } from './layout';
 import type { QuotaCardItem } from './quota-cards';
 import { defaultQuotaVisibility } from './quota-visibility';
-import { kindAvailable, kindOfCard, limitKinds, pickable } from './workspace-kinds';
+import { MULTI_KINDS, kindAvailable, kindOfCard, limitKinds, pickable } from './workspace-kinds';
 
 const allOn = (_: WidgetId) => true;
 const card = (id: string): QuotaCardItem => ({ id, provider: id.startsWith('agy:') ? 'AGY' : id as 'Claude', title: id, snapshots: [] });
@@ -40,5 +40,11 @@ describe('what an empty tile offers', () => {
   it('leaves out what is already on the grid and what the settings switched off', () => {
     expect(pickable(cards, ['quota:Claude', 'mail'], kind => kind !== 'system' && kind !== 'quota:agy:Gemini 4 Argon'))
       .toEqual(['quota:Codex', 'quota:agy:Gemini Models', 'cezar']);
+  });
+  it('offers a widget that may repeat again and again, last, while the settings allow it; today there is none', () => {
+    expect(MULTI_KINDS).toEqual([]);
+    expect(pickable(cards, ['todo', 'todo', 'mail'], () => true, ['todo'])).toEqual([
+      'quota:Claude', 'quota:Codex', 'quota:agy:Gemini Models', 'quota:agy:Gemini 4 Argon', 'cezar', 'system', 'todo']);
+    expect(pickable(cards, [], kind => kind !== 'todo', ['todo'])).not.toContain('todo');
   });
 });

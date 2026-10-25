@@ -8,16 +8,16 @@ import { MissingLimit, QuotaTile } from './QuotaBars';
 import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SystemTile } from './SystemTile';
 import {
-  COLS, ROWS, add, autoTiles, emptyCells, move, readWorkspace, readingOrder, remove, resize, saveWorkspace, targetRect, type Plan, type Rect, type Tile,
+  COLS, ROWS, add, autoTiles, emptyCells, move, newTileId, readWorkspace, readingOrder, remove, resize, saveWorkspace, targetRect, type Plan, type Rect, type Tile,
 } from './tile-grid';
 import type { CezarState } from './useCezar';
 import type { MailState } from './useMail';
-import { kindOfCard, limitKinds, pickable } from './workspace-kinds';
+import { MULTI_KINDS, kindOfCard, limitKinds, pickable } from './workspace-kinds';
 import { ctx } from './chat-context';
 import { workspaceKey } from './pulpits';
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
-const sameLayout = (a: Tile[], b: Tile[]) => a.length === b.length && a.every(t => b.some(o => o.kind === t.kind && o.c === t.c && o.r === t.r && o.w === t.w && o.h === t.h));
+const sameLayout = (a: Tile[], b: Tile[]) => a.length === b.length && a.every(t => b.some(o => o.id === t.id && o.c === t.c && o.r === t.r && o.w === t.w && o.h === t.h));
 const areaOf = ({ c, r, w, h }: Rect) => ({ '--c': c + 1, '--r': r + 1, '--w': w, '--h': h }) as CSSProperties;
 
 const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
@@ -47,7 +47,7 @@ function measure(grid: HTMLElement | null): Geometry | null {
 }
 const cellAt = (g: Geometry, x: number, y: number) => ({ c: clamp(Math.floor((x - g.left) / g.px), 0, COLS - 1), r: clamp(Math.floor((y - g.top) / g.py), 0, ROWS - 1) });
 
-interface Drag { kind: string; dx: number; dy: number; plan: Plan | null; to: Rect | null }
+interface Drag { id: string; dx: number; dy: number; plan: Plan | null; to: Rect | null }
 
 /** A cell nobody covers: a row of what could stand here, in the same order wherever it is. */
 function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number }; kinds: string[]; cards: QuotaCardItem[]; pick: (kind: string) => void }) {
@@ -113,16 +113,16 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, s
     if (event.button > 0 || !g) return;
     event.preventDefault();
     capture(event);
-    setActive(tile.kind);
+    setActive(tile.id);
     const grab = cellAt(g, event.clientX, event.clientY);
     // The tile is held by the cell it was taken by, so a wide tile lands where its grabbed part is pointing.
     const held = { c: clamp(grab.c - tile.c, 0, tile.w - 1), r: clamp(grab.r - tile.r, 0, tile.h - 1) };
     const aim = (e: PointerEvent) => {
       const cell = cellAt(measure(grid.current) ?? g, e.clientX, e.clientY), at = { c: cell.c - held.c, r: cell.r - held.r };
-      return { plan: move(tilesRef.current, tile.kind, at), to: targetRect(tilesRef.current, tile.kind, at) };
+      return { plan: move(tilesRef.current, tile.id, at), to: targetRect(tilesRef.current, tile.id, at) };
     };
-    setDrag({ kind: tile.kind, dx: 0, dy: 0, plan: null, to: null });
-    track(e => setDrag({ kind: tile.kind, dx: e.clientX - event.clientX, dy: e.clientY - event.clientY, ...aim(e) }), e => {
+    setDrag({ id: tile.id, dx: 0, dy: 0, plan: null, to: null });
+    track(e => setDrag({ id: tile.id, dx: e.clientX - event.clientX, dy: e.clientY - event.clientY, ...aim(e) }), e => {
       setDrag(null);
       setActive(null);
       if (!e) return;
@@ -132,20 +132,20 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, s
     });
   };
 
-  const startResize = (event: ReactPointerEvent, kind: string, edges: 'r' | 'b' | 'rb') => {
+  const startResize = (event: ReactPointerEvent, id: string, edges: 'r' | 'b' | 'rb') => {
     const g = measure(grid.current);
     if (event.button > 0 || !g) return;
     event.preventDefault();
     capture(event);
-    setActive(kind);
+    setActive(id);
     let told = false;
     track(e => {
-      const geo = measure(grid.current) ?? g, tile = tilesRef.current.find(t => t.kind === kind);
+      const geo = measure(grid.current) ?? g, tile = tilesRef.current.find(t => t.id === id);
       if (!tile) return;
       // The edge follows the pointer: the size is how many cells the pointer has gone past from the tile's corner.
       const w = edges.includes('r') ? Math.round((e.clientX - (geo.left + tile.c * geo.px) + geo.gx) / geo.px) : tile.w;
       const h = edges.includes('b') ? Math.round((e.clientY - (geo.top + tile.r * geo.py) + geo.gy) / geo.py) : tile.h;
-      const plan = resize(tilesRef.current, kind, { w, h });
+      const plan = resize(tilesRef.current, id, { w, h });
       if (!sameLayout(plan.tiles, tilesRef.current)) commit(plan.tiles);
       else if ((w > tile.w || h > tile.h) && !told) { told = true; say('Nie ma miejsca: sąsiednie kafelki nie mają dokąd się przesunąć. Usuń któryś albo zmniejsz.'); }
     }, () => setActive(null));
@@ -165,24 +165,24 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, s
   const offered = pickable(cards, tiles.map(t => t.kind), available);
   const highlights = drag ? [
     ...(drag.to ? [{ key: 'to', rect: drag.to, ok: !!drag.plan }] : []),
-    ...(drag.plan?.tiles.filter(t => drag.plan!.moved.includes(t.kind)).map(t => ({ key: t.kind, rect: t as Rect, ok: true })) ?? []),
+    ...(drag.plan?.tiles.filter(t => drag.plan!.moved.includes(t.id)).map(t => ({ key: t.id, rect: t as Rect, ok: true })) ?? []),
   ] : [];
   return <div className="wk-grid" ref={grid} role="group" aria-label="Obszar roboczy">
     {readingOrder(tiles).map(tile => {
       const { title } = describe(tile.kind, cards);
-      const dragging = drag?.kind === tile.kind;
-      return <div key={tile.kind} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.kind ? 'active' : ''}`} data-kind={tile.kind} {...ctx('tile', tile.kind, title)}
+      const dragging = drag?.id === tile.id;
+      return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} {...ctx('tile', tile.id, title)}
         style={{ ...areaOf(tile), ...(dragging ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {}) }}>
         <div className="wk-body">{content(tile)}</div>
         <button className="wk-grip" aria-label={`Przesuń kafelek: ${title}`} title="Przeciągnij, żeby przesunąć" onPointerDown={e => startMove(e, tile)}><i /></button>
-        <button className="wk-x" aria-label={`Wyłącz kafelek: ${title}`} title="Wyłącz kafelek" onClick={() => commit(remove(tilesRef.current, tile.kind))}><X size={14} aria-hidden="true" /></button>
-        {active === tile.kind && <span className="wk-size" aria-hidden="true">{tile.w}×{tile.h}</span>}
-        <i className="wk-rz r" onPointerDown={e => startResize(e, tile.kind, 'r')} />
-        <i className="wk-rz b" onPointerDown={e => startResize(e, tile.kind, 'b')} />
-        <i className="wk-rz rb" onPointerDown={e => startResize(e, tile.kind, 'rb')} />
+        <button className="wk-x" aria-label={`Wyłącz kafelek: ${title}`} title="Wyłącz kafelek" onClick={() => commit(remove(tilesRef.current, tile.id))}><X size={14} aria-hidden="true" /></button>
+        {active === tile.id && <span className="wk-size" aria-hidden="true">{tile.w}×{tile.h}</span>}
+        <i className="wk-rz r" onPointerDown={e => startResize(e, tile.id, 'r')} />
+        <i className="wk-rz b" onPointerDown={e => startResize(e, tile.id, 'b')} />
+        <i className="wk-rz rb" onPointerDown={e => startResize(e, tile.id, 'rb')} />
       </div>;
     })}
-    {emptyCells(tiles).map(cell => <EmptyCell key={`${cell.c},${cell.r}`} cell={cell} kinds={offered} cards={cards} pick={kind => commit(add(tilesRef.current, kind, cell.c, cell.r))} />)}
+    {emptyCells(tiles).map(cell => <EmptyCell key={`${cell.c},${cell.r}`} cell={cell} kinds={offered} cards={cards} pick={kind => commit(add(tilesRef.current, kind, cell.c, cell.r, MULTI_KINDS.includes(kind) ? newTileId(tilesRef.current, kind) : kind))} />)}
     {highlights.map(h => <div key={h.key} className={`wk-hl ${h.ok ? 'ok' : 'bad'}`} style={areaOf(h.rect)} aria-hidden="true" />)}
     {notice && <p className="wk-notice" role="status">{notice}</p>}
   </div>;

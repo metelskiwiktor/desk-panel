@@ -7,8 +7,15 @@ export const ROWS = 2;
 export const WORKSPACE_KEY = 'desk-panel.workspace';
 
 export interface Rect { c: number; r: number; w: number; h: number }
-export interface Tile extends Rect { kind: string }
-/** The tiles after a change, and the kinds of the other tiles that had to make room (they moved to free cells). */
+/** A setting of one tile (which list it shows, whether it hides what is done): small, plain values only. */
+export type TileConfig = Record<string, string | number | boolean>;
+/**
+ * A tile is one placed instance of a widget. `kind` says which widget it is; `id` says which tile, and it is what moving,
+ * resizing and removing go by. A widget that can stand on the grid only once has `id === kind`; one that can stand there
+ * several times (see `MULTI_KINDS`) gets an id of its own for each, and `config` keeps what differs between them.
+ */
+export interface Tile extends Rect { id: string; kind: string; config?: TileConfig }
+/** The tiles after a change, and the ids of the other tiles that had to make room (they moved to free cells). */
 export interface Plan { tiles: Tile[]; moved: string[] }
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
@@ -51,16 +58,16 @@ function relocate(movers: Tile[], fixed: Rect[]): Tile[] | null {
  * Puts the tile `kind` on `to`. Whatever stood there is moved to the nearest free cells; if it has nowhere to go,
  * nothing happens (null). This one rule is the whole of "smart" growing and of dropping a tile onto another.
  */
-export function place(tiles: Tile[], kind: string, to: Rect): Plan | null {
-  const subject = tiles.find(t => t.kind === kind);
+export function place(tiles: Tile[], id: string, to: Rect): Plan | null {
+  const subject = tiles.find(t => t.id === id);
   if (!subject || !inGrid(to)) return null;
   const others = tiles.filter(t => t !== subject);
   const blocking = others.filter(t => overlaps(t, to));
   const relocated = relocate(blocking, [to, ...others.filter(t => !blocking.includes(t))]);
   if (!relocated) return null;
   return {
-    tiles: tiles.map(t => t === subject ? { ...t, ...rectOf(to) } : relocated.find(m => m.kind === t.kind) ?? t),
-    moved: blocking.map(t => t.kind),
+    tiles: tiles.map(t => t === subject ? { ...t, ...rectOf(to) } : relocated.find(m => m.id === t.id) ?? t),
+    moved: blocking.map(t => t.id),
   };
 }
 
@@ -68,35 +75,51 @@ export function place(tiles: Tile[], kind: string, to: Rect): Plan | null {
  * The size closest to `want` that the tile can have. It grows into free cells first, then asks the tiles in the way to
  * move out; when they cannot, it stops at the last size that works instead of refusing the whole step.
  */
-export function resize(tiles: Tile[], kind: string, want: { w: number; h: number }): Plan {
-  const tile = tiles.find(t => t.kind === kind);
+export function resize(tiles: Tile[], id: string, want: { w: number; h: number }): Plan {
+  const tile = tiles.find(t => t.id === id);
   if (!tile) return { tiles, moved: [] };
   const w = clamp(want.w, 1, COLS - tile.c), h = clamp(want.h, 1, ROWS - tile.r);
   const between = (from: number, to: number) => Array.from({ length: Math.abs(to - from) + 1 }, (_, i) => from + Math.sign(to - from) * i);
   const sizes = between(tile.w, w).flatMap(cw => between(tile.h, h).map(ch => ({ w: cw, h: ch })))
     .sort((a, b) => Math.abs(a.w - w) + Math.abs(a.h - h) - Math.abs(b.w - w) - Math.abs(b.h - h));
   for (const size of sizes) {
-    const plan = place(tiles, kind, { c: tile.c, r: tile.r, ...size });
+    const plan = place(tiles, id, { c: tile.c, r: tile.r, ...size });
     if (plan) return plan;
   }
   return { tiles, moved: [] };
 }
 
 /** Where the tile would stand with its top-left corner at `at`, kept inside the grid. */
-export function targetRect(tiles: Tile[], kind: string, at: { c: number; r: number }): Rect | null {
-  const tile = tiles.find(t => t.kind === kind);
+export function targetRect(tiles: Tile[], id: string, at: { c: number; r: number }): Rect | null {
+  const tile = tiles.find(t => t.id === id);
   return tile ? { c: clamp(at.c, 0, COLS - tile.w), r: clamp(at.r, 0, ROWS - tile.h), w: tile.w, h: tile.h } : null;
 }
 
 /** Moves the tile to `at`; the tile it lands on goes to the nearest free cells (a swap when that is nearest). */
-export function move(tiles: Tile[], kind: string, at: { c: number; r: number }): Plan | null {
-  const to = targetRect(tiles, kind, at);
-  return to ? place(tiles, kind, to) : null;
+export function move(tiles: Tile[], id: string, at: { c: number; r: number }): Plan | null {
+  const to = targetRect(tiles, id, at);
+  return to ? place(tiles, id, to) : null;
 }
 
-export const add = (tiles: Tile[], kind: string, c: number, r: number): Tile[] =>
-  tiles.some(t => t.kind === kind) || tileAt(tiles, c, r) ? tiles : [...tiles, { kind, c, r, w: 1, h: 1 }];
-export const remove = (tiles: Tile[], kind: string): Tile[] => tiles.filter(t => t.kind !== kind);
+/** An id for one more tile of a widget that may stand on the grid several times: `todo#1`, `todo#2`, the first number not in use. */
+export function newTileId(tiles: Tile[], kind: string): string {
+  const used = new Set(tiles.map(t => t.id));
+  for (let n = 1; ; n++) if (!used.has(`${kind}#${n}`)) return `${kind}#${n}`;
+}
+
+/** Puts a new 1×1 tile on a free cell. Nothing happens when the cell is taken or the id is: `id` defaults to the kind, so such a widget stands once. */
+export const add = (tiles: Tile[], kind: string, c: number, r: number, id: string = kind): Tile[] =>
+  tiles.some(t => t.id === id) || tileAt(tiles, c, r) ? tiles : [...tiles, { id, kind, c, r, w: 1, h: 1 }];
+export const remove = (tiles: Tile[], id: string): Tile[] => tiles.filter(t => t.id !== id);
+/** Changes the settings of one tile (a value of `undefined` clears a setting); the other tiles are left as they are. */
+export const configure = (tiles: Tile[], id: string, patch: Record<string, string | number | boolean | undefined>): Tile[] =>
+  tiles.map(t => {
+    if (t.id !== id) return t;
+    const config: TileConfig = { ...t.config };
+    for (const [key, value] of Object.entries(patch)) { if (value === undefined) delete config[key]; else config[key] = value; }
+    const { config: _old, ...rest } = t;
+    return Object.keys(config).length ? { ...rest, config } : rest;
+  });
 
 /**
  * What a panel nobody has arranged shows: the limits and mail on the left, in reading order, and Cezar on the right,
@@ -105,17 +128,26 @@ export const remove = (tiles: Tile[], kind: string): Tile[] => tiles.filter(t =>
  */
 export function autoTiles(kinds: string[]): Tile[] {
   const side = kinds.filter(k => k !== 'cezar' && k !== 'system');
-  if (!kinds.includes('cezar')) return side.slice(0, COLS * ROWS).map((kind, i) => ({ kind, c: i % COLS, r: Math.floor(i / COLS), w: 1, h: 1 }));
+  if (!kinds.includes('cezar')) return side.slice(0, COLS * ROWS).map((kind, i) => ({ id: kind, kind, c: i % COLS, r: Math.floor(i / COLS), w: 1, h: 1 }));
   const tall = side.length <= 4;
   const cells = tall ? [[0, 0], [1, 0], [0, 1], [1, 1]] : [[0, 0], [1, 0], [0, 1], [1, 1], [2, 1], [3, 1]];
   return [
-    ...side.slice(0, cells.length).map((kind, i) => ({ kind, c: cells[i][0], r: cells[i][1], w: 1, h: 1 })),
-    { kind: 'cezar', c: 2, r: 0, w: 2, h: tall ? 2 : 1 },
+    ...side.slice(0, cells.length).map((kind, i) => ({ id: kind, kind, c: cells[i][0], r: cells[i][1], w: 1, h: 1 })),
+    { id: 'cezar', kind: 'cezar', c: 2, r: 0, w: 2, h: tall ? 2 : 1 },
   ];
 }
 
+/** Settings are a few short names with plain values; anything else in a saved layout means it was not written by this panel. */
+function validConfig(config: unknown): boolean {
+  if (config === undefined) return true;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return false;
+  const entries = Object.entries(config);
+  return entries.length <= 10 && entries.every(([key, value]) =>
+    key.length > 0 && key.length <= 40 && (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.length <= 200)));
+}
+
 /**
- * A saved layout that is not a clean arrangement (outside the grid, overlapping, a kind twice) is not trusted at all.
+ * A saved layout that is not a clean arrangement (outside the grid, overlapping, an id twice) is not trusted at all.
  * Null means nobody has arranged the panel (or the arrangement is unusable), so the automatic layout applies.
  */
 export function parseWorkspace(raw: string | null): Tile[] | null {
@@ -123,11 +155,16 @@ export function parseWorkspace(raw: string | null): Tile[] | null {
     if (!raw) return null;
     const saved = JSON.parse(raw);
     if (saved?.version !== 1 || !Array.isArray(saved.tiles)) return null;
-    const tiles: Tile[] = saved.tiles.map((t: Record<string, unknown>) => ({ kind: t?.kind, c: t?.c, r: t?.r, w: t?.w, h: t?.h }));
+    // A layout saved before tiles had ids has none: its tiles each stood once, so the kind is the id.
+    const tiles: Tile[] = saved.tiles.map((t: Record<string, unknown>) => {
+      const tile = { id: t?.id ?? t?.kind, kind: t?.kind, c: t?.c, r: t?.r, w: t?.w, h: t?.h } as Tile;
+      return t?.config === undefined ? tile : { ...tile, config: t.config as TileConfig };
+    });
+    const name = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 200;
     const valid = tiles.every((t, i) =>
-      typeof t.kind === 'string' && t.kind.length > 0 && t.kind.length <= 200 &&
+      name(t.kind) && name(t.id) && validConfig(t.config) &&
       [t.c, t.r, t.w, t.h].every(Number.isInteger) && inGrid(t) &&
-      tiles.every((other, j) => j <= i || (other.kind !== t.kind && !overlaps(t, other))));
+      tiles.every((other, j) => j <= i || (other.id !== t.id && !overlaps(t, other))));
     return valid ? tiles : null;
   } catch {
     return null;
