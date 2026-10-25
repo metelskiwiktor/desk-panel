@@ -67,20 +67,27 @@ describe('the Zadania tile', () => {
     expect(arranged().find(t => t.id === 'todo#2')!.config).toEqual({ list: B }); // the other tile did not move
   });
 
-  it('hides what is done with "Ukryj ukończone", per tile, and remembers it in the layout', async () => {
+  it('hides what is done from the ⋯ menu: a setting of the list, so every tile showing it follows and another list is untouched', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }), todo(2, 2, 0, 2, 2, { list: A }));
-    renderApp();
+    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A }), todo(3, 0, 1, 2, 1, { list: B }));
+    const { posts } = renderApp();
     const [first, second] = [tileOf('todo#1'), tileOf('todo#2')];
     await within(first).findByText('Komunikat o pustej odpowiedzi');
-    await user.click(within(first).getByRole('checkbox', { name: 'Ukryj ukończone' }));
+    expect(within(first).queryByRole('checkbox', { name: 'Ukryj ukończone' })).toBeNull(); // no checkbox on the tile any more
+    await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
+    const item = within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' });
+    expect(item.getAttribute('aria-checked')).toBe('false');
+    await user.click(item);
+    expect(posts()).toEqual([{ action: 'setHideDone', list: A, hideDone: true }]);
     expect(titles(first)).not.toContain('Komunikat o pustej odpowiedzi');
-    expect(titles(second)).toContain('Komunikat o pustej odpowiedzi'); // each tile has its own
-    expect(arranged().find(t => t.id === 'todo#1')!.config).toEqual({ list: A, hideDone: true });
-    expect(arranged().find(t => t.id === 'todo#2')!.config).toEqual({ list: A });
-    await user.click(within(first).getByRole('checkbox', { name: 'Ukryj ukończone' }));
+    expect(titles(tileOf('todo#3'))).toEqual(['Kupić żarówki do przedpokoju']);
+    await waitFor(() => expect(titles(second)).not.toContain('Komunikat o pustej odpowiedzi')); // the other tile of the same list
+    expect(arranged().find(t => t.id === 'todo#1')!.config).toEqual({ list: A }); // nothing about it in the tile
+    await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
+    expect(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }).getAttribute('aria-checked')).toBe('true');
+    await user.click(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
+    expect(posts().at(-1)).toEqual({ action: 'setHideDone', list: A, hideDone: false });
     expect(titles(first)).toContain('Komunikat o pustej odpowiedzi');
-    expect(arranged().find(t => t.id === 'todo#1')!.config).toEqual({ list: A });
   });
 
   it('is named after its list, so two tiles can be told apart', async () => {
@@ -97,15 +104,22 @@ describe('the Zadania tile', () => {
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
+    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull(); // the field is not there until the + asks for it
+    await user.click(within(tile).getByRole('button', { name: 'Dodawanie zadań' }));
     const field = within(tile).getByRole('textbox', { name: 'Nowe zadanie' }) as HTMLInputElement;
+    expect(document.activeElement).toBe(field);
     expect((within(tile).getByRole('button', { name: 'Dodaj zadanie' }) as HTMLButtonElement).disabled).toBe(true);
     await user.type(field, '   {Enter}');
     expect(posts()).toEqual([]);
     await user.type(field, 'Zadzwonić do mamy{Enter}');
     expect(posts()).toEqual([{ action: 'addTask', list: A, title: 'Zadzwonić do mamy' }]);
     expect(field.value).toBe('');
+    await user.type(field, 'I jeszcze jedno{Enter}'); // the field stays open for the next one
+    expect(posts().map(p => p.title)).toEqual(['Zadzwonić do mamy', 'I jeszcze jedno']);
     expect(await within(tile).findByText('Zadzwonić do mamy')).toBeTruthy();
     expect(titles(tile).indexOf('Zadzwonić do mamy')).toBe(2); // after the other open ones, before the done one
+    await user.click(within(tile).getByRole('button', { name: 'Dodawanie zadań' })); // only the + closes it
+    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull();
   });
 
   it('ticks a task at once and writes it, and unticks a done one', async () => {
@@ -244,17 +258,19 @@ describe('the Zadania tile', () => {
   });
 
   it('shows what is left when everything is done and hidden', async () => {
-    arrange(todo(1, 0, 0, 2, 2, { list: A, hideDone: true }));
+    const user = userEvent.setup();
+    arrange(todo(1, 0, 0, 2, 2, { list: A }));
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
-    const user = userEvent.setup();
     await user.click(await within(tile).findByRole('checkbox', { name: 'Agent nie wie, ile ma limitu na dziś' }));
     await user.click(within(tile).getByRole('checkbox', { name: 'Odpowiedź bez sformułowania „nie mam dostępu”' }));
-    expect(posts()).toHaveLength(2);
+    await user.click(within(tile).getByRole('button', { name: 'Zarządzaj listą' }));
+    await user.click(within(tile).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
+    expect(posts()).toHaveLength(3);
     expect(await within(tile).findByText('Wszystkie zadania są ukończone.')).toBeTruthy();
   });
 
-  it('in a tile of one cell leaves out notes, keeps the add field, and has "Ukryj ukończone" in the menu', async () => {
+  it('in a tile of one cell leaves out notes but keeps everything else: the + for adding, the count, the agent mark', async () => {
     const user = userEvent.setup();
     arrange(todo(1, 0, 0, 1, 1, { list: A }));
     const { posts } = renderApp();
@@ -263,28 +279,26 @@ describe('the Zadania tile', () => {
     expect(within(tile).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
     expect(within(tile).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1);
     expect(within(tile).getByTitle('Ukończone z wszystkich').textContent).toBe('1/3');
+    await user.click(within(tile).getByRole('button', { name: 'Dodawanie zadań' }));
     await user.type(within(tile).getByRole('textbox', { name: 'Nowe zadanie' }), 'Mały kafelek{Enter}');
     expect(posts()).toEqual([{ action: 'addTask', list: A, title: 'Mały kafelek' }]);
-    expect(within(tile).queryByRole('checkbox', { name: 'Ukryj ukończone' })).toBeNull();
-    await user.click(within(tile).getByRole('button', { name: 'Zarządzaj listą' }));
-    await user.click(within(tile).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
-    expect(titles(tile)).not.toContain('Komunikat o pustej odpowiedzi');
-    expect(arranged()[0].config).toEqual({ list: A, hideDone: true });
+    await user.keyboard('{Escape}');
+    expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull();
   });
 
-  it('puts "Ukryj ukończone" where the size has room: next to the field when wide, in a foot when tall and narrow', async () => {
+  it('shows notes only when the tile is wide and tall, and marks its size on the card for the layout', async () => {
     arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 1, 2, { list: A }), todo(3, 3, 0, 1, 1, { list: A }));
     renderApp();
     const [wide, tall, one] = [tileOf('todo#1'), tileOf('todo#2'), tileOf('todo#3')];
     await within(wide).findByText('Komunikat o pustej odpowiedzi');
-    expect(wide.querySelector('.todo-bar .todo-hide')).toBeTruthy();
-    expect(wide.querySelector('.todo-foot')).toBeNull();
-    expect(tall.querySelector('.todo-bar .todo-hide')).toBeNull();
-    expect(tall.querySelector('.todo-foot .todo-hide')).toBeTruthy();
-    expect(one.querySelector('.todo-hide')).toBeNull();
-    // Notes need room both ways: a wide short tile and a tall narrow one leave them out.
     expect(within(wide).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
     expect(within(tall).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
+    const classes = (t: HTMLElement) => (t.querySelector('.todo') as HTMLElement).className;
+    expect(classes(wide)).toMatch(/\bwide\b/);
+    expect(classes(wide)).not.toMatch(/\btall\b/);
+    expect(classes(tall)).toMatch(/\btall\b/);
+    expect(classes(tall)).not.toMatch(/\bwide\b/);
+    expect(classes(one)).not.toMatch(/\b(wide|tall)\b/);
   });
 });
 

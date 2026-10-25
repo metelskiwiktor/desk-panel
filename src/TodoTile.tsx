@@ -8,10 +8,9 @@ import { ctx } from './chat-context';
 import type { TodosState } from './useTodos';
 
 /** What one Zadania tile remembers (in the saved layout): which list it shows and whether it hides what is done. */
-export interface TodoConfig { list?: string; hideDone?: boolean }
+export interface TodoConfig { list?: string }
 export const todoConfigOf = (config: TileConfig | undefined): TodoConfig => ({
   list: typeof config?.list === 'string' ? config.list : undefined,
-  hideDone: config?.hideDone === true,
 });
 const NEW_LIST = '__new__';
 
@@ -58,18 +57,20 @@ function TodoRow({ list, task, notes, act }: { list: TodoList; task: TodoTask; n
 
 /**
  * A to-do tile: one list at a time, chosen from a drop-down, with its tasks to tick, edit and delete. Several tiles can
- * stand on the grid, each with its own list and its own "Ukryj ukończone" (kept in the tile's settings).
- * What fits follows the tile's cells (`wide`: two or more columns, `tall`: two or more rows). The add field is always at
- * the bottom, and "Ukryj ukończone" sits next to it in a wide tile, in a foot of its own in a tall narrow one, and in
- * the ⋯ menu in a tile of one cell. Notes show only when there is room both ways; a wide short tile lays tasks in two columns.
+ * stand on the grid, each with its own list. The list's own settings ("Ukryj ukończone") are in the ⋯ menu and are kept on
+ * the list, so they follow it to every tile. The + in the head shows the add field floating over the foot of the tile (the
+ * tasks scroll under it) until the + is pressed again. What fits follows the tile's cells (`wide`: two or more columns,
+ * `tall`: two or more rows): notes show only when there is room both ways, a wide short tile lays tasks in two columns.
  */
 export function TodoTile({ todos, config, setConfig, wide = true, tall = true }: {
   todos: TodosState; config?: TileConfig; setConfig: (patch: Record<string, string | boolean | undefined>) => void; wide?: boolean; tall?: boolean;
 }) {
   const { source, error, clearError, act } = todos;
   const lists = source.data?.lists ?? null;
-  const { list: wanted, hideDone } = todoConfigOf(config);
+  const { list: wanted } = todoConfigOf(config);
   const list: TodoList | null = lists?.find(l => l.id === wanted) ?? lists?.[0] ?? null;
+  // The add field floats over the foot of the tile; it opens and closes with the + in the head and stays open while tasks are added.
+  const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<'view' | 'new' | 'rename'>('view');
   const [name, setName] = useState('');
   const [draft, setDraft] = useState('');
@@ -115,6 +116,7 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
     void act({ action: 'addTask', list: list.id, title });
   };
 
+  const hideDone = list?.hideDone ?? false;
   const open = list?.tasks.filter(t => !t.done) ?? [], done = list?.tasks.filter(t => t.done) ?? [];
   const shown = hideDone ? open : [...open, ...done];
   const naming = mode !== 'view';
@@ -126,9 +128,7 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
     }}
     onBlur={() => void finishNaming(true)} />;
 
-  const hideBox = <label className="todo-hide"><input type="checkbox" checked={hideDone} onChange={e => setConfig({ hideDone: e.target.checked ? true : undefined })} /> Ukryj ukończone</label>;
-
-  return <section className={`p2-card todo${wide ? ' wide' : ''}${tall ? ' tall' : ''}`} aria-label="Zadania">
+  return <section className={`p2-card todo${wide ? ' wide' : ''}${tall ? ' tall' : ''}${adding ? ' adding' : ''}`} aria-label="Zadania">
     <div className="p2-card-head static todo-head">
       <ListChecks size={18} aria-hidden="true" />
       {naming ? nameInput
@@ -139,10 +139,14 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
         </select>
         : <h2>Zadania</h2>}
       {list && !naming && <span className="p2-meta todo-count" title="Ukończone z wszystkich">{done.length}/{list.tasks.length}</span>}
+      {list && !naming && <button type="button" className="todo-more todo-plus" aria-label="Dodawanie zadań" aria-pressed={adding} onClick={() => setAdding(a => !a)}><Plus size={18} aria-hidden="true" /></button>}
       {list && !naming && <div className="todo-menu" ref={menuRoot}>
         <button type="button" className="todo-more" aria-label="Zarządzaj listą" aria-haspopup="menu" aria-expanded={menu} ref={moreButton} onClick={toggleMenu}><MoreHorizontal size={18} aria-hidden="true" /></button>
         {menu && <div className="todo-pop" role="menu" aria-label="Lista zadań" style={popAt ?? undefined}>
-          {!wide && !tall && <button type="button" role="menuitemcheckbox" aria-checked={hideDone} onClick={() => { closeMenu(); setConfig({ hideDone: hideDone ? undefined : true }); }}><span className="todo-tick" aria-hidden="true">{hideDone && <Check size={15} />}</span> Ukryj ukończone</button>}
+          <button type="button" role="menuitemcheckbox" aria-checked={hideDone} onClick={() => {
+            closeMenu();
+            void act({ action: 'setHideDone', list: list.id, hideDone: !hideDone }, data => ({ lists: data.lists.map(l => l.id === list.id ? { ...l, hideDone: !hideDone } : l) }));
+          }}><span className="todo-tick" aria-hidden="true">{hideDone && <Check size={15} />}</span> Ukryj ukończone</button>
           <button type="button" role="menuitem" onClick={() => startNaming('new')}><Plus size={15} aria-hidden="true" /> Nowa lista</button>
           <button type="button" role="menuitem" onClick={() => startNaming('rename')}><Pencil size={15} aria-hidden="true" /> Zmień nazwę</button>
           <button type="button" role="menuitem" disabled={!done.length} onClick={() => { closeMenu(); void act({ action: 'clearDone', list: list.id }); }}><Check size={15} aria-hidden="true" /> Wyczyść ukończone ({done.length})</button>
@@ -157,14 +161,11 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
       {shown.length
         ? <ul className="todo-list" aria-label={`Zadania: ${list.name}`}>{shown.map(task => <TodoRow key={task.id} list={list} task={task} notes={wide && tall} act={act} />)}</ul>
         : <p className="p2-empty">{list.tasks.length && hideDone ? 'Wszystkie zadania są ukończone.' : 'Brak zadań na tej liście.'}</p>}
-      <div className="todo-bar">
-        <form className="todo-add" onSubmit={add}>
-          <input aria-label="Nowe zadanie" placeholder="Dodaj zadanie…" maxLength={TODO_LIMITS.title} value={draft} onChange={e => setDraft(e.target.value)} />
-          <button type="submit" aria-label="Dodaj zadanie" disabled={!draft.trim()}><Plus size={17} aria-hidden="true" /></button>
-        </form>
-        {wide && hideBox}
-      </div>
-      {tall && !wide && <div className="todo-foot">{hideBox}</div>}
+      {adding && <form className="todo-add" onSubmit={add}>
+        <input aria-label="Nowe zadanie" placeholder="Dodaj zadanie…" maxLength={TODO_LIMITS.title} value={draft} autoFocus onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setAdding(false); } }} />
+        <button type="submit" aria-label="Dodaj zadanie" disabled={!draft.trim()}><Plus size={17} aria-hidden="true" /></button>
+      </form>}
     </> : lists ? <div className="todo-none">
       <p className="p2-empty">Nie ma jeszcze żadnej listy.</p>
       {!naming && <button type="button" className="todo-create" onClick={() => startNaming('new')}><Plus size={16} aria-hidden="true" /> Utwórz listę</button>}

@@ -81,7 +81,7 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
         const existing = lists.find(l => same(l.name, action.name));
         if (existing) return { ok: true, list: { id: existing.id, name: existing.name, created: false } };
         if (lists.length >= TODO_LIMITS.lists) throw new TodoError(409, `Może być najwyżej ${TODO_LIMITS.lists} list.`);
-        const list: TodoList = { id: id('l'), name: action.name, createdAt: now(), tasks: [] };
+        const list: TodoList = { id: id('l'), name: action.name, createdAt: now(), hideDone: false, tasks: [] };
         lists.push(list);
         return { ok: true, list: { id: list.id, name: list.name, created: true } };
       }
@@ -89,6 +89,11 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
         const list = listOf(action.list);
         if (lists.some(l => l !== list && same(l.name, action.name))) throw new TodoError(409, 'Lista o takiej nazwie już jest.');
         list.name = action.name;
+        return { ok: true, list: { id: list.id, name: list.name } };
+      }
+      case 'setHideDone': {
+        const list = listOf(action.list);
+        list.hideDone = action.hideDone;
         return { ok: true, list: { id: list.id, name: list.name } };
       }
       case 'deleteList': {

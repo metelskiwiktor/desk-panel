@@ -540,9 +540,9 @@
 /* The days header is one slim line; its grip reaches up into the gap above, so it is still easy to take hold of. */
 .p3-days .p3-grip.top { top: -8px; height: 30px; }
 
-/* Zadania: a to-do tile. One list at a time (chosen in the head), tasks to tick, and a bar at the bottom with the add field.
+/* Zadania: a to-do tile. One list at a time (chosen in the head), tasks to tick, and the add field floating at the bottom (opened by the + in the head).
    What fits follows the cells: .wide (2+ columns) and .tall (2+ rows). Wide and short lays tasks in two columns, notes show
-   only when wide and tall, "Ukryj ukończone" is in the bar (wide), in a foot (tall and narrow) or in the menu (one cell). */
+   only when wide and tall. The list's own settings ("Ukryj ukończone") are in the ⋯ menu. */
 .todo { position: relative; gap: 6px; padding: 8px 10px 10px; }
 .todo-head { gap: 6px; min-height: 36px; }
 .todo-head > svg { margin-left: 4px; color: var(--p2-cezar); }
@@ -564,11 +564,12 @@
 .todo-pop button.danger, .todo-del.danger { color: var(--quota-red); }
 .todo-error { display: flex; align-items: center; gap: 6px; }
 .todo-error button { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: transparent; color: inherit; }
-.todo-bar { display: flex; align-items: center; gap: 10px; }
-.todo-add { display: flex; flex: 1; min-width: 0; gap: 6px; }
-.todo-add input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); color: var(--p2-text); font-size: 15px; }
+.todo-add { position: absolute; right: 14px; bottom: 14px; left: 10px; z-index: 3; display: flex; gap: 6px; padding: 6px; border: 1px solid var(--p2-line); border-radius: 14px; background: var(--p2-surface-2); box-shadow: 0 8px 24px #000a; }
+.todo.adding .todo-list { padding-bottom: 64px; }
+.todo-plus[aria-pressed="true"] { background: var(--p2-surface-2); color: var(--p2-cal); }
+.todo-add input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface); color: var(--p2-text); font-size: 15px; }
 .todo-add input::placeholder { color: var(--p2-faint); }
-.todo-add button { display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border-radius: 12px; background: var(--p2-surface-2); color: var(--p2-cal); }
+.todo-add button { display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border-radius: 10px; background: var(--p2-surface); color: var(--p2-cal); }
 .todo-list { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; flex: 1; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .todo.wide:not(.tall) .todo-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
 .todo-row { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 2px 0; border-bottom: 1px solid color-mix(in srgb, var(--p2-line) 60%, transparent); }
@@ -590,11 +591,7 @@
 .todo-edit-actions .todo-del { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--p2-muted); }
 .todo-edit-actions .todo-del svg { margin-left: 0; }
 .todo-edit-actions .todo-del.danger { color: var(--quota-red); }
-.todo-foot { display: flex; align-items: center; padding: 0 8px; }
-.todo-hide { display: inline-flex; align-items: center; flex: none; gap: 8px; min-height: 34px; padding: 0 4px; color: var(--p2-muted); font-size: 14px; white-space: nowrap; cursor: pointer; }
-.todo-hide input { width: 20px; height: 20px; margin: 0; accent-color: var(--p2-cal); cursor: pointer; }
 .todo-none { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .todo-create { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 16px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); color: var(--p2-cal); }
 .todo-create svg { margin-left: 0; }
 .todo:not(.wide):not(.tall) { padding: 6px 8px 8px; }
-.todo:not(.wide):not(.tall) .todo-add input, .todo:not(.wide):not(.tall) .todo-add button { height: 32px; }
