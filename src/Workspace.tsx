@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Bot, Cpu, Gem, Layers, Mail, Rocket, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
+import { Bot, Cpu, Gem, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
 import { MailFeed } from './MailFeed';
@@ -7,8 +7,10 @@ import type { DashboardData, Detail } from './model';
 import { MissingLimit, QuotaTile } from './QuotaBars';
 import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SystemTile } from './SystemTile';
+import { TodoTile, todoConfigOf } from './TodoTile';
+import type { TodosState } from './useTodos';
 import {
-  COLS, ROWS, add, autoTiles, emptyCells, move, newTileId, readWorkspace, readingOrder, remove, resize, saveWorkspace, targetRect, type Plan, type Rect, type Tile,
+  COLS, ROWS, add, autoTiles, configure, emptyCells, move, newTileId, readWorkspace, readingOrder, remove, resize, saveWorkspace, targetRect, type Plan, type Rect, type Tile,
 } from './tile-grid';
 import type { CezarState } from './useCezar';
 import type { MailState } from './useMail';
@@ -24,6 +26,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   cezar: { title: 'Cezar', icon: Bot },
   mail: { title: 'Poczta', icon: Mail },
   system: { title: 'Komputer', icon: Cpu },
+  todo: { title: 'Zadania', icon: ListChecks },
 };
 /** Name and icon of a kind. Claude and Codex are known before the first reading; an Antigravity group is named by its card. */
 function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: LucideIcon } {
@@ -75,8 +78,8 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
  * stretch it, and the X in its corner switches it off. A tile that grows over others asks them to move to free cells,
  * and only stops where they have nowhere to go. The arrangement is kept in the browser.
  */
-export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
-  data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState;
+export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
+  data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState;
   showTasks: () => void; showBreakdown?: () => void; available: (kind: string) => boolean; systemThreshold: number;
   /** The virtual desktop whose arrangement this is (pulpits.ts); each one is kept under its own key. */
   pulpit?: string;
@@ -157,11 +160,21 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, s
       finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />;
     if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={open} compact={!roomy} />;
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={open} roomy={roomy} threshold={systemThreshold} />;
+    if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} compact={!roomy}
+      setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);
     return card ? <QuotaTile card={card} data={data} now={now} open={open} showBreakdown={showBreakdown} roomy={roomy} />
       : <MissingLimit title={describe(tile.kind, cards).title} loading={data.quotas.status === 'loading'} />;
   };
 
+  // A to-do tile is named after its list, so two of them can be told apart (by a screen reader, and in what is pointed at in the chat).
+  const tileTitle = (tile: Tile) => {
+    const base = describe(tile.kind, cards).title;
+    if (tile.kind !== 'todo') return base;
+    const lists = todos.source.data?.lists, { list } = todoConfigOf(tile.config);
+    const named = lists?.find(l => l.id === list) ?? lists?.[0];
+    return named ? `${base} · ${named.name}` : base;
+  };
   const offered = pickable(cards, tiles.map(t => t.kind), available);
   const highlights = drag ? [
     ...(drag.to ? [{ key: 'to', rect: drag.to, ok: !!drag.plan }] : []),
@@ -169,7 +182,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, showTasks, s
   ] : [];
   return <div className="wk-grid" ref={grid} role="group" aria-label="Obszar roboczy">
     {readingOrder(tiles).map(tile => {
-      const { title } = describe(tile.kind, cards);
+      const title = tileTitle(tile);
       const dragging = drag?.id === tile.id;
       return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} {...ctx('tile', tile.id, title)}
         style={{ ...areaOf(tile), ...(dragging ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {}) }}>

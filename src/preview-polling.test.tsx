@@ -42,10 +42,10 @@ it('aborts in-flight reads when the host is hidden without starting new ones', a
   render(<TabletPreview />);
   navigate('Ustawienia');
   fireEvent.click(screen.getByRole('button', { name: 'Otwórz podgląd pionowy' }));
-  expect(signals).toHaveLength(9);
+  expect(signals).toHaveLength(10);
   expect(signals.every(signal => signal.aborted)).toBe(true);
   await act(async () => { await vi.advanceTimersByTimeAsync(61_000); });
-  expect(fetcher).toHaveBeenCalledTimes(9);
+  expect(fetcher).toHaveBeenCalledTimes(10);
 });
 
 it('preserves a pending mail undo across a short preview visit', async () => {

@@ -45,6 +45,7 @@ import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
+import { useTodos } from './useTodos';
 import { useTraining } from './useTraining';
 import { UsageBreakdownCard } from './UsageBreakdownCard';
 import { WorkoutDetail } from './TrainingCard';
@@ -83,6 +84,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const usageBreakdown = useUsageBreakdown();
   const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
+  const todos = useTodos();
   const training = useTraining();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
@@ -416,7 +418,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} now={now} open={open}
+                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} todos={todos} now={now} open={open}
                   showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} pulpit={pulpits.active} />
               </>
             ) : (

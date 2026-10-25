@@ -1,12 +1,31 @@
 # Listy zadań
 
-Własne dane panelu (nie dostawcy): **listy** zadań do zrobienia, np. „Do poprawy - Chat Agy” albo „Dom”. W interfejsie pokaże je widget
-Zadania (kolejny krok; widget będzie można postawić na siatce wiele razy, każdy z wybraną listą i własnym „Ukryj ukończone”, zob.
-[docs/desk-panel.md](desk-panel.md), „Widget i kafelek”). Ten dokument opisuje to, co już jest: dane, API i dostęp agenta czatu.
+Własne dane panelu (nie dostawcy): **listy** zadań do zrobienia, np. „Do poprawy - Chat Agy” albo „Dom”. W interfejsie pokazuje je widget
+**Zadania**, który można postawić na siatce wiele razy (każdy kafelek ma wybraną listę i własne „Ukryj ukończone”, zob.
+[docs/desk-panel.md](desk-panel.md), „Widget i kafelek”). Ten dokument opisuje widget, dane, API i dostęp agenta czatu.
 
 **Nazewnictwo.** „Zadanie” bez dopowiedzenia to zadanie z listy. Zadania Cezara to osobna rzecz ([docs/cezar.md](cezar.md)) i tak się je
 nazywa („zadania Cezara”, „taski Cezara”). W kodzie i API to `todo` (rodzaj `task` zajmuje kontekst czatu dla Cezara), a w interfejsie
 „lista” (dawniej „temat”).
+
+## Widget Zadania
+
+Kod: `src/TodoTile.tsx`, stan i odczyt w `src/useTodos.ts` (jeden hook dla wszystkich kafelków), style `.todo-*` w `src/pulpit.css`. Widget jest oferowany
+w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo#1`, `todo#2`… i nazywa się „Zadania · <lista>”. Włącza go i wyłącza sekcja
+„Zadania” w Ustawieniach.
+
+- **Lista** wybierana jest z rozwijanej listy w nagłówku (ostatnia pozycja „＋ Nowa lista…”); wybór zapisuje się w ustawieniach kafelka (`config.list`), więc
+  dwa kafelki mogą pokazywać różne listy. Jeśli zapisana lista zniknęła, kafelek pokazuje pierwszą.
+- **Menu ⋯**: nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie potwierdza i mówi, ile zadań zniknie).
+- **Zadania**: pole „Dodaj zadanie…” (Enter), pole wyboru przy zadaniu (zaznaczenie widać od razu), dotknięcie tytułu otwiera edycję tytułu i notatki
+  (Zapisz / Anuluj / Esc), X usuwa po drugim dotknięciu. Otwarte są przed ukończonymi (te skreślone, na końcu), notatka i plakietka „agent” (zadanie dodał
+  agent) są pod tytułem.
+- **„Ukryj ukończone”**: pole w stopce kafelka, zapamiętane **per kafelek** w jego ustawieniach (`config.hideDone`); obok licznik „ukończone/wszystkie”.
+  Ukończone zostają na liście, dopóki ich nie wyczyścisz.
+- **Kafelek jednokomórkowy** nie ma miejsca na pole dodawania i stopkę: pole pokazuje przycisk „+” w nagłówku, a „Ukryj ukończone” jest w menu ⋯; notatek i
+  plakietek nie widać.
+- **Odświeżanie**: lista jest czytana co 5 s, więc to, co dopisze agent czatu, pojawia się w kilka sekund; po własnej zmianie odczyt następuje od razu.
+  Odrzucona zmiana pokazuje powód z serwera (np. „Lista o takiej nazwie już jest.”) nad listą.
 
 ## Model
 

@@ -67,7 +67,7 @@ describe('the work area', () => {
     const empty = grid().querySelector('.wk-empty') as HTMLElement;
     expect(empty).toBeTruthy();
     const offer = within(empty).getAllByRole('button').map(b => b.getAttribute('aria-label'));
-    expect(offer).toEqual(['Dodaj kafelek: Poczta', 'Dodaj kafelek: Komputer']); // not what already stands on the grid
+    expect(offer).toEqual(['Dodaj kafelek: Poczta', 'Dodaj kafelek: Komputer', 'Dodaj kafelek: Zadania']); // not what already stands on the grid, except what may repeat
     await user.click(within(empty).getByRole('button', { name: 'Dodaj kafelek: Komputer' }));
     expect(await screen.findByRole('region', { name: 'Komputer' })).toBeTruthy();
     expect(at('system')).toMatchObject({ w: 1, h: 1 });
@@ -90,7 +90,7 @@ describe('the work area', () => {
     expect(grid().querySelectorAll('.wk-empty')).toHaveLength(8);
     const first = grid().querySelector('.wk-empty') as HTMLElement;
     expect(within(first).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([
-      'Dodaj kafelek: Claude', 'Dodaj kafelek: Codex', 'Dodaj kafelek: Gemini', 'Dodaj kafelek: Cezar', 'Dodaj kafelek: Poczta', 'Dodaj kafelek: Komputer']);
+      'Dodaj kafelek: Claude', 'Dodaj kafelek: Codex', 'Dodaj kafelek: Gemini', 'Dodaj kafelek: Cezar', 'Dodaj kafelek: Poczta', 'Dodaj kafelek: Komputer', 'Dodaj kafelek: Zadania']);
     expect(within(first).getByText('Wybierz kafelek')).toBeTruthy();
     await user.hover(within(first).getByRole('button', { name: 'Dodaj kafelek: Cezar' }));
     expect(within(first).getByText('Cezar')).toBeTruthy();

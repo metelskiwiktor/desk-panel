@@ -96,7 +96,7 @@ describe('three zones', () => {
     expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
   });
   it('leaves the work area out when nothing in it would say anything, and the month needs no cards', async () => {
-    localStorage.setItem('desk-panel.layout', JSON.stringify({ version: 2, widgets: ['cezar', 'system', 'calendar', 'training', 'quotas', 'breakdown', 'insights', 'mail', 'ambient'].map(id => ({ id, visible: id === 'calendar' || id === 'training', displayMode: 'expanded', priority: 'normal' })) }));
+    localStorage.setItem('desk-panel.layout', JSON.stringify({ version: 2, widgets: ['cezar', 'system', 'calendar', 'training', 'quotas', 'breakdown', 'insights', 'mail', 'todo', 'ambient'].map(id => ({ id, visible: id === 'calendar' || id === 'training', displayMode: 'expanded', priority: 'normal' })) }));
     renderWith();
     await screen.findByRole('region', { name: 'Dziś' });
     expect(document.querySelector('.p3-work')).toBeNull();

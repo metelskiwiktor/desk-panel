@@ -6,6 +6,7 @@ import { DaysZone } from './DaysZone';
 import { MAX_AGE, fresh, type DashboardData, type Detail, type SystemSample } from './model';
 import type { CezarSnapshot } from './cezar-contract';
 import type { MailState } from './useMail';
+import type { TodosState } from './useTodos';
 import type { WidgetId } from './layout';
 import { useDismiss } from './popover';
 import type { QuotaVisibility } from './quota-visibility';
@@ -83,10 +84,10 @@ export function StatusChips({ data, mail, now, open, navigate, showPc = true }: 
  * two leave; see Workspace. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
  * top and bottom zones are one step each way and are remembered.
  */
-export function Dashboard({ data, training, snapshot, cezar, mail, now, open, showTasks, showCalendar, showBreakdown, visible, quotaHidden, resetSignal = false, pulpit = 'main' }: {
+export function Dashboard({ data, training, snapshot, cezar, mail, todos, now, open, showTasks, showCalendar, showBreakdown, visible, quotaHidden, resetSignal = false, pulpit = 'main' }: {
   /** Finished tasks and the actions on them; without it only the active tasks show. */
   cezar?: CezarState;
-  data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; now: number;
+  data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; now: number;
   open: (d: Detail) => void; showTasks: () => void; showCalendar: () => void; showBreakdown: () => void; visible: (id: WidgetId) => boolean;
   /** The limits the settings hide: their tiles are not drawn and not offered. */
   quotaHidden: QuotaVisibility;
@@ -125,7 +126,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, now, open, sh
     : trainingOn && training.data && !fresh(training, now, MAX_AGE.training) ? 'Garmin: dane nieaktualne'
     : calendarOn && data.calendar.data && !fresh(data.calendar, now, MAX_AGE.calendar) ? 'Kalendarz: dane nieaktualne' : null;
 
-  const work = (['cezar', 'mail', 'system', 'quotas'] as const).some(visible);
+  const work = (['cezar', 'mail', 'system', 'quotas', 'todo'] as const).some(visible);
   // In the month the work area folds away to nothing instead of leaving: the zones glide, and the cards are still there.
   const folded = view.bottom === 'month';
   return <div className="p3-frame" data-top={view.top} data-bottom={view.bottom} data-work={work} data-days={calendarOn || trainingOn}>
@@ -133,7 +134,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, now, open, sh
       next={next} yesterday={yesterday} notice={notice} known={known}
       cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} preview={previewTop} open={open} showCalendar={showCalendar} />}
     {work && <div className="p3-work" aria-hidden={folded || undefined} inert={folded}>
-      <Workspace key={pulpit} pulpit={pulpit} data={data} now={now} open={open} cezar={cezar} snapshot={snapshot} mail={mail} showTasks={showTasks}
+      <Workspace key={pulpit} pulpit={pulpit} data={data} now={now} open={open} cezar={cezar} snapshot={snapshot} mail={mail} todos={todos} showTasks={showTasks}
         showBreakdown={visible('breakdown') ? showBreakdown : undefined} available={kind => kindAvailable(kind, visible, quotaHidden)}
         systemThreshold={SYSTEM_ALERT_PERCENT} />
     </div>}

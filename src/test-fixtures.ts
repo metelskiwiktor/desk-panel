@@ -4,6 +4,7 @@ import { jsonRoutes } from '../server/sources';
 import type { DashboardData, Source } from './model';
 import { cezarActionSchema } from './cezar-contract';
 import { mailActionSchema } from './mail-contract';
+import { todoActionSchema } from './todo-contract';
 import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
@@ -54,6 +55,10 @@ export function scenarioFetch(name: ScenarioName): typeof fetch {
         const { account, threadId, action } = mailActionSchema.parse(JSON.parse(String(init.body)));
         await sources.mailAction(account, threadId, action);
         return Response.json({ ok: true });
+      }
+      if (init?.method === 'POST' && url.pathname === '/api/todos/action') {
+        try { return Response.json(await sources.todoAction(todoActionSchema.parse(JSON.parse(String(init.body))))); }
+        catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Nie udało się wykonać akcji.' }, { status: (error as { status?: number }).status ?? 400 }); }
       }
       const route = routes[url.pathname];
       if (!route || init?.method === 'POST') return new Response('', { status: 404 });

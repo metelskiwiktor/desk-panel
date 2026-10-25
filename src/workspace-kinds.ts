@@ -10,6 +10,7 @@ export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, 
   if (kind === 'cezar') return visible('cezar');
   if (kind === 'mail') return visible('mail');
   if (kind === 'system') return visible('system');
+  if (kind === 'todo') return visible('todo');
   if (!kind.startsWith('quota:') || !visible('quotas')) return false;
   const id = kind.slice('quota:'.length);
   if (id === 'Claude' || id === 'Codex') return !hidden.hiddenProviders.includes(id);
@@ -22,9 +23,9 @@ export const limitKinds = (cards: QuotaCardItem[]) => [...new Set([...LIMITS_OF_
 
 /**
  * Widgets that can stand on the grid several times, each tile with its own settings (its own id, see tile-grid.ts).
- * Every other widget is one thing and stands once. None yet: the to-do lists will be the first.
+ * Every other widget is one thing and stands once. Today that is the to-do lists (`todo`): each tile shows one list.
  */
-export const MULTI_KINDS: readonly string[] = [];
+export const MULTI_KINDS: readonly string[] = ['todo'];
 
 /**
  * What an empty tile offers, in this order: the limits, then Cezar, mail and the computer, then the widgets that may
