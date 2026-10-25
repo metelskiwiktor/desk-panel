@@ -91,18 +91,21 @@ describe('listy zadań: sklep', () => {
     expect(await data(store)).toEqual([]);
   });
 
-  it('ukrywanie ukończonych jest ustawieniem listy: domyślnie wyłączone, zapisywane w pliku, a lista bez tego pola (stary plik) też się wczytuje', async () => {
+  it('ukrywanie ukończonych i znak agenta to ustawienia listy: domyślnie wyłączone, zapisywane w pliku, a lista bez tego pola (stary plik) też się wczytuje', async () => {
     const store = createTodoStore({ file: path.join(dir, 'hide.json') });
     const a = (await store.apply({ action: 'createList', name: 'A' })).list!.id;
     await store.apply({ action: 'createList', name: 'B' });
     expect((await data(store)).map(l => l.hideDone)).toEqual([false, false]);
-    expect(await store.apply({ action: 'setHideDone', list: a, hideDone: true })).toMatchObject({ ok: true, list: { id: a } });
+    expect(await store.apply({ action: 'setListOptions', list: a, hideDone: true })).toMatchObject({ ok: true, list: { id: a } });
     expect((await data(store)).map(l => l.hideDone)).toEqual([true, false]); // only that list
-    await expect(store.apply({ action: 'setHideDone', list: 'l-00000000', hideDone: true })).rejects.toThrow('Nie ma takiej listy.');
+    await expect(store.apply({ action: 'setListOptions', list: 'l-00000000', hideDone: true })).rejects.toThrow('Nie ma takiej listy.');
+    await store.apply({ action: 'setListOptions', list: a, showAgent: true });
+    expect((await data(store)).map(l => [l.hideDone, l.showAgent])).toEqual([[true, true], [false, false]]); // each option on its own
+    expect(todoActionSchema.safeParse({ action: 'setListOptions', list: a }).success).toBe(false); // nothing to change
     await store.drain();
     expect((await data(createTodoStore({ file: path.join(dir, 'hide.json') }))).map(l => l.hideDone)).toEqual([true, false]);
     await writeFile(path.join(dir, 'old.json'), JSON.stringify({ version: 1, lists: [{ id: 'l-22222222', name: 'Stara', createdAt: 1, tasks: [] }] }), 'utf8');
-    expect((await data(createTodoStore({ file: path.join(dir, 'old.json') })))[0]).toMatchObject({ name: 'Stara', hideDone: false });
+    expect((await data(createTodoStore({ file: path.join(dir, 'old.json') })))[0]).toMatchObject({ name: 'Stara', hideDone: false, showAgent: false });
   });
 
   it('odmowa nic nie zmienia: nieznana lista i zadanie to 404 z powodem, zajęta nazwa przy zmianie nazwy to 409', async () => {
@@ -120,7 +123,7 @@ describe('listy zadań: sklep', () => {
   });
 
   it('zaczyna od danych początkowych i zwraca kopie, których zmiana nie rusza stanu', async () => {
-    const initial: TodoData = { lists: [{ id: 'l-11111111', name: 'Start', createdAt: 1, hideDone: false, tasks: [] }] };
+    const initial: TodoData = { lists: [{ id: 'l-11111111', name: 'Start', createdAt: 1, hideDone: false, showAgent: false, tasks: [] }] };
     const store = createTodoStore({ initial });
     (await store.read()).data!.lists[0].name = 'zmienione z zewnątrz';
     expect((await data(store))[0].name).toBe('Start');

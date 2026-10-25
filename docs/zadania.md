@@ -16,14 +16,13 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 
 - **Lista** wybierana jest z rozwijanej listy w nagłówku (ostatnia pozycja „＋ Nowa lista…”); wybór zapisuje się w ustawieniach kafelka (`config.list`), więc
   dwa kafelki mogą pokazywać różne listy. Jeśli zapisana lista zniknęła, kafelek pokazuje pierwszą.
-- **Menu ⋯** (ustawienia listy): „Ukryj ukończone” (pole wyboru), nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie
+- **Menu ⋯** (ustawienia listy): „Ukryj ukończone” i „Pokaż, co dodał agent” (pola wyboru), nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie
   potwierdza i mówi, ile zadań zniknie).
 - **Zadania**: pole wyboru przy zadaniu (zaznaczenie widać od razu), dotknięcie tytułu otwiera edycję tytułu i notatki (Zapisz / Anuluj / Esc) z przyciskiem
-  „Usuń” (usuwa po drugim dotknięciu; w wierszu nie ma X). Otwarte są przed ukończonymi (te skreślone, na końcu); ikona ✦ przy zadaniu oznacza, że dodał je
-  agent. Tytuł ma jedną linię (w wąskim, wysokim kafelku dwie). Licznik „ukończone/wszystkie” jest w nagłówku.
+  „Usuń” (usuwa po drugim dotknięciu; w wierszu nie ma X). Otwarte są przed ukończonymi (te skreślone, na końcu); ikona ✦ przy zadaniu (domyślnie niewidoczna, włącza ją „Pokaż, co dodał agent” w menu ⋯) oznacza, że dodał je agent. Tytuł ma jedną linię (w wąskim, wysokim kafelku dwie). Licznik „ukończone/wszystkie” jest w nagłówku.
 - **Dodawanie**: „+” w nagłówku pokazuje pole „Dodaj zadanie…” pływające nad dołem kafelka (zadania przewijają się pod nim). Enter zapisuje, a pole zostaje
   otwarte na kolejne; zamyka je dopiero ponowne dotknięcie „+” (albo Esc).
-- **„Ukryj ukończone”** jest ustawieniem **listy**, nie kafelka: leży w danych listy (`hideDone`, `setHideDone`), więc każdy kafelek, który ją pokazuje (także na
+- **„Ukryj ukończone”** jest ustawieniem **listy**, nie kafelka: leży w danych listy (`hideDone`, akcja `setListOptions`), więc każdy kafelek, który ją pokazuje (także na
   innym urządzeniu), ukrywa ukończone tak samo, a przełączenie kafelka na inną listę pokazuje jej własne ustawienie. Ukończone zostają na liście, dopóki ich
   nie wyczyścisz.
 - **Rozmiar kafelka** (liczony w komórkach siatki, `wide` = 2+ kolumny, `tall` = 2+ wiersze) decyduje o układzie: szeroki i niski kafelek układa zadania w dwóch
@@ -36,7 +35,7 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 
 `src/todo-contract.ts` (schematy zod, wspólne dla serwera i interfejsu):
 
-- **Lista**: `id` (`l-` i 8 znaków szesnastkowych), `name` (do 80 znaków, unikalna bez względu na wielkość liter), `createdAt`, `hideDone` (domyślnie `false`; stary plik bez tego pola się wczytuje), `tasks`.
+- **Lista**: `id` (`l-` i 8 znaków szesnastkowych), `name` (do 80 znaków, unikalna bez względu na wielkość liter), `createdAt`, `hideDone` i `showAgent` (oba domyślnie `false`; stary plik bez tych pól się wczytuje), `tasks`.
 - **Zadanie**: `id` (`t-…`), `title` (do 200), `note` (do 2000, domyślnie pusta), `done`, `createdAt`, `completedAt` (null, dopóki otwarte),
   `by` (`user` albo `agent`: kto dodał). Zadania leżą w kolejności dodania; pokazywanie otwartych przed ukończonymi to sprawa widoku.
 - Limity: 50 list, 500 zadań na liście. Ukończone zostają, dopóki ich nie wyczyścisz (`clearDone`).
@@ -57,7 +56,7 @@ Odpowiedź to `{ "ok": true, ... }` z identyfikatorami tego, co powstało lub si
 | --- | --- | --- |
 | `createList` | `name` | nowa lista; jeśli lista o tej nazwie już jest, zwraca ją (`created: false`) |
 | `renameList` | `list`, `name` | zmiana nazwy (`409`, gdy nazwę ma inna lista) |
-| `setHideDone` | `list`, `hideDone` | ustawienie listy „ukryj ukończone” (tylko dla ekranu; agent nie dostaje go w instrukcji) |
+| `setListOptions` | `list`, `hideDone?`, `showAgent?` | ustawienia listy dla ekranu (co najmniej jedno pole; agent nie dostaje tej akcji w instrukcji) |
 | `deleteList` | `list` | usuwa listę z zadaniami (`removed` to liczba zadań) |
 | `addTask` | `list`, `title`, `note?`, `by?` | dodaje zadanie na koniec; `by` domyślnie `user`, agent podaje `agent` |
 | `updateTask` | `task`, `title?`, `note?`, `done?` | zmienia podane pola; `done` ustawia lub czyści czas ukończenia |

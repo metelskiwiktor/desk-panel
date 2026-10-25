@@ -51,7 +51,7 @@ function TodoRow({ list, task, notes, act }: { list: TodoList; task: TodoTask; n
       <span className="todo-text">{task.title}</span>
       {notes && task.note && <span className="todo-note">{task.note}</span>}
     </button>
-    {task.by === 'agent' && <span className="todo-by" role="img" aria-label="Dodał agent czatu" title="Dodał agent czatu"><Sparkles size={14} aria-hidden="true" /></span>}
+    {list.showAgent && task.by === 'agent' && <span className="todo-by" role="img" aria-label="Dodał agent czatu" title="Dodał agent czatu"><Sparkles size={14} aria-hidden="true" /></span>}
   </li>;
 }
 
@@ -145,8 +145,12 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
         {menu && <div className="todo-pop" role="menu" aria-label="Lista zadań" style={popAt ?? undefined}>
           <button type="button" role="menuitemcheckbox" aria-checked={hideDone} onClick={() => {
             closeMenu();
-            void act({ action: 'setHideDone', list: list.id, hideDone: !hideDone }, data => ({ lists: data.lists.map(l => l.id === list.id ? { ...l, hideDone: !hideDone } : l) }));
+            void act({ action: 'setListOptions', list: list.id, hideDone: !hideDone }, data => ({ lists: data.lists.map(l => l.id === list.id ? { ...l, hideDone: !hideDone } : l) }));
           }}><span className="todo-tick" aria-hidden="true">{hideDone && <Check size={15} />}</span> Ukryj ukończone</button>
+          <button type="button" role="menuitemcheckbox" aria-checked={list.showAgent} onClick={() => {
+            closeMenu();
+            void act({ action: 'setListOptions', list: list.id, showAgent: !list.showAgent }, data => ({ lists: data.lists.map(l => l.id === list.id ? { ...l, showAgent: !list.showAgent } : l) }));
+          }}><span className="todo-tick" aria-hidden="true">{list.showAgent && <Check size={15} />}</span> Pokaż, co dodał agent</button>
           <button type="button" role="menuitem" onClick={() => startNaming('new')}><Plus size={15} aria-hidden="true" /> Nowa lista</button>
           <button type="button" role="menuitem" onClick={() => startNaming('rename')}><Pencil size={15} aria-hidden="true" /> Zmień nazwę</button>
           <button type="button" role="menuitem" disabled={!done.length} onClick={() => { closeMenu(); void act({ action: 'clearDone', list: list.id }); }}><Check size={15} aria-hidden="true" /> Wyczyść ukończone ({done.length})</button>

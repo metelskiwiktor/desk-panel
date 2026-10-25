@@ -21,6 +21,8 @@ export const todoListSchema = z.object({
   id: todoListId, name, createdAt: z.number().finite(),
   /** The list's own setting, so every tile and screen shows it the same way: done tasks stay on the list but are not shown. */
   hideDone: z.boolean().default(false),
+  /** Also a setting of the list: mark the tasks the agent added (off unless the user wants to see it). */
+  showAgent: z.boolean().default(false),
   /** In the order they were added; showing open ones first is the view's business. */
   tasks: z.array(todoTaskSchema).max(TODO_LIMITS.tasksPerList),
 });
@@ -44,7 +46,8 @@ export type TodoSource = z.infer<typeof todoSourceSchema>;
 export const todoActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('createList'), name }).strict(),
   z.object({ action: z.literal('renameList'), list: todoListId, name }).strict(),
-  z.object({ action: z.literal('setHideDone'), list: todoListId, hideDone: z.boolean() }).strict(),
+  z.object({ action: z.literal('setListOptions'), list: todoListId, hideDone: z.boolean().optional(), showAgent: z.boolean().optional() }).strict()
+    .refine(a => a.hideDone !== undefined || a.showAgent !== undefined, { message: 'Nothing to change' }),
   z.object({ action: z.literal('deleteList'), list: todoListId }).strict(),
   z.object({ action: z.literal('addTask'), list: todoListId, title, note: note.optional(), by: z.enum(['user', 'agent']).optional() }).strict(),
   z.object({ action: z.literal('updateTask'), task: todoTaskId, title: title.optional(), note: note.optional(), done: z.boolean().optional() }).strict()

@@ -4,7 +4,7 @@ import { listContext, taskContext } from './todo-context';
 import type { TodoList, TodoTask } from './todo-contract';
 
 const task = (n: number, extra: Partial<TodoTask> = {}): TodoTask => ({ id: `t-${String(n).padStart(8, '0')}`, title: `Zadanie ${n}`, note: '', done: false, createdAt: 1, completedAt: null, by: 'user', ...extra });
-const list = (tasks: TodoTask[]): TodoList => ({ id: 'l-1a2b3c4d', name: 'Do poprawy - Chat Agy', createdAt: 1, hideDone: false, tasks });
+const list = (tasks: TodoTask[]): TodoList => ({ id: 'l-1a2b3c4d', name: 'Do poprawy - Chat Agy', createdAt: 1, hideDone: false, showAgent: false, tasks });
 
 describe('what the agent is told about a pointed list', () => {
   it('names the list with its id, counts, and lists the open tasks with their ids and notes; done ones are only counted', () => {

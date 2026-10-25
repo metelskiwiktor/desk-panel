@@ -39,7 +39,7 @@ function renderApp(scenario: ScenarioName = 'standard') {
 const titles = (tile: HTMLElement) => [...tile.querySelectorAll('.todo-row .todo-text')].map(x => x.textContent);
 
 describe('the Zadania tile', () => {
-  it('shows its list: open tasks first, done ones struck through at the end, notes, who added what, and a count', async () => {
+  it('shows its list: open tasks first, done ones struck through at the end, notes, and a count; nobody is marked as the author unless asked', async () => {
     arrange(todo(1, 0, 0, 2, 2, { list: A }));
     renderApp();
     const tile = tileOf('todo#1');
@@ -48,7 +48,7 @@ describe('the Zadania tile', () => {
     expect((within(tile).getByRole('checkbox', { name: 'Komunikat o pustej odpowiedzi' }) as HTMLInputElement).checked).toBe(true);
     expect((within(tile).getByRole('checkbox', { name: 'Odpowiedź bez sformułowania „nie mam dostępu”' }) as HTMLInputElement).checked).toBe(false);
     expect(within(tile).getByText('Dodać limity AI do widoku dla agenta.')).toBeTruthy(); // the note
-    expect(within(tile).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1); // only what the agent added is marked
+    expect(within(tile).queryByRole('img', { name: 'Dodał agent czatu' })).toBeNull(); // the agent mark is off until the list asks for it
     expect(within(tile).getByTitle('Ukończone z wszystkich').textContent).toBe('1/3');
     const select = within(tile).getByRole('combobox', { name: 'Lista zadań' }) as HTMLSelectElement;
     expect([...select.options].map(o => o.textContent)).toEqual(['Do poprawy - Chat Agy', 'Dom', '＋ Nowa lista…']);
@@ -78,7 +78,7 @@ describe('the Zadania tile', () => {
     const item = within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' });
     expect(item.getAttribute('aria-checked')).toBe('false');
     await user.click(item);
-    expect(posts()).toEqual([{ action: 'setHideDone', list: A, hideDone: true }]);
+    expect(posts()).toEqual([{ action: 'setListOptions', list: A, hideDone: true }]);
     expect(titles(first)).not.toContain('Komunikat o pustej odpowiedzi');
     expect(titles(tileOf('todo#3'))).toEqual(['Kupić żarówki do przedpokoju']);
     await waitFor(() => expect(titles(second)).not.toContain('Komunikat o pustej odpowiedzi')); // the other tile of the same list
@@ -86,8 +86,27 @@ describe('the Zadania tile', () => {
     await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
     expect(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }).getAttribute('aria-checked')).toBe('true');
     await user.click(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
-    expect(posts().at(-1)).toEqual({ action: 'setHideDone', list: A, hideDone: false });
+    expect(posts().at(-1)).toEqual({ action: 'setListOptions', list: A, hideDone: false });
     expect(titles(first)).toContain('Komunikat o pustej odpowiedzi');
+  });
+
+  it('marks what the agent added only when the list asks for it in the menu, for every tile that shows the list', async () => {
+    const user = userEvent.setup();
+    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A }));
+    const { posts } = renderApp();
+    const [first, second] = [tileOf('todo#1'), tileOf('todo#2')];
+    await within(first).findByText('Komunikat o pustej odpowiedzi');
+    await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
+    const item = within(first).getByRole('menuitemcheckbox', { name: 'Pokaż, co dodał agent' });
+    expect(item.getAttribute('aria-checked')).toBe('false');
+    await user.click(item);
+    expect(posts()).toEqual([{ action: 'setListOptions', list: A, showAgent: true }]);
+    expect(within(first).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1); // only what the agent added
+    await waitFor(() => expect(within(second).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1));
+    await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
+    await user.click(within(first).getByRole('menuitemcheckbox', { name: 'Pokaż, co dodał agent' }));
+    expect(posts().at(-1)).toEqual({ action: 'setListOptions', list: A, showAgent: false });
+    expect(within(first).queryByRole('img', { name: 'Dodał agent czatu' })).toBeNull();
   });
 
   it('is named after its list, so two tiles can be told apart', async () => {
@@ -270,14 +289,13 @@ describe('the Zadania tile', () => {
     expect(await within(tile).findByText('Wszystkie zadania są ukończone.')).toBeTruthy();
   });
 
-  it('in a tile of one cell leaves out notes but keeps everything else: the + for adding, the count, the agent mark', async () => {
+  it('in a tile of one cell leaves out notes but keeps everything else: the + for adding and the count', async () => {
     const user = userEvent.setup();
     arrange(todo(1, 0, 0, 1, 1, { list: A }));
     const { posts } = renderApp();
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(within(tile).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
-    expect(within(tile).getAllByRole('img', { name: 'Dodał agent czatu' })).toHaveLength(1);
     expect(within(tile).getByTitle('Ukończone z wszystkich').textContent).toBe('1/3');
     await user.click(within(tile).getByRole('button', { name: 'Dodawanie zadań' }));
     await user.type(within(tile).getByRole('textbox', { name: 'Nowe zadanie' }), 'Mały kafelek{Enter}');
