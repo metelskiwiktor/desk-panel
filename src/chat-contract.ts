@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** What the user pointed at on the dashboard: one row (mail, task, meeting, workout) or a whole tile. */
-export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile'] as const;
+export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo'] as const;
 export type ContextKind = typeof contextKinds[number];
 export const contextItemSchema = z.object({
   kind: z.enum(contextKinds),
@@ -66,7 +66,7 @@ export type ChatEvent =
 /** Never the same text twice for the agent: the dashboard elements go first, the question after. */
 export function withContext(text: string, context: ContextItem[]): string {
   if (!context.length) return text;
-  const kinds: Record<ContextKind, string> = { mail: 'Mail', event: 'Spotkanie', task: 'Zadanie Cezara', workout: 'Trening', tile: 'Kafelek pulpitu' };
+  const kinds: Record<ContextKind, string> = { mail: 'Mail', event: 'Spotkanie', task: 'Zadanie Cezara', workout: 'Trening', tile: 'Kafelek pulpitu', todoList: 'Lista zadań', todo: 'Zadanie z listy' };
   const blocks = context.map((item, i) => `${i + 1}. ${kinds[item.kind]}: ${item.title}\n${item.text.split('\n').map(line => `   ${line}`).join('\n')}`);
   return `[Kontekst: elementy pulpitu wskazane przez użytkownika]\n${blocks.join('\n')}\n\n[Wiadomość]\n${text}`;
 }

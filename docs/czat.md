@@ -47,7 +47,7 @@ Element jest wskazywalny, jeśli ma atrybuty `data-ctx-*`. Dodaje je `ctx()` z `
 <li {...ctx('mail', thread.id, `${thread.from}: ${thread.subject}`, 'Od: ...\nTemat: ...')}>
 ```
 
-`ctx(kind, id, title, text?)`: `kind` to `mail | event | task | workout | tile`; bez `text` agent dostaje to, co użytkownik widzi
+`ctx(kind, id, title, text?)`: `kind` to `mail | event | task | workout | tile | todoList | todo` (`task` to zadanie Cezara; `todoList` i `todo` to lista i zadanie z list, zob. [docs/zadania.md](zadania.md)); bez `text` agent dostaje to, co użytkownik widzi
 w elemencie (`innerText`). Wskazywany jest **najbliższy** oznaczony element, więc wiersz poczty wygrywa z kafelkiem Poczta,
 a kliknięcie w nagłówek kafelka wskazuje cały kafelek. Nowy rodzaj elementu to jedno `ctx()` w komponencie (plus rodzaj w
 `contextKinds` w `src/chat-contract.ts`, jeśli nie pasuje żaden istniejący). Limity: do 10 elementów na wiadomość, 2000 znaków

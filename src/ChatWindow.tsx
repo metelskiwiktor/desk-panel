@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, Mail, Maximize2, Minimize2, Pencil, Plus, Search, Sparkles, Square, Trash2, Wrench, X,
+  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, ListChecks, Mail, Maximize2, Minimize2, Pencil, Plus, Search, Sparkles, Square, SquareCheck, Trash2, Wrench, X,
   type LucideIcon,
 } from 'lucide-react';
 import { MAX_CONTEXT, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
@@ -12,9 +12,11 @@ import { useChat, type ChatState } from './useChat';
 const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   mail: { label: 'Mail', icon: Mail },
   event: { label: 'Spotkanie', icon: CalendarDays },
-  task: { label: 'Zadanie', icon: Bot },
+  task: { label: 'Task Cezara', icon: Bot },
   workout: { label: 'Trening', icon: Activity },
   tile: { label: 'Kafelek', icon: LayoutGrid },
+  todoList: { label: 'Lista', icon: ListChecks },
+  todo: { label: 'Zadanie', icon: SquareCheck },
 };
 
 const WIDE_KEY = 'desk-panel.chat-wide';

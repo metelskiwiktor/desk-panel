@@ -136,6 +136,7 @@ body[data-chat-dock] .top-right { margin-left: auto; }
 }
 .chat-chip.mail { --c: var(--c-mail); } .chat-chip.event { --c: var(--c-cal); } .chat-chip.task { --c: var(--c-agent); }
 .chat-chip.workout { --c: var(--c-train); } .chat-chip.tile { --c: var(--c-tile); }
+.chat-chip.todoList, .chat-chip.todo { --c: var(--c-cal); }
 .chat-chip svg { color: var(--c); }
 .chat-chip .k { flex: none; color: var(--c); font-weight: 600; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
 .chat-chip .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

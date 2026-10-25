@@ -61,6 +61,14 @@ Odpowiedź to `{ "ok": true, ... }` z identyfikatorami tego, co powstało lub si
 
 Błędy: `400` (zła akcja lub pola), `404` (nie ma takiej listy lub zadania), `409` (limit albo zajęta nazwa), `413` (ciało większe niż 4 KB).
 
+## Wskazywanie w czacie
+
+W trybie „Wskaż element” kafelek Zadania jest wskazywany jako **lista**, którą pokazuje (rodzaj `todoList`; ten sam id listy w dwóch kafelkach to jeden element
+kontekstu), a pojedynczy wiersz jako **zadanie** (`todo`), bo najbliższy oznaczony element wygrywa. Agent dostaje w bloku `[Kontekst]` id i nazwę listy oraz
+zadania do zrobienia z id (ukończone są tylko policzone; do 1800 znaków, nadmiar z odsyłaczem do `/api/agent/todos?list=…`), a przy zadaniu id zadania i listy,
+stan, notatkę i autora (`src/todo-context.ts`). Dzięki temu „dodaj tu zadanie” albo „odhacz to” działa bez ponownego czytania list. Kontekst jest zdjęciem z
+chwili wskazania (lista odświeża się co 5 s). Kafelek bez listy wskazuje się jak zwykły kafelek, a chip zadania Cezara nazywa się teraz „Task Cezara”.
+
 ## Agent czatu
 
 Agent czyta listy przez widok `GET /api/agent/todos` (`?list=<id lub fragment nazwy>`, `&ukonczone=1`; ukończone są domyślnie tylko policzone),

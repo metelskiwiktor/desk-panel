@@ -16,6 +16,7 @@ import type { CezarState } from './useCezar';
 import type { MailState } from './useMail';
 import { MULTI_KINDS, kindOfCard, limitKinds, pickable } from './workspace-kinds';
 import { ctx } from './chat-context';
+import { listContext } from './todo-context';
 import { workspaceKey } from './pulpits';
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
@@ -168,12 +169,21 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showT
   };
 
   // A to-do tile is named after its list, so two of them can be told apart (by a screen reader, and in what is pointed at in the chat).
-  const tileTitle = (tile: Tile) => {
-    const base = describe(tile.kind, cards).title;
-    if (tile.kind !== 'todo') return base;
+  const todoListOf = (tile: Tile) => {
+    if (tile.kind !== 'todo') return undefined;
     const lists = todos.source.data?.lists, { list } = todoConfigOf(tile.config);
-    const named = lists?.find(l => l.id === list) ?? lists?.[0];
+    return lists?.find(l => l.id === list) ?? lists?.[0];
+  };
+  const tileTitle = (tile: Tile) => {
+    const base = describe(tile.kind, cards).title, named = todoListOf(tile);
     return named ? `${base} · ${named.name}` : base;
+  };
+  // A to-do tile is pointed at as the list it shows (with its tasks and ids), not as an anonymous tile.
+  const pointAt = (tile: Tile, title: string) => {
+    const named = todoListOf(tile);
+    if (!named) return ctx('tile', tile.id, title);
+    const c = listContext(named);
+    return ctx('todoList', c.id, c.title, c.text);
   };
   const offered = pickable(cards, tiles.map(t => t.kind), available);
   const highlights = drag ? [
@@ -184,7 +194,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showT
     {readingOrder(tiles).map(tile => {
       const title = tileTitle(tile);
       const dragging = drag?.id === tile.id;
-      return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} {...ctx('tile', tile.id, title)}
+      return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} {...pointAt(tile, title)}
         style={{ ...areaOf(tile), ...(dragging ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {}) }}>
         <div className="wk-body">{content(tile)}</div>
         <button className="wk-grip" aria-label={`Przesuń kafelek: ${title}`} title="Przeciągnij, żeby przesunąć" onPointerDown={e => startMove(e, tile)}><i /></button>

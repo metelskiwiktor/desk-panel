@@ -330,6 +330,8 @@ describe('uruchamianie agy', () => {
     expect(text).toContain(`POST ${DEFAULT_PANEL_URL}/api/todos/action`);
     for (const action of ['createList', 'addTask', 'updateTask', 'moveTask', 'renameList', 'deleteTask', 'clearDone', 'deleteList']) expect(text).toContain(`"action":"${action}"`);
     expect(text).toContain('"by":"agent"');
+    expect(text).toMatch(/„Lista zadań” podaje id listy \(l-…\)/);
+    expect(text).toMatch(/„Zadanie z listy” id zadania i listy/);
     expect(text).toContain('charset=utf-8');
     expect(text).toMatch(/nie przez zagnieżdżone `powershell -Command/);
     expect(text).toMatch(/bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara/);
