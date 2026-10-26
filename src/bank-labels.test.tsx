@@ -17,7 +17,7 @@ const source: BankSource = {
     accounts: [{ id: 'a', name: 'Konto osobiste', last4: '4245', currency: 'PLN', balance: 1000, balanceAt: NOW }],
     transactions: [
       tx('t1', '2026-10-25', -43.9, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }),
-      tx('t2', '2026-10-24', -200, 'DANIEL KOWALSKI', { note: 'Za bilety', raw: { entry_reference: 'O;1' } }),
+      tx('t2', '2026-10-24', -200, 'DANIEL KOWALSKI', { note: 'Za bilety', raw: { entry_reference: 'O;1', remittance_information: ['Za bilety', 'MOBILE-PAYMENT-C2C-EXTERNAL'] } }),
       tx('t3', '2026-10-23', -70.85, 'Płatność BLIK'),
       tx('t4', '2026-10-22', -12.5, 'LESZNOZABKA ZD623 K.1', { note: 'Płatność kartą' }),
       tx('old', '2026-09-01', -12, 'Płatność telefonem'),
@@ -117,6 +117,18 @@ describe('marking bank operations', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Jedzenie na mieście' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
     expect(act).toHaveBeenLastCalledWith({ action: 'label', tx: 't3', category: OUT.id, tags: [], merchant: PYSZNE.id, person: null, recurring: false, comment: '' }, expect.any(Function));
+  });
+
+  it('names the way the bank says it was paid, and offers to make an unknown side of a transfer a person in one tap', async () => {
+    const { rows, act } = tile(base({ suggestions: {}, known: {} }));
+    expect(rows[1].textContent).toContain('przelew na telefon · Za bilety');
+    await userEvent.click(rows[1]);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('.bank-dlg-who')!.textContent).toContain('Z banku: Daniel Kowalski. Kto to?');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Osoba' }));
+    expect(act).toHaveBeenCalledWith({ action: 'createPerson', name: 'Daniel Kowalski' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
+    expect(act).toHaveBeenLastCalledWith({ action: 'label', tx: 't2', category: null, tags: [], merchant: null, person: 'p-00000009', recurring: false, comment: '' }, expect.any(Function));
   });
 
   it('tells two people of the same name apart by their identifiers, and adds another one on purpose', async () => {

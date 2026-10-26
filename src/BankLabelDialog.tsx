@@ -11,6 +11,8 @@ import { withLabel, type BankLabelsHook } from './useBankLabels';
 const money = (amount: number, currency: string) => `${amount > 0 ? '+' : amount < 0 ? '−' : ''}${Math.abs(amount).toLocaleString('pl-PL', { style: 'currency', currency })}`;
 /** A card payment, an ATM or a card transfer names its merchant in the bank's text: that name is offered as the merchant. */
 const namesMerchant = (t: BankTransaction) => t.note === 'Płatność kartą' || describe(t).category === 'atm';
+/** A transfer names its other side (`creditor`/`debtor` in the bank's answer), but whether it is a person or a company only the user knows. */
+const namesSide = (t: BankTransaction) => t.note !== undefined && !namesMerchant(t) && !/^(Płatność|Przelew z karty)/.test(t.title) && !/^Płatność/.test(t.note);
 
 /**
  * Marking one operation: a dialog over the whole panel, so it reads the same in a tile of any size and on a phone. Each field
@@ -111,6 +113,12 @@ export function BankLabelDialog({ t, data, act, error, close, done, position }: 
     setSuggestion(undefined);
   };
   const clear = async () => { setBusy(true); const result = await act({ action: 'clear', tx: t.id }, value => withLabel(value, t.id, null)); setBusy(false); if (result) close(); };
+  // Nobody known by the bank's name yet: one tap makes the person (or the merchant), and its identifiers are learnt on Zapisz.
+  const unknownSide = namesSide(t) && !known?.person && !known?.merchant && !person && !merchant && !merchantText.trim() && !existing;
+  const makePerson = async () => {
+    const result = await act({ action: 'createPerson', name: d.name });
+    if (result?.person) setPerson(result.person.id);
+  };
   const addPerson = async () => {
     const name = query.trim();
     if (!name) return;
@@ -158,6 +166,15 @@ export function BankLabelDialog({ t, data, act, error, close, done, position }: 
             <button type="button" className="no" disabled={busy} onClick={() => void reject()}><X size={16} aria-hidden="true" /> Żadne</button>
           </div>
         </div>)}
+
+        {unknownSide && <div className="bank-dlg-who">
+          <p>Z banku: <b>{d.name}</b>. Kto to?</p>
+          <div className="bank-dlg-sug-actions">
+            <button type="button" disabled={busy} onClick={() => void makePerson()}><User size={16} aria-hidden="true" /> Osoba</button>
+            <button type="button" disabled={busy} onClick={() => setMerchantText(d.name)}><Store size={16} aria-hidden="true" /> Sprzedawca</button>
+          </div>
+          <small>Panel zapamięta rachunek, telefon i nazwę z banku i następnym razem rozpozna ją sam.</small>
+        </div>}
 
         <label className="todo-dlg-label" htmlFor={`${id}-merchant`}>Sprzedawca</label>
         {chosenMerchant ? <div className="bank-person">

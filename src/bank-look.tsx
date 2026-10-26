@@ -22,6 +22,17 @@ export const ICONS: Record<BankIcon, LucideIcon> = {
   smartphone: Smartphone, banknote: Banknote, user: User,
 };
 
+/** The way an operation was made, as PKO ends its title (`MOBILE-PAYMENT-C2C-EXTERNAL`), in words; null when the bank sent no code. */
+const CODES: [RegExp, string][] = [
+  [/^MOBILE-PAYMENT-C2C/, 'przelew na telefon'], [/^TRANSFER-/, 'przelew na rachunek'], [/^CARD-PAYMENT$/, 'karta'], [/^BLIK-/, 'BLIK'],
+  [/^MOBILE-PAYMENT-ATM/, 'bankomat, telefon'], [/^MOBILE-PAYMENT-POS-RETURN/, 'zwrot, telefon'], [/^MOBILE-PAYMENT-POS/, 'telefon w sklepie'], [/^PAYCARD-TRANSFER$/, 'przelew z karty'],
+];
+export function methodName(t: BankTransaction): string | null {
+  const info = t.raw?.remittance_information;
+  const code = Array.isArray(info) && info.length ? String(info.at(-1)).trim() : '';
+  return CODES.find(([pattern]) => pattern.test(code))?.[1] ?? null;
+}
+
 /**
  * How an operation was made and what its title says, without any category: "karta", "przelew · Zwrot za kolację",
  * "sklep nieznany" for a payment by phone (the bank sends no name for it) until the user names the merchant (`named`).
@@ -37,7 +48,7 @@ export function howPaid(t: BankTransaction, named = false): string {
   if (t.note === 'Płatność kartą') return 'karta';
   if (t.note === 'Płatność telefonem') return 'telefon';
   const note = humanNote(t.note);
-  return `${t.amount > 0 ? 'wpływ' : 'przelew'}${note ? ` · ${note}` : ''}`;
+  return `${methodName(t) ?? (t.amount > 0 ? 'wpływ' : 'przelew')}${note ? ` · ${note}` : ''}`;
 }
 
 /**

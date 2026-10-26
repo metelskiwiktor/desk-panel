@@ -709,6 +709,9 @@ button.p2-badge.bank-todo { border: 0; cursor: pointer; background: color-mix(in
 .bank-chips.tags button[aria-pressed='true'] { --c: var(--p2-cal); }
 .bank-tag-input { width: 180px; max-width: 100%; height: 34px; padding: 0 10px; border: 1px dashed var(--p2-line); border-radius: 17px; background: transparent; color: var(--p2-text); font: inherit; font-size: 13.5px; outline: none; }
 .bank-tag-input:focus { border-color: var(--p2-cal); border-style: solid; }
+.bank-dlg-who { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--p2-line); border-radius: 14px; background: var(--p2-surface); }
+.bank-dlg-who p { margin: 0; font-size: 15px; }
+.bank-dlg-who small { color: var(--p2-muted); font-size: 12.5px; }
 .bank-dlg-options { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .bank-dlg-options button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-text); font-size: 14px; text-align: left; }
 .bank-dlg-options button small { color: var(--p2-muted); font-size: 12px; }

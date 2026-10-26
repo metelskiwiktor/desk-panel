@@ -68,7 +68,7 @@ Każde pole odpowiada na jedno pytanie:
 | Kategoria (dokładnie jedna) | na co poszły pieniądze; jeden kawałek paska | użytkownik, własna lista z kolorem i ikoną |
 | Etykiety (dowolnie wiele) | szczegóły, po których potem szukasz (`#internet`, `#tabnote`, `#ogrzewanie`) | użytkownik, tworzone w locie |
 | Sprzedawca | gdzie | rozpoznany z tekstu banku (karta) albo rachunku i nazwy (przelew); przy telefonie i BLIK wybierany z listy |
-| Metoda płatności | jak | sama z banku: karta, telefon, BLIK, przelew; nie jest oznaczeniem |
+| Metoda płatności | jak | sama z kodu, którym PKO kończy tytuł: karta, przelew na telefon, przelew na rachunek, BLIK, telefon w sklepie; nie jest oznaczeniem |
 | Osoba | komu, od kogo | przy przelewach; rozpoznawana po rachunku, telefonie, nazwie z banku |
 | Cykliczne, opis | | użytkownik |
 
@@ -106,6 +106,10 @@ W tytule przelewu na telefon jest też **własny** numer (`OD:` przy wychodzący
 kontrahenta i nigdy własnego rachunku. Po oznaczeniu identyfikatory strony operacji dopisują się do wskazanej osoby (rachunek, telefon, a z
 pełnego numeru także jego zamaskowana postać, nazwa z banku), a gdy osoby nie ma, do sprzedawcy; tekst płatności kartą (bez miasta i numeru
 sklepu) zawsze do sprzedawcy. Identyfikator należy do jednej encji (ostatnie oznaczenie wygrywa), a w ustawieniach można go zapomnieć.
+
+Przelew od lub do kogoś jeszcze nieznanego pokazuje w oknie „Z banku: Alicja Kowalska. Kto to?” z przyciskami **Osoba** i **Sprzedawca**:
+panel nie zgaduje, czy to człowiek, czy firma (jak Inea), ale jedno dotknięcie tworzy właściwą encję, a po zapisie jej identyfikatory są
+rozpoznawane same.
 
 Dwie osoby mogą mieć to samo imię: rozróżnia je to, co pokazał bank. Lista osób w oknie i w ustawieniach pokazuje przy imieniu nazwę z
 banku i końcówki („Daniel · „DANIEL KOWALSKI” · rach. ··2874 · tel. ··321”); rachunek ma 4 cyfry, telefon 3, bo resztę maskuje bank.
