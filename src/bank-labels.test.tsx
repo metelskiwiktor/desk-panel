@@ -119,6 +119,16 @@ describe('marking bank operations', () => {
     expect(act).toHaveBeenLastCalledWith({ action: 'label', tx: 't3', category: OUT.id, tags: [], merchant: PYSZNE.id, person: null, recurring: false, comment: '' }, expect.any(Function));
   });
 
+  it('shows a suggestion also beside an operation older than the day “to be marked” counts from, without counting it', () => {
+    const data = base();
+    data.suggestions.old = { sure: true, options: [{ category: OUT.id, merchant: PYSZNE.id, reasons: ['ta sama kwota', 'pyszne.pl · Jedzenie na mieście: 2 z 2 razy'] }] };
+    const { rows } = tile(data);
+    expect(rows[4].textContent).toContain('pyszne.pl · Jedzenie na mieście?');
+    expect(within(rows[4]).getByRole('button', { name: /Przyjmij podpowiedź/ })).toBeTruthy();
+    expect(rows[4].textContent).not.toContain('przypisz');
+    expect(screen.getByRole('button', { name: '3 do przypisania' })).toBeTruthy();
+  });
+
   it('names the way the bank says it was paid, and offers to make an unknown side of a transfer a person in one tap', async () => {
     const { rows, act } = tile(base({ suggestions: {}, known: {} }));
     expect(rows[1].textContent).toContain('przelew na telefon · Za bilety');

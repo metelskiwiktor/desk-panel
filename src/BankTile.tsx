@@ -183,7 +183,8 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
                 const merchant = merchants.get(mark?.merchant ?? labels?.known[t.id]?.merchant ?? '');
                 const name = merchant?.name ?? d.name;
                 const todo = pending.has(t.id);
-                const suggestion = todo ? labels?.suggestions[t.id] : undefined;
+                // Any operation without a category shows what the panel knows, also one older than the day "to be marked" counts from.
+                const suggestion = category ? undefined : labels?.suggestions[t.id];
                 const first = suggestion?.options[0];
                 const proposed = first?.category ? categories.get(first.category) : undefined;
                 const Icon = category ? ICONS[category.icon] : null;
