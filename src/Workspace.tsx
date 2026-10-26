@@ -94,7 +94,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
   const cards = getQuotaCards(data.quotas.data);
   // Until the panel is arranged by hand the layout follows what there is to show; then the saved one is kept as it is.
   // A tile of a kind the settings switched off is not drawn, and the next change drops it from the saved layout for good.
-  const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar', 'smart-actions'].filter(available))).filter(t => available(t.kind));
+  const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar'].filter(available))).filter(t => available(t.kind));
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
   const commit = (next: Tile[]) => { tilesRef.current = next; setStored(next); saveWorkspace(next, workspaceKey(pulpit)); };

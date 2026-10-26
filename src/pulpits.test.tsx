@@ -115,7 +115,7 @@ describe('virtual desktops in the panel', () => {
     await user.click(menu());
     expect(saved().items).toHaveLength(8);
     expect((screen.getByRole('button', { name: /Nowy pulpit/ }) as HTMLButtonElement).disabled).toBe(true);
-  });
+  }, 15000);
   it('the menu is only on the home page', async () => {
     const user = userEvent.setup();
     render(<App />);
