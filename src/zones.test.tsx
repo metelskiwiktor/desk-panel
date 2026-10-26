@@ -121,9 +121,9 @@ describe('dragging the grips', () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
-    drag(grip(), 300, 230); // 124 - 70 = 54: nearest is the line (64)
+    drag(grip(), 300, 230); // 124 - 70 = 54: nearest is the line (44)
     expect(frame().getAttribute('data-top')).toBe('cmp');
-    drag(grip(), 300, 400); // 64 + 100 = 164, held at the standard height
+    drag(grip(), 300, 400); // 44 + 100 = 144, held at the standard height
     expect(frame().getAttribute('data-top')).toBe('std');
     drag(grip(), 300, 100); // all the way up: held at the line
     expect(frame().getAttribute('data-top')).toBe('cmp');
