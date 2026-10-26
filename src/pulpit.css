@@ -283,8 +283,8 @@
 /* ── Three zones: today (top), work area (middle), days (bottom) ─────────────────────────────── */
 .p3-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; font-variant-numeric: tabular-nums; }
 .p3-frame[data-top="std"] { --p3-top: 124px; }
-.p3-frame[data-top="cmp"] { --p3-top: 64px; }
-.p3-frame[data-bottom="short"] { --p3-bottom: 112px; }
+.p3-frame[data-top="cmp"] { --p3-top: 44px; }
+.p3-frame[data-bottom="short"] { --p3-bottom: 64px; }
 .p3-frame[data-bottom="mid"] { --p3-bottom: 224px; }
 /* The month takes everything the top leaves; the work area folds to nothing (its two gaps cancel with the margins). */
 .p3-frame[data-bottom="month"] { --p3-bottom: calc(100% - var(--p3-top) - 8px); }
@@ -331,10 +331,20 @@
 .p3-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--p2-cal); }
 .p3-empty { font-size: 15px; color: var(--p2-muted); }
 .p3-notice { padding: 2px 10px; border-radius: 10px; background: color-mix(in srgb, var(--quota-yellow) 16%, transparent); color: var(--quota-yellow); font-size: 12px; }
+.p3-day.cmp { padding: 0 14px 0 10px; border-radius: 14px; overflow: visible; }
+.p3-day.cmp .p3-label { padding-left: 4px; min-width: auto; max-width: 240px; }
 .p3-day.cmp .p3-label span, .p3-day.cmp .p3-chip-text small { display: none; }
-.p3-day.cmp .p3-label strong { font-size: 16px; }
-.p3-day.cmp .p3-chip { min-height: 38px; padding: 2px 10px; }
-.p3-day.cmp .p3-chip-text strong { font-size: 14px; }
+.p3-day.cmp .p3-label strong { font-size: 14px; font-weight: 600; line-height: 1.2; }
+.p3-day.cmp .p3-items { gap: 6px; align-items: center; }
+.p3-day.cmp .p3-chip { min-height: 30px; height: 30px; padding: 0 10px; gap: 8px; border-radius: 10px; }
+.p3-day.cmp .p3-chip svg { width: 15px; height: 15px; }
+.p3-day.cmp .p3-chip-text strong { font-size: 13px; font-weight: 600; }
+.p3-day.cmp .p3-chip small { font-size: 12px; }
+.p3-day.cmp .p3-chip .p2-level { height: 10px; transform: scale(0.65); transform-origin: left center; }
+.p3-day.cmp .p3-notice { padding: 1px 8px; font-size: 11px; }
+.p3-day.cmp .p3-empty { font-size: 13px; }
+.p3-day.cmp .p3-grip { bottom: -6px; width: 100px; height: 16px; }
+.p3-day.cmp .p3-grip i { width: 36px; height: 4px; }
 
 /* Middle: the work area, a grid of 4 × 2 cells. A tile covers one or more of them (--c, --r, --w, --h); a cell without
    a tile offers to become one. Each says what it has and none is cut. */
@@ -432,6 +442,16 @@
 .p3-dots i { display: block; width: 9px; height: 9px; }
 .p3-dots i.train { border-radius: 3px; background: var(--p2-train); }
 .p3-dots i.event { border-radius: 50%; background: var(--p2-cal); }
+.p3-days.short { gap: 4px; }
+.p3-days.short .p3-days-head { min-height: 18px; padding: 0 6px 0 8px; }
+.p3-days.short .p3-days-head h2 { font-size: 11px; line-height: 1.2; }
+.p3-days.short .p3-cal { min-height: 20px; font-size: 13px; }
+.p3-days.short .p2-week-list.chips { gap: 8px; }
+.p3-days.short .p3-daychip { flex-direction: row; align-items: center; justify-content: center; gap: 8px; min-height: 36px; height: 36px; padding: 0 10px; border-radius: 12px; }
+.p3-days.short .p3-daychip b { font-size: 13px; font-weight: 600; }
+.p3-days.short .p3-daychip span { font-size: 13px; color: var(--p2-muted); }
+.p3-days.short .p3-dots { display: inline-flex; align-items: center; gap: 3px; min-height: 8px; }
+.p3-days.short .p3-dots i { width: 7px; height: 7px; }
 .p3-month { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .p3-month-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; font-size: 12px; color: var(--p2-muted); text-align: center; }
 .p3-month-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -511,10 +531,6 @@
 .p3-grip:hover i, .p3-grip:active i { width: 64px; background: #7f8ca3; }
 .p3-grip.bottom { bottom: 0; }
 .p3-grip.top { top: 0; }
-.p3-day.cmp .p3-label { padding-left: 6px; }
-/* The line has the grip in the middle too, in a strip of its own under the chips so it takes no more room than that. */
-.p3-day.cmp { padding: 6px 12px 18px 6px; }
-.p3-day.cmp .p3-grip { width: 120px; height: 18px; }
 
 /* Limits as bars, a block per provider */
 /* A limit: the name and the reset on the left, the bars on the right (a tile puts them one under the other). */

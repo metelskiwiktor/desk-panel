@@ -13,12 +13,12 @@ export const DEFAULT_ZONES: Zones = { top: 'std', bottom: 'mid' };
 export const ZONES_KEY = 'desk-panel.zones';
 
 /** Heights (px) the sizes of the top zone are drawn at, in the order of TOP_SIZES. */
-export const TOP_HEIGHTS = [64, 124];
+export const TOP_HEIGHTS = [44, 124];
 /** Heights of the bottom zone in the order of BOTTOM_SIZES; the month takes what the top leaves of the frame. */
 export const bottomHeights = (frame: HTMLElement | null): number[] => {
   const top = TOP_HEIGHTS[TOP_SIZES.indexOf((frame?.getAttribute('data-top') as TopSize | null) ?? 'std')] ?? 124;
   const month = frame && frame.clientHeight > 0 ? frame.clientHeight - top - 8 : 480;
-  return [112, 224, Math.max(month, 300)];
+  return [64, 224, Math.max(month, 300)];
 };
 
 /** The next size, and from the last one round to the first. */
