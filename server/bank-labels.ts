@@ -4,8 +4,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { BankAccount, BankTransaction } from '../src/bank-contract';
 import {
-  BANK_COLORS, BANK_ICONS, BANK_LABEL_LIMITS, BANK_PARTY_KINDS, bankCategorySchema, bankCategoryId, bankLabelActionSchema, bankPartyId,
-  type BankCategory, type BankLabel, type BankLabelAction, type BankLabelActionParsed, type BankLabelResult, type BankLabelsSource, type BankPartyKind, type BankSuggestion,
+  BANK_COLORS, BANK_ICONS, BANK_LABEL_LIMITS, BANK_MOVES, bankCategorySchema, bankCategoryId, bankLabelActionSchema, bankPartyId, isDone,
+  type BankBalance, type BankCategory, type BankMove, type BankLabel, type BankLabelAction, type BankLabelActionParsed, type BankLabelResult, type BankLabelsSource, type BankSuggestion,
 } from '../src/bank-labels-contract';
 import { partiesOf, type Party } from './bank-parties';
 import { featuresOf, suggest, type Marked, type OpFeatures, type Proposal, type Rejection } from './bank-suggest';
@@ -33,7 +33,7 @@ const opSchema = z.object({
 });
 const tagText = z.string().min(1).max(BANK_LABEL_LIMITS.tag);
 const storedLabelSchema = z.object({
-  category: bankCategoryId.nullable(), tags: z.array(tagText).max(BANK_LABEL_LIMITS.tagsPerMark), party: bankPartyId.nullable(), purpose: tagText.nullable(),
+  move: z.enum(BANK_MOVES).nullable(), category: bankCategoryId.nullable(), tags: z.array(tagText).max(BANK_LABEL_LIMITS.tagsPerMark), party: bankPartyId.nullable(),
   recurring: z.boolean(), comment: z.string().max(BANK_LABEL_LIMITS.comment), labeledAt: z.number().finite(), op: opSchema,
 });
 /**
@@ -44,17 +44,16 @@ const storedLabelSchema = z.object({
  */
 const identifierSchema = z.object({ key: z.string().max(250), kind: z.enum(['account', 'phone', 'phoneTail', 'name', 'merchant']), hint: z.string().max(80), addedAt: z.number().finite() });
 const storedPartySchema = z.object({
-  id: bankPartyId, name: z.string().max(BANK_LABEL_LIMITS.partyName), kind: z.enum(BANK_PARTY_KINDS), createdAt: z.number().finite(),
+  id: bankPartyId, name: z.string().max(BANK_LABEL_LIMITS.partyName), createdAt: z.number().finite(),
   identifiers: z.array(identifierSchema).max(BANK_LABEL_LIMITS.identifiers),
 });
 const rejectionSchema = z.object({ tx: z.string().max(200), basis: z.string().max(300), signature: z.string().max(2000), at: z.number().finite() });
 export const bankLabelFileSchema = z.object({
-  version: z.literal(3),
+  version: z.literal(4),
   secret: z.string().min(32),
   since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   categories: z.array(bankCategorySchema).max(BANK_LABEL_LIMITS.categories),
   tags: z.array(tagText).max(BANK_LABEL_LIMITS.tags),
-  purposes: z.array(tagText).max(BANK_LABEL_LIMITS.purposes),
   parties: z.array(storedPartySchema).max(BANK_LABEL_LIMITS.parties),
   labels: z.record(z.string().max(200), storedLabelSchema),
   rejections: z.array(rejectionSchema),
@@ -62,19 +61,31 @@ export const bankLabelFileSchema = z.object({
 export type BankLabelFile = z.infer<typeof bankLabelFileSchema>;
 
 /**
- * Earlier versions: the first had a category, a person, recurring and a comment; the second added tags and merchants. Their
- * people and merchants become sides of the kind person and company; a mark of the category "Pożyczka" becomes the purpose
- * "pożyczka" (money out) or "zwrot" (money in) and the category goes, since a loan is a purpose, not what money went on.
+ * Earlier versions. The first had a category, a person, recurring and a comment; the second added tags and merchants; the third
+ * made people and merchants one other side with a kind (person, company, the user themself) and gave people a purpose. Each is
+ * read into the third's shape and then into moves (`toMoves`).
  */
+const plainCategory = bankCategorySchema.omit({ move: true });
 const ownerSchema = z.object({ id: bankPartyId, name: z.string(), createdAt: z.number(), identifiers: z.array(identifierSchema) });
 const oldLabel = z.object({
   category: bankCategoryId.nullable(), recurring: z.boolean(), person: bankPartyId.nullable(), comment: z.string(), labeledAt: z.number(), op: opSchema,
   tags: z.array(tagText).default([]), merchant: bankPartyId.nullable().default(null),
 });
+const thirdSchema = z.object({
+  version: z.literal(3), secret: z.string().min(32), since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), categories: z.array(plainCategory), tags: z.array(tagText),
+  purposes: z.array(tagText), parties: z.array(ownerSchema.extend({ kind: z.enum(['person', 'company', 'self']) })),
+  labels: z.record(z.string().max(200), z.object({
+    category: bankCategoryId.nullable(), tags: z.array(tagText), party: bankPartyId.nullable(), purpose: tagText.nullable(), recurring: z.boolean(), comment: z.string(),
+    labeledAt: z.number(), op: opSchema,
+  })),
+  rejections: z.array(rejectionSchema),
+});
+type Third = z.infer<typeof thirdSchema>;
+/** The first two versions as the third: people and merchants become sides, a "Pożyczka" category the purpose "pożyczka" or "zwrot". */
 const olderSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]), secret: z.string().min(32), since: z.string(), categories: z.array(bankCategorySchema),
+  version: z.union([z.literal(1), z.literal(2)]), secret: z.string().min(32), since: z.string(), categories: z.array(plainCategory),
   tags: z.array(tagText).default([]), merchants: z.array(ownerSchema).default([]), people: z.array(ownerSchema), labels: z.record(z.string(), oldLabel),
-}).transform((old): BankLabelFile => {
+}).transform((old): Third => {
   const loans = new Set(old.categories.filter(c => /po[zż]yczk/i.test(c.name)).map(c => c.id));
   const labels = Object.fromEntries(Object.entries(old.labels).map(([tx, l]) => {
     const loan = !!l.category && loans.has(l.category);
@@ -89,16 +100,63 @@ const olderSchema = z.object({
     parties: [...old.people.map(p => ({ ...p, kind: 'person' as const })), ...old.merchants.map(m => ({ ...m, kind: 'company' as const }))],
   };
 });
+/** A purpose that says money is to come back or was given back; any other purpose ("dokładka", "prezent") was what it went on. */
+const SETTLING = /po[zż]ycz|zwrot|d[lł]ug|odda/i;
+/**
+ * The third version into moves, without asking. A category used only on money that came in becomes an income source, any other
+ * stays a spending category, and a mark with one takes its move. A loan or its return (a settling purpose) is a settlement. The
+ * user's own side was their company or another own account: money in from it is income from the source "Pensja" (made when
+ * needed, as the user's company pays the salary), money out a move between own accounts. Every other purpose becomes a tag, and
+ * the kinds of sides go: the move says what the money did.
+ */
+function toMoves(old: Third): BankLabelFile {
+  const marks = Object.values(old.labels);
+  const income = new Set(old.categories.filter(c => {
+    const used = marks.filter(l => l.category === c.id);
+    return used.length > 0 && used.every(l => l.op.amount > 0);
+  }).map(c => c.id));
+  const categories: BankCategory[] = old.categories.map(c => ({ ...c, move: income.has(c.id) ? 'income' : 'spend' }));
+  const kinds = new Map(old.parties.map(p => [p.id, p.kind]));
+  const tags = [...old.tags];
+  const keep = (tag: string) => { if (!tags.some(t => same(t, tag))) tags.push(tag); return tags.find(t => same(t, tag))!; };
+  let salary: string | undefined;
+  const labels = Object.fromEntries(Object.entries(old.labels).map(([tx, l]) => {
+    const settling = !!l.purpose && SETTLING.test(l.purpose) && !l.category && !!l.party;
+    const extra = l.purpose && !settling ? [keep(l.purpose)] : [];
+    let move: BankLabel['move'] = null, category = l.category;
+    if (l.category) move = income.has(l.category) ? 'income' : 'spend';
+    else if (settling) move = 'settle';
+    else if (kinds.get(l.party ?? '') === 'self') {
+      if (l.op.amount > 0) {
+        salary ??= categories.find(c => c.move === 'income' && same(c.name, 'Pensja'))?.id;
+        if (!salary) {
+          salary = `c-${randomUUID().slice(0, 8)}`;
+          const used = new Set(categories.map(c => c.color));
+          categories.push({ id: salary, name: 'Pensja', move: 'income', color: used.has('green') ? BANK_COLORS.find(c => !used.has(c)) ?? 'green' : 'green', icon: 'banknote' });
+        }
+        move = 'income'; category = salary;
+      } else move = 'move';
+    } else if (l.purpose) move = l.op.amount < 0 ? 'spend' : 'income';
+    return [tx, {
+      move, category, tags: [...new Set([...l.tags, ...extra])].slice(0, BANK_LABEL_LIMITS.tagsPerMark), party: l.party, recurring: l.recurring, comment: l.comment,
+      labeledAt: l.labeledAt, op: l.op,
+    }];
+  }));
+  return {
+    version: 4, secret: old.secret, since: old.since, categories: categories.slice(0, BANK_LABEL_LIMITS.categories), tags: tags.slice(0, BANK_LABEL_LIMITS.tags),
+    parties: old.parties.map(({ kind: _, ...p }) => p), labels, rejections: old.rejections,
+  };
+}
 
 /** What a scenario file may start with: no key and no hashes (they are made from the scenario's own numbers). */
 export const bankLabelSeedSchema = z.object({
   since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  categories: z.array(bankCategorySchema).max(BANK_LABEL_LIMITS.categories).default([]),
-  parties: z.array(z.object({ id: bankPartyId, name: z.string().max(BANK_LABEL_LIMITS.partyName), kind: z.enum(BANK_PARTY_KINDS) })).max(BANK_LABEL_LIMITS.parties).default([]),
+  categories: z.array(bankCategorySchema.extend({ move: bankCategorySchema.shape.move.default('spend') })).max(BANK_LABEL_LIMITS.categories).default([]),
+  parties: z.array(z.object({ id: bankPartyId, name: z.string().max(BANK_LABEL_LIMITS.partyName) })).max(BANK_LABEL_LIMITS.parties).default([]),
   /** Marks of operations of the scenario's bank reading; the sides learn their identifiers from them as from a gesture. */
   labels: z.record(z.string(), z.object({
-    category: bankCategoryId.nullable().default(null), tags: z.array(tagText).default([]), party: bankPartyId.nullable().default(null),
-    purpose: tagText.nullable().default(null), recurring: z.boolean().default(false), comment: z.string().max(BANK_LABEL_LIMITS.comment).default(''),
+    move: z.enum(BANK_MOVES).nullable().default(null), category: bankCategoryId.nullable().default(null), tags: z.array(tagText).default([]),
+    party: bankPartyId.nullable().default(null), recurring: z.boolean().default(false), comment: z.string().max(BANK_LABEL_LIMITS.comment).default(''),
   })).default({}),
 });
 export type BankLabelSeed = z.infer<typeof bankLabelSeedSchema>;
@@ -106,7 +164,7 @@ export type BankLabelSeed = z.infer<typeof bankLabelSeedSchema>;
 /** The marks as the agent's view reads them: every kept operation (the reading's and the marked ones), no identifiers. */
 export interface BankLedger {
   observedAt: number | null; since: string;
-  categories: BankCategory[]; parties: { id: string; name: string; kind: BankPartyKind }[];
+  categories: BankCategory[]; parties: { id: string; name: string }[]; balances: BankBalance[];
   entries: { tx: string; op: OpFeatures; label: BankLabel | null; known: string | null; suggestion: BankSuggestion | null; pending: boolean; inReading: boolean }[];
 }
 
@@ -137,7 +195,22 @@ const localDay = (at: number) => { const d = new Date(at); return `${d.getFullYe
 /** A booking day is kept as noon UTC of that date. */
 const bookedOn = (at: number) => new Date(at).toISOString().slice(0, 10);
 const publicId = (key: string) => key.startsWith('merchant:') ? `m${createHmac('sha256', 'id').update(key).digest('hex').slice(0, 11)}` : key.slice(key.indexOf(':') + 1, key.indexOf(':') + 13);
-const isEmpty = (l: MarkFields) => !l.category && !l.tags.length && !l.party && !l.purpose && !l.recurring && !l.comment.trim();
+const isEmpty = (l: MarkFields) => !l.move && !l.category && !l.tags.length && !l.party && !l.recurring && !l.comment.trim();
+const MOVE_OF_CATEGORY = { spend: 'wydatków', income: 'przychodów', move: 'przełożeń' } as const;
+
+/** What is open with each side over every kept settlement: positive when it owes the user. Even sides are left out. */
+function balancesOf(file: BankLabelFile): BankBalance[] {
+  const by = new Map<string, BankBalance>();
+  for (const l of Object.values(file.labels)) {
+    if (l.move !== 'settle' || !l.party || !file.parties.some(p => p.id === l.party)) continue;
+    const key = `${l.party} ${l.op.currency}`;
+    const balance = by.get(key) ?? { party: l.party, currency: l.op.currency, amount: 0 };
+    balance.amount -= l.op.amount;
+    by.set(key, balance);
+  }
+  return [...by.values()].map(b => ({ ...b, amount: Math.round(b.amount * 100) / 100 })).filter(b => b.amount !== 0)
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+}
 /** Who the bank names for sure: a masked phone number only hints, so it never fills the dialog by itself. */
 const SURE_KINDS = ['merchant', 'account', 'phone', 'name'];
 
@@ -152,7 +225,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
   let loading: Promise<BankLabelFile> | undefined;
   let tail: Promise<unknown> = Promise.resolve();
 
-  const fresh = (): BankLabelFile => ({ version: 3, secret: randomBytes(32).toString('base64url'), since: options.today?.() ?? localDay(now()), categories: [], tags: [], purposes: [], parties: [], labels: {}, rejections: [] });
+  const fresh = (): BankLabelFile => ({ version: 4, secret: randomBytes(32).toString('base64url'), since: options.today?.() ?? localDay(now()), categories: [], tags: [], parties: [], labels: {}, rejections: [] });
   const hash = (secret: string, party: Party) => `${party.kind}:${createHmac('sha256', secret).update(`${party.kind}:${party.value}`).digest('base64url').slice(0, 24)}`;
 
   async function load(): Promise<BankLabelFile> {
@@ -170,8 +243,9 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         if (raw === null) { data = fresh(); await options.persistence.write(data); message = undefined; return data; }
         const parsed = bankLabelFileSchema.safeParse(raw);
         if (parsed.success) { data = parsed.data; message = undefined; return data; }
-        const old = olderSchema.safeParse(raw);
-        if (old.success) { data = old.data; await options.persistence.write(data); message = undefined; return data; }
+        const third = thirdSchema.safeParse(raw);
+        const old = third.success ? third : olderSchema.safeParse(raw);
+        if (old.success) { data = toMoves(old.data); await options.persistence.write(data); message = undefined; return data; }
         // Never write over what cannot be read: keep it aside and start again, and say so.
         const aside = await options.persistence.aside?.().catch(() => null);
         message = `Plik z oznaczeniami operacji był uszkodzony${aside ? ` (zachowany jako ${path.basename(aside)})` : ''}; zaczynasz od pustych oznaczeń.`;
@@ -204,18 +278,16 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       if (!t) continue;
       const r = read(file, t, reading!.accounts);
       file.labels[tx] = { ...label, labeledAt: now(), op: r.op };
-      keepWords(file, label.tags, label.purpose);
+      keepWords(file, label.tags);
       learn(file, file.labels[tx], r);
     }
     return file;
   }
 
-  /** Tags and purposes are lists of the user's own words, kept once each however they were written. */
-  function keepWords(file: BankLabelFile, tags: string[], purpose: string | null) {
+  /** Tags are a list of the user's own words, kept once each however they were written. */
+  function keepWords(file: BankLabelFile, tags: string[]) {
     for (const tag of tags) if (!file.tags.some(t => same(t, tag))) file.tags.push(tag);
-    if (purpose && !file.purposes.some(p => same(p, purpose))) file.purposes.push(purpose);
     if (file.tags.length > BANK_LABEL_LIMITS.tags) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.tags} etykiet.`);
-    if (file.purposes.length > BANK_LABEL_LIMITS.purposes) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.purposes} celów.`);
   }
 
   /** What the bank showed for the other side now belongs to the side the user said, and to no other (the latest word counts). */
@@ -237,7 +309,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
   async function view(file: BankLabelFile) {
     const reading = await options.operations();
     const ops = (reading?.transactions ?? []).map(t => read(file, t, reading!.accounts));
-    const marked: Marked[] = Object.entries(file.labels).map(([tx, l]) => ({ tx, op: l.op, category: l.category, tags: l.tags, party: l.party, purpose: l.purpose, recurring: l.recurring }));
+    const marked: Marked[] = Object.entries(file.labels).map(([tx, l]) => ({ tx, op: l.op, move: l.move, category: l.category, tags: l.tags, party: l.party, recurring: l.recurring }));
     const owners = file.parties.map(p => ({ id: p.id, name: p.name, identifiers: p.identifiers }));
     const ctx = { marked, categories: file.categories, owners, rejections: file.rejections };
     const known = new Map<string, string>();
@@ -245,23 +317,30 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       const key = o.op.keys.find(k => SURE_KINDS.includes(k.slice(0, k.indexOf(':'))) && owners.some(w => w.identifiers.some(i => i.key === k)));
       if (key) known.set(o.t.id, owners.find(w => w.identifiers.some(i => i.key === key))!.id);
     }
-    const kindOf = (id: string | null | undefined) => file.parties.find(p => p.id === id)?.kind;
-    // Done is what the user has said enough about: a category, or a purpose (money to or from a person), or money between the
-    // user's own pockets, which needs neither, whether marked so or known to be by its identifiers.
-    const done = (tx: string) => !!file.labels[tx]?.category || !!file.labels[tx]?.purpose || kindOf(file.labels[tx]?.party ?? known.get(tx)) === 'self';
+    // Done is an operation whose move is said, with its category or source where the move has one.
+    const done = (tx: string) => isDone(file.labels[tx]);
     const pending = ops.filter(o => bookedOn(o.t.at) >= file.since && !done(o.t.id)).map(o => o.t.id);
     const proposals = new Map<string, Proposal>();
     // Every operation not done gets its suggestion, also one older than "to be marked" counts from: it is not asked for,
-    // but the panel says what it knows. One the user marked already (even without a category) is left as it is.
+    // but the panel says what it knows.
     for (const o of ops) {
-      if (file.labels[o.t.id] && done(o.t.id)) continue;
+      if (done(o.t.id)) continue;
       const proposal = suggest(o.t.id, o.op, ctx);
       if (proposal) proposals.set(o.t.id, proposal);
     }
-    return { reading, ops, pending, proposals, known };
+    // The habit of each side: what its earlier marks with money going the same way said the money did.
+    const habits = new Map<string, Partial<Record<BankMove, number>>>();
+    for (const o of ops) {
+      const party = file.labels[o.t.id]?.party ?? known.get(o.t.id);
+      if (!party || done(o.t.id)) continue;
+      const counts: Partial<Record<BankMove, number>> = {};
+      for (const m of marked) if (m.tx !== o.t.id && m.party === party && m.move && Math.sign(m.op.amount) === Math.sign(o.op.amount)) counts[m.move] = (counts[m.move] ?? 0) + 1;
+      if (Object.keys(counts).length) habits.set(o.t.id, counts);
+    }
+    return { reading, ops, pending, proposals, known, habits };
   }
 
-  const label = (l: StoredLabel): BankLabel => ({ category: l.category, tags: [...l.tags], party: l.party, purpose: l.purpose, recurring: l.recurring, comment: l.comment });
+  const label = (l: StoredLabel): BankLabel => ({ move: l.move, category: l.category, tags: [...l.tags], party: l.party, recurring: l.recurring, comment: l.comment });
   const id = (prefix: 'c' | 'k', taken: string[]) => { for (;;) { const c = `${prefix}-${randomUUID().slice(0, 8)}`; if (!taken.includes(c)) return c; } };
   const missing = (what: string): never => { throw new BankLabelError(404, what); };
   const categoryOf = (file: BankLabelFile, categoryId: string) => file.categories.find(c => c.id === categoryId) ?? missing('Nie ma takiej kategorii.');
@@ -274,15 +353,27 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
   };
   /** The same word written another way ("Zakupy" for "zakupy") is the one already kept. */
   const canonical = (list: string[], words: string[]) => words.map(t => list.find(k => same(k, t)) ?? t);
-  /** Renames a tag or purpose in its list and in every mark; renaming onto an existing word merges the two. */
-  function renameWord(file: BankLabelFile, list: 'tags' | 'purposes', from: string, to: string) {
-    const old = file[list].find(t => same(t, from)) ?? missing(list === 'tags' ? 'Nie ma takiej etykiety.' : 'Nie ma takiego celu.');
-    const target = file[list].find(t => same(t, to) && t !== old) ?? to;
-    file[list] = [...file[list].filter(t => t !== old && t !== target), target];
-    for (const l of Object.values(file.labels)) {
-      if (list === 'tags' && l.tags.includes(old)) l.tags = [...new Set(l.tags.map(t => t === old ? target : t))];
-      if (list === 'purposes' && l.purpose === old) l.purpose = target;
+  /** Renames a tag in the list and in every mark; renaming onto an existing tag merges the two. */
+  function renameTag(file: BankLabelFile, from: string, to: string) {
+    const old = file.tags.find(t => same(t, from)) ?? missing('Nie ma takiej etykiety.');
+    const target = file.tags.find(t => same(t, to) && t !== old) ?? to;
+    file.tags = [...file.tags.filter(t => t !== old && t !== target), target];
+    for (const l of Object.values(file.labels)) if (l.tags.includes(old)) l.tags = [...new Set(l.tags.map(t => t === old ? target : t))];
+  }
+  /**
+   * A mark holds together: a category belongs to the move it is of (a spend's category, an income's source, a move's pocket), and
+   * is taken as the move when none is said; a settlement has none and needs the side it is with.
+   */
+  function checked(file: BankLabelFile, next: MarkFields): MarkFields {
+    const category = next.category ? categoryOf(file, next.category) : null;
+    const move = next.move ?? category?.move ?? null;
+    if (category && move !== category.move) {
+      if (move === 'settle') throw new BankLabelError(409, 'Rozliczenie nie ma kategorii.');
+      throw new BankLabelError(409, `„${category.name}” należy do ${MOVE_OF_CATEGORY[category.move]}, nie do ${MOVE_OF_CATEGORY[move!]}.`);
     }
+    if (move === 'settle' && !next.party) throw new BankLabelError(409, 'Rozliczenie potrzebuje drugiej strony: wybierz, z kim.');
+    if (next.party) partyOf(file, next.party);
+    return { ...next, move };
   }
 
   /** Validates, then changes; a refusal is thrown before anything is touched. */
@@ -303,36 +394,41 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         let next: MarkFields;
         if (action.action === 'accept') {
           const option = proposal!.suggestion.options[action.option] ?? missing('Nie ma takiej możliwości.');
+          // What the option does not say stays as it was, unless the option's move leaves no room for it.
+          const move = option.move ?? before?.move ?? null;
+          const category = option.category ?? (option.move && option.move !== before?.move ? null : before?.category ?? null);
           next = {
-            category: option.category ?? before?.category ?? null, tags: option.tags ?? before?.tags ?? [], party: option.party ?? before?.party ?? null,
-            purpose: option.purpose ?? before?.purpose ?? null, recurring: option.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
+            move, category, tags: option.tags ?? before?.tags ?? [], party: option.party ?? before?.party ?? null,
+            recurring: option.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
           };
         } else {
           next = {
-            category: action.category, tags: canonical(file.tags, action.tags), party: action.party, purpose: action.purpose && canonical(file.purposes, [action.purpose])[0],
+            move: action.move, category: action.category, tags: canonical(file.tags, action.tags), party: action.party,
             recurring: action.recurring, comment: (action.comment ?? before?.comment ?? '').trim(),
           };
+        }
+        next = checked(file, next);
+        if (action.action === 'label') {
           // Saving something else than a sure suggestion puts it in doubt: next time it is a choice, not a suggestion.
           const first = proposal?.suggestion.options[0];
-          if (proposal?.suggestion.sure && first && (next.category !== (first.category ?? null) || next.purpose !== (first.purpose ?? null) || [...next.tags].sort().join() !== [...(first.tags ?? [])].sort().join()))
+          if (proposal?.suggestion.sure && first && (next.move !== (first.move ?? null) || next.category !== (first.category ?? null) || [...next.tags].sort().join() !== [...(first.tags ?? [])].sort().join()))
             remember(file, { tx: action.tx, basis: proposal.basis, signature: proposal.signatures[0], at: now() });
         }
-        if (next.category) categoryOf(file, next.category);
-        if (next.party) partyOf(file, next.party);
         if (isEmpty(next)) { delete file.labels[action.tx]; return { ok: true, removed: before ? 1 : 0 }; }
         if (!before && Object.keys(file.labels).length >= MAX_LABELS) throw new BankLabelError(409, `Może być najwyżej ${MAX_LABELS} oznaczeń.`);
-        keepWords(file, next.tags, next.purpose);
+        keepWords(file, next.tags);
         file.labels[action.tx] = { ...next, labeledAt: now(), op: found!.op };
         learn(file, file.labels[action.tx], found!);
         return { ok: true };
       }
       case 'createCategory': {
-        const existing = file.categories.find(c => same(c.name, action.name));
+        // A spending category and an income source may share a name ("Zwroty"); within one list a name is one.
+        const existing = file.categories.find(c => c.move === action.move && same(c.name, action.name));
         if (existing) return { ok: true, category: { id: existing.id, created: false } };
-        if (file.categories.length >= BANK_LABEL_LIMITS.categories) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.categories} kategorii.`);
+        if (file.categories.length >= BANK_LABEL_LIMITS.categories) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.categories} kategorii i źródeł.`);
         const used = new Set(file.categories.map(c => c.color));
         const category: BankCategory = {
-          id: id('c', file.categories.map(c => c.id)), name: action.name,
+          id: id('c', file.categories.map(c => c.id)), name: action.name, move: action.move,
           color: action.color ?? BANK_COLORS.find(c => !used.has(c)) ?? BANK_COLORS[file.categories.length % BANK_COLORS.length], icon: action.icon ?? BANK_ICONS[0],
         };
         file.categories.push(category);
@@ -340,7 +436,8 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       }
       case 'updateCategory': {
         const category = categoryOf(file, action.category);
-        if (action.name !== undefined && file.categories.some(c => c !== category && same(c.name, action.name!))) throw new BankLabelError(409, 'Kategoria o takiej nazwie już jest.');
+        if (action.name !== undefined && file.categories.some(c => c !== category && c.move === category.move && same(c.name, action.name!)))
+          throw new BankLabelError(409, category.move === 'income' ? 'Źródło o takiej nazwie już jest.' : 'Kategoria o takiej nazwie już jest.');
         Object.assign(category, { ...(action.name !== undefined ? { name: action.name } : {}), ...(action.color ? { color: action.color } : {}), ...(action.icon ? { icon: action.icon } : {}) });
         return { ok: true, category: { id: category.id, created: false } };
       }
@@ -352,8 +449,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         dropEmpty(file);
         return { ok: true, removed };
       }
-      case 'renameTag': { renameWord(file, 'tags', action.tag, action.name); return { ok: true }; }
-      case 'renamePurpose': { renameWord(file, 'purposes', action.purpose, action.name); return { ok: true }; }
+      case 'renameTag': { renameTag(file, action.tag, action.name); return { ok: true }; }
       case 'deleteTag': {
         const tag = file.tags.find(t => same(t, action.tag)) ?? missing('Nie ma takiej etykiety.');
         file.tags = file.tags.filter(t => t !== tag);
@@ -362,27 +458,16 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         dropEmpty(file);
         return { ok: true, removed };
       }
-      case 'deletePurpose': {
-        const purpose = file.purposes.find(p => same(p, action.purpose)) ?? missing('Nie ma takiego celu.');
-        file.purposes = file.purposes.filter(p => p !== purpose);
-        let removed = 0;
-        for (const l of Object.values(file.labels)) if (l.purpose === purpose) { l.purpose = null; removed++; }
-        dropEmpty(file);
-        return { ok: true, removed };
-      }
       case 'createParty': {
-        // A company or the user's own account of the same name is the same one; two people may share a name.
-        const existing = action.kind !== 'person' && file.parties.find(p => p.kind === action.kind && same(p.name, action.name));
-        if (existing) return { ok: true, party: { id: existing.id, created: false } };
+        // Always a new one: two sides may share a name, and the screen offers an existing one before making another.
         if (file.parties.length >= BANK_LABEL_LIMITS.parties) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.parties} drugich stron.`);
-        const party: StoredParty = { id: id('k', file.parties.map(p => p.id)), name: action.name, kind: action.kind, createdAt: now(), identifiers: [] };
+        const party: StoredParty = { id: id('k', file.parties.map(p => p.id)), name: action.name, createdAt: now(), identifiers: [] };
         file.parties.push(party);
         return { ok: true, party: { id: party.id, created: true } };
       }
       case 'updateParty': {
         const party = partyOf(file, action.party);
-        if (action.name !== undefined) party.name = action.name;
-        if (action.kind !== undefined) party.kind = action.kind;
+        party.name = action.name;
         return { ok: true, party: { id: party.id, created: false } };
       }
       case 'deleteParty': {
@@ -415,16 +500,17 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       await tail;
       let file: BankLabelFile;
       try { file = await load(); } catch (error) { return unavailable('offline', error instanceof BankLabelError ? error.message : 'Nie udało się odczytać oznaczeń.'); }
-      const { reading, ops, pending, proposals, known } = await view(file);
-      const labels = Object.fromEntries(ops.filter(o => file.labels[o.t.id]).map(o => [o.t.id, label(file.labels[o.t.id])]));
+      const { reading, ops, pending, proposals, known, habits } = await view(file);
+      const labels =Object.fromEntries(ops.filter(o => file.labels[o.t.id]).map(o => [o.t.id, label(file.labels[o.t.id])]));
       const uses = new Map<string, number>();
-      for (const l of Object.values(file.labels)) for (const w of [...l.tags, ...(l.purpose ? [l.purpose] : [])]) uses.set(w, (uses.get(w) ?? 0) + 1);
+      for (const l of Object.values(file.labels)) for (const w of l.tags) uses.set(w, (uses.get(w) ?? 0) + 1);
       return {
         live: true, name: 'Oznaczenia', status: 'connected', observedAt: reading?.observedAt ?? null, ...(message ? { message } : {}),
         data: {
-          since: file.since, categories: structuredClone(file.categories), tags: byUse(file.tags, uses), purposes: byUse(file.purposes, uses),
-          parties: file.parties.map(p => ({ id: p.id, name: p.name, kind: p.kind, identifiers: p.identifiers.map(i => ({ id: publicId(i.key), kind: i.kind, hint: i.hint })) })),
+          since: file.since, categories: structuredClone(file.categories), tags: byUse(file.tags, uses),
+          parties: file.parties.map(p => ({ id: p.id, name: p.name, identifiers: p.identifiers.map(i => ({ id: publicId(i.key), kind: i.kind, hint: i.hint })) })),
           labels, suggestions: Object.fromEntries([...proposals].map(([tx, p]) => [tx, p.suggestion])), known: Object.fromEntries(known), pending,
+          balances: balancesOf(file), habits: Object.fromEntries(habits),
         },
       };
     },
@@ -462,7 +548,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       }));
       return {
         observedAt: reading?.observedAt ?? null, since: file.since, categories: structuredClone(file.categories),
-        parties: file.parties.map(p => ({ id: p.id, name: p.name, kind: p.kind })), entries,
+        parties: file.parties.map(p => ({ id: p.id, name: p.name })), balances: balancesOf(file), entries,
       };
     },
     async drain() { await tail; },

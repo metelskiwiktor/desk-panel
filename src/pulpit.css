@@ -621,7 +621,6 @@
 /* Category identity: hues of the chart palette, never the status colours. Avatar, bar segment and legend dot read the same --c. */
 /* A category's colour comes as --c from its own setting; without a category there is no colour to guess. */
 .bank-row, .bank-bar i, .bank-legend li { --c: var(--p2-faint); }
-.bank-bar i.own, .bank-legend .own i { background: var(--p2-muted); opacity: 0.55; }
 .bank-bar i.uncat, .bank-legend .uncat i { background: repeating-linear-gradient(135deg, var(--p2-faint) 0 3px, transparent 3px 6px); }
 .bank-kinds { display: flex; flex-direction: column; gap: 6px; padding: 2px 6px 6px; }
 .bank-bar { display: flex; height: 8px; gap: 2px; border-radius: 4px; overflow: hidden; }
@@ -630,6 +629,15 @@
 .bank-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .bank-legend i { width: 8px; height: 8px; border-radius: 3px; background: var(--c); }
 .bank-legend b { font-weight: 500; color: var(--p2-text); font-variant-numeric: tabular-nums; }
+.bank-flow .net { color: var(--p2-text); }
+/* What is open with people: one line each, in the settlement colour (--c). */
+.bank-balances { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 0; padding: 0 6px 6px; list-style: none; font-size: 12.5px; color: var(--p2-text); font-variant-numeric: tabular-nums; }
+.bank-balances li { display: inline-flex; align-items: center; gap: 6px; }
+.bank-balances i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.bank-balances .owe i { background: transparent; border: 1.5px solid var(--c); box-sizing: border-box; }
+.bank-balances .more { color: var(--p2-muted); }
+/* Money between own accounts counts nowhere, so its amount steps back. */
+.bank-row.aside .bank-amount { color: var(--p2-muted); }
 .bank-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
 .bank-days { display: flex; flex-direction: column; }
 .bank-day h3 { display: flex; justify-content: space-between; margin: 0; padding: 12px 6px 4px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--p2-muted); }
@@ -710,14 +718,23 @@ button.p2-badge.bank-todo { border: 0; cursor: pointer; background: color-mix(in
 .bank-chips.tags button[aria-pressed='true'] { --c: var(--p2-cal); }
 .bank-tag-input { width: 180px; max-width: 100%; height: 34px; padding: 0 10px; border: 1px dashed var(--p2-line); border-radius: 17px; background: transparent; color: var(--p2-text); font: inherit; font-size: 13.5px; outline: none; }
 .bank-tag-input:focus { border-color: var(--p2-cal); border-style: solid; }
-.bank-party-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.bank-kinds-switch { display: inline-flex; padding: 2px; border: 1px solid var(--p2-line); border-radius: 18px; }
-.bank-kinds-switch button { min-height: 30px; padding: 0 12px; border-radius: 15px; background: transparent; color: var(--p2-muted); font-size: 13px; }
-.bank-kinds-switch button[aria-pressed='true'] { background: color-mix(in srgb, var(--p2-cal) 24%, transparent); color: var(--p2-text); font-weight: 600; }
-.bank-new-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--p2-muted); font-size: 13px; }
-.bank-dlg-who { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--p2-line); border-radius: 14px; background: var(--p2-surface); }
-.bank-dlg-who p { margin: 0; font-size: 15px; }
-.bank-dlg-who small { color: var(--p2-muted); font-size: 12.5px; }
+/* The four moves: what the money did, each with its own colour (--c), never a status colour. */
+.bank-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.bank-moves button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 52px; padding: 6px 10px; border: 1px solid var(--p2-line); border-radius: 12px; background: transparent; color: var(--p2-text); text-align: left; }
+.bank-moves .name { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--c); }
+.bank-moves svg { margin-left: 0; }
+.bank-moves small { color: var(--p2-muted); font-size: 11.5px; line-height: 1.25; }
+.bank-moves button[aria-pressed='true'] { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+.bank-moves button { position: relative; }
+.bank-moves .hab { position: absolute; top: 6px; right: 8px; color: var(--c); font: 500 11px/1 ui-monospace, "Cascadia Mono", Consolas, monospace; opacity: 0.9; }
+/* What will be saved, as a sentence: each said part underlined in the move's colour, what is still to say faint. */
+.bank-sentence { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.6; color: var(--p2-text); }
+.bank-slot { padding: 0 6px; border-bottom: 2px solid var(--c, var(--p2-line)); border-radius: 6px; background: color-mix(in srgb, var(--c, var(--p2-muted)) 12%, transparent); }
+.bank-slot.faint { border-bottom-style: dashed; border-color: var(--p2-line); background: transparent; color: var(--p2-faint); font-weight: 400; }
+@media (max-width: 520px) { .bank-moves { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bank-dlg-says { margin: 0; color: var(--p2-muted); font-size: 13.5px; }
+.bank-dlg-says b { color: var(--p2-text); font-weight: 600; }
+.bank-another { align-self: flex-start; min-height: 32px; padding: 0 10px; border: 1px dashed var(--p2-line); border-radius: 16px; background: transparent; color: var(--p2-muted); font-size: 13px; }
 .bank-dlg-options { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .bank-dlg-options button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-text); font-size: 14px; text-align: left; }
 .bank-dlg-options button small { color: var(--p2-muted); font-size: 12px; }

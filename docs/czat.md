@@ -101,7 +101,7 @@ scenariusza):
 | `mail` | `limit` (1–50, domyślnie 10) | nieprzeczytane z 30 dni: nadawca, temat, początek; bez treści |
 | `quotas`, `system` | | limity AI z resetami w czasie lokalnym; CPU i RAM |
 | `todos` | `list` (id lub fragment nazwy), `ukonczone=1` | listy zadań użytkownika z id list i zadań; ukończone tylko policzone (zob. [docs/zadania.md](zadania.md)) |
-| `bank` | `from`, `to` (domyślnie ostatnie 30 dni, najwyżej 400), `kategoria`, `etykieta`, `strona`, `cel` (fragment nazwy), `nieprzypisane=1` | saldo, wpływy i wydatki, wydatki według kategorii użytkownika, rozliczenie z każdą osobą według celu z całej zapisanej historii, operacje z drugą stroną (osoba, firma, „ja”), kategorią, celem, etykietami, cyklicznością, opisem, „do przypisania” i podpowiedzią albo wyborem (zob. [docs/bank.md](bank.md)) |
+| `bank` | `from`, `to` (domyślnie ostatnie 30 dni, najwyżej 400), `ruch` (wydatek, przychód, rozliczenie, przełożenie), `kategoria` (także źródło), `etykieta`, `strona` (fragment nazwy), `nieprzypisane=1` | saldo, przychody, wydatki i netto, wydatki według kategorii i przychody według źródła, salda rozliczeń z każdą stroną z całej zapisanej historii, operacje z ruchem, kategorią albo źródłem, drugą stroną, etykietami, cyklicznością, opisem, „do przypisania” i podpowiedzią albo wyborem (zob. [docs/bank.md](bank.md)) |
 
 Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie
 pustą listę. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany

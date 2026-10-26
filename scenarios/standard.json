@@ -39,36 +39,38 @@
   "bankLabels": {
     "since": "today-6",
     "categories": [
-      {"id": "c-0000000a", "name": "Spożywcze", "color": "green", "icon": "cart"},
-      {"id": "c-0000000b", "name": "Jedzenie na mieście", "color": "orange", "icon": "utensils"},
-      {"id": "c-0000000c", "name": "Subskrypcje", "color": "violet", "icon": "repeat"},
-      {"id": "c-0000000d", "name": "Rachunki", "color": "blue", "icon": "receipt"},
-      {"id": "c-0000000e", "name": "Zdrowie", "color": "pink", "icon": "brain"}
+      {"id": "c-0000000a", "name": "Spożywcze", "move": "spend", "color": "green", "icon": "cart"},
+      {"id": "c-0000000b", "name": "Jedzenie na mieście", "move": "spend", "color": "orange", "icon": "utensils"},
+      {"id": "c-0000000c", "name": "Subskrypcje", "move": "spend", "color": "violet", "icon": "repeat"},
+      {"id": "c-0000000d", "name": "Rachunki", "move": "spend", "color": "blue", "icon": "receipt"},
+      {"id": "c-0000000e", "name": "Zdrowie", "move": "spend", "color": "pink", "icon": "brain"},
+      {"id": "c-0000000f", "name": "Pensja", "move": "income", "color": "teal", "icon": "banknote"},
+      {"id": "c-00000010", "name": "Sprzedaż", "move": "income", "color": "indigo", "icon": "handCoins"}
     ],
     "parties": [
-      {"id": "k-0000000a", "name": "Biedronka", "kind": "company"},
-      {"id": "k-0000000b", "name": "Żabka", "kind": "company"},
-      {"id": "k-0000000c", "name": "McDonald’s", "kind": "company"},
-      {"id": "k-0000000d", "name": "Cukiernia Hoffmann", "kind": "company"},
-      {"id": "k-0000000e", "name": "Claude", "kind": "company"},
-      {"id": "k-0000000f", "name": "Gabinet psychologiczny", "kind": "company"},
-      {"id": "k-00000010", "name": "Moja firma", "kind": "self"},
-      {"id": "k-00000011", "name": "pyszne.pl", "kind": "company"},
-      {"id": "k-00000012", "name": "Anna", "kind": "person"},
-      {"id": "k-00000013", "name": "Jonasz", "kind": "person"}
+      {"id": "k-0000000a", "name": "Biedronka"},
+      {"id": "k-0000000b", "name": "Żabka"},
+      {"id": "k-0000000c", "name": "McDonald’s"},
+      {"id": "k-0000000d", "name": "Cukiernia Hoffmann"},
+      {"id": "k-0000000e", "name": "Claude"},
+      {"id": "k-0000000f", "name": "Gabinet psychologiczny"},
+      {"id": "k-00000010", "name": "Moja firma"},
+      {"id": "k-00000011", "name": "pyszne.pl"},
+      {"id": "k-00000012", "name": "Anna"},
+      {"id": "k-00000013", "name": "Jonasz"}
     ],
     "labels": {
-      "acc-1:t8": {"category": "c-0000000b", "party": "k-00000011", "tags": ["restauracja"]},
-      "acc-1:t9": {"party": "k-00000010", "tags": ["pensja"], "recurring": true},
-      "acc-1:t10": {"category": "c-0000000a", "party": "k-0000000b"},
-      "acc-1:t11": {"category": "c-0000000b", "party": "k-0000000c", "tags": ["fast-food"]},
-      "acc-1:t12": {"category": "c-0000000b", "party": "k-0000000d", "tags": ["urodziny"], "comment": "Tort na urodziny"},
-      "acc-1:t16": {"category": "c-0000000e", "party": "k-0000000f", "tags": ["psycholog"], "recurring": true, "comment": "Sesja co tydzień"},
-      "acc-1:t17": {"party": "k-00000013", "purpose": "zwrot", "tags": ["laptop"], "comment": "Laptop, ostatnia część"},
-      "acc-1:t18": {"party": "k-00000010", "tags": ["pensja"], "recurring": true},
-      "acc-1:t19": {"category": "c-0000000a", "party": "k-0000000a"},
-      "acc-1:t20": {"party": "k-00000012", "purpose": "pożyczka", "comment": "Anna pożyczyła na kolację"},
-      "acc-1:t21": {"category": "c-0000000c", "party": "k-0000000e", "tags": ["ai"], "recurring": true}
+      "acc-1:t8": {"move": "spend", "category": "c-0000000b", "party": "k-00000011", "tags": ["restauracja"]},
+      "acc-1:t9": {"move": "income", "category": "c-0000000f", "party": "k-00000010", "recurring": true},
+      "acc-1:t10": {"move": "spend", "category": "c-0000000a", "party": "k-0000000b"},
+      "acc-1:t11": {"move": "spend", "category": "c-0000000b", "party": "k-0000000c", "tags": ["fast-food"]},
+      "acc-1:t12": {"move": "spend", "category": "c-0000000b", "party": "k-0000000d", "tags": ["urodziny"], "comment": "Tort na urodziny"},
+      "acc-1:t16": {"move": "spend", "category": "c-0000000e", "party": "k-0000000f", "tags": ["psycholog"], "recurring": true, "comment": "Sesja co tydzień"},
+      "acc-1:t17": {"move": "income", "category": "c-00000010", "party": "k-00000013", "tags": ["laptop"], "comment": "Laptop, ostatnia rata"},
+      "acc-1:t18": {"move": "income", "category": "c-0000000f", "party": "k-00000010", "recurring": true},
+      "acc-1:t19": {"move": "spend", "category": "c-0000000a", "party": "k-0000000a"},
+      "acc-1:t20": {"move": "settle", "party": "k-00000012", "comment": "Anna pożyczyła na kolację"},
+      "acc-1:t21": {"move": "spend", "category": "c-0000000c", "party": "k-0000000e", "tags": ["ai"], "recurring": true}
     }
   },
   "cezar": {

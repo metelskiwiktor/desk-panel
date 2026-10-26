@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollingEnabled } from './polling';
-import { bankLabelsSourceSchema, type BankLabelAction, type BankLabelResult, type BankLabelsData, type BankLabelsSource } from './bank-labels-contract';
+import { bankLabelsSourceSchema, isDone, type BankLabelAction, type BankLabelResult, type BankLabelsData, type BankLabelsSource } from './bank-labels-contract';
 
 /**
  * The user's marks change only by the user's own gestures, and the operations they mark come from the server's kept reading;
@@ -9,7 +9,7 @@ import { bankLabelsSourceSchema, type BankLabelAction, type BankLabelResult, typ
 const POLL_MS = 60_000;
 
 /**
- * Marks on bank operations: categories, people, the mark of each operation and the server's suggestions. An action is shown
+ * Marks on bank operations: categories and sources, the other sides, the mark of each operation and the server's suggestions. An action is shown
  * at once (`optimistic`) and the server's answer replaces it right after, with suggestions worked out again.
  */
 export function useBankLabels() {
@@ -72,5 +72,5 @@ export function withLabel(data: BankLabelsData, tx: string, label: BankLabelsDat
   if (label) labels[tx] = label; else delete labels[tx];
   const suggestions = { ...data.suggestions };
   delete suggestions[tx];
-  return { ...data, labels, suggestions, pending: label?.category ? data.pending.filter(id => id !== tx) : data.pending };
+  return { ...data, labels, suggestions, pending: isDone(label) ? data.pending.filter(id => id !== tx) : data.pending };
 }

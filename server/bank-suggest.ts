@@ -1,5 +1,5 @@
 import type { BankTransaction } from '../src/bank-contract';
-import type { BankCategory, BankOption, BankSuggestion } from '../src/bank-labels-contract';
+import type { BankCategory, BankMove, BankOption, BankSuggestion } from '../src/bank-labels-contract';
 import { describe, humanNote } from '../src/bank-merchants';
 import { maskPhones, plainName } from './bank-parties';
 
@@ -47,10 +47,10 @@ export function featuresOf(t: BankTransaction, keys: string[]): OpFeatures {
 }
 
 /** A mark as the rules see it. */
-export interface Marked { tx: string; op: OpFeatures; category: string | null; tags: string[]; party: string | null; purpose: string | null; recurring: boolean }
+export interface Marked { tx: string; op: OpFeatures; move: BankMove | null; category: string | null; tags: string[]; party: string | null; recurring: boolean }
 /** "None of these" for one operation: the options shown then, by what they were based on. */
 export interface Rejection { tx: string; basis: string; signature: string; at: number }
-/** The other side (a person, a company or the user themself), with the keys of what the bank showed for it. */
+/** The other side, with the keys of what the bank showed for it. */
 export interface Owner { id: string; name: string; identifiers: { key: string; kind: string; hint: string }[] }
 export interface SuggestContext { marked: Marked[]; categories: BankCategory[]; owners: Owner[]; rejections: Rejection[] }
 /** The suggestion with what it was based on and each option's signature, so a rejection is remembered against both. */
@@ -72,6 +72,8 @@ const sameAmount = (a: number, b: number) => Math.abs(a - b) < 0.005;
 /** Phone and BLIK are both "a payment without a name": the same amount means the same in either. */
 const group = (m: Method) => m === 'phone' || m === 'blik' ? 'nameless' : m;
 const times = (n: number) => n === 1 ? 'raz' : 'razy';
+/** A move in words, as the dialog's buttons name it. */
+export const MOVE_WORDS: Record<BankMove, string> = { spend: 'Wydatek', income: 'Przychód', settle: 'Rozliczenie', move: 'Przełożenie' };
 
 export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Proposal | null {
   const categories = new Map(ctx.categories.map(c => [c.id, c]));
@@ -87,8 +89,8 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
     if (link) break;
   }
   const sign = Math.sign(op.amount);
-  // A mark that only says who (nothing about what or why) says nothing about what it was.
-  const marks = ctx.marked.filter(m => m.tx !== tx && (m.category || m.tags.length || m.purpose || m.recurring) && Math.sign(m.op.amount) === sign);
+  // A mark that only says who (nothing about what the money did) says nothing about what it was.
+  const marks = ctx.marked.filter(m => m.tx !== tx && (m.move || m.category || m.tags.length || m.recurring) && Math.sign(m.op.amount) === sign);
 
   // What it was the other times: this side's earlier marks, money going the same way; without a name, only the very same amount.
   let basis: string, history: Marked[], reliable: boolean;
@@ -102,9 +104,9 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
     reliable = false;
   } else return null;
 
-  // Earlier marks grouped by what they said (category, tags, recurring, and the merchant when only the amount links them).
+  // Earlier marks grouped by what they said (move, category, tags, recurring, and the side when only the amount links them).
   const signature = (m: Marked) => JSON.stringify({
-    c: m.category && categories.has(m.category) ? m.category : null, t: [...m.tags].sort(), r: m.recurring, p: m.purpose,
+    m: m.move, c: m.category && categories.has(m.category) ? m.category : null, t: [...m.tags].sort(), r: m.recurring,
     s: !link && m.party && owners.has(m.party) ? m.party : null,
   });
   const groups = new Map<string, { marks: Marked[]; last: number }>();
@@ -124,11 +126,13 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
     const first = g.marks[0];
     const category = first.category && categories.has(first.category) ? first.category : undefined;
     const party = link?.owner.id ?? (first.party && owners.has(first.party) ? first.party : undefined);
-    const words = [!link && party ? owners.get(party)!.name : null, first.purpose, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
+    // A spend is said by its category alone; any other move, or a spend without one, by its name.
+    const moveWord = first.move && (first.move !== 'spend' || !category) ? MOVE_WORDS[first.move] : null;
+    const words = [!link && party ? owners.get(party)!.name : null, moveWord, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
     const count = `${words}: ${g.marks.length} z ${total} ${times(total)}`;
     options.push({
-      ...(category ? { category } : {}), ...(first.tags.length ? { tags: [...first.tags] } : {}), ...(party ? { party } : {}),
-      ...(first.purpose ? { purpose: first.purpose } : {}), ...(first.recurring ? { recurring: true as const } : {}),
+      ...(first.move ? { move: first.move } : {}), ...(category ? { category } : {}), ...(first.tags.length ? { tags: [...first.tags] } : {}),
+      ...(party ? { party } : {}), ...(first.recurring ? { recurring: true as const } : {}),
       reasons: link ? [link.reason, count] : [`ta sama kwota ${money(op.amount, op.currency)}, bez nazwy sklepu`, count],
     });
     signatures.push(s);

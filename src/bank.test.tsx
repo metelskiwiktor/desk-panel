@@ -19,12 +19,12 @@ const connected = (over: Partial<BankSource> = {}): BankSource => ({
   }, ...over,
 });
 const marks = (data: Partial<BankLabelsData> = {}, act: BankLabelsHook['act'] = vi.fn(async () => ({ ok: true as const }))): BankLabelsHook => ({
-  source: { live: true, name: 'Oznaczenia', status: 'connected', observedAt: NOW, data: { since: '2026-10-20', categories: [], tags: [], purposes: [], parties: [], labels: {}, suggestions: {}, known: {}, pending: [], ...data } },
+  source: { live: true, name: 'Oznaczenia', status: 'connected', observedAt: NOW, data: { since: '2026-10-20', categories: [], tags: [], parties: [], labels: {}, suggestions: {}, known: {}, pending: [], balances: [], habits: {}, ...data } },
   error: '', clearError: vi.fn(), act,
 });
 const hook = (source: BankSource, over: Partial<BankHook> = {}): BankHook => ({ source, signIn: null, error: '', busy: false, connect: vi.fn(async () => {}), refresh: vi.fn(), labels: marks(), ...over });
-const FOOD = { id: 'c-00000001', name: 'Jedzenie', color: 'orange', icon: 'utensils' } as const;
-const SHRINK = { id: 'c-00000002', name: 'Psycholog', color: 'violet', icon: 'brain' } as const;
+const FOOD = { id: 'c-00000001', name: 'Jedzenie', move: 'spend', color: 'orange', icon: 'utensils' } as const;
+const SHRINK = { id: 'c-00000002', name: 'Psycholog', move: 'spend', color: 'violet', icon: 'brain' } as const;
 const ANNA = { id: 'p-00000001', name: 'Anna', identifiers: [{ id: 'abc', kind: 'account', hint: '··1234' }] } as const;
 
 describe('bank helpers', () => {
@@ -42,16 +42,20 @@ describe('bank helpers', () => {
     expect(dayHeading(at('2026-10-24'), NOW)).toBe('Wczoraj');
     expect(dayHeading(at('2026-10-23'), NOW)).toMatch(/^Pt, 23 paź/);
   });
-  it('splits the last 30 days of spending by the user’s own categories, the rest as one uncategorised share, without income', () => {
+  it('splits the last 30 days of spending by the user’s own categories net of money back, the rest as one uncategorised share, without income or settlements', () => {
     const list = [tx('a', '2026-10-24', -100, 'Płatność telefonem'), tx('b', '2026-10-23', -40, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }), tx('e', '2026-10-23', -15, 'x'), tx('c', '2026-10-22', 900, 'Pensja'), tx('d', '2026-08-01', -999, 'Płatność telefonem')];
-    const mark = { tags: [], party: null, purpose: null, recurring: false, comment: '' };
-    const labels = { b: { ...mark, category: FOOD.id }, e: { ...mark, category: 'c-0000dead' } };
-    expect(spending(list, NOW, 'PLN', labels, [FOOD])).toEqual([{ category: null, sum: 115 }, { category: FOOD, sum: 40 }]);
+    const mark = { tags: [], party: null, recurring: false, comment: '' };
+    const labels = { b: { ...mark, move: 'spend' as const, category: FOOD.id }, e: { ...mark, move: 'spend' as const, category: 'c-0000dead' }, r: { ...mark, move: 'spend' as const, category: FOOD.id }, s: { ...mark, move: 'settle' as const, category: null } };
+    const more = [...list, tx('r', '2026-10-23', 10, 'zwrot'), tx('s', '2026-10-23', -200, 'Anna')];
+    expect(spending(more, NOW, 'PLN', labels, [FOOD])).toEqual([{ category: null, sum: 115 }, { category: FOOD, sum: 30 }]);
     expect(spending(list, NOW, 'PLN')).toEqual([{ category: null, sum: 155 }]);
   });
   it('adds up the last 30 days of one currency, in and out apart', () => {
     const list = [...connected().data!.transactions, tx('usd', '2026-10-20', -5, 'x', { currency: 'USD' })];
     expect(sums(list, NOW, 'PLN')).toEqual({ income: 4200, spent: 143.9 });
+    // Lent to someone and moved to another own account: neither spent nor earned.
+    const mark = { category: null, tags: [], party: null, recurring: false, comment: '' };
+    expect(sums(list, NOW, 'PLN', { t3: { ...mark, move: 'settle' }, t2: { ...mark, move: 'move' } })).toEqual({ income: 0, spent: 43.9 });
   });
 });
 
@@ -66,7 +70,7 @@ describe('Konto tile', () => {
     const rows = within(days).getAllByRole('listitem');
     expect(rows).toHaveLength(4);
     expect(rows[0].textContent).toContain('Biedronka');
-    expect(rows[0].textContent).toMatch(/Bez kategorii\s· karta/);
+    expect(rows[0].textContent).toMatch(/Nieoznaczona\s· karta/);
     expect(rows[0].textContent).toContain('−43,90');
     expect(rows[1].textContent).toContain('Acme');
     expect(rows[1].textContent).toMatch(/\swpływ · Wynagrodzenie/);

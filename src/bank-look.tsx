@@ -1,9 +1,9 @@
 import {
   Baby, Banknote, BookOpen, Brain, Bus, Car, Coffee, Dumbbell, Film, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HeartPulse, House, Music,
-  PawPrint, PiggyBank, Plane, Receipt, Repeat, Shirt, ShoppingCart, Smartphone, Store, Tag, User, UtensilsCrossed, Wrench, Zap, ArrowLeftRight, type LucideIcon,
+  PawPrint, PiggyBank, Plane, Receipt, Repeat, Shirt, ShoppingBag, ShoppingCart, Smartphone, Tag, User, UtensilsCrossed, Wrench, Zap, ArrowLeftRight, type LucideIcon,
 } from 'lucide-react';
 import type { BankTransaction } from './bank-contract';
-import type { BankColor, BankIcon, BankLabelsData, BankOption, BankParty, BankPartyKind } from './bank-labels-contract';
+import type { BankColor, BankIcon, BankLabelsData, BankMove, BankOption, BankParty } from './bank-labels-contract';
 import { describe, humanNote } from './bank-merchants';
 
 /** How a category's colour and icon look; the names are what the server keeps. */
@@ -51,9 +51,26 @@ export function howPaid(t: BankTransaction, named = false): string {
   return `${methodName(t) ?? (t.amount > 0 ? 'wpływ' : 'przelew')}${note ? ` · ${note}` : ''}`;
 }
 
-/** The kinds of the other side, in the words and icons the screen uses. */
-export const KIND_WORDS: Record<BankPartyKind, string> = { person: 'Osoba', company: 'Firma', self: 'Ja' };
-export const KIND_ICONS: Record<BankPartyKind, LucideIcon> = { person: User, company: Store, self: ArrowLeftRight };
+/** The moves in the words, hints, icons and colours the screen uses. */
+export const MOVE_WORDS: Record<BankMove, string> = { spend: 'Wydatek', income: 'Przychód', settle: 'Rozliczenie', move: 'Przełożenie' };
+export const MOVE_HINTS: Record<BankMove, string> = { spend: 'na co poszło', income: 'skąd przyszło', settle: 'pożyczka, oddanie', move: 'między moimi kontami' };
+export const MOVE_ICONS: Record<BankMove, LucideIcon> = { spend: ShoppingBag, income: Banknote, settle: HandCoins, move: ArrowLeftRight };
+export const MOVE_COLORS: Record<BankMove, string> = { spend: '#e8955a', income: '#1baf7a', settle: '#9b7be8', move: '#8a97ab' };
+
+/**
+ * The move an operation most likely is before anything was learnt: a payment in a shop (card, phone, BLIK) is a spend, also a
+ * refund of one; a transfer could be anything, so it is left to the user.
+ */
+export function likelyMove(t: BankTransaction): BankMove | null {
+  if (t.title === 'Płatność telefonem' || t.title === 'Płatność BLIK') return 'spend';
+  return t.note === 'Płatność kartą' && describe(t).category !== 'atm' ? 'spend' : null;
+}
+
+/** What is open with a side, as the user reads it: "Anna odda Ci 250,00 zł", "Jonasz czeka na zwrot 400,00 zł", "Anna: rozliczone". */
+export function balanceText(name: string, amount: number, currency: string): string {
+  const sum = Math.abs(amount).toLocaleString('pl-PL', { style: 'currency', currency });
+  return Math.abs(amount) < 0.005 ? `${name}: rozliczone` : amount > 0 ? `${name} odda Ci ${sum}` : `${name} czeka na zwrot ${sum}`;
+}
 
 /**
  * What tells a person apart from another of the same name: the bank's name for them, and the ends of their account and phone
@@ -65,9 +82,13 @@ export function personHint(p: Pick<BankParty, 'identifiers'>): string {
   return [...of('name').map(i => `„${i.hint}”`), ...of('account').map(i => `rach. ${i.hint}`), ...phones.map(i => `tel. ${i.hint}`)].join(' · ');
 }
 
-/** One proposed mark in words: "Inea · Rachunki · #internet · cykliczne". */
+/**
+ * One proposed mark in words: "Inea · Rachunki · #internet · cykliczne", "Anna · Rozliczenie", "Moja firma · Przychód · Pensja". A
+ * spend is said by its category alone.
+ */
 export function optionText(o: BankOption, data: BankLabelsData): string {
   const party = o.party && data.parties.find(p => p.id === o.party)?.name;
   const category = o.category && data.categories.find(c => c.id === o.category)?.name;
-  return [party, o.purpose, category, ...(o.tags ?? []).map(t => `#${t}`), o.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ');
+  const move = o.move && (o.move !== 'spend' || !category) ? MOVE_WORDS[o.move] : null;
+  return [party, move, category, ...(o.tags ?? []).map(t => `#${t}`), o.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ');
 }

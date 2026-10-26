@@ -1,11 +1,11 @@
 import { useState, type CSSProperties } from 'react';
-import { Check, Landmark, MessageSquare, Repeat, Settings2, User, X } from 'lucide-react';
+import { Check, Landmark, MessageSquare, Repeat, Settings2, X } from 'lucide-react';
 import { SourceNote } from './components';
 import { MAX_AGE, fresh } from './model';
 import type { BankTransaction } from './bank-contract';
-import type { BankCategory, BankLabel, BankLabelsData } from './bank-labels-contract';
+import { isDone, type BankCategory, type BankLabel, type BankLabelsData, type BankMove } from './bank-labels-contract';
 import { describe } from './bank-merchants';
-import { COLOR_VALUES, ICONS, howPaid, optionText } from './bank-look';
+import { COLOR_VALUES, ICONS, MOVE_COLORS, MOVE_ICONS, MOVE_WORDS, balanceText, howPaid, optionText } from './bank-look';
 import { BankLabelDialog } from './BankLabelDialog';
 import { BankLabelSettings } from './BankLabelSettings';
 import type { BankHook } from './useBank';
@@ -37,29 +37,41 @@ export function dayHeading(at: number, now: number): string {
   return text[0].toUpperCase() + text.slice(1);
 }
 
-/** What came in and went out over the last `SUM_DAYS` days, per currency of the first transaction's account; mixed currencies are not added up. */
-export function sums(transactions: BankTransaction[], now: number, currency: string) {
+/**
+ * The move an operation counts as in the sums: its own, or for one not marked yet a spend (money out) or an income (money in),
+ * so the sums are whole before everything is marked.
+ */
+const countsAs = (t: BankTransaction, labels: Record<string, BankLabel>): BankMove => labels[t.id]?.move ?? (t.amount < 0 ? 'spend' : 'income');
+
+/**
+ * What came in and went out over the last `SUM_DAYS` days in one currency (mixed currencies are not added up). Only spending
+ * and income count: a settlement with someone and a move between own accounts change the balance, not what was spent or
+ * earned, and money back from a shop (a spend with a plus) lowers what was spent.
+ */
+export function sums(transactions: BankTransaction[], now: number, currency: string, labels: Record<string, BankLabel> = {}) {
   const recent = transactions.filter(t => t.currency === currency && now - t.at <= SUM_DAYS * DAY);
-  return { income: recent.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0), spent: recent.filter(t => t.amount < 0).reduce((s, t) => s - t.amount, 0) };
+  return {
+    income: recent.filter(t => countsAs(t, labels) === 'income').reduce((s, t) => s + t.amount, 0),
+    spent: recent.filter(t => countsAs(t, labels) === 'spend').reduce((s, t) => s - t.amount, 0),
+  };
 }
 
 /**
- * What the last `SUM_DAYS` days went on, by the user's own categories, largest first; money that came in is not counted,
- * money sent to the user's own accounts (`own`) is one "Przelewy własne" share, and whatever has no category (or one since
- * deleted) is one "Bez kategorii" share, never guessed.
+ * What the last `SUM_DAYS` days went on, by the user's own spending categories, largest first, each net of money back. Only
+ * spending counts; whatever has no category yet (or one since deleted) is one "Bez kategorii" share, never guessed.
  */
-export function spending(transactions: BankTransaction[], now: number, currency: string, labels: Record<string, BankLabel> = {}, categories: BankCategory[] = [], own: Set<string> = new Set()): { category: BankCategory | null; own?: true; sum: number }[] {
-  const known = new Map(categories.map(c => [c.id, c]));
-  const by = new Map<string, { category: BankCategory | null; own?: true; sum: number }>();
+export function spending(transactions: BankTransaction[], now: number, currency: string, labels: Record<string, BankLabel> = {}, categories: BankCategory[] = []): { category: BankCategory | null; sum: number }[] {
+  const known = new Map(categories.filter(c => c.move === 'spend').map(c => [c.id, c]));
+  const by = new Map<string, { category: BankCategory | null; sum: number }>();
   for (const t of transactions) {
-    if (t.currency !== currency || t.amount >= 0 || now - t.at > SUM_DAYS * DAY) continue;
+    if (t.currency !== currency || now - t.at > SUM_DAYS * DAY || countsAs(t, labels) !== 'spend') continue;
     const category = known.get(labels[t.id]?.category ?? '') ?? null;
-    const key = category?.id ?? (own.has(t.id) ? 'own' : '');
-    const entry = by.get(key) ?? { category, ...(key === 'own' ? { own: true as const } : {}), sum: 0 };
+    const key = category?.id ?? '';
+    const entry = by.get(key) ?? { category, sum: 0 };
     entry.sum -= t.amount;
     by.set(key, entry);
   }
-  return [...by.values()].sort((a, b) => b.sum - a.sum);
+  return [...by.values()].filter(e => e.sum > 0.005).sort((a, b) => b.sum - a.sum);
 }
 
 /** Operations grouped by booking day, newest first, each group with what the day came to. */
@@ -86,15 +98,17 @@ function RawPopover({ t, box }: { t: BankTransaction; box: DOMRect }) {
 }
 
 const tint = (category: BankCategory | null | undefined): CSSProperties | undefined => category ? { '--c': COLOR_VALUES[category.color] } as CSSProperties : undefined;
+const moveTint = (move: BankMove): CSSProperties => ({ '--c': MOVE_COLORS[move] } as CSSProperties);
 
 /**
- * The bank account as a tile: the balance, what came in and went out in the last 30 days, where the money went by the user's
- * own categories, and the operations by day. An operation shows its category in its colour and icon, or "Bez kategorii":
- * since the day the user picked, an unmarked one has a dashed circle and counts in "N do przypisania", with the server's
- * suggestion beside it (✓ takes it, ✕ rejects it) when the tile is wide. A tap opens the marking dialog; the bank's raw answer
- * shows beside a row under the pointer. Without a consent (or when it has run out) the tile offers to connect: the bank's
- * sign-in opens from a link, because a browser blocks a window opened after the server has answered. `wide` and `tall`
- * follow the tile's cells.
+ * The bank account as a tile: the balance, what came in, went out and is left (net) in the last 30 days, where the money went
+ * by the user's own spending categories, what is open with people, and the operations by day. An operation shows its category
+ * or source in its colour and icon, a settlement or a move between own accounts by the move's icon, or "Nieoznaczona": since
+ * the day the user picked, one not done has a dashed circle and counts in "N do przypisania", with the server's suggestion
+ * beside it (✓ takes it, ✕ rejects it) when the tile is wide. A tap opens the marking dialog; the bank's raw answer shows
+ * beside a row under the pointer. Without a consent (or when it has run out) the tile offers to connect: the bank's sign-in
+ * opens from a link, because a browser blocks a window opened after the server has answered. `wide` and `tall` follow the
+ * tile's cells.
  */
 export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHook; now: number; wide?: boolean; tall?: boolean }) {
   const { source, signIn, error, busy, connect, labels: marks } = bank;
@@ -104,14 +118,14 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
   const parties = new Map((labels?.parties ?? []).map(p => [p.id, p]));
   // The other side the user named, or the one the bank's text or account is known to be.
   const sideOf = (id: string) => parties.get(labels?.labels[id]?.party ?? labels?.known[id] ?? '');
-  const own = new Set((data?.transactions ?? []).filter(t => sideOf(t.id)?.kind === 'self').map(t => t.id));
   const pending = new Set(labels?.pending ?? []);
   const accounts = data?.accounts ?? [];
   const currency = accounts[0]?.currency ?? 'PLN';
   const balances = accounts.filter(a => a.currency === currency);
   const total = balances.length && balances.every(a => a.balance !== null) ? balances.reduce((s, a) => s + (a.balance ?? 0), 0) : null;
-  const flow = data ? sums(data.transactions, now, currency) : null;
-  const kinds = data ? spending(data.transactions, now, currency, labels?.labels, labels?.categories, own) : [];
+  const flow = data ? sums(data.transactions, now, currency, labels?.labels) : null;
+  const kinds = data ? spending(data.transactions, now, currency, labels?.labels, labels?.categories) : [];
+  const open = (labels?.balances ?? []).filter(b => b.currency === currency && parties.has(b.party));
   const spent = kinds.reduce((s, k) => s + k.sum, 0);
   const daysLeft = source.consentUntil ? Math.floor((source.consentUntil - now) / DAY) : null;
   const expiring = !source.loginRequired && daysLeft !== null && daysLeft <= CONSENT_WARN_DAYS;
@@ -122,7 +136,7 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
   // The operation being marked; `queue` when it was opened from "N do przypisania", so saving goes on to the next one.
   const [editing, setEditing] = useState<{ id: string; queue: boolean } | null>(null);
   const [settings, setSettings] = useState(false);
-  const open = (id: string, queue = false) => { setPeeked(null); marks.clearError(); setEditing({ id, queue }); };
+  const openMark = (id: string, queue = false) => { setPeeked(null); marks.clearError(); setEditing({ id, queue }); };
   const toMark = (data?.transactions ?? []).filter(t => pending.has(t.id));
   const edited = editing && data?.transactions.find(t => t.id === editing.id);
   const label = accounts.length === 1 ? `${accounts[0].name}${accounts[0].last4 ? ` ··${accounts[0].last4}` : ''}` : accounts.length > 1 ? `${accounts.length} konta` : '';
@@ -132,8 +146,8 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
     if (!o) return;
     const before = labels?.labels[t.id];
     void marks.act({ action: 'accept', tx: t.id, option: 0 }, d => withLabel(d, t.id, {
-      category: o.category ?? before?.category ?? null, tags: o.tags ?? before?.tags ?? [], party: o.party ?? before?.party ?? null,
-      purpose: o.purpose ?? before?.purpose ?? null, recurring: o.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
+      move: o.move ?? before?.move ?? null, category: o.category ?? (o.move && o.move !== before?.move ? null : before?.category ?? null),
+      tags: o.tags ?? before?.tags ?? [], party: o.party ?? before?.party ?? null, recurring: o.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
     }));
   };
   const reject = (t: BankTransaction) => void marks.act({ action: 'reject', tx: t.id }, d => { const suggestions = { ...d.suggestions }; delete suggestions[t.id]; return { ...d, suggestions }; });
@@ -144,8 +158,8 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
       <h2>Konto</h2>
       {label && wide && <span className="p2-meta">{label}</span>}
       {expiring && <span className="p2-badge warn" title="Zgoda w banku wygasa; połącz konto ponownie">zgoda: {daysLeft} dni</span>}
-      {data && labels && toMark.length > 0 && <button type="button" className="p2-badge bank-todo" onClick={() => open(toMark[0].id, true)}
-        title={`Operacje od ${labels.since} bez kategorii`}>{toMark.length} do przypisania</button>}
+      {data && labels && toMark.length > 0 && <button type="button" className="p2-badge bank-todo" onClick={() => openMark(toMark[0].id, true)}
+        title={`Operacje od ${labels.since} jeszcze nieoznaczone`}>{toMark.length} do przypisania</button>}
       {data && labels && <button type="button" className="bank-gear" aria-label="Ustawienia oznaczeń" onClick={() => setSettings(true)}><Settings2 size={16} aria-hidden="true" /></button>}
     </div>
     {source.loginRequired || (!data && source.status !== 'loading') ? <div className="bank-connect">
@@ -161,16 +175,23 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
     </div> : !data ? <p className="p2-empty">Ładowanie konta…</p> : <div className="bank-body">
       <div className="bank-top">
         <strong className="bank-balance" aria-label="Saldo">{total === null ? '—' : money(total, currency)}</strong>
-        {flow && wide && <span className="bank-flow"><span className="in">{signed(flow.income, currency)}</span><span className="out">{signed(-flow.spent, currency)}</span><small>{SUM_DAYS} dni</small></span>}
+        {flow && wide && <span className="bank-flow" title={`Przychody, wydatki i netto z ${SUM_DAYS} dni; rozliczenia i przełożenia się nie liczą`}>
+          <span className="in">{signed(flow.income, currency)}</span><span className="out">{signed(-flow.spent, currency)}</span>
+          <span className="net">netto {signed(flow.income - flow.spent, currency)}</span><small>{SUM_DAYS} dni</small>
+        </span>}
       </div>
       {tall && spent > 0 && <div className="bank-kinds">
         <div className="bank-bar" role="img" aria-label={`Wydatki z ${SUM_DAYS} dni według kategorii`}>
-          {kinds.map(k => <i key={k.category?.id ?? (k.own ? 'own' : 'none')} className={k.category ? undefined : k.own ? 'own' : 'uncat'} style={{ flex: k.sum, ...tint(k.category) }} title={`${k.category?.name ?? (k.own ? 'Przelewy własne' : 'Bez kategorii')}: ${money(k.sum, currency)}`} />)}
+          {kinds.map(k => <i key={k.category?.id ?? 'none'} className={k.category ? undefined : 'uncat'} style={{ flex: k.sum, ...tint(k.category) }} title={`${k.category?.name ?? 'Bez kategorii'}: ${money(k.sum, currency)}`} />)}
         </div>
         <ul className="bank-legend">
-          {kinds.slice(0, wide ? 4 : 3).map(k => <li key={k.category?.id ?? (k.own ? 'own' : 'none')} className={k.category ? undefined : k.own ? 'own' : 'uncat'} style={tint(k.category)}><i />{k.category?.name ?? (k.own ? 'Przelewy własne' : 'Bez kategorii')} <b>{Math.round((k.sum / spent) * 100)}%</b></li>)}
+          {kinds.slice(0, wide ? 4 : 3).map(k => <li key={k.category?.id ?? 'none'} className={k.category ? undefined : 'uncat'} style={tint(k.category)}><i />{k.category?.name ?? 'Bez kategorii'} <b>{Math.round((k.sum / spent) * 100)}%</b></li>)}
         </ul>
       </div>}
+      {tall && open.length > 0 && <ul className="bank-balances" aria-label="Rozliczenia" style={moveTint('settle')}>
+        {open.slice(0, wide ? 3 : 2).map(b => <li key={b.party} className={b.amount > 0 ? 'owed' : 'owe'}><i aria-hidden="true" />{balanceText(parties.get(b.party)!.name, b.amount, b.currency)}</li>)}
+        {open.length > (wide ? 3 : 2) && <li className="more">i {open.length - (wide ? 3 : 2)} więcej</li>}
+      </ul>}
       {marks.error && !editing && <p className="p2-note warn" role="status">{marks.error}</p>}
       {groups.length ? <div className="bank-days" aria-label="Operacje według dni">
         {groups.map(g => {
@@ -181,26 +202,29 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
               {g.items.map(t => {
                 const d = describe(t);
                 const mark = labels?.labels[t.id];
+                const move = mark?.move ?? null;
                 const category = mark?.category ? categories.get(mark.category) : undefined;
+                // A settlement and a move between own accounts are shown by their move; spending and income by their category.
+                const aside = move === 'settle' || move === 'move' ? move : null;
+                const done = isDone(mark);
                 const side = sideOf(t.id);
                 const name = side?.name ?? d.name;
                 const todo = pending.has(t.id);
-                // Any operation without a category shows what the panel knows, also one older than the day "to be marked" counts from.
-                const suggestion = category ? undefined : labels?.suggestions[t.id];
+                // Any operation not done shows what the panel knows, also one older than the day "to be marked" counts from.
+                const suggestion = done ? undefined : labels?.suggestions[t.id];
                 const first = suggestion?.options[0];
                 const proposed = first?.category ? categories.get(first.category) : undefined;
-                const Icon = category ? ICONS[category.icon] : null;
-                return <li key={t.id} className={`bank-row${todo ? ' todo' : ''}${category ? ' marked' : ''}`} style={tint(category)} tabIndex={0}
-                  aria-label={`${name}, ${signed(t.amount, t.currency)}, ${category ? category.name : 'bez kategorii'}${todo ? ', do przypisania' : ''}`}
+                const Icon = category ? ICONS[category.icon] : aside ? MOVE_ICONS[aside] : null;
+                const said = aside === 'move' && category ? `${MOVE_WORDS.move} · ${category.name}` : category ? category.name : aside ? MOVE_WORDS[aside] : move ? `${MOVE_WORDS[move]} · ${move === 'income' ? 'bez źródła' : 'bez kategorii'}` : 'Nieoznaczona';
+                return <li key={t.id} className={`bank-row${todo ? ' todo' : ''}${done ? ' marked' : ''}${move === 'move' ? ' aside' : ''}`} style={aside ? moveTint(aside) : tint(category)} tabIndex={0}
+                  aria-label={`${name}, ${signed(t.amount, t.currency)}, ${said}${todo ? ', do przypisania' : ''}`}
                   onMouseEnter={e => peek(t, e.currentTarget)} onFocus={e => { if (e.target === e.currentTarget) peek(t, e.currentTarget); }} onMouseLeave={() => setPeeked(null)} onBlur={() => setPeeked(null)}
-                  onClick={() => open(t.id)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(t.id); } }}>
-                  <span className={`bank-avatar${category ? '' : todo ? ' dashed' : ' none'}`} aria-hidden="true">{Icon && <Icon size={18} />}</span>
+                  onClick={() => openMark(t.id)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); openMark(t.id); } }}>
+                  <span className={`bank-avatar${done ? '' : todo ? ' dashed' : ' none'}`} aria-hidden="true">{Icon && <Icon size={18} />}</span>
                   <span className="bank-what">
                     <span className="bank-title">{name}</span>
                     <span className="bank-note">
-                      {side?.kind === 'self' && !category ? <span className="bank-uncat">Przelew własny</span>
-                        : todo && !category ? <span className="bank-assign">przypisz</span> : <span className={category ? 'bank-cat' : 'bank-uncat'}>{category?.name ?? 'Bez kategorii'}</span>}
-                      {mark?.purpose ? <span className="bank-tags">{' · '}{mark.purpose}</span> : null}
+                      {todo && !done ? <span className="bank-assign">przypisz</span> : <span className={done ? 'bank-cat' : 'bank-uncat'}>{said}</span>}
                       {mark?.tags.length ? <span className="bank-tags">{' '}{mark.tags.map(tag => `#${tag}`).join(' ')}</span> : null}
                       <span>{' · '}{howPaid(t, !!side)}</span>
                       {mark?.recurring && <Repeat size={12} className="bank-flag" aria-label="cykliczne" />}
@@ -208,7 +232,7 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
                     </span>
                     {suggestion && first && wide && (suggestion.options.length > 1
                       ? <span className="bank-sug weak"><i aria-hidden="true" /><span className="bank-sug-text"><b>{suggestion.options.length} możliwości</b> do wyboru w oknie</span></span>
-                      : <span className={`bank-sug${suggestion.sure ? '' : ' weak'}`} style={tint(proposed)}>
+                      : <span className={`bank-sug${suggestion.sure ? '' : ' weak'}`} style={proposed ? tint(proposed) : first.move ? moveTint(first.move) : undefined}>
                         <i aria-hidden="true" />
                         <span className="bank-sug-text"><b>{optionText(first, labels!)}?</b> {first.reasons.at(-1)}{suggestion.sure ? '' : ' (niepewne)'}</span>
                         <button type="button" className="ok" aria-label={`Przyjmij podpowiedź: ${optionText(first, labels!)}`} onClick={e => { e.stopPropagation(); accept(t); }}><Check size={15} aria-hidden="true" /></button>

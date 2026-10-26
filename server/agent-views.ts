@@ -197,16 +197,19 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       if (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) >= BANK_MAX_DAYS * DAY) throw new AgentViewError(400, `Zakres to najwyżej ${BANK_MAX_DAYS} dni.`);
       const categories = new Map(ledger.categories.map(c => [c.id, c.name]));
       const parties = new Map(ledger.parties.map(p => [p.id, p]));
-      const kindName = { person: 'osoba', company: 'firma', self: 'ja' } as const;
+      const moveName = { spend: 'wydatek', income: 'przychód', settle: 'rozliczenie', move: 'przełożenie' } as const;
       const find = (wanted: string | null, names: Map<string, string>) => {
         const w = wanted?.trim().toLowerCase();
         return w ? [...names].filter(([id, name]) => id === w || name.toLowerCase().includes(w)).map(([id]) => id) : null;
       };
-      const wantCategory = find(url.searchParams.get('kategoria'), categories);
+      const wantCategory = find(url.searchParams.get('kategoria') ?? url.searchParams.get('źródło') ?? url.searchParams.get('zrodlo'), categories);
       // `osoba` and `sprzedawca` are older names of the same filter.
       const wantParty = find(url.searchParams.get('strona') ?? url.searchParams.get('osoba') ?? url.searchParams.get('sprzedawca'), new Map(ledger.parties.map(p => [p.id, p.name])));
       const wantTag = url.searchParams.get('etykieta')?.replace(/^#/, '').trim().toLowerCase() || null;
-      const wantPurpose = url.searchParams.get('cel')?.trim().toLowerCase() || null;
+      const ruch = url.searchParams.get('ruch')?.trim().toLowerCase() || null;
+      // "przychody", "przelozenie" and "rozliczenia" are the same as the names: compared without diacritics, by their start.
+      const plain = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/ł/g, 'l').toLowerCase().slice(0, 5);
+      const wantMove = ruch ? Object.entries(moveName).find(([id, name]) => id === ruch || plain(name) === plain(ruch))?.[0] ?? 'none' : null;
       const onlyPending = url.searchParams.get('nieprzypisane') === '1';
       // A booking day is noon UTC of that date.
       const booked = (at: number) => new Date(at).toISOString().slice(0, 10);
@@ -215,51 +218,59 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       const balance = accounts.length ? accounts.map(a => `${a.name}${a.last4 ? ` ··${a.last4}` : ''}: ${a.balance === null ? '?' : pln(a.balance, a.currency).replace(/^\+/, '')}`).join('; ') : 'brak';
       const out = [
         `Konto PKO BP (tylko odczyt; dane z banku i oznaczenia użytkownika), stan banku z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). Dziś: ${todayLabel(now, zone)}. Saldo: ${balance}.`,
-        `Zakres ${from} – ${to}. Oznaczenia nadaje użytkownik: druga strona (osoba, firma albo „ja”, czyli jego własna firma lub konto), kategoria (na co), etykiety, cel (przy osobach: np. pożyczka, zwrot), cykliczność, opis; „bez kategorii” to operacja nieoznaczona. Do przypisania są operacje od ${ledger.since} bez kategorii, poza przelewami własnymi.`,
+        `Zakres ${from} – ${to}. Oznaczenia nadaje użytkownik. Najpierw ruch, czyli co zrobiły pieniądze: wydatek (kategoria: na co; wpływ oznaczony jako wydatek to zwrot i zmniejsza kategorię), przychód (źródło: skąd), rozliczenie (pożyczka albo jej oddanie z drugą stroną; liczy się tylko do salda z nią, nie do wydatków ani przychodów), przełożenie (między własnymi kontami; nie liczy się nigdzie). Do tego druga strona, etykiety, cykliczność, opis. Operacja bez ruchu jest nieoznaczona i liczy się jako wydatek albo wpływ według znaku. Do przypisania są operacje od ${ledger.since} bez ruchu albo wydatki i przychody bez kategorii.`,
       ];
       const none = unavailable('Bank', source.status, !!source.data, source.message);
       if (none) out.push(none);
       const inRange = ledger.entries.filter(e => booked(e.op.at) >= from && booked(e.op.at) <= to);
       const flows = inRange.filter(e => e.op.currency === 'PLN');
-      out.push(`Wpływy ${pln(flows.filter(e => e.op.amount > 0).reduce((s, e) => s + e.op.amount, 0))}, wydatki ${pln(flows.filter(e => e.op.amount < 0).reduce((s, e) => s + e.op.amount, 0))}.`);
-      const spent = new Map<string, number>();
-      for (const e of flows) if (e.op.amount < 0) { const name = e.label?.category ? categories.get(e.label.category) ?? 'bez kategorii' : 'bez kategorii'; spent.set(name, (spent.get(name) ?? 0) - e.op.amount); }
-      out.push(`Wydatki według kategorii: ${spent.size ? [...spent].sort((a, b) => b[1] - a[1]).map(([name, sum]) => `${name} ${pln(sum).replace(/^\+/, '')}`).join('; ') : 'brak'}.`);
-      // People over everything kept, not only the range: who owes whom needs the whole story, summed by purpose.
-      const byPerson = new Map<string, { out: number; in: number; purposes: Map<string, number> }>();
-      for (const e of ledger.entries) {
-        const party = e.label?.party ? parties.get(e.label.party) : undefined;
-        if (!party || party.kind !== 'person' || e.op.currency !== 'PLN') continue;
-        const p = byPerson.get(party.id) ?? { out: 0, in: 0, purposes: new Map() };
-        if (e.op.amount < 0) p.out -= e.op.amount; else p.in += e.op.amount;
-        const purpose = e.label!.purpose ?? 'bez celu';
-        p.purposes.set(purpose, (p.purposes.get(purpose) ?? 0) + e.op.amount);
-        byPerson.set(party.id, p);
+      // An unmarked operation counts by its sign; a settlement and a move between own accounts count in neither sum.
+      const spendOf = (e: (typeof flows)[number]) => e.label?.move === 'spend' || (!e.label?.move && e.op.amount < 0);
+      const incomeOf = (e: (typeof flows)[number]) => e.label?.move === 'income' || (!e.label?.move && e.op.amount > 0);
+      const spentTotal = -flows.filter(spendOf).reduce((s, e) => s + e.op.amount, 0);
+      const earned = flows.filter(incomeOf).reduce((s, e) => s + e.op.amount, 0);
+      const aside = (move: 'settle' | 'move') => flows.filter(e => e.label?.move === move).reduce((s, e) => s + e.op.amount, 0);
+      out.push(`Przychody ${pln(earned)}, wydatki ${pln(-spentTotal)}, netto ${pln(earned - spentTotal)}. Poza tymi sumami: rozliczenia ${pln(aside('settle'))}, przełożenia ${pln(aside('move'))}.`);
+      const byAxis = (pick: (e: (typeof flows)[number]) => boolean, sign: number, none: string) => {
+        const sums = new Map<string, number>();
+        for (const e of flows.filter(pick)) {
+          const name = e.label?.category ? categories.get(e.label.category) ?? none : e.label?.move ? none : 'nieoznaczone';
+          sums.set(name, (sums.get(name) ?? 0) + sign * e.op.amount);
+        }
+        return sums.size ? [...sums].sort((a, b) => b[1] - a[1]).map(([name, sum]) => `${name} ${pln(sum).replace(/^\+/, '')}`).join('; ') : 'brak';
+      };
+      out.push(`Wydatki według kategorii: ${byAxis(spendOf, -1, 'bez kategorii')}.`);
+      out.push(`Przychody według źródła: ${byAxis(incomeOf, 1, 'bez źródła')}.`);
+      // Balances over everything kept, not only the range: who owes whom needs the whole story.
+      out.push(ledger.balances.length ? 'Salda rozliczeń (cała zapisana historia):' : 'Salda rozliczeń: wszyscy rozliczeni albo brak rozliczeń.');
+      for (const b of ledger.balances) {
+        const name = parties.get(b.party)?.name ?? '?';
+        const sum = pln(Math.abs(b.amount), b.currency).replace(/^\+/, '');
+        out.push(b.amount > 0 ? `  ${name}: do oddania użytkownikowi ${sum}` : `  ${name}: użytkownik ma do oddania ${sum}`);
       }
-      out.push(byPerson.size ? 'Osoby (cała zapisana historia; „wysłano” to pieniądze do osoby, „otrzymano” od niej; według celu suma ze znakiem, np. pożyczka −400 i zwrot +150 to 250 jeszcze nieoddane):' : 'Osoby: brak oznaczonych operacji z osobą.');
-      for (const [id, p] of byPerson) out.push(`  ${parties.get(id)?.name ?? '?'}: wysłano ${pln(p.out).replace(/^\+/, '')}, otrzymano ${pln(p.in).replace(/^\+/, '')}; ${[...p.purposes].map(([purpose, sum]) => `${purpose} ${pln(sum)}`).join(', ')}`);
       const pending = ledger.entries.filter(e => e.pending);
       out.push(`Do przypisania: ${pending.length}.`);
       const shown = inRange.filter(e => (!onlyPending || e.pending)
+        && (!wantMove || e.label?.move === wantMove)
         && (!wantCategory || (!!e.label?.category && wantCategory.includes(e.label.category)))
         && (!wantParty || wantParty.includes(e.label?.party ?? e.known ?? ''))
-        && (!wantTag || !!e.label?.tags.some(t => t.toLowerCase().includes(wantTag)))
-        && (!wantPurpose || !!e.label?.purpose?.toLowerCase().includes(wantPurpose)));
-      out.push(`Operacje${onlyPending ? ' do przypisania' : ''}${wantCategory ? ` w kategorii ${wantCategory.map(id => categories.get(id)).join('/') || '(brak takiej)'}` : ''}${wantParty ? ` z drugą stroną ${wantParty.map(id => parties.get(id)?.name).join('/') || '(brak takiej)'}` : ''}${wantTag ? ` z etykietą #${wantTag}` : ''}${wantPurpose ? ` o celu ${wantPurpose}` : ''}, najnowsze pierwsze:`);
+        && (!wantTag || !!e.label?.tags.some(t => t.toLowerCase().includes(wantTag))));
+      out.push(`Operacje${onlyPending ? ' do przypisania' : ''}${wantMove ? ` o ruchu ${moveName[wantMove as keyof typeof moveName] ?? '(brak takiego)'}` : ''}${wantCategory ? ` w kategorii ${wantCategory.map(id => categories.get(id)).join('/') || '(brak takiej)'}` : ''}${wantParty ? ` z drugą stroną ${wantParty.map(id => parties.get(id)?.name).join('/') || '(brak takiej)'}` : ''}${wantTag ? ` z etykietą #${wantTag}` : ''}, najnowsze pierwsze:`);
       const method: Record<string, string> = { card: 'karta', phone: 'telefon, bez nazwy sklepu', blik: 'BLIK, bez nazwy sklepu', cardTransfer: 'przelew z karty', atm: 'bankomat', transfer: 'przelew', other: '' };
       const optionWords = (o: NonNullable<(typeof ledger.entries)[number]['suggestion']>['options'][number]) =>
-        [o.party && parties.get(o.party)?.name, o.purpose, o.category && categories.get(o.category), ...(o.tags ?? []).map(t => `#${t}`)].filter(Boolean).join(', ');
+        [o.move && moveName[o.move], o.party && parties.get(o.party)?.name, o.category && categories.get(o.category), ...(o.tags ?? []).map(t => `#${t}`)].filter(Boolean).join(', ');
       out.push(...(shown.length ? shown.slice(0, BANK_SHOWN).map(e => {
         const party = parties.get(e.label?.party ?? e.known ?? '');
+        const move = e.label?.move;
         const marks = [
-          party?.kind === 'self' ? 'przelew własny' : e.label?.category ? `kategoria: ${categories.get(e.label.category) ?? '?'}` : 'bez kategorii',
-          party ? `strona: ${party.name} (${kindName[party.kind]}${e.label?.party ? '' : ', rozpoznana, nieoznaczona'})` : null,
-          e.label?.purpose ? `cel: ${e.label.purpose}` : null,
+          move ? `ruch: ${moveName[move]}` : 'nieoznaczona',
+          e.label?.category ? `${move === 'income' ? 'źródło' : move === 'move' ? 'kieszeń' : 'kategoria'}: ${categories.get(e.label.category) ?? '?'}` : null,
+          party ? `strona: ${party.name}${e.label?.party ? '' : ' (rozpoznana, nieoznaczona)'}` : null,
           e.label?.tags.length ? `etykiety: ${e.label.tags.map(t => `#${t}`).join(' ')}` : null,
           e.label?.recurring ? 'cykliczne' : null,
           e.label?.comment ? `opis: „${clip(e.label.comment, 160)}”` : null,
           e.pending ? 'DO PRZYPISANIA' : null,
-          !e.label?.category && e.suggestion ? `${e.suggestion.sure ? 'podpowiedź' : 'do wyboru'}: ${e.suggestion.options.map(optionWords).join(' albo ')}` : null,
+          e.suggestion ? `${e.suggestion.sure ? 'podpowiedź' : 'do wyboru'}: ${e.suggestion.options.map(optionWords).join(' albo ')}` : null,
         ].filter(Boolean).join('; ');
         return `${dayName(midnight(booked(e.op.at), zone), zone)} ${booked(e.op.at)}  ${pln(e.op.amount, e.op.currency)}  ${clip(e.op.name, 60)}${method[e.op.method] ? ` (${method[e.op.method]})` : ''}${e.op.detail ? ` — ${clip(e.op.detail, 60)}` : ''}  [${marks}]`;
       }) : ['  brak']));

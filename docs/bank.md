@@ -1,10 +1,10 @@
 # Konto bankowe (PKO BP przez Enable Banking)
 
-Kafelek **Konto** pokazuje saldo konta prywatnego w PKO BP, wpływy i wydatki z ostatnich 30 dni, pasek z podziałem wydatków
-na **kategorie użytkownika** i operacje pogrupowane po dniach („Dziś”, „Wczoraj”, „Pt, 23 paź”, z sumą dnia). Każda operacja ma kółko
-w kolorze i z ikoną swojej kategorii, czystą nazwę, podpis („Jedzenie · karta”, znaczniki: cykliczne, opis) i kwotę ze
-znakiem + lub −; wpływy są zielone. Kafelek 1×1 pokazuje tylko saldo i listę, od szerokości dwóch komórek są sumy 30 dni, podpisy i
-podpowiedzi przy wierszach, a od wysokości dwóch pasek kategorii. Dane z banku są tylko do odczytu: panel nie ma przelewów ani żadnej
+Kafelek **Konto** pokazuje saldo konta prywatnego w PKO BP, przychody, wydatki i netto z ostatnich 30 dni, pasek z podziałem wydatków
+na **kategorie użytkownika**, salda rozliczeń z ludźmi i operacje pogrupowane po dniach („Dziś”, „Wczoraj”, „Pt, 23 paź”, z sumą dnia).
+Każda operacja ma kółko w kolorze i z ikoną swojej kategorii (albo ruchu), czystą nazwę, podpis („Jedzenie · karta”, znaczniki: cykliczne,
+opis) i kwotę ze znakiem + lub −; wpływy są zielone. Kafelek 1×1 pokazuje tylko saldo i listę, od szerokości dwóch komórek są sumy 30 dni,
+podpisy i podpowiedzi przy wierszach, a od wysokości dwóch pasek kategorii i rozliczenia. Dane z banku są tylko do odczytu: panel nie ma przelewów ani żadnej
 operacji zapisu w banku; oznaczenia są lokalne.
 
 Bank oddaje przez API sam tekst, bez logo, adresu, godziny i kategorii (pole MCC jest puste). Nazwy robi więc `src/bank-merchants.ts`
@@ -61,44 +61,66 @@ a panel podpisuje zapytania krótkim JWT RS256 kluczem aplikacji (`server/bank.t
 
 ## Oznaczenia operacji
 
-Każde pole odpowiada na jedno pytanie:
+Najpierw jedno pytanie: **co zrobiły pieniądze**. Odpowiedź to **ruch**, a ruch decyduje, do której sumy operacja trafia, i ma
+dokładnie jedną oś. Dzięki temu każdy wykres czyta jedno pole i sumuje się do 100%.
+
+| Ruch | Pytanie | Oś (jedna) | Liczy się do |
+| --- | --- | --- | --- |
+| **Wydatek** | na co poszło? | kategoria wydatku (własna lista z kolorem i ikoną) | wydatków i netto; wpływ oznaczony jako wydatek to zwrot (sklep, cashback, znajomy oddaje swoją część kolacji) i zmniejsza kategorię |
+| **Przychód** | skąd przyszło? | źródło przychodu (osobna lista: Pensja, Sprzedaż, Zwrot podatku) | przychodów i netto; wypływ oznaczony jako przychód to korekta |
+| **Rozliczenie** | kto komu jest winien? | druga strona | tylko salda z tą stroną: pożyczka −400 i oddanie +150 to „Anna odda Ci 250 zł”; nie liczy się do wydatków ani przychodów |
+| **Przełożenie** | gdzie leży? | kieszeń, opcjonalnie (własna lista: Oszczędności, Revolut) | nigdzie: to nadal Twoje pieniądze |
+
+Do tego, przy każdym ruchu:
 
 | Pole | Pytanie | Kto wypełnia |
 | --- | --- | --- |
-| Druga strona | kto | rozpoznawana z tego, co pokazuje bank (tekst płatności kartą, rachunek, telefon, nazwa); przy telefonie i BLIK wybierana z listy |
-| Kategoria (dokładnie jedna) | na co poszły pieniądze; jeden kawałek paska | użytkownik, własna lista z kolorem i ikoną |
-| Cel (przy osobie) | po co: pożyczka, zwrot, dokładka, prezent | użytkownik, własna lista jak etykiety |
-| Etykiety (dowolnie wiele) | szczegóły, po których potem szukasz (`#internet`, `#tabnote`, `#ogrzewanie`) | użytkownik, tworzone w locie |
+| Druga strona | kto | rozpoznawana z tego, co pokazuje bank (tekst płatności kartą, rachunek, telefon, nazwa); nowa dostaje nazwę z banku do poprawienia; przy telefonie i BLIK wybierana z listy |
+| Etykiety (dowolnie wiele) | szczegóły, po których potem szukasz (`#internet`, `#ogrzewanie`, `#dokładka`) | użytkownik, tworzone w locie |
+| Cykliczne, opis | kontekst | użytkownik |
 | Metoda płatności | jak | sama z kodu, którym PKO kończy tytuł: karta, przelew na telefon, przelew na rachunek, BLIK, telefon w sklepie; nie jest oznaczeniem |
-| Cykliczne, opis | | użytkownik |
 
-**Druga strona** ma rodzaj, od którego zależy, o co pyta okno:
+Druga strona nie ma rodzaju (osoba, firma): o liczeniu decyduje ruch, nie to, kto stoi po drugiej stronie. Przelew do taty na
+ogrzewanie to Wydatek w kategorii Rachunki z `#ogrzewanie`, pożyczka dla Anny to Rozliczenie z Anną, pensja z własnej firmy to Przychód ze
+źródła Pensja, a przelew na własne oszczędności to Przełożenie do kieszeni „Oszczędności”.
 
-- **Firma** (Inea, Społem, pyszne.pl, OVH): kategoria, etykiety, cykliczne. Przykład: Inea, kategoria Rachunki, `#internet`, cykliczne.
-- **Osoba** (Alicja, tata, Daniel): do tego **cel**. Przykład: przelew do taty to cel „dokładka”, kategoria Rachunki, `#ogrzewanie` i opis.
-  Pożyczka to cel, nie kategoria. Rozliczenie z osobą (widok agenta) sumuje jej operacje według celu ze znakiem: pożyczka −400 i zwrot
-  +150 to 250 jeszcze nieoddane, a dokładka nie wygląda jak dług.
-- **Ja** (własna firma, inne własne konto): **przelew własny**. Kategoria jest niepotrzebna i operacja nie wisi jako „do przypisania”, ale
-  zgodnie z wyborem użytkownika liczy się do sum wpływów i wydatków (to jego pensja). Wydatek na własne konto ma na pasku osobny odcinek
-  „Przelewy własne”.
+**Reguła na przyszłość.** Nowe pytanie (np. „powód”) nie staje się nową osią obok kategorii. Jeśli zmienia, do której sumy trafiają
+pieniądze, to nowy ruch (bardzo rzadko, np. inwestycje). Jeśli nie, to wartość na istniejącej osi (nowa kategoria albo źródło), gdy ma być
+osobnym kawałkiem wykresu, albo etykieta.
 
-Kategoria to to, co chcesz widzieć jako osobny kawałek paska (Rachunki, Spożywcze, Jedzenie na mieście, Subskrypcje); reszta to etykiety.
-Operacja jest **załatwiona**, gdy ma kategorię albo cel, albo jej druga strona to „Ja” (także rozpoznana, zanim ją oznaczysz). **Do
-przypisania** są niezałatwione operacje zaksięgowane od wybranego dnia (domyślnie dzień, w którym usługa pierwszy raz otworzyła oznaczenia;
-zmiana w ustawieniach na kafelku): przerywane kółko, „przypisz” i „N do przypisania” w nagłówku (otwiera pierwszą i po zapisie przechodzi do
-następnej). Starsze zostają „Bez kategorii”, bez licznika.
+Operacja jest **załatwiona**, gdy ma ruch, a wydatek i przychód także kategorię albo źródło (`isDone` w kontrakcie). **Do przypisania** są
+niezałatwione operacje zaksięgowane od wybranego dnia (domyślnie dzień, w którym usługa pierwszy raz otworzyła oznaczenia; zmiana w ustawieniach
+na kafelku): przerywane kółko, „przypisz” i „N do przypisania” w nagłówku (otwiera pierwszą i po zapisie przechodzi do następnej). Starsze
+zostają „Nieoznaczone”, bez licznika. Rozpoznana druga strona sama niczego nie załatwia: przelew z firmy, rozpoznany po rachunku, dostaje pewną
+podpowiedź (✓ jednym dotknięciem), ale nie zapisuje się sam.
 
-Wiersz pokazuje nazwę drugiej strony (gdy jest znana, zamiast tekstu banku), kategorię w jej kolorze albo „Przelew własny”, cel, etykiety,
-sposób płatności („sklep nieznany” znika, gdy płatność telefonem ma drugą stronę) i znaczniki: cykliczne, opis. Dotknięcie otwiera okno:
-podpowiedź albo wybór na górze, „Kto to?” dla nieznanego kontrahenta przelewu (Osoba, Firma, Ja), druga strona (lista z identyfikatorami; nowa
-z wyborem rodzaju; dla karty wypełniona nazwą z banku jako firma; rodzaj znanej zmienia się jednym dotknięciem), potem pola zależne od rodzaju,
-etykiety, „Cykliczne”, opis, Wyczyść i Zapisz oraz „Odpowiedź banku”. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
+Kafelek liczy sumy 30 dni według ruchów: przychody, wydatki i netto (przychód minus wydatek); nieoznaczona operacja liczy się według znaku, a
+rozliczenia i przełożenia nie liczą się wcale. Pasek dzieli wydatki według kategorii, każda pomniejszona o zwroty, z odcinkiem „Bez
+kategorii” dla reszty. Pod nim „Rozliczenia”: salda otwarte z każdą stroną z całej zapisanej historii („Anna odda Ci 250 zł”, „Jonasz czeka na zwrot 400 zł”), od wysokości dwóch komórek.
 
-Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc przyszłe widoki pożyczek i operacji
-cyklicznych mają całą historię bez migracji. Pliki wcześniejszych wersji są przenoszone same przy odczycie: osoby i sprzedawcy stają się drugą
-stroną rodzaju osoba i firma, a oznaczenie kategorią „Pożyczka” dostaje cel „pożyczka” (pieniądze wyszły) albo „zwrot” (przyszły), a sama
-kategoria znika.
+Wiersz pokazuje nazwę drugiej strony (gdy jest znana, zamiast tekstu banku), kategorię albo źródło w jego kolorze, „Rozliczenie” albo
+„Przełożenie · Oszczędności” z ikoną ruchu (kwota przełożenia jest wyszarzona), etykiety, sposób płatności („sklep nieznany” znika, gdy
+płatność telefonem ma drugą stronę) i znaczniki: cykliczne, opis. Dotknięcie otwiera okno: podpowiedź albo wybór na górze, potem cztery
+przyciski ruchu (płatność kartą, telefonem i BLIK zaczyna od Wydatku, przelew czeka na wybór), każdy z nawykiem drugiej strony („2×”: tyle
+jej wcześniejszych operacji w tę samą stronę było tym ruchem, `habits`). Pod nimi zdanie mówi, co się zapisze („Wydane 54,20 zł · u
+Biedronka · na Spożywcze”, „Przełożone 2 000 zł · do Oszczędności”), z brakującymi częściami wyblakłymi, a pod zdaniem jedna lista ruchu:
+kategorie wydatku, źródła przychodu albo kieszenie przełożenia (z „Nowa”/„Nowe”), a przy rozliczeniu saldo przed i po tej operacji.
+Rozliczenia bez drugiej strony nie da się zapisać. Dalej druga strona, etykiety, „Cykliczne”, opis, Wyczyść i Zapisz oraz „Odpowiedź banku”.
+Okno nie wylicza wszystkiego: druga strona pokazuje wybraną albo pole z nazwą z banku, a zapisane strony dopiero, gdy wpisujesz (pięć
+pasujących); etykiety pokazują wybrane i osiem najczęstszych, resztę znajduje wpisywanie. Wpisana nazwa równa zapisanej stronie to ta strona;
+„to ktoś inny” robi nową o tej samej nazwie. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
 
+Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc salda rozliczeń i przyszłe widoki
+operacji cyklicznych mają całą historię bez migracji. Pliki wcześniejszych wersji są przenoszone same przy odczycie, bez pytania:
+
+| Wcześniej | Teraz |
+| --- | --- |
+| kategoria | jej ruch: kategoria używana wyłącznie przy wpływach staje się źródłem przychodu, każda inna kategorią wydatku |
+| kategoria „Pożyczka” (wersje 1–2), cel pożyczka, zwrot, dług bez kategorii | Rozliczenie z tą osobą |
+| strona „Ja” i wpływ | Przychód ze źródła „Pensja” (tworzonego, gdy go nie ma) |
+| strona „Ja” i wypływ | Przełożenie |
+| inny cel (dokładka, prezent) | etykieta; ruch z kategorii albo, bez niej, Wydatek lub Przychód według znaku |
+| rodzaj strony (osoba, firma, Ja) | znika; identyfikatory zostają |
 ### Druga strona i jej identyfikatory
 
 Druga strona (`k-…`; `p-…` i `m-…` to osoby i sprzedawcy z wcześniejszych wersji) to encja z listą identyfikatorów. Co bank faktycznie
@@ -115,10 +137,10 @@ daje (sprawdzone na odczycie konta, 150 operacji):
 W tytule przelewu na telefon jest też **własny** numer (`OD:` przy wychodzącym, `DO:` przy przychodzącym); panel bierze tylko stronę
 kontrahenta i nigdy własnego rachunku. Po oznaczeniu identyfikatory strony operacji (rachunek, telefon, a z pełnego numeru także jego
 zamaskowana postać, nazwa z banku, tekst płatności kartą bez miasta i numeru sklepu) dopisują się do wskazanej drugiej strony. Identyfikator
-należy do jednej (ostatnie oznaczenie wygrywa), a w ustawieniach można go zapomnieć. Panel nie zgaduje, czy nieznany kontrahent przelewu to
-osoba, firma czy „Ja”; pyta raz („Kto to?”) i potem rozpoznaje sam.
+należy do jednej (ostatnie oznaczenie wygrywa), a w ustawieniach można go zapomnieć. Nieznany kontrahent przelewu dostaje w oknie nazwę z
+banku jako nową drugą stronę; po zapisie panel rozpoznaje go sam.
 
-Dwie osoby mogą mieć to samo imię (firma i „Ja” o tej samej nazwie to ta sama): rozróżnia je to, co pokazał bank. Lista w oknie i w
+Dwie strony mogą mieć to samo imię: rozróżnia je to, co pokazał bank. Wpisana nazwa równa zapisanej to ta strona, a „to ktoś inny” robi drugą. Lista w oknie i w
 ustawieniach pokazuje przy imieniu nazwę z banku i końcówki („Daniel · „DANIEL KOWALSKI” · rach. ··2874 · tel. ··321”); rachunek ma 4 cyfry,
 telefon 3, bo resztę maskuje bank.
 
@@ -142,7 +164,7 @@ Podpowiedź liczy się dla każdej niezałatwionej operacji, także starszej ni�
 
 1. **Kto**: tekst sprzedawcy z banku, rachunek, pełny numer telefonu albo nazwa z banku należą do znanej drugiej strony. Okno od razu pokazuje,
    kto to jest, także bez wcześniejszych oznaczeń. Zamaskowany numer (pierwsza i trzy ostatnie cyfry) tylko podpowiada, z prośbą o sprawdzenie.
-2. **Co**: wcześniejsze oznaczenia tej strony z tym samym kierunkiem pieniędzy, pogrupowane po tym, co mówiły (kategoria, cel, etykiety,
+2. **Co**: wcześniejsze oznaczenia tej strony z tym samym kierunkiem pieniędzy, pogrupowane po tym, co mówiły (ruch, kategoria, etykiety,
    cykliczne). Wystarczy jedno oznaczenie: strona jest rozpoznana pewnie.
 3. **Płatność bez nazwy** (telefon, BLIK): tylko ta sama kwota co do grosza; zawsze jako wybór, nigdy jako pewna podpowiedź.
 
@@ -160,9 +182,9 @@ w 3 z 33.
 
 | Trasa | Co robi |
 | --- | --- |
-| `GET /api/bank/labels` | kategorie, etykiety, cele, drugie strony z rodzajem (identyfikatory w postaci uciętej), oznaczenia operacji z ostatniego odczytu, rozpoznana druga strona (`known`), podpowiedzi, lista „do przypisania” (`src/bank-labels-contract.ts`) |
-| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label`, `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `renameTag`, `deleteTag`, `renamePurpose`, `deletePurpose`, `createParty`, `updateParty` (nazwa, rodzaj), `deleteParty`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
-| `GET /api/agent/bank` | tekst dla agenta czatu: saldo, operacje z zakresu (`from`, `to`, domyślnie 30 dni, najwyżej 400; `kategoria`, `etykieta`, `strona`, `cel`, `nieprzypisane=1`), wydatki według kategorii, rozliczenie z osobami według celu z całej historii; bez pełnych numerów |
+| `GET /api/bank/labels` | kategorie wydatków, źródła przychodu i kieszenie (`move`), nawyk drugiej strony przy nieoznaczonych (`habits`), etykiety, drugie strony (identyfikatory w postaci uciętej), oznaczenia operacji z ostatniego odczytu, rozpoznana druga strona (`known`), podpowiedzi, lista „do przypisania”, salda rozliczeń (`balances`; `src/bank-labels-contract.ts`) |
+| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label` (ruch, kategoria, druga strona, etykiety, cykliczne, opis; kategoria musi być z listy ruchu, rozliczenie wymaga drugiej strony), `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `renameTag`, `deleteTag`, `createParty`, `updateParty` (nazwa), `deleteParty`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
+| `GET /api/agent/bank` | tekst dla agenta czatu: saldo, operacje z zakresu (`from`, `to`, domyślnie 30 dni, najwyżej 400; `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane=1`), przychody, wydatki i netto, wydatki według kategorii, przychody według źródła, salda rozliczeń z całej historii; bez pełnych numerów |
 
 Przeglądarka czyta oznaczenia co minutę i zaraz po każdej akcji; to odczyt pamięci serwera, bank nie jest pytany. Agent oznaczeń nie
 zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/bank`, trafia do dostawcy modelu `agy` ([czat.md](czat.md)).
@@ -170,7 +192,7 @@ zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/ba
 ## Scenariusze
 
 `scenarios/standard.json` ma klucz `bank` w kształcie API (`src/bank-contract.ts`); `at` operacji to chwila w dniu
-(`"today-1@12:00"`), a `raw` może mieć pełne (zmyślone) numery, bo scenariusz maskuje je przy wyjściu jak usługa. Klucz `bankLabels` (`since`, `categories`, `parties` z `kind`, `labels` po id operacji z `category`, `tags`, `party`,
-`purpose`, `recurring`, `comment`) to oznaczenia na start; drugie strony uczą się identyfikatorów z nich jak z gestu, a akcje są
-pamiętane w pamięci do restartu. Scenariusz standardowy ma pożyczkę i zwrot (Anna, Jonasz), przelewy własne z firmy, pewne
-podpowiedzi (Biedronka, Claude, Moja firma, Anna) i wybór po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.
+(`"today-1@12:00"`), a `raw` może mieć pełne (zmyślone) numery, bo scenariusz maskuje je przy wyjściu jak usługa. Klucz `bankLabels` (`since`, `categories` z `move`, `parties`, `labels` po id operacji z `move`, `category`, `tags`, `party`,
+`recurring`, `comment`) to oznaczenia na start; drugie strony uczą się identyfikatorów z nich jak z gestu, a akcje są
+pamiętane w pamięci do restartu. Scenariusz standardowy ma rozliczenie z Anną (saldo „Anna czeka na zwrot 120 zł”), pensję z firmy i sprzedaż
+laptopa jako przychody, pewne podpowiedzi (Biedronka, Claude, Moja firma, Anna) i wybór po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.
