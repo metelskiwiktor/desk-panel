@@ -137,6 +137,7 @@ body[data-chat-dock] .top-right { margin-left: auto; }
 .chat-chip.mail { --c: var(--c-mail); } .chat-chip.event { --c: var(--c-cal); } .chat-chip.task { --c: var(--c-agent); }
 .chat-chip.workout { --c: var(--c-train); } .chat-chip.tile { --c: var(--c-tile); }
 .chat-chip.todoList, .chat-chip.todo { --c: var(--c-cal); }
+.chat-chip.skill { --c: var(--c-agent); }
 .chat-chip svg { color: var(--c); }
 .chat-chip .k { flex: none; color: var(--c); font-weight: 600; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
 .chat-chip .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -150,6 +151,12 @@ body[data-chat-dock] .top-right { margin-left: auto; }
 .chat-composer textarea { font: inherit; color: var(--c-text); background: transparent; border: 0; resize: none; width: 100%; box-sizing: border-box; padding: 4px 2px; outline: none; font-size: 15px; line-height: 1.5; max-height: 168px; }
 .chat-composer textarea::placeholder { color: var(--c-muted); }
 .chat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-skills { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 12px; background: var(--c-side); border: 1px solid var(--c-line-2); }
+.chat-skill-opt { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; min-height: 38px; padding: 6px 10px; border-radius: 9px; font-size: 13px; color: var(--c-text); }
+.chat-skill-opt svg { color: var(--c-agent); }
+.chat-skill-opt .t { font-weight: 600; color: #eadfff; flex: none; }
+.chat-skill-opt .d { color: var(--c-muted); font-size: 12px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-skill-opt:hover, .chat-skill-opt.on { background: color-mix(in srgb, var(--c-agent) 18%, var(--c-surface-2)); }
 .chat-hint { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px dashed var(--c-faint); font-size: 13px; color: var(--c-muted); }
 .chat-tools { display: flex; align-items: center; gap: 10px; }
 .chat-pick, .chat-done { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 0 16px; border-radius: 12px; font-size: 14px; font-weight: 500; }

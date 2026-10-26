@@ -1,6 +1,6 @@
 import type { ContextItem, ContextKind } from './chat-contract';
 
-/** Never more than the agent should read at once (the server accepts 2000). */
+/** Never more than the agent should read at once (the server accepts up to 8000). */
 export const MAX_CONTEXT_TEXT = 1800;
 const MAX_TITLE = 120;
 

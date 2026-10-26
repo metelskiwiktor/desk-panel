@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatEvent, ContextItem } from '../src/chat-contract';
+import { CHAT_SKILLS, skillItem, type ChatEvent, type ContextItem } from '../src/chat-contract';
 import { agyExecutable, agyModelArgs, agyPermissionArgs, createAgentChat, DEFAULT_AGY_MODEL, preamble, DEFAULT_PANEL_URL, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
 import { handleChatRoute } from './chat-routes';
 
@@ -419,11 +419,22 @@ describe('trasy /api/chats', () => {
     expect(agents).toHaveLength(0);
   });
 
-  it('odrzuca nieprawidłowe ciało i nadmiar kontekstu', async () => {
-    expect((await post('/api/chats', { text: '   ' })).status).toBe(400);
-    expect((await post('/api/chats', { text: 'a', extra: 1 })).status).toBe(400);
+  it('odrzuca nieprawidłowe ciało i nadmiar kontekstu ze szczegółowym powodem', async () => {
+    const emptyText = await post('/api/chats', { text: '   ' });
+    expect(emptyText.status).toBe(400);
+    expect(((await emptyText.json()) as { error: string }).error).toContain('Nieprawidłowe dane (text:');
+
+    const extraField = await post('/api/chats', { text: 'a', extra: 1 });
+    expect(extraField.status).toBe(400);
+    expect(((await extraField.json()) as { error: string }).error).toContain('extra:');
+
     expect((await post('/api/chats', { text: 'a', context: Array.from({ length: 11 }, () => mail) })).status).toBe(400);
     expect(agents).toHaveLength(0);
+  });
+
+  it('przyjmuje skill z pełnymi instrukcjami w kontekście wiadomości', async () => {
+    const created = await post('/api/chats', { text: 'Zaimplementuj to', context: [skillItem(CHAT_SKILLS[0])] });
+    expect(created.status).toBe(201);
   });
 
   it('tworzy rozmowę, wysyła wiadomości, zmienia nazwę i usuwa', async () => {

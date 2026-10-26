@@ -5,7 +5,7 @@ import { BankError, createBank } from './bank';
 import { createBankLabelStore, privateFile } from './bank-labels';
 import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
-import { cezarAction, createFinishedReader } from './cezar-finished';
+import { cezarAction, createCezarRun, createFinishedReader } from './cezar-finished';
 import { createCalendarReader } from './calendar';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
@@ -80,6 +80,16 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       try { await cezarAction(options.cezarUrl, id, action); }
       catch { throw new SourceError(502); }
       finishedReader.invalidate(id);
+    },
+    async cezarCreateRun(input) {
+      try {
+        const created = await createCezarRun(options.cezarUrl, input);
+        cache = undefined;
+        fetchedAt = 0;
+        return created;
+      } catch {
+        throw new SourceError(502);
+      }
     },
     calendar: () => readCalendar(),
     training: () => readTraining(),

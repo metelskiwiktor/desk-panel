@@ -20,6 +20,7 @@ scenario name="standard":
 
 # Playwright screenshots of a scenario into output/screenshots, e.g. `just screenshots offline --pages pulpit`.
 screenshots name="standard" *args:
+    node scripts/ensure-deps.mjs
     npm run scenario -- {{name}} --shot {{args}}
 
 # Target screens from devices.json with derived CSS sizes and Chrome DevTools values.
@@ -48,6 +49,7 @@ garmin-login:
 
 # Run all tests, typecheck and produce the frontend served by the service.
 check:
+    node scripts/ensure-deps.mjs
     npm test
     npm run build
 

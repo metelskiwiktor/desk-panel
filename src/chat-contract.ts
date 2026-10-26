@@ -1,16 +1,57 @@
 import { z } from 'zod';
 
-/** What the user pointed at on the dashboard: one row (mail, task, meeting, workout) or a whole tile. */
-export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo'] as const;
+/** What the user pointed at on the dashboard: one row (mail, task, meeting, workout), a whole tile, or a skill picked with `@`. */
+export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo', 'skill'] as const;
 export type ContextKind = typeof contextKinds[number];
 export const contextItemSchema = z.object({
   kind: z.enum(contextKinds),
   id: z.string().min(1).max(200),
   title: z.string().min(1).max(200),
-  /** What the user sees (or the row's data), as plain text. Never more than the agent should read at once. */
-  text: z.string().max(2000),
+  /** What the user sees (or the row's data / skill instructions), as plain text. Never more than the agent should read at once. */
+  text: z.string().max(8000),
 }).strict();
 export type ContextItem = z.infer<typeof contextItemSchema>;
+
+export interface ChatSkill {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+}
+
+export const CHAT_SKILLS: readonly ChatSkill[] = [
+  {
+    id: 'zaimplementuj-zadanie',
+    title: 'Zaimplementuj zadanie',
+    description: 'Rekonesans w repo, gotowy prompt i zlecenie taska na Cezarze',
+    prompt: [
+      'You are the dispatcher for Desk Panel (repo: C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel). Your job is to produce a high-quality, self-contained task prompt for the Cezar executor, then ask for confirmation.',
+      'Hard rules:',
+      '- Do a fast, minimal read-only recon in at most 2-3 tool calls (batch file listings or reads into one command): identify the exact files in src/ or server/ that need changes, check matching scenarios in scenarios/*.json, and decide whether the change is UI (changes visible in the browser: src/, styles.css, scenarios/) or non-UI (backend-only in server/, tests, or scripts where screenshots would not change).',
+      '- For UI tasks, check whether the chosen scenario in scenarios/*.json already contains data that visibly exposes the problem/feature (e.g. a truncated long message, overflowing text, or specific state); if the existing fixture is too short/simple to show the difference between before.png and after.png, add a bullet in Notes for executor specifying how to adjust the scenario fixture first. When the task adds or modifies a workspace tile (e.g. smart-actions, bank, todo, system, mail, cezar), ALWAYS set open to `tile:<kind>` (e.g. `open: tile:smart-actions`) so scenario.ts showcases the tile at 2x2 without modifying `autoTiles` in `src/Workspace.tsx`.',
+      '- NEVER edit repository files or implement the task yourself.',
+      '- Output in Polish for the user, with the Executor Prompt block in English, in this exact order:',
+      '  1. Short plan (3-6 bullets max) for the user.',
+      '  2. A fenced ```text Executor Prompt block (use repo-relative paths only, e.g. src/..., server/...):',
+      '     Task: <one-sentence clear goal>',
+      '     Type: UI | non-UI',
+      '     Scenario for screenshots: <scenario name, e.g. standard or inbox, or "none" if non-UI> (page: pulpit|zadania|kalendarz|system|zdarzenia|ustawienia, open: none|tile:<kind>|mail|chat|chat-wide|task|event|bank|<css-selector>)',
+      '     Relevant files (from recon):',
+      '     - src/...',
+      '     - server/...',
+      '     Acceptance criteria:',
+      '     - [ ] ...',
+      '     Notes for executor:',
+      '     - Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
+      '- Then ask: "Zlecić na Cezarze?" and STOP.',
+      '- After user confirms ("zleć", "ok", "tak"), POST to /api/cezar/runs with Origin header and JSON {"title":"<short title>","task":"<full Executor Prompt>"} (if a task from the to-do list was provided in context, include its id as "todoId":"t-…"; in PowerShell ALWAYS use a single-quoted here-string `$taskText = @\'...\'@` so backticks are not interpreted as escape sequences) and return the Cezar task URL.',
+    ].join('\n'),
+  },
+];
+
+export function skillItem(skill: ChatSkill): ContextItem {
+  return { kind: 'skill', id: skill.id, title: skill.title, text: skill.prompt };
+}
 
 export const MAX_CONTEXT = 10;
 export const MAX_MESSAGE = 8000;
@@ -66,7 +107,16 @@ export type ChatEvent =
 /** Never the same text twice for the agent: the dashboard elements go first, the question after. */
 export function withContext(text: string, context: ContextItem[]): string {
   if (!context.length) return text;
-  const kinds: Record<ContextKind, string> = { mail: 'Mail', event: 'Spotkanie', task: 'Zadanie Cezara', workout: 'Trening', tile: 'Kafelek pulpitu', todoList: 'Lista zadań', todo: 'Zadanie z listy' };
+  const kinds: Record<ContextKind, string> = {
+    mail: 'Mail',
+    event: 'Spotkanie',
+    task: 'Zadanie Cezara',
+    workout: 'Trening',
+    tile: 'Kafelek pulpitu',
+    todoList: 'Lista zadań',
+    todo: 'Zadanie z listy',
+    skill: 'Skill',
+  };
   const blocks = context.map((item, i) => `${i + 1}. ${kinds[item.kind]}: ${item.title}\n${item.text.split('\n').map(line => `   ${line}`).join('\n')}`);
   return `[Kontekst: elementy pulpitu wskazane przez użytkownika]\n${blocks.join('\n')}\n\n[Wiadomość]\n${text}`;
 }

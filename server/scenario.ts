@@ -138,6 +138,19 @@ export function createScenarioSources(file: string): PanelSources {
       else change.unread = action === 'unread';
       finishedChanges.set(id, change);
     },
+    async cezarCreateRun(input) {
+      const project = input.project || 'desk-panel';
+      const id = '00000000-0000-0000-0000-000000000001';
+      return {
+        ok: true,
+        id: `${project}/${id}`,
+        project,
+        url: `http://127.0.0.1:4321/p/${encodeURIComponent(project)}/tasks/${id}`,
+        workflow: input.workflow || 'desk-panel-task',
+        runner: input.runner || 'agy',
+        model: input.model || 'gemini-3.8-flash-medium',
+      };
+    },
     calendar: () => serve('calendar'),
     training: () => serve('training'),
     googleAccounts: () => serve('googleAccounts'),

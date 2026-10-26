@@ -19,6 +19,7 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   z wyjątkiem elementów oznaczonych `data-pick-through` (menu pulpitów wirtualnych): można przełączyć pulpit i wskazać kafelek
   z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i wracają do okna sprzed niego.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
+- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (np. `@Zaimplementuj zadanie`). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` działa jako dyspozytor: robi szybki rekonesans tylko do odczytu w repozytorium, wypisuje krótki plan po polsku + gotowy blok `Executor Prompt` po angielsku, pyta „Zlecić na Cezarze?”, a po potwierdzeniu wysyła `POST /api/cezar/runs` i zwraca link do zadania w Cezarze.
 - Rozmowę można zmienić nazwę (ołówek) i usunąć (kosz, wymaga drugiego dotknięcia).
 - Wąski ekran (telefon przez Tailscale): lista rozmów jest szufladą, okno zajmuje cały ekran (bez przycisku powiększania), a
   panel wskazywania jest u dołu.

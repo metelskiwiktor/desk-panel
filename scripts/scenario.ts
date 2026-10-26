@@ -7,7 +7,7 @@
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type Browser } from 'playwright';
 import { createPanelServer } from '../server/app';
@@ -26,6 +26,8 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   out: { type: 'string', default: 'output/screenshots' },
   nav: { type: 'boolean', default: false },
   query: { type: 'string' },
+  open: { type: 'string' },
+  file: { type: 'string' },
 } });
 const name = positionals[0] ?? 'standard';
 const file = name.endsWith('.json') ? resolve(name) : join(process.cwd(), 'scenarios', `${name}.json`);
@@ -64,7 +66,8 @@ if (!values.shot) {
       await page.waitForTimeout(1500);
       if (values.query) {
         // A query (e.g. ambient=night) changes what the first screen is; there is no navigation to walk through.
-        const path = join(values.out, `${label}-${values.query.replace(/[^a-z0-9]+/gi, '-')}-${target.label}.png`);
+        const path = values.file ? resolve(values.file) : join(values.out, `${label}-${values.query.replace(/[^a-z0-9]+/gi, '-')}-${target.label}.png`);
+        if (values.file) mkdirSync(dirname(path), { recursive: true });
         await page.screenshot({ path, fullPage: true });
         console.log(path);
         await page.close();
@@ -77,7 +80,51 @@ if (!values.shot) {
         await entry.click();
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.waitForTimeout(600);
-        const path = join(values.out, `${label}-${pageName}-${target.label}.png`);
+        if (values.open === 'chat' || values.open === 'chat-wide') {
+          await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+          if (values.open === 'chat-wide') await page.getByRole('button', { name: 'Powiększ okno czatu' }).click();
+          await page.waitForTimeout(300);
+        } else if (values.open?.startsWith('tile:')) {
+          const tileKind = values.open.slice('tile:'.length).trim();
+          const tileId = tileKind === 'todo' ? 'todo#1' : tileKind;
+          const rightTop = tileKind === 'mail' ? 'quota:Claude' : 'mail';
+          const rightBottom = tileKind === 'cezar' ? 'quota:Codex' : 'cezar';
+          await page.evaluate(({ id, kind, top, bottom }) => {
+            localStorage.setItem('desk-panel.workspace', JSON.stringify({
+              version: 1,
+              tiles: [
+                { id, kind, c: 0, r: 0, w: 2, h: 2 },
+                { id: top, kind: top, c: 2, r: 0, w: 2, h: 1 },
+                { id: bottom, kind: bottom, c: 2, r: 1, w: 2, h: 1 },
+              ],
+            }));
+          }, { id: tileId, kind: tileKind, top: rightTop, bottom: rightBottom });
+          await page.reload();
+          await page.waitForTimeout(800);
+          const rendered = await page.locator(`.wk-cell[data-kind="${tileKind}"]`).count();
+          if (rendered === 0) {
+            await page.evaluate(() => localStorage.removeItem('desk-panel.workspace'));
+            await page.reload();
+            await page.waitForTimeout(800);
+          }
+        } else if (values.open === 'mail') {
+          await page.locator('.p2-mrow').first().click();
+          await page.waitForTimeout(300);
+        } else if (values.open === 'task' || values.open === 'cezar') {
+          await page.locator('[data-ctx-kind="task"] button, .p2-trow').first().click();
+          await page.waitForTimeout(300);
+        } else if (values.open === 'event' || values.open === 'calendar') {
+          await page.locator('[data-ctx-kind="event"] button, .p2-erow').first().click();
+          await page.waitForTimeout(300);
+        } else if (values.open === 'bank') {
+          await page.locator('[data-ctx-kind="bank-tx"] button, .bank-tx-row button').first().click();
+          await page.waitForTimeout(300);
+        } else if (values.open) {
+          await page.locator(values.open).first().click();
+          await page.waitForTimeout(300);
+        }
+        const path = values.file ? resolve(values.file) : join(values.out, `${label}-${pageName}-${target.label}.png`);
+        if (values.file) mkdirSync(dirname(path), { recursive: true });
         const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
         await page.screenshot({ path, fullPage: true });
         await hidden?.evaluate(node => (node as Element).remove());

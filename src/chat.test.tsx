@@ -225,6 +225,43 @@ describe('ChatWindow', () => {
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('picks a skill with @ into a removable context chip and sends it', async () => {
+    const calls = mockServer([]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await screen.findByText('Nie ma jeszcze rozmów.');
+    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, '@zaimp');
+    const menu = await screen.findByRole('listbox', { name: 'Wybór skillów' });
+    expect(within(menu).getByText('@Zaimplementuj zadanie')).toBeTruthy();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('listbox', { name: 'Wybór skillów' })).toBeNull();
+    expect(input.value).toBe('');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Zaimplementuj zadanie' })).toBeTruthy();
+    await user.type(input, 'Dodaj skrót klawiszowy{Enter}');
+    await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({
+      text: 'Dodaj skrót klawiszowy',
+      context: [{ kind: 'skill', id: 'zaimplementuj-zadanie', title: 'Zaimplementuj zadanie' }],
+    }));
+  });
+
+  it('displays detailed error message from server when message sending fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/chats' && method === 'GET') return new Response(JSON.stringify({ chats: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (url === '/api/chats' && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Nieprawidłowe dane (context.0.text: Too big)' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await screen.findByText('Nie ma jeszcze rozmów.');
+    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, 'Test błędu{Enter}');
+    expect(await screen.findByText('Nieprawidłowe dane (context.0.text: Too big)')).toBeTruthy();
+  });
 });
 
 describe('pointing while chatting', () => {

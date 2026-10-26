@@ -64,6 +64,25 @@ export type FinishedTask = z.infer<typeof finishedTaskSchema>;
 export const cezarActions = ['archive', 'unarchive', 'read', 'unread'] as const;
 export type CezarAction = typeof cezarActions[number];
 export const cezarActionSchema = z.object({ id: z.string().regex(/^[^/\s]{1,128}\/[0-9A-Za-z-]{1,128}$/), action: z.enum(cezarActions) }).strict();
+export const cezarCreateRunSchema = z.object({
+  task: z.string().trim().min(1).max(32_000),
+  title: z.string().trim().min(1).max(120).optional(),
+  project: z.string().trim().min(1).max(64).default('desk-panel'),
+  workflow: z.string().trim().min(1).max(64).default('desk-panel-task'),
+  runner: z.string().trim().min(1).max(32).default('agy'),
+  model: z.string().trim().min(1).max(128).default('gemini-3.8-flash-medium'),
+  todoId: z.string().trim().min(1).max(64).optional(),
+}).strict();
+export type CezarCreateRunInput = z.input<typeof cezarCreateRunSchema>;
+export interface CezarCreatedRun {
+  ok: true;
+  id: string;
+  project: string;
+  url: string;
+  workflow: string;
+  runner: string;
+  model: string;
+}
 export const cezarSchema = z.object({
   observedAt: z.number().finite(), tasks: z.array(taskSchema), finished: z.array(finishedTaskSchema).default([]),
   counts: z.object({ running: count, queue: count, 'needs-input': count, review: count }),

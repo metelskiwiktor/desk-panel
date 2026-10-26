@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
-import { cezarActionSchema } from '../src/cezar-contract';
+import { cezarActionSchema, cezarCreateRunSchema } from '../src/cezar-contract';
 import { mailActionSchema } from '../src/mail-contract';
 import { warmupEditFor, warmupProviderSchema, warmupRunInputSchema } from '../src/warmup-contract';
 import { jsonRoutes, SourceError, type PanelSources } from './sources';
@@ -16,10 +16,10 @@ import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { BankLabelError } from './bank-labels';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
-async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
+async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, maxBytes = 4096): Promise<T> {
   let body = '';
   req.setEncoding('utf8'); // a Polish letter split between two chunks must not break
-  for await (const chunk of req) { body += chunk; if (body.length > 4096) throw new SourceError(413); }
+  for await (const chunk of req) { body += chunk; if (body.length > maxBytes) throw new SourceError(413); }
   const parsed = schema.safeParse(JSON.parse(body || 'null'));
   if (!parsed.success) throw new SourceError(400);
   return parsed.data;
@@ -59,7 +59,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -70,6 +70,10 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ authorizationUrl: await sources.googleConnect(email) }));
         } else if (url.pathname === '/api/bank/connect') {
           res.end(JSON.stringify({ authorizationUrl: await sources.bankConnect() }));
+        } else if (url.pathname === '/api/cezar/runs') {
+          if (!sources.cezarCreateRun) throw new SourceError(503);
+          const input = await readJson(req, cezarCreateRunSchema, 65_536);
+          res.writeHead(201).end(JSON.stringify(await sources.cezarCreateRun(input)));
         } else if (url.pathname === '/api/cezar/action') {
           const { id, action } = await readJson(req, cezarActionSchema);
           await sources.cezarAction(id, action);

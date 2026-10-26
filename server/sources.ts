@@ -1,7 +1,7 @@
 import type { BankSource } from '../src/bank-contract';
 import type { BankLabelAction, BankLabelResult, BankLabelsSource } from '../src/bank-labels-contract';
 import type { BankLedger } from './bank-labels';
-import type { CezarAction, CezarSnapshot } from '../src/cezar-contract';
+import type { CezarAction, CezarCreateRunInput, CezarCreatedRun, CezarSnapshot } from '../src/cezar-contract';
 import type { CalendarSource } from '../src/calendar-contract';
 import type { GoogleAccountStatus } from '../src/google-contract';
 import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
@@ -20,6 +20,8 @@ export interface PanelSources {
   cezar(): Promise<CezarSnapshot>;
   /** Archive or restore a finished task, or mark it read or unread, in Cezar itself. */
   cezarAction(id: string, action: CezarAction): Promise<void>;
+  /** Start a new task run in Cezar (used by the chat dispatcher after user confirmation). */
+  cezarCreateRun?(input: CezarCreateRunInput): Promise<CezarCreatedRun>;
   calendar(): Promise<CalendarSource>;
   /** Garmin Connect plan, the coming workouts' steps and recent recordings. */
   training(): Promise<TrainingSource>;

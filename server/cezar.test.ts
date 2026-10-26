@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readCezar } from './cezar';
+import { createCezarRun } from './cezar-finished';
 
 const asOf = '2026-10-24T18:00:00.000Z';
 const coverage = { projects: [{ projectId: 'p', state: 'complete' }] };
@@ -37,5 +38,49 @@ describe('readCezar model', () => {
   it('leaves the model out when the history has no session start, whatever the run says', async () => {
     const result = await readCezar('http://cezar.test', fakeCezar([]));
     expect((result.tasks[0] as { model?: string }).model).toBeUndefined();
+  });
+});
+
+describe('createCezarRun', () => {
+  it('dispatches desk-panel-task on agy gemini-3.8-flash-medium by default and returns the task URL', async () => {
+    const calls: { url: string; method: string; body: any }[] = [];
+    const fetchMock = (async (input: URL | string, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url.endsWith('/runs')) return new Response(JSON.stringify({ id: '99887766' }), { status: 201 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+
+    const result = await createCezarRun('http://127.0.0.1:4173', {
+      title: 'Wybór skillów w czacie',
+      task: 'Task: Add @ skill picker\nType: UI',
+    }, fetchMock);
+
+    expect(result).toEqual({
+      ok: true,
+      id: 'desk-panel/99887766',
+      project: 'desk-panel',
+      workflow: 'desk-panel-task',
+      runner: 'agy',
+      model: 'gemini-3.8-flash-medium',
+      url: 'http://127.0.0.1:4173/p/desk-panel/tasks/99887766',
+    });
+    expect(calls[0]).toEqual({
+      url: 'http://127.0.0.1:4173/api/v1/p/desk-panel/runs',
+      method: 'POST',
+      body: {
+        task: 'Task: Add @ skill picker\nType: UI',
+        workflow: 'desk-panel-task',
+        runner: 'agy',
+        model: 'gemini-3.8-flash-medium',
+        autonomous: true,
+        worktree: true,
+      },
+    });
+    expect(calls[1]).toEqual({
+      url: 'http://127.0.0.1:4173/api/v1/p/desk-panel/runs/99887766',
+      method: 'PATCH',
+      body: { title: 'Wybór skillów w czacie' },
+    });
   });
 });

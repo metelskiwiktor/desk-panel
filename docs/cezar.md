@@ -33,10 +33,9 @@ Odczytuje wszystkie projekty zarejestrowane w działającym Cezarze.
 
 Serwer nasłuchuje tylko na 127.0.0.1, sprawdza Host i nie otwiera CORS.
 Odczyty to GET do konkretnych projekcji; rozpoczęcie OAuth, akcje poczty i akcje na zakończonych zadaniach Cezara to POST
-z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Do Cezara panel zapisuje wyłącznie
-`POST /api/cezar/action` z `{id, action}`, gdzie akcja to `archive`, `unarchive`, `read` albo `unread` na jednym runie
-(odpowiednie `POST …/runs/:id/archive`, `/read`, `/unread` Cezara). Nie ma ogólnego proxy ani innych akcji tasków
-(start, wznowienie, odpowiedź).
+z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Do Cezara panel zapisuje:
+1. `POST /api/cezar/action` z `{id, action}`, gdzie akcja to `archive`, `unarchive`, `read` albo `unread` na jednym runie (odpowiednie `POST …/runs/:id/archive`, `/read`, `/unread` Cezara).
+2. `POST /api/cezar/runs` z `{title, task, workflow?, runner?, model?, todoId?}` (Origin-checked): zleca nowe zadanie w projekcie `desk-panel` na Cezarze (domyślnie workflow `desk-panel-task`, runner `agy`, model `gemini-3.8-flash-medium`) i zwraca `{ok: true, id, url}`. Workflow `desk-panel-task` wykonuje implementację w worktree Cezara, weryfikuje `just check`, otwiera gotowy PR, dopisuje komentarz ze zdjęciami Przed/Po (`scripts/pr-screenshots.mjs`, fail-soft), a automatyzacja `pull_request.opened` uruchamia automatyczny `pr-review` na `agy` (`gemini-3.8-flash-medium`).
 Private api-client Cezara nie jest publikowany: integracja waliduje dokumentowany
 podzbiór kontraktu bez importów do sąsiedniego checkoutu.
 

@@ -6,7 +6,11 @@ const messageOf = (status: number) => status === 409 ? 'Agent jeszcze odpowiada.
 
 async function call(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(path, { method, headers: body === undefined ? undefined : JSON_HEADERS, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw Object.assign(new Error(messageOf(response.status)), { status: response.status });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    const text = payload?.error || (payload?.detail ? `Nie udało się wykonać operacji czatu: ${payload.detail}` : messageOf(response.status));
+    throw Object.assign(new Error(text), { status: response.status });
+  }
   return response.json().catch(() => ({}));
 }
 

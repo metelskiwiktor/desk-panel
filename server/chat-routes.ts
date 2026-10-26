@@ -1,16 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { type ZodType } from 'zod';
 import { chatRenameSchema, chatSendSchema } from '../src/chat-contract';
 import { ChatError, type ChatService } from './agent-chat';
 
 const MAX_BODY = 64 * 1024;
 async function readBody(req: IncomingMessage): Promise<unknown> {
   let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413); }
+  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>64 KB)'); }
   return JSON.parse(body || 'null');
 }
-const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => {
+const parse = <T>(schema: ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
-  if (!result.success) throw new ChatError(400);
+  if (!result.success) {
+    const issues = result.error.issues.map(i => {
+      const field = i.path.join('.') || ('keys' in i && Array.isArray((i as { keys?: unknown[] }).keys) ? (i as { keys: unknown[] }).keys.join(', ') : 'body');
+      return `${field}: ${i.message}`;
+    }).join(', ');
+    throw new ChatError(400, `Nieprawidłowe dane (${issues})`);
+  }
   return result.data;
 };
 const json = (res: ServerResponse, status: number, value: unknown) => {
@@ -61,8 +68,20 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     res.writeHead(405).end();
   } catch (error) {
     const status = error instanceof ChatError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
+      ? error.message
+      : undefined;
     if (res.headersSent) res.end();
-    else json(res, status, { error: status === 409 ? 'Agent jeszcze odpowiada.' : status === 404 ? 'Nie ma takiej rozmowy.' : 'Nie udało się wykonać operacji czatu.' });
+    else json(res, status, {
+      error: status === 409
+        ? 'Agent jeszcze odpowiada.'
+        : status === 404
+        ? 'Nie ma takiej rozmowy.'
+        : msg
+        ? (msg.startsWith('Nie udało się') ? msg : `Nie udało się wykonać operacji czatu: ${msg}`)
+        : 'Nie udało się wykonać operacji czatu.',
+      detail: msg,
+    });
   }
   return true;
 }

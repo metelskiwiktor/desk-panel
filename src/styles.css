@@ -1283,6 +1283,17 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   color: var(--quota-red);
 }
 
+.smart-actions:not(.wide) .sa-item {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.smart-actions:not(.wide) .sa-item-content {
+  flex-basis: 100%;
+  order: 2;
+}
+.smart-actions:not(.wide) .sa-actions {
+  margin-left: auto;
+}
 .smart-actions:not(.wide) .sa-btn-label {
   display: none;
 }

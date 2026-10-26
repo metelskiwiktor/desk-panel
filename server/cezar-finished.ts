@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CezarAction, FinishedTask } from '../src/cezar-contract';
+import type { CezarAction, CezarCreateRunInput, CezarCreatedRun, FinishedTask } from '../src/cezar-contract';
 
 // Finished tasks come from Cezar's dashboard overview, which pages 20 light rows (about 8 KB) instead of the 1.1 MB list of
 // every run. What the overview leaves out (read receipt, branch, diff, PR) is read from the single run, and cached.
@@ -126,4 +126,52 @@ export async function cezarAction(base: string, id: string, action: CezarAction,
     ...(unarchive ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: false }) } : {}),
   });
   if (!response.ok) throw new Error(`Cezar HTTP ${response.status}`);
+}
+
+const createdRunSchema = z.object({ id: z.string().min(1) });
+
+/** Starts a new task run in Cezar (defaults to desk-panel-task on agy / gemini-3.8-flash-medium in an isolated worktree). */
+export async function createCezarRun(base: string, input: CezarCreateRunInput, request: typeof fetch = fetch): Promise<CezarCreatedRun> {
+  const project = input.project || 'desk-panel';
+  const workflow = input.workflow || 'desk-panel-task';
+  const runner = input.runner || 'agy';
+  const model = input.model || 'gemini-3.8-flash-medium';
+  const response = await request(new URL(`/api/v1/p/${encodeURIComponent(project)}/runs`, base), {
+    method: 'POST',
+    signal: AbortSignal.timeout(8000),
+    redirect: 'error',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      task: input.task,
+      workflow,
+      runner,
+      model,
+      worktree: true,
+      autonomous: true,
+      ...(input.todoId ? { todoId: input.todoId } : {}),
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Cezar HTTP ${response.status}${errText ? `: ${errText.slice(0, 200)}` : ''}`);
+  }
+  const created = createdRunSchema.parse(await response.json());
+  if (input.title) {
+    await request(new URL(runPath(project, created.id), base), {
+      method: 'PATCH',
+      signal: AbortSignal.timeout(4000),
+      redirect: 'error',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: input.title }),
+    }).catch(() => {});
+  }
+  return {
+    ok: true,
+    id: `${project}/${created.id}`,
+    project,
+    url: new URL(`/p/${encodeURIComponent(project)}/tasks/${encodeURIComponent(created.id)}`, base).href,
+    workflow,
+    runner,
+    model,
+  };
 }

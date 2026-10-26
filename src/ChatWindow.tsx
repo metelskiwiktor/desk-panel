@@ -4,7 +4,7 @@ import {
   Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, ListChecks, Mail, Maximize2, Minimize2, Pencil, Plus, Search, Sparkles, Square, SquareCheck, Trash2, Wrench, X,
   type LucideIcon,
 } from 'lucide-react';
-import { MAX_CONTEXT, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
+import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatMessage, type ChatPart, type ChatSkill, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
 import { contextFrom, markPicked, pickableAt, sameContext } from './chat-context';
 import { Markdown } from './markdown-lite';
 import { useChat, type ChatState } from './useChat';
@@ -17,6 +17,7 @@ const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   tile: { label: 'Kafelek', icon: LayoutGrid },
   todoList: { label: 'Lista', icon: ListChecks },
   todo: { label: 'Zadanie', icon: SquareCheck },
+  skill: { label: 'Skill', icon: Wrench },
 };
 
 const WIDE_KEY = 'desk-panel.chat-wide';
@@ -144,6 +145,16 @@ function useStickToEnd(dep: unknown) {
   return { ref: box, onScroll: () => { const el = box.current; if (el) stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; } };
 }
 
+/** Detects a trailing `@query` token so typing `@` opens the skill picker. */
+function detectAtSkill(draft: string): { start: number; query: string; token: string } | null {
+  const match = /(?:^|\s)(@[^\n@]*)$/.exec(draft);
+  if (!match) return null;
+  const token = match[1];
+  const query = token.slice(1).trim().toLowerCase();
+  const start = match.index + (match[0].length - token.length);
+  return { start, query, token };
+}
+
 /**
  * The chat with the agent. By default a small window floating at the right, under the top bar: it covers part of the
  * dashboard, which stays usable. The button in its header widens it into a big window with the list of conversations
@@ -156,6 +167,8 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   const [picking, setPicking] = useState(false);
   const [wide, setWide] = useState(readWide);
   const [draft, setDraft] = useState('');
+  const [skillIndex, setSkillIndex] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [listOpen, setListOpen] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -165,6 +178,13 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   const running = chat.active?.running ?? false;
   const items = chat.active?.items;
   const scroll = useStickToEnd(items);
+
+  const atSkill = detectAtSkill(draft);
+  const matchingSkills = atSkill && dismissedAt !== atSkill.token
+    ? CHAT_SKILLS.filter(s => !atSkill.query || s.title.toLowerCase().includes(atSkill.query) || s.id.toLowerCase().includes(atSkill.query))
+    : [];
+  const activeSkillIndex = matchingSkills.length ? Math.min(skillIndex, matchingSkills.length - 1) : 0;
+  const pickedSkill = context.find(c => c.kind === 'skill');
 
   useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 60_000); return () => window.clearInterval(t); }, []);
   useEffect(() => { text.current?.focus(); }, [picking, chat.activeId]);
@@ -237,12 +257,39 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('keydown', key);
   }, [picking, wide, onClose]);
 
+  const pickSkill = (skill: ChatSkill) => {
+    const item = skillItem(skill);
+    setContext(list => list.some(x => sameContext(x, item)) ? list : list.length < MAX_CONTEXT ? [...list, item] : list);
+    if (atSkill) {
+      const before = draft.slice(0, atSkill.start).replace(/\s+$/, '');
+      setDraft(before ? `${before} ` : '');
+    }
+    setDismissedAt(null);
+    setSkillIndex(0);
+    text.current?.focus();
+  };
+
   const submit = async () => {
-    const body = draft.trim();
+    const body = draft.trim() || (pickedSkill ? pickedSkill.title : '');
     if (!body || running || chat.busy || chat.unavailable) return;
-    if (await chat.send(body, context)) { setDraft(''); setContext([]); }
+    if (await chat.send(body, context)) { setDraft(''); setContext([]); setDismissedAt(null); }
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (matchingSkills.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSkillIndex(i => (i + 1) % matchingSkills.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSkillIndex(i => (i - 1 + matchingSkills.length) % matchingSkills.length); return; }
+      if ((e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) || e.key === 'Tab') {
+        e.preventDefault();
+        pickSkill(matchingSkills[activeSkillIndex]);
+        return;
+      }
+      if (e.key === 'Escape' && atSkill) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDismissedAt(atSkill.token);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); }
   };
   const choose = (id: string | null) => { setListOpen(false); if (id) chat.open(id); else chat.startNew(); };
@@ -261,8 +308,17 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
       {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
       {picking && <span className="chat-hint"><Crosshair size={16} aria-hidden="true" />{context.length ? 'Kliknij kolejny element na pulpicie' : 'Kliknij element na pulpicie'}</span>}
     </div>}
-    <textarea ref={text} rows={picking ? 2 : 1} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey} disabled={chat.unavailable}
-      aria-label="Wiadomość do agenta" placeholder={picking ? 'Co z tym zrobić?' : 'Napisz wiadomość… (Enter wysyła, Shift+Enter nowa linia)'} />
+    {matchingSkills.length > 0 && <div className="chat-skills" role="listbox" aria-label="Wybór skillów">
+      {matchingSkills.map((skill, i) => <button key={skill.id} type="button" role="option" aria-selected={i === activeSkillIndex}
+        className={`chat-skill-opt ${i === activeSkillIndex ? 'on' : ''}`}
+        onMouseDown={e => e.preventDefault()} onClick={() => pickSkill(skill)}>
+        <Wrench size={15} aria-hidden="true" />
+        <span className="t">@{skill.title}</span>
+        <span className="d">{skill.description}</span>
+      </button>)}
+    </div>}
+    <textarea ref={text} rows={picking ? 2 : 1} value={draft} onChange={e => { setDraft(e.target.value); setDismissedAt(null); setSkillIndex(0); }} onKeyDown={onKey} disabled={chat.unavailable}
+      aria-label="Wiadomość do agenta" placeholder={picking ? 'Co z tym zrobić?' : 'Napisz wiadomość lub wpisz @ aby wybrać skill…'} />
     <div className="chat-tools">
       {picking
         ? <><button type="button" className="chat-done" onClick={() => setPicking(false)}>Gotowe</button><span className="chat-tools-note">Kończy wskazywanie (Esc)</span></>
@@ -270,7 +326,7 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
       <span className="chat-agy" title="Agent: agy"><i className={running ? 'run' : ''} aria-hidden="true" />agy</span>
       {running
         ? <button type="button" className="chat-round stop" aria-label="Zatrzymaj odpowiedź" onClick={() => void chat.stop()}><Square size={16} fill="currentColor" aria-hidden="true" /></button>
-        : <button type="button" className="chat-round" aria-label="Wyślij" disabled={!draft.trim() || chat.busy || chat.unavailable} onClick={() => void submit()}><ArrowUp size={20} aria-hidden="true" /></button>}
+        : <button type="button" className="chat-round" aria-label="Wyślij" disabled={(!draft.trim() && !pickedSkill) || chat.busy || chat.unavailable} onClick={() => void submit()}><ArrowUp size={20} aria-hidden="true" /></button>}
     </div>
   </div>;
 
@@ -280,7 +336,7 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
       ? <div className="chat-empty">
         <Sparkles size={26} aria-hidden="true" />
         <h2>Nowy czat</h2>
-        <p>Napisz do agenta albo wskaż na pulpicie mail, spotkanie, zadanie Cezara, trening lub cały kafelek, a od razu będzie wiedział, o czym mowa.</p>
+        <p>Napisz do agenta, wpisz <code>@</code> aby wybrać skill albo wskaż na pulpicie mail, spotkanie, zadanie, trening lub cały kafelek.</p>
       </div>
       : !chat.active
         ? <p className="chat-empty">Wczytuję rozmowę…</p>
