@@ -222,13 +222,13 @@
         "id": "owner@gmail.com:18c2f0a1b2c3d401",
         "account": "owner@gmail.com",
         "threadId": "18c2f0a1b2c3d401",
-        "from": "Anna Nowak",
-        "subject": "Spotkanie w czwartek",
-        "snippet": "Cześć, czy możemy przesunąć spotkanie na 15:00? Mam konflikt w kalendarzu.",
-        "body": "Cześć,\n\nCzy możemy przesunąć spotkanie na 15:00?\nMam konflikt w kalendarzu o 14:00.\n\nDaj znać czy Ci pasuje,\nAnna",
+        "from": "Centrum Medyczne",
+        "subject": "Potwierdzenie wizyty: Dr Jan Kowalski",
+        "snippet": "Prosimy o potwierdzenie wizyty lekarskiej w czwartek o godz. 11:30.",
+        "body": "Dzień dobry,\n\nPrzypominamy o wizycie u lekarza Dr Jan Kowalski w czwartek o 11:30.\n\nPotwierdź wizytę: https://przychodnia.local/wizyty/potwierdz/98124\n\nCentrum Medyczne",
         "receivedAt": "now-6m",
         "messages": 1,
-        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d401"
+        "sourceUrl": "https://przychodnia.local/wizyty/potwierdz/98124"
       },
       {
         "id": "praca@gmail.com:18c2f0a1b2c3d402",
@@ -237,22 +237,22 @@
         "from": "GitHub",
         "subject": "[desk-panel] PR #3: Gmail w panelu",
         "snippet": "metelskiwiktor requested your review on this pull request.",
-        "body": "metelskiwiktor requested your review on this pull request.\n\nPR #3: Gmail w panelu\nBranch: feat/gmail\n\nChanges include:\n- Read-only thread view\n- Swipe actions for read and trash",
+        "body": "metelskiwiktor requested your review on this pull request.\n\nPR #3: Gmail w panelu\nBranch: feat/gmail\n\nChanges include:\n- Read-only thread view\n- Swipe actions for read and trash\n\nReview: https://github.com/metelskiwiktor/desk-panel/pull/3",
         "receivedAt": "now-25m",
         "messages": 2,
-        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d402"
+        "sourceUrl": "https://github.com/metelskiwiktor/desk-panel/pull/3"
       },
       {
         "id": "owner@gmail.com:18c2f0a1b2c3d403",
         "account": "owner@gmail.com",
         "threadId": "18c2f0a1b2c3d403",
         "from": "Bank Millennium",
-        "subject": "Potwierdzenie przelewu",
-        "snippet": "Przelew na kwotę 120,00 zł został zrealizowany.",
-        "body": "Dzień dobry,\n\nInformujemy, że przelew na kwotę 120,00 zł został zrealizowany poprawnie.\n\nNumer transakcji: TR-2026-98124\nData waluty: dzisiaj\n\nPozdrawiamy,\nBank Millennium",
+        "subject": "Faktura do opłacenia: F/2026/10/8812",
+        "snippet": "Rachunek na kwotę 120,00 zł oczekuje na opłacenie. Termin: 30.10.2026.",
+        "body": "Dzień dobry,\n\nOczekuje płatność na kwotę 120,00 zł.\nTermin: 30.10.2026.\nOpłać rachunek: https://platnosci.bankmillennium.local/pay/8812\n\nPozdrawiamy,\nBank Millennium",
         "receivedAt": "now-1h10m",
         "messages": 1,
-        "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d403"
+        "sourceUrl": "https://platnosci.bankmillennium.local/pay/8812"
       },
       {
         "id": "praca@gmail.com:18c2f0a1b2c3d404",
@@ -264,7 +264,7 @@
         "body": "Nowe zadanie przypisane do Ciebie:\n\nDESK-42 Przegląd układu na ekranie pionowym.\nPriorytet: Wysoki\nOpis: Sprawdź zachowanie kafelków i przewijania na ekranie medialove-14 w trybie portretowym.\n\nLink: https://jira.local/browse/DESK-42",
         "receivedAt": "now-3h",
         "messages": 1,
-        "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404"
+        "sourceUrl": "https://jira.local/browse/DESK-42"
       }
     ],
     "accounts": [
