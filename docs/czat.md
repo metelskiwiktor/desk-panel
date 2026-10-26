@@ -101,6 +101,7 @@ scenariusza):
 | `mail` | `limit` (1–50, domyślnie 10) | nieprzeczytane z 30 dni: nadawca, temat, początek; bez treści |
 | `quotas`, `system` | | limity AI z resetami w czasie lokalnym; CPU i RAM |
 | `todos` | `list` (id lub fragment nazwy), `ukonczone=1` | listy zadań użytkownika z id list i zadań; ukończone tylko policzone (zob. [docs/zadania.md](zadania.md)) |
+| `bank` | `from`, `to` (domyślnie ostatnie 30 dni, najwyżej 400), `kategoria`, `etykieta`, `sprzedawca`, `osoba` (fragment nazwy), `nieprzypisane=1` | saldo, wpływy i wydatki, wydatki według kategorii użytkownika, rozliczenie z każdą osobą z całej zapisanej historii, operacje z kategorią, etykietami, sprzedawcą, osobą, cyklicznością, opisem, „do przypisania” i podpowiedzią albo wyborem (zob. [docs/bank.md](bank.md)) |
 
 Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie
 pustą listę. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany
@@ -110,7 +111,15 @@ dla UI, a instrukcja każe agentowi ich nie używać. Do panelu agent ma słać 
 Cezara** (`archive`, `unarchive`, `read`, `unread`) przez `POST /api/cezar/action` z nagłówkiem `Origin` równym adresowi panelu i ciałem
 `{"id":"projekt/uuid","action":"archive"}` (id z widoku `cezar`; odpowiedź `{"ok":true}`). Archiwizacja jest odwracalna, a zadań nie da się
 usunąć. (2) **Listy zadań użytkownika** (`POST /api/todos/action`, tak samo z `Origin`; akcje i zasady w [docs/zadania.md](zadania.md)): agent tworzy listy, dodaje zadania z `"by":"agent"`, zaznacza je i przenosi. Samo „zadanie” oznacza zadanie z listy, a Cezar tylko wtedy, gdy użytkownik go nazwie albo wskaże jego kafelek. Inne zapisy (`POST` poczty, czat) są technicznie możliwe, bo `Origin` chroni przeglądarkę, a nie `curl`, więc ogranicza agenta
-wyłącznie instrukcja. **Nowe pole lub widok, który agent ma znać,
+wyłącznie instrukcja. Oznaczeń operacji bankowych (`POST /api/bank/labels/action`) agent nie zmienia wcale: instrukcja mu tego
+zabrania, choć technicznie mógłby to zrobić `curl`-em, jak każdy zapis.
+
+**Dane banku a dostawca modelu.** Widok `bank` daje agentowi saldo, operacje (dzień, kwota, czysta nazwa sprzedawcy albo
+kontrahenta, tytuł przelewu z zamaskowanymi numerami) i oznaczenia użytkownika (kategorie, osoby po imieniu, komentarze). Bez pełnych
+numerów rachunków i telefonów: widok nie zna identyfikatorów osób, a na koniec maskuje każdy ciąg co najmniej 9 cyfr. Wszystko, co agent
+odczyta, trafia jednak do dostawcy modelu, z którego korzysta `agy` (jak poczta i kalendarz). `agy` działa bez piaskownicy jako ten sam
+użytkownik Windows, więc technicznie mógłby odszyfrować także pliki DPAPI panelu; ogranicza go tylko instrukcja. Pytaj agenta o konto,
+gdy to Ci odpowiada. **Nowe pole lub widok, który agent ma znać,
 dopisz zarówno do `agent-views.ts`, jak i do instrukcji.**
 
 **Koszt odpowiedzi.** Zdarzenie `result` z `agy` niesie `usage` dla całej tury (suma wszystkich wywołań modelu): serwis zapisuje je przy

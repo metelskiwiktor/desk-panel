@@ -2,19 +2,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { z } from 'zod';
 import { usePollingEnabled } from './polling';
 import { bankSourceSchema, type BankSource } from './bank-contract';
+import { useBankLabels } from './useBankLabels';
 
 export type BankState = BankSource & { loadedAt?: number };
 /** The server reads the bank at most every few hours and keeps the answer; the panel only has to notice a change promptly. */
 const POLL_MS = 60_000;
 const authorizationSchema = z.object({ authorizationUrl: z.url() });
 
-/** The bank account and the consent flow: `connect` asks the server to start it and gives the bank's sign-in address. */
+/**
+ * The bank account and the consent flow: `connect` asks the server to start it and gives the bank's sign-in address. `labels` are
+ * the user's own marks on its operations (useBankLabels.ts).
+ */
 export function useBank() {
   const [source, setSource] = useState<BankState>({ name: 'PKO BP', live: true, status: 'loading', observedAt: null, data: null });
   const [signIn, setSignIn] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const labels = useBankLabels();
   const pollingEnabled = usePollingEnabled();
   useEffect(() => {
     if (!pollingEnabled) return;
@@ -62,6 +67,6 @@ export function useBank() {
   }, []);
   /** Read again at once, e.g. when the user comes back from the bank. */
   const refresh = useCallback(() => setReload(n => n + 1), []);
-  return { source, signIn, error, busy, connect, refresh };
+  return { source, signIn, error, busy, connect, refresh, labels };
 }
 export type BankHook = ReturnType<typeof useBank>;

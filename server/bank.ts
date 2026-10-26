@@ -2,6 +2,7 @@ import { createSign, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { bankAccountSchema, bankTransactionSchema, type BankAccount, type BankSource, type BankTransaction } from '../src/bank-contract';
+import { publicTransaction } from './bank-parties';
 
 /**
  * PKO BP through Enable Banking (read-only, PSD2 account information). The application signs a short JWT with its private
@@ -80,15 +81,15 @@ export function mapTransaction(raw: unknown, accountId: string, index: number): 
 }
 
 /**
- * What the bank sent for one operation, to be read in the panel: empty fields left out and every IBAN cut to its last four
- * digits (an account number of someone else is not shown even to its owner's own panel).
+ * What the bank sent for one operation, empty fields left out. It is kept whole in the encrypted cache, because the account
+ * and phone number of the other side tell who it is (bank-parties.ts); what leaves the server is `publicTransaction`, with
+ * every IBAN cut to its last four digits and phone numbers masked (someone else's number is not shown even to the owner's panel).
  */
 function rawOf(value: unknown): Record<string, unknown> {
-  const clean = (v: unknown, key = ''): unknown => {
-    if (/iban/i.test(key) && typeof v === 'string') return `…${v.replace(/\s/g, '').slice(-4)}`;
-    if (Array.isArray(v)) { const items = v.map(i => clean(i, key)).filter(i => i !== undefined); return items.length ? items : undefined; }
+  const clean = (v: unknown): unknown => {
+    if (Array.isArray(v)) { const items = v.map(i => clean(i)).filter(i => i !== undefined); return items.length ? items : undefined; }
     if (v && typeof v === 'object') {
-      const entries = Object.entries(v).map(([k, i]) => [k, clean(i, k)] as const).filter(([, i]) => i !== undefined);
+      const entries = Object.entries(v).map(([k, i]) => [k, clean(i)] as const).filter(([, i]) => i !== undefined);
       return entries.length ? Object.fromEntries(entries) : undefined;
     }
     return v === null || v === '' ? undefined : v;
@@ -171,7 +172,7 @@ export function createBank(options: {
   const configured = () => !!options.appId;
   const source = (partial: Partial<BankSource>, data: Cache | null | undefined, consentUntil: number | null): BankSource => ({
     live: true, name: 'PKO BP', status: 'connected', observedAt: data?.observedAt ?? null, consentUntil,
-    data: data ? { accounts: data.accounts, transactions: data.transactions } : null, ...partial,
+    data: data ? { accounts: data.accounts, transactions: data.transactions.map(publicTransaction) } : null, ...partial,
   });
 
   return {
@@ -197,6 +198,15 @@ export function createBank(options: {
         else return source({ status: 'offline', message: 'Nie udało się odczytać konta, ponowię później.' }, last, current.validUntil);
       }
       return source({}, cache ?? last, current.validUntil);
+    },
+
+    /**
+     * The last reading as it is kept, numbers whole, for the server's own use (who the other side is): never a call to the
+     * bank, whatever its age. Not for the browser or the agent; they get `read`.
+     */
+    async cached(): Promise<{ observedAt: number; accounts: BankAccount[]; transactions: BankTransaction[] } | null> {
+      if (!configured()) return null;
+      return await loadCache() ?? null;
     },
 
     /** Starts the consent: resolves to the address where the user signs in to the bank. */

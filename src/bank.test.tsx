@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BankTile, dayHeading, dayLabel, signed, spending, sums } from './BankTile';
 import type { BankSource, BankTransaction } from './bank-contract';
+import type { BankLabelsData } from './bank-labels-contract';
 import type { BankHook } from './useBank';
+import type { BankLabelsHook } from './useBankLabels';
 
 afterEach(cleanup);
 const NOW = Date.parse('2026-10-25T10:00:00Z');
@@ -16,7 +18,14 @@ const connected = (over: Partial<BankSource> = {}): BankSource => ({
     transactions: [tx('t1', '2026-10-25', -43.9, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }), tx('t2', '2026-10-24', 4200, 'Acme', { note: 'Wynagrodzenie' }), tx('t3', '2026-10-01', -100, 'Czynsz'), tx('old', '2026-08-01', -999, 'Dawno temu')],
   }, ...over,
 });
-const hook = (source: BankSource, over: Partial<BankHook> = {}): BankHook => ({ source, signIn: null, error: '', busy: false, connect: vi.fn(async () => {}), refresh: vi.fn(), ...over });
+const marks = (data: Partial<BankLabelsData> = {}, act: BankLabelsHook['act'] = vi.fn(async () => ({ ok: true as const }))): BankLabelsHook => ({
+  source: { live: true, name: 'Oznaczenia', status: 'connected', observedAt: NOW, data: { since: '2026-10-20', categories: [], tags: [], merchants: [], people: [], labels: {}, suggestions: {}, known: {}, pending: [], ...data } },
+  error: '', clearError: vi.fn(), act,
+});
+const hook = (source: BankSource, over: Partial<BankHook> = {}): BankHook => ({ source, signIn: null, error: '', busy: false, connect: vi.fn(async () => {}), refresh: vi.fn(), labels: marks(), ...over });
+const FOOD = { id: 'c-00000001', name: 'Jedzenie', color: 'orange', icon: 'utensils' } as const;
+const SHRINK = { id: 'c-00000002', name: 'Psycholog', color: 'violet', icon: 'brain' } as const;
+const ANNA = { id: 'p-00000001', name: 'Anna', identifiers: [{ id: 'abc', kind: 'account', hint: '··1234' }] } as const;
 
 describe('bank helpers', () => {
   it('always shows the sign, with a real minus', () => {
@@ -33,9 +42,12 @@ describe('bank helpers', () => {
     expect(dayHeading(at('2026-10-24'), NOW)).toBe('Wczoraj');
     expect(dayHeading(at('2026-10-23'), NOW)).toMatch(/^Pt, 23 paź/);
   });
-  it('splits the last 30 days of spending by category, largest first, without income', () => {
-    const list = [tx('a', '2026-10-24', -100, 'Płatność telefonem'), tx('b', '2026-10-23', -40, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }), tx('c', '2026-10-22', 900, 'Pensja'), tx('d', '2026-08-01', -999, 'Płatność telefonem')];
-    expect(spending(list, NOW, 'PLN')).toEqual([{ category: 'phone', sum: 100 }, { category: 'grocery', sum: 40 }]);
+  it('splits the last 30 days of spending by the user’s own categories, the rest as one uncategorised share, without income', () => {
+    const list = [tx('a', '2026-10-24', -100, 'Płatność telefonem'), tx('b', '2026-10-23', -40, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }), tx('e', '2026-10-23', -15, 'x'), tx('c', '2026-10-22', 900, 'Pensja'), tx('d', '2026-08-01', -999, 'Płatność telefonem')];
+    const mark = { tags: [], merchant: null, recurring: false, person: null, comment: '' };
+    const labels = { b: { ...mark, category: FOOD.id }, e: { ...mark, category: 'c-0000dead' } };
+    expect(spending(list, NOW, 'PLN', labels, [FOOD])).toEqual([{ category: null, sum: 115 }, { category: FOOD, sum: 40 }]);
+    expect(spending(list, NOW, 'PLN')).toEqual([{ category: null, sum: 155 }]);
   });
   it('adds up the last 30 days of one currency, in and out apart', () => {
     const list = [...connected().data!.transactions, tx('usd', '2026-10-20', -5, 'x', { currency: 'USD' })];
@@ -54,20 +66,18 @@ describe('Konto tile', () => {
     const rows = within(days).getAllByRole('listitem');
     expect(rows).toHaveLength(4);
     expect(rows[0].textContent).toContain('Biedronka');
-    expect(rows[0].textContent).toContain('Zakupy · karta');
+    expect(rows[0].textContent).toMatch(/Bez kategorii\s· karta/);
     expect(rows[0].textContent).toContain('−43,90');
     expect(rows[1].textContent).toContain('Acme');
-    expect(rows[1].textContent).toContain('Wpływ · Wynagrodzenie');
+    expect(rows[1].textContent).toMatch(/\swpływ · Wynagrodzenie/);
     expect(rows[1].textContent).toMatch(/\+4\s?200,00/);
-    expect(rows[0].className).toContain('cat-grocery');
     expect(screen.getByText('Konto osobiste ··4245')).toBeTruthy();
   });
   it('names a payment by phone for what it is: a payment without a shop name', () => {
     const source = connected();
     source.data!.transactions = [tx('p1', '2026-10-25', -1868.49, 'Płatność telefonem')];
     render(<BankTile bank={hook(source)} now={NOW} />);
-    expect(screen.getByText('Sklep nieznany')).toBeTruthy();
-    expect(screen.getAllByText('Bez nazwy sklepu').length).toBeGreaterThan(0);
+    expect(screen.getByText(/sklep nieznany/)).toBeTruthy();
   });
   it('shows what the bank sent for an operation when the pointer is on it, and says so when it kept nothing', async () => {
     const source = connected();

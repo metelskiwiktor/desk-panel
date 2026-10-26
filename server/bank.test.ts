@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { bankSourceSchema } from '../src/bank-contract';
+import { publicTransaction } from './bank-parties';
 import { BANK_REFRESH_MS, BankError, cleanTitle, createBank, mapTransaction, type BankStore } from './bank';
 
 let dir = '';
@@ -40,8 +41,11 @@ const bank = (store: BankStore, fetch: ReturnType<typeof api>, now = () => NOW, 
 describe('mapTransaction', () => {
   it('signs by direction and names the other side', () => {
     expect(mapTransaction(operation, 'a', 0)).toEqual({ id: 'a:r1', accountId: 'a', at: Date.parse('2026-10-24T12:00:00Z'), amount: -12.5, currency: 'PLN', title: 'Sklep', note: 'Zakup karta', raw: operation });
-    const iban = mapTransaction({ ...operation, creditor_account: { iban: 'PL07 1020 3088 0000 8302 0072 4245', other: null }, debtor: null, merchant_category_code: null }, 'a', 0)?.raw;
-    expect(iban).toMatchObject({ creditor_account: { iban: '…4245' } });
+    const kept = mapTransaction({ ...operation, creditor_account: { iban: 'PL07 1020 3088 0000 8302 0072 4245', other: null }, debtor: null, merchant_category_code: null }, 'a', 0)!;
+    // Whole in the encrypted cache (it tells who the other side is), cut to the last four digits on the way out.
+    expect(kept.raw).toMatchObject({ creditor_account: { iban: 'PL07 1020 3088 0000 8302 0072 4245' } });
+    expect(publicTransaction(kept).raw).toMatchObject({ creditor_account: { iban: '…4245' } });
+    const iban = kept.raw;
     expect(iban).not.toHaveProperty('debtor');
     expect(iban).not.toHaveProperty('merchant_category_code');
     expect(mapTransaction({ ...operation, credit_debit_indicator: 'CRDT', debtor: { name: 'Firma' } }, 'a', 0)).toMatchObject({ amount: 12.5, title: 'Firma' });

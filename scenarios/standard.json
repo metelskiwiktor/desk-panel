@@ -29,8 +29,49 @@
         {"id": "acc-1:t16", "accountId": "acc-1", "at": "today-7@12:00", "amount": -220, "currency": "PLN", "title": "LESZNOCENTRUM MEDYCZNE SPO 0", "note": "Płatność kartą"},
         {"id": "acc-1:t17", "accountId": "acc-1", "at": "today-8@12:00", "amount": 500, "currency": "PLN", "title": "JONASZ METELSKI", "note": "LAPTOP OSTATNIA CZESCOD: 48667178938"},
         {"id": "acc-1:t18", "accountId": "acc-1", "at": "today-9@12:00", "amount": 1000, "currency": "PLN", "title": "FIRMA INFORMATYCZNA WIKTOR METELSKI", "note": "PRZELEW IKO NA NUMER RACHUNKU TRANSFER-IN"},
-        {"id": "acc-1:t19", "accountId": "acc-1", "at": "today-9@12:00", "amount": -63.04, "currency": "PLN", "title": "LESZNOJMP S.A. BIEDRONKA 4452", "note": "Płatność kartą"}
+        {"id": "acc-1:t19", "accountId": "acc-1", "at": "today-9@12:00", "amount": -63.04, "currency": "PLN", "title": "LESZNOJMP S.A. BIEDRONKA 4452", "note": "Płatność kartą"},
+        {"id": "acc-1:t20", "accountId": "acc-1", "at": "today-12@12:00", "amount": 120, "currency": "PLN", "title": "Anna Kowalska", "note": "Pożyczka na kolację", "raw": {"entry_reference": "t20", "credit_debit_indicator": "CRDT", "debtor": {"name": "Anna Kowalska"}, "debtor_account": {"iban": "PL61109010140000071219812874"}, "remittance_information": ["Pożyczka na kolację", "TRANSFER-IN"]}},
+        {"id": "acc-1:t21", "accountId": "acc-1", "at": "today-36@12:00", "amount": -101.2, "currency": "PLN", "title": "ANTHROPIC.COMANTHROPIC* CLAU", "note": "Płatność kartą"},
+        {"id": "acc-1:t22", "accountId": "acc-1", "at": "today-1@12:00", "amount": -70.85, "currency": "PLN", "title": "Płatność BLIK"}
       ]
+    }
+  },
+  "bankLabels": {
+    "since": "today-6",
+    "categories": [
+      {"id": "c-0000000a", "name": "Spożywcze", "color": "green", "icon": "cart"},
+      {"id": "c-0000000b", "name": "Jedzenie na mieście", "color": "orange", "icon": "utensils"},
+      {"id": "c-0000000c", "name": "Subskrypcje", "color": "violet", "icon": "repeat"},
+      {"id": "c-0000000d", "name": "Pożyczka", "color": "blue", "icon": "handCoins"},
+      {"id": "c-0000000e", "name": "Zdrowie", "color": "pink", "icon": "brain"},
+      {"id": "c-0000000f", "name": "Wpływy", "color": "teal", "icon": "banknote"}
+    ],
+    "merchants": [
+      {"id": "m-0000000a", "name": "Biedronka"},
+      {"id": "m-0000000b", "name": "Żabka"},
+      {"id": "m-0000000c", "name": "McDonald’s"},
+      {"id": "m-0000000d", "name": "Cukiernia Hoffmann"},
+      {"id": "m-0000000e", "name": "Claude"},
+      {"id": "m-0000000f", "name": "Gabinet psychologiczny"},
+      {"id": "m-00000010", "name": "Firma"},
+      {"id": "m-00000011", "name": "pyszne.pl"}
+    ],
+    "people": [
+      {"id": "p-0000000a", "name": "Anna"},
+      {"id": "p-0000000b", "name": "Jonasz"}
+    ],
+    "labels": {
+      "acc-1:t8": {"category": "c-0000000b", "merchant": "m-00000011", "tags": ["restauracja"]},
+      "acc-1:t9": {"category": "c-0000000f", "merchant": "m-00000010", "tags": ["wynagrodzenie"], "recurring": true},
+      "acc-1:t10": {"category": "c-0000000a", "merchant": "m-0000000b"},
+      "acc-1:t11": {"category": "c-0000000b", "merchant": "m-0000000c", "tags": ["fast-food"]},
+      "acc-1:t12": {"category": "c-0000000b", "merchant": "m-0000000d", "tags": ["urodziny"], "comment": "Tort na urodziny"},
+      "acc-1:t16": {"category": "c-0000000e", "merchant": "m-0000000f", "tags": ["psycholog"], "recurring": true, "comment": "Sesja co tydzień"},
+      "acc-1:t17": {"category": "c-0000000d", "tags": ["laptop"], "person": "p-0000000b", "comment": "Laptop, ostatnia część"},
+      "acc-1:t18": {"category": "c-0000000f", "merchant": "m-00000010", "tags": ["wynagrodzenie"], "recurring": true},
+      "acc-1:t19": {"category": "c-0000000a", "merchant": "m-0000000a"},
+      "acc-1:t20": {"category": "c-0000000d", "person": "p-0000000a"},
+      "acc-1:t21": {"category": "c-0000000c", "merchant": "m-0000000e", "tags": ["ai"], "recurring": true}
     }
   },
   "cezar": {

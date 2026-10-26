@@ -11,6 +11,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const MAX_DAYS = 42;
 /** Finished Cezar tasks listed, each with its id for the archive and read actions; the rest is only counted. */
 const FINISHED_SHOWN = 40;
+/** The bank view reaches further back than the calendar: marks keep their operations after the bank's reading drops them. */
+const BANK_MAX_DAYS = 400;
+const BANK_SHOWN = 150;
 
 export class AgentViewError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -181,6 +184,83 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
         const open = list.tasks.filter(t => !t.done), done = list.tasks.filter(t => t.done);
         return [`Lista „${list.name}” (id=${list.id}): do zrobienia ${open.length}, ukończonych ${done.length}`, ...(open.length ? open.map(task) : ['  (brak zadań do zrobienia)']), ...(withDone ? done.map(task) : [])];
       })].join('\n');
+    },
+
+    async bank(url, now) {
+      const zone = DEFAULT_ZONE;
+      const [source, ledger] = await Promise.all([sources.bank(), sources.bankLedger()]);
+      const today = dateOf(now, zone);
+      const from = url.searchParams.get('from') ?? addDays(today, -30);
+      const to = url.searchParams.get('to') ?? today;
+      if (!validDate(from) || !validDate(to)) throw new AgentViewError(400, 'from i to to daty RRRR-MM-DD.');
+      if (to < from) throw new AgentViewError(400, 'to nie może być przed from.');
+      if (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) >= BANK_MAX_DAYS * DAY) throw new AgentViewError(400, `Zakres to najwyżej ${BANK_MAX_DAYS} dni.`);
+      const categories = new Map(ledger.categories.map(c => [c.id, c.name]));
+      const people = new Map(ledger.people.map(p => [p.id, p.name]));
+      const merchants = new Map(ledger.merchants.map(m => [m.id, m.name]));
+      const find = (wanted: string | null, names: Map<string, string>) => {
+        const w = wanted?.trim().toLowerCase();
+        return w ? [...names].filter(([id, name]) => id === w || name.toLowerCase().includes(w)).map(([id]) => id) : null;
+      };
+      const wantCategory = find(url.searchParams.get('kategoria'), categories);
+      const wantPerson = find(url.searchParams.get('osoba'), people);
+      const wantMerchant = find(url.searchParams.get('sprzedawca'), merchants);
+      const wantTag = url.searchParams.get('etykieta')?.replace(/^#/, '').trim().toLowerCase() || null;
+      const onlyPending = url.searchParams.get('nieprzypisane') === '1';
+      // A booking day is noon UTC of that date.
+      const booked = (at: number) => new Date(at).toISOString().slice(0, 10);
+      const pln = (amount: number, currency = 'PLN') => `${amount > 0 ? '+' : amount < 0 ? '−' : ''}${Math.abs(amount).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+      const accounts = source.data?.accounts ?? [];
+      const balance = accounts.length ? accounts.map(a => `${a.name}${a.last4 ? ` ··${a.last4}` : ''}: ${a.balance === null ? '?' : pln(a.balance, a.currency).replace(/^\+/, '')}`).join('; ') : 'brak';
+      const out = [
+        `Konto PKO BP (tylko odczyt; dane z banku i oznaczenia użytkownika), stan banku z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). Dziś: ${todayLabel(now, zone)}. Saldo: ${balance}.`,
+        `Zakres ${from} – ${to}. Kategorie, osoby, cykliczność i komentarze nadaje użytkownik; „bez kategorii” to operacja nieoznaczona. Do przypisania są operacje od ${ledger.since} bez kategorii.`,
+      ];
+      const none = unavailable('Bank', source.status, !!source.data, source.message);
+      if (none) out.push(none);
+      const inRange = ledger.entries.filter(e => booked(e.op.at) >= from && booked(e.op.at) <= to);
+      const flows = inRange.filter(e => e.op.currency === 'PLN');
+      out.push(`Wpływy ${pln(flows.filter(e => e.op.amount > 0).reduce((s, e) => s + e.op.amount, 0))}, wydatki ${pln(flows.filter(e => e.op.amount < 0).reduce((s, e) => s + e.op.amount, 0))}.`);
+      const spent = new Map<string, number>();
+      for (const e of flows) if (e.op.amount < 0) { const name = e.label?.category ? categories.get(e.label.category) ?? 'bez kategorii' : 'bez kategorii'; spent.set(name, (spent.get(name) ?? 0) - e.op.amount); }
+      out.push(`Wydatki według kategorii: ${spent.size ? [...spent].sort((a, b) => b[1] - a[1]).map(([name, sum]) => `${name} ${pln(sum).replace(/^\+/, '')}`).join('; ') : 'brak'}.`);
+      // People over everything kept, not only the range: who owes whom needs the whole story.
+      const byPerson = new Map<string, { out: number; in: number; lines: Map<string, number> }>();
+      for (const e of ledger.entries) {
+        if (!e.label?.person || e.op.currency !== 'PLN') continue;
+        const p = byPerson.get(e.label.person) ?? { out: 0, in: 0, lines: new Map() };
+        if (e.op.amount < 0) p.out -= e.op.amount; else p.in += e.op.amount;
+        const cat = e.label.category ? categories.get(e.label.category) ?? 'bez kategorii' : 'bez kategorii';
+        p.lines.set(cat, (p.lines.get(cat) ?? 0) + e.op.amount);
+        byPerson.set(e.label.person, p);
+      }
+      out.push(byPerson.size ? 'Osoby (cała zapisana historia; „wysłano” to pieniądze do osoby, „otrzymano” od niej; per kategoria suma ze znakiem):' : 'Osoby: brak oznaczonych operacji z osobą.');
+      for (const [id, p] of byPerson) out.push(`  ${people.get(id) ?? '?'}: wysłano ${pln(p.out).replace(/^\+/, '')}, otrzymano ${pln(p.in).replace(/^\+/, '')}; ${[...p.lines].map(([cat, sum]) => `${cat} ${pln(sum)}`).join(', ')}`);
+      const pending = ledger.entries.filter(e => e.pending);
+      out.push(`Do przypisania: ${pending.length}.`);
+      const shown = inRange.filter(e => (!onlyPending || e.pending)
+        && (!wantCategory || (!!e.label?.category && wantCategory.includes(e.label.category)))
+        && (!wantPerson || (!!e.label?.person && wantPerson.includes(e.label.person)))
+        && (!wantMerchant || (!!e.label?.merchant && wantMerchant.includes(e.label.merchant)))
+        && (!wantTag || !!e.label?.tags.some(t => t.toLowerCase().includes(wantTag))));
+      out.push(`Operacje${onlyPending ? ' do przypisania' : ''}${wantCategory ? ` w kategorii ${wantCategory.map(id => categories.get(id)).join('/') || '(brak takiej)'}` : ''}${wantPerson ? ` z osobą ${wantPerson.map(id => people.get(id)).join('/') || '(brak takiej)'}` : ''}${wantMerchant ? ` u sprzedawcy ${wantMerchant.map(id => merchants.get(id)).join('/') || '(brak takiego)'}` : ''}${wantTag ? ` z etykietą #${wantTag}` : ''}, najnowsze pierwsze:`);
+      const method: Record<string, string> = { card: 'karta', phone: 'telefon, bez nazwy sklepu', blik: 'BLIK, bez nazwy sklepu', cardTransfer: 'przelew z karty', atm: 'bankomat', transfer: 'przelew', other: '' };
+      out.push(...(shown.length ? shown.slice(0, BANK_SHOWN).map(e => {
+        const marks = [
+          e.label?.category ? `kategoria: ${categories.get(e.label.category) ?? '?'}` : 'bez kategorii',
+          e.label?.tags.length ? `etykiety: ${e.label.tags.map(t => `#${t}`).join(' ')}` : null,
+          e.label?.merchant ? `sprzedawca: ${merchants.get(e.label.merchant) ?? '?'}` : null,
+          e.label?.person ? `osoba: ${people.get(e.label.person) ?? '?'}` : null,
+          e.label?.recurring ? 'cykliczne' : null,
+          e.label?.comment ? `komentarz: „${clip(e.label.comment, 160)}”` : null,
+          e.pending ? 'DO PRZYPISANIA' : null,
+          e.pending && e.suggestion ? `${e.suggestion.sure ? 'podpowiedź' : 'do wyboru'}: ${e.suggestion.options.map(o => [o.merchant && merchants.get(o.merchant), o.category && categories.get(o.category), o.person && people.get(o.person), ...(o.tags ?? []).map(t => `#${t}`)].filter(Boolean).join(', ')).join(' albo ')}` : null,
+        ].filter(Boolean).join('; ');
+        return `${dayName(midnight(booked(e.op.at), zone), zone)} ${booked(e.op.at)}  ${pln(e.op.amount, e.op.currency)}  ${clip(e.op.name, 60)}${method[e.op.method] ? ` (${method[e.op.method]})` : ''}${e.op.detail ? ` — ${clip(e.op.detail, 60)}` : ''}  [${marks}]`;
+      }) : ['  brak']));
+      if (shown.length > BANK_SHOWN) out.push(`… i ${shown.length - BANK_SHOWN} starszych (zawęź zakres from/to).`);
+      // Whatever slipped through, no long run of digits (an account or a phone number) leaves this view.
+      return out.join('\n').replace(/\d{9,}/g, run => `${'*'.repeat(run.length - 3)}${run.slice(-3)}`);
     },
 
     async system() {

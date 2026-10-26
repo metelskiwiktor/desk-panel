@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BankError, createBank } from './bank';
+import { createBankLabelStore, privateFile } from './bank-labels';
 import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
 import { cezarAction, createFinishedReader } from './cezar-finished';
@@ -45,6 +46,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     redirectUrl: env.DESK_BANK_REDIRECT_URL || (env.DESK_ALLOWED_HOST ? `https://${env.DESK_ALLOWED_HOST.trim().toLowerCase()}/api/bank/callback` : `http://127.0.0.1:${options.port}/api/bank/callback`),
     store: { read: name => readPrivate(join(dir, `bank-${name}.dpapi`)), write: (name, value) => writePrivate(join(dir, `bank-${name}.dpapi`), value) },
   });
+  // The user's marks on its operations, from the kept reading only: marking never makes the bank be read.
+  const bankLabels = createBankLabelStore({ operations: () => bank.cached(), persistence: privateFile(join(dir, 'bank-labels.dpapi'), { read: readPrivate, write: writePrivate }) });
   const readSystem = createSystemReader();
   const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -91,6 +94,9 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     todos: () => todoStore.read(),
     todoAction: action => todoStore.apply(action),
     bank: () => bank.read(),
+    bankLabels: () => bankLabels.read(),
+    bankLabelAction: action => bankLabels.apply(action),
+    bankLedger: () => bankLabels.ledger(),
     async bankConnect() {
       try { return await bank.begin(); }
       catch { throw new SourceError(409); }

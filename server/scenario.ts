@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { bankSourceSchema } from '../src/bank-contract';
+import { bankLabelSeedSchema, createBankLabelStore, type BankLabelStore } from './bank-labels';
+import { publicTransaction } from './bank-parties';
 import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
@@ -42,12 +44,14 @@ export const scenarioSchema = z.object({
   todos: z.union([special, todoSourceSchema]).default({ live: true, name: 'Zadania', status: 'connected', observedAt: null, data: { lists: [] } }),
   /** The bank account; `now-…` and `today-…` give the day of each operation. */
   bank: endpoint(bankSourceSchema),
+  /** The user's marks the scenario starts with (categories, people, marks by operation id); actions are remembered in memory. */
+  bankLabels: bankLabelSeedSchema.optional(),
   warmup: endpoint(warmupStatusSchema),
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
-export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'>;
+export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
 const AMOUNT = '\\d+(?:ms|s|m|h|d)';
@@ -98,6 +102,12 @@ export function createScenarioSources(file: string): PanelSources {
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   /** Made from the scenario the first time the lists are asked for, so they stay as the session changed them. */
   let todoStore: TodoStore | undefined;
+  /** Like the lists: made once, from the scenario's bank reading (raw numbers whole, as the service keeps them) and its marks. */
+  let labelStore: BankLabelStore | undefined;
+  const labels = () => labelStore ??= createBankLabelStore({
+    seed: loadScenario(file).bankLabels,
+    operations: async () => { const source = await serve('bank'); return source.data && { observedAt: source.observedAt ?? Date.now(), ...source.data }; },
+  });
   const todos = async () => {
     const source = await serve('todos');
     todoStore ??= createTodoStore({ initial: source.data ?? { lists: [] } });
@@ -148,7 +158,10 @@ export function createScenarioSources(file: string): PanelSources {
     async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
-    bank: () => serve('bank'),
+    async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },
+    bankLabels: () => labels().read(),
+    bankLabelAction: action => labels().apply(action),
+    bankLedger: () => labels().ledger(),
     bankConnect: async () => { throw new SourceError(409); },
     bankCallback: async () => ({ ok: false, message: 'Scenariusz nie obsługuje łączenia z bankiem.' }),
     warmup:async()=>warmup ?? serve('warmup'),

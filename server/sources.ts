@@ -1,4 +1,6 @@
 import type { BankSource } from '../src/bank-contract';
+import type { BankLabelAction, BankLabelResult, BankLabelsSource } from '../src/bank-labels-contract';
+import type { BankLedger } from './bank-labels';
 import type { CezarAction, CezarSnapshot } from '../src/cezar-contract';
 import type { CalendarSource } from '../src/calendar-contract';
 import type { GoogleAccountStatus } from '../src/google-contract';
@@ -35,6 +37,11 @@ export interface PanelSources {
   /** Starts the bank consent and resolves to the address where the user signs in to the bank. */
   bankConnect(): Promise<string>;
   bankCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;
+  /** The user's own marks on the operations of the last reading (categories, people, comments) and suggestions; local only. */
+  bankLabels(): Promise<BankLabelsSource>;
+  bankLabelAction(action: BankLabelAction): Promise<BankLabelResult>;
+  /** Every kept operation with its mark, for the agent's text view; server-side only, no identifiers. */
+  bankLedger(): Promise<BankLedger>;
   usageBreakdown?(): Promise<UsageBreakdown>;
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
@@ -61,6 +68,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/quotas': () => sources.quotas(),
     '/api/todos': () => sources.todos(),
     '/api/bank': () => sources.bank(),
+    '/api/bank/labels': () => sources.bankLabels(),
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };

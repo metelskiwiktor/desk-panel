@@ -12,6 +12,8 @@ import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
 import { todoActionSchema } from '../src/todo-contract';
 import { TodoError } from './todos';
+import { bankLabelActionSchema } from '../src/bank-labels-contract';
+import { BankLabelError } from './bank-labels';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>): Promise<T> {
@@ -57,7 +59,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -74,6 +76,9 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         } else if (url.pathname === '/api/todos/action') {
           res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
+        } else if (url.pathname === '/api/bank/labels/action') {
+          // The user's marks only, kept on this computer: nothing here reaches the bank.
+          res.end(JSON.stringify(await sources.bankLabelAction(await readJson(req, bankLabelActionSchema))));
         } else {
           const { account, threadId, action } = await readJson(req, mailActionSchema);
           await sources.mailAction(account, threadId, action);
@@ -82,7 +87,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       } catch (error) {
         const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
         // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
-        const reason = error instanceof TodoError ? error.message
+        const reason = error instanceof TodoError || error instanceof BankLabelError ? error.message
           : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'
           : status === 409 && url.pathname === '/api/google/connect' ? 'Dodaj plik klienta OAuth Google.'
           : status === 409 && url.pathname === '/api/bank/connect' ? 'Konto bankowe nie jest skonfigurowane albo bank odmówił rozpoczęcia zgody.' : 'Nie udało się wykonać akcji.';
