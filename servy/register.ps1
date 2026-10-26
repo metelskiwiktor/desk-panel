@@ -73,7 +73,7 @@ try {
     }
     $catalog=Join-Path $PSScriptRoot 'registrations'
     New-Item -ItemType Directory -Path $catalog -Force | Out-Null
-    @{manifest=$context.Path;services=$names} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $catalog ((Split-Path $context.ProjectRoot -Leaf)+'.json')) -Encoding UTF8
+    @{manifest=$context.Path;services=$names} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $catalog ((Split-Path $context.ProjectRoot -Leaf)+$(if ((Split-Path $context.Path -Leaf) -ne 'services.json') { '-'+[IO.Path]::GetFileNameWithoutExtension($context.Path) } else { '' })+'.json')) -Encoding UTF8
 } catch {
     foreach ($name in $updated) {
         Stop-Service $name -ErrorAction SilentlyContinue

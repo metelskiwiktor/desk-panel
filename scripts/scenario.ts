@@ -3,6 +3,7 @@
 //   npm run scenario -- offline --shot                 → output/screenshots/offline-*.png
 //   npm run scenario -- standard --shot --query ambient=night   (first screen with a URL query, no page walk)
 //   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device medialove-14 --scale all
+//   npm run scenario -- standard --shot --pages pulpit --open chat --hermes down   (the chat when Hermes is not running)
 // The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
@@ -28,14 +29,16 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   query: { type: 'string' },
   open: { type: 'string' },
   file: { type: 'string' },
+  hermes: { type: 'string', default: 'up' },
 } });
 const name = positionals[0] ?? 'standard';
 const file = name.endsWith('.json') ? resolve(name) : join(process.cwd(), 'scenarios', `${name}.json`);
 const label = name.replace(/^.*[\\/]/, '').replace(/\.json$/, '');
 try { loadScenario(file); } catch (error) { console.error((error as Error).message); process.exit(1); }
 
-// The chat answers from a script (no agy, no limit spent), so it can be tried and photographed.
-const chat = createScenarioChat();
+// The chat answers from a script (no agy, no Hermes, no limit spent), so it can be tried and photographed.
+// `--hermes down` shows the chat as it is when Hermes is not running.
+const chat = await createScenarioChat({ hermes: values.hermes === 'down' ? 'down' : 'up' });
 const api = createPanelServer(createScenarioSources(file), join(process.cwd(), 'dist'), undefined, chat).listen(0, '127.0.0.1');
 await new Promise(done => api.once('listening', done));
 // Read by vite.config.ts, so it must be set before Vite loads the config.
@@ -84,6 +87,18 @@ if (!values.shot) {
           await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
           if (values.open === 'chat-wide') await page.getByRole('button', { name: 'Powiększ okno czatu' }).click();
           await page.waitForTimeout(300);
+        } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
+          // A Hermes turn of the stand-in: an answer with a tool step, or one waiting for the user's approval.
+          await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+          await page.getByRole('button', { name: 'Powiększ okno czatu' }).click();
+          await page.getByLabel('Wiadomość do agenta').fill(values.open === 'chat-approval' ? 'Pokaż procesy, potrzebna zgoda na polecenie' : 'Co mam dziś do zrobienia?');
+          await page.getByLabel('Wiadomość do agenta').press('Enter');
+          if (values.open === 'chat-approval') await page.getByRole('button', { name: 'Zezwól' }).waitFor();
+          else {
+            await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor();
+            await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
+          }
+          await page.waitForTimeout(400);
         } else if (values.open?.startsWith('tile:')) {
           const tileKind = values.open.slice('tile:'.length).trim();
           const tileId = tileKind === 'todo' ? 'todo#1' : tileKind;

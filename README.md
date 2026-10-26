@@ -39,7 +39,8 @@ wdraża do usługi Windows. Autostart, usługa i kiosk: [docs/system.md](docs/sy
 | [docs/garmin.md](docs/garmin.md) | Plan treningowy z Garmin Connect; katalog danych w [docs/garmin-data.md](docs/garmin-data.md) |
 | [docs/zdarzenia.md](docs/zdarzenia.md) | Reguły i historia zdarzeń panelu |
 | [docs/zadania.md](docs/zadania.md) | Listy zadań: model, zapis, API zmian, dostęp agenta czatu |
-| [docs/czat.md](docs/czat.md) | Czat z agentem (agy): rozmowy, wskazywanie elementów pulpitu, API, protokół |
+| [docs/czat.md](docs/czat.md) | Czat z agentem (Hermes domyślnie albo agy): rozmowy, wskazywanie elementów pulpitu, API, protokół |
+| [docs/hermes.md](docs/hermes.md) | Hermes Agent jako silnik czatu: instalacja na Windows, usługa, klucze, narzędzia MCP panelu, zgody, ograniczenia |
 | [docs/bank.md](docs/bank.md) | Kafelek Konto: PKO BP przez Enable Banking, konfiguracja, zgoda, limity odczytów, własne kategorie, osoby i podpowiedzi |
 | [docs/tailscale.md](docs/tailscale.md) | Dostęp z telefonu przez Tailscale |
 | [docs/testowanie.md](docs/testowanie.md) | Scenariusze, zrzuty ekranu, testy i CI |

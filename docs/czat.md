@@ -1,6 +1,8 @@
 # Czat z agentem
 
-Okno rozmowy z agentem (Antigravity CLI, `agy`) otwierane przyciskiem w pasku u góry pulpitu. Agent wie, kim jest, czym jest
+Okno rozmowy z agentem otwierane przyciskiem w pasku u góry pulpitu. Rozmowa działa na jednym z dwóch silników: **Hermes**
+(domyślny dla nowych rozmów, zob. [hermes.md](hermes.md)) albo **AGY** (Antigravity CLI, `agy`, opisany niżej). Wybór jest
+przełącznikiem w oknie i serwer go pamięta; rozmowa zostaje przy swoim silniku, a stare rozmowy (bez pola `engine`) są rozmowami agy. Agent wie, kim jest, czym jest
 panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje razem z wiadomością (to podpowiedź, o co pyta); resztę
 (kalendarz, poczta, Cezar, trening, limity, komputer) **czyta sam** z lokalnego API panelu, tylko przez GET.
 
@@ -76,7 +78,7 @@ ChatWindow ── useChat ── /api/chats… ── ChatService (server/agent-
 - **Strumień do przeglądarki**: `GET /api/chats/<id>/events` (SSE). Najpierw jedno zdarzenie `state` (cała rozmowa), potem
   `update` (podsumowanie i zmieniona wiadomość), łączone co ok. 40 ms. `EventSource` sam się łączy ponownie i dostaje `state`
   od nowa, więc nic nie ginie po przerwie.
-- **Zapis**: `~/.desk-panel/chats/<id>.json` (zapisy jednej rozmowy są szeregowane). Wiadomość „w trakcie” z poprzedniego
+- **Zapis**: `~/.desk-panel/chats/<id>.json` (zapisy jednej rozmowy są szeregowane; plik ma `engine: "agy"`, a plik bez tego pola, sprzed Hermesa, dostaje je przy wczytaniu, reszta bez zmian). Wiadomość „w trakcie” z poprzedniego
   uruchomienia panelu jest po starcie oznaczana jako przerwana. Katalog roboczy agenta: `~/.desk-panel/agent`.
 - **Model i reasoning**: każdy proces dostaje `--model`. Domyślnie `gemini-3.8-flash-medium` (Gemini 3.8 Flash, Medium); zmienia go
   `DESK_AGY_MODEL` (lista identyfikatorów: `agy models`). Poziom reasoningu jest częścią identyfikatora modelu (`-low|-medium|-high`),
@@ -190,12 +192,14 @@ Wszystko poza odczytem wymaga nagłówka `Origin` równego adresowi panelu (jak 
 
 | Trasa | Działanie |
 | --- | --- |
-| `GET /api/chats` | `{ chats: ChatSummary[] }` |
-| `POST /api/chats` | nowa rozmowa z pierwszą wiadomością `{ text, context }` → `201 { id }` |
+| `GET /api/chats` | `{ chats: ChatSummary[], engines, engine }` (każda rozmowa ma `engine`; `engines` mówi, który silnik przyjmie wiadomość) |
+| `POST /api/chats` | nowa rozmowa z pierwszą wiadomością `{ text, context, engine?, nonce? }` → `201 { id }` |
+| `PUT /api/chats/engine` | `{ engine: "hermes" \| "agy" }`: silnik nowych rozmów |
 | `GET /api/chats/<id>` | cała rozmowa |
 | `PATCH /api/chats/<id>` | `{ title }` |
 | `DELETE /api/chats/<id>` | usuwa rozmowę i kończy jej proces |
-| `POST /api/chats/<id>/messages` | `{ text, context }` → `202`; `409`, gdy agent jeszcze odpowiada |
+| `POST /api/chats/<id>/messages` | `{ text, context, nonce? }` → `202`; `409`, gdy agent jeszcze odpowiada; `503`, gdy silnik rozmowy nie działa |
+| `POST /api/chats/<id>/approval` | `{ approvalId, decision: "approve" \| "deny" }`: odpowiedź na prośbę o zgodę (tylko Hermes); `409`, gdy nieaktualna |
 | `POST /api/chats/<id>/stop` | zatrzymuje odpowiedź |
 | `GET /api/chats/<id>/events` | strumień SSE |
 
@@ -203,7 +207,7 @@ Bez usługi czatu (np. testy serwera bez `agy`) trasy odpowiadają `503`, a UI p
 
 ## Próbowanie bez `agy`
 
-`just scenario NAME` uruchamia czat ze **skryptowym agentem** (`server/scenario-chat.ts`): te same zdarzenia co `agy`
+`just scenario NAME` uruchamia czat z atrapą Hermesa (`server/hermes-mock.ts`) i ze **skryptowym agentem** agy (`server/scenario-chat.ts`): te same zdarzenia co `agy`
 (krok narzędzia, potem odpowiedź słowo po słowie), odpowiedź wypisuje wskazane elementy. Nie zużywa limitu, a rozmowy trafiają do
 katalogu tymczasowego, który znika razem ze scenariuszem. Dev server proxy (`vite.config.ts`) zachowuje nagłówek `Host`
 strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
@@ -211,6 +215,7 @@ strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
 ## Testy
 
 - `server/agent-chat.test.ts`: serwis i trasy na zdarzeniach w kształcie prawdziwego `agy` (fałszywy proces).
+- `server/hermes-chat.test.ts`, `server/panel-mcp.test.ts`: silnik Hermes, oba silniki razem, migracja starych rozmów (zob. [hermes.md](hermes.md)).
 - `src/chat.test.tsx`: renderer Markdown, wskazywanie (najbliższy element, limity, znaczniki), okno, strumień, zatrzymanie,
   usuwanie, brak usługi.
 

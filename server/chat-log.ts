@@ -26,6 +26,8 @@ export interface TurnSummary {
   /** 1-based number of the user message in the conversation. */
   turn: number;
   model: string | null;
+  /** Which engine ran the turn; missing on agy turns written before Hermes. */
+  engine?: 'hermes' | 'agy';
   /** The user's message, shortened, and the kinds of the dashboard elements they pointed at. */
   ask: string;
   context: string[];
@@ -78,7 +80,8 @@ Usunięcie rozmowy w panelu nie usuwa jej śladu tutaj.
 | Pole | Znaczenie |
 | --- | --- |
 | \`at\`, \`chat\`, \`title\`, \`turn\` | kiedy (ms epoki), której rozmowy, który raz użytkownik napisał (od 1) |
-| \`model\` | wartość \`--model\`, z którą działał \`agy\` |
+| \`model\` | wartość \`--model\`, z którą działał \`agy\` (\`hermes\` w turach Hermesa) |
+| \`engine\` | \`hermes\` albo \`agy\` (brak w starszych liniach agy); tury Hermesa mają w \`result.status\` stan przebiegu (\`completed\`, \`failed\`, \`cancelled\`), a w śladzie rozmowy zdarzenia z \`src: "hermes"\` |
 | \`ask\`, \`context\` | pytanie użytkownika (do 200 znaków) i rodzaje wskazanych elementów pulpitu |
 | \`status\` | \`done\`, \`error\` albo \`stopped\` |
 | \`error\` | komunikat pokazany użytkownikowi, gdy \`status\` to \`error\` |

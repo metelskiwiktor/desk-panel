@@ -1,0 +1,20 @@
+{
+  "hermes": "0.21.7",
+  "provider": {
+    "name": "antigravity-oauth",
+    "source": "community",
+    "ref": null,
+    "note": "Pin the exact release or commit of the provider that was verified with this Hermes version; `just hermes CHECK` warns while ref is null."
+  },
+  "streamingPatch": {
+    "required": true,
+    "file": null,
+    "sha256": null,
+    "note": "Without the local patch that emits text deltas the provider streams 0 deltas; the panel still shows the answer from the run's final output (no live text). Record the patched provider file (path relative to the Hermes install) and its SHA-256 here; CHECK then verifies it."
+  },
+  "api": {
+    "url": "http://127.0.0.1:8642",
+    "health": "/health",
+    "routes": "server/hermes-api.ts (HERMES_ROUTES)"
+  }
+}

@@ -64,7 +64,7 @@ body[data-chat-dock] .top-right { margin-left: auto; }
 .chat-sess.on { background: var(--c-surface-2); box-shadow: inset 0 0 0 1px #34405a; }
 .chat-sess .t { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-sess .m { font-size: 12px; color: var(--c-meta); }
-.chat-pulse, .chat-agy i.run { width: 8px; height: 8px; border-radius: 50%; background: var(--c-amber); flex: none; animation: chat-pulse 1.2s ease-in-out infinite; }
+.chat-pulse, .chat-engine i.run { width: 8px; height: 8px; border-radius: 50%; background: var(--c-amber); flex: none; animation: chat-pulse 1.2s ease-in-out infinite; }
 
 /* ── conversation ── */
 .chat-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -164,8 +164,34 @@ body[data-chat-dock] .top-right { margin-left: auto; }
 .chat-pick:hover { background: color-mix(in srgb, var(--c-cal) 22%, var(--c-surface-2)); }
 .chat-done { padding: 0 18px; font-weight: 600; background: var(--c-cal); color: var(--c-bg); }
 .chat-tools-note { font-size: 12px; color: var(--c-meta); }
-.chat-agy { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-muted); }
-.chat-agy i { width: 8px; height: 8px; border-radius: 50%; background: var(--c-green); }
+/* Engine switch: Hermes (default) or AGY. A conversation keeps its engine; the switch picks the next new chat's. */
+.chat-engine { margin-left: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: 12px; border: 1px solid var(--c-line); background: var(--c-side); }
+.chat-engine button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 10px; font-size: 13px; color: var(--c-muted); }
+.chat-engine button.on { color: var(--c-text); background: var(--c-surface-2); font-weight: 600; }
+.chat-engine i { width: 8px; height: 8px; border-radius: 50%; background: var(--c-green); flex: none; }
+.chat-engine i.down { background: var(--c-red); }
+.chat-eng { margin-left: 8px; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--c-muted); border: 1px solid var(--c-line); }
+.chat-eng[data-engine='hermes'] { color: #b9a6ff; border-color: color-mix(in srgb, #b9a6ff 40%, transparent); }
+.chat-engine-down { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; padding: 8px 12px; border-radius: 12px; font-size: 13px; color: #ffd3d4; background: color-mix(in srgb, var(--c-red) 12%, var(--c-surface)); border: 1px solid color-mix(in srgb, var(--c-red) 40%, transparent); }
+.chat-engine-down p { margin: 0; flex: 1 1 240px; line-height: 1.45; }
+.chat-engine-down .actions { display: flex; gap: 8px; }
+.chat-engine-down button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px; font-weight: 600; color: var(--c-text); background: var(--c-surface-2); border: 1px solid var(--c-line); }
+.chat-switched { margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 13px; color: var(--c-text); background: var(--c-side); border: 1px solid var(--c-line); }
+.chat-slow { margin: 0; padding: 0 14px 10px; font-size: 12px; color: var(--c-amber); }
+.chat-tool[data-error] .state { color: var(--c-red); }
+/* The agent asks before a tool runs; the run waits for the answer. */
+.chat-approval { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; font-size: 13px; border: 1px solid color-mix(in srgb, var(--c-amber) 55%, transparent); background: color-mix(in srgb, var(--c-amber) 8%, var(--c-side)); }
+.chat-approval[data-state='approved'] { border-color: color-mix(in srgb, var(--c-green) 45%, transparent); background: var(--c-side); }
+.chat-approval[data-state='denied'], .chat-approval[data-state='expired'] { border-color: var(--c-line); background: var(--c-side); color: var(--c-muted); }
+.chat-approval .head { display: flex; align-items: center; gap: 8px; }
+.chat-approval .tool { margin-left: auto; font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--c-muted); }
+.chat-approval pre { margin: 0; max-height: 160px; overflow: auto; padding: 8px 10px; border-radius: 10px; background: var(--c-bg); border: 1px solid var(--c-line); font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: #c4cddc; }
+.chat-approval .wait { margin: 0; color: var(--c-amber); }
+.chat-approval .actions { display: flex; gap: 8px; }
+.chat-approval button { min-height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 600; border: 1px solid var(--c-line); }
+.chat-approval button.ok { background: var(--c-cal); color: var(--c-bg); border-color: transparent; }
+.chat-approval button.no { background: var(--c-surface-2); color: var(--c-text); }
+.chat-approval button:disabled { opacity: 0.5; cursor: default; }
 .chat-round { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--c-cal); color: var(--c-bg); }
 .chat-round:disabled { background: #2a3550; color: var(--c-muted); cursor: default; }
 .chat-round.stop { background: var(--c-text); }
@@ -200,8 +226,14 @@ body[data-picking] .wk-grip, body[data-picking] .wk-x, body[data-picking] .wk-rz
   .chat-root[data-mode='dock'] .chat-panel { top: auto; left: 0; width: auto; height: 52dvh; border-width: 1px 0 0; box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.35); }
   body[data-chat-dock] { padding-right: 0; padding-bottom: 52dvh; }
 }
+/* A phone: the pointing button, the engine switch and send share one row, or wrap. */
+@media (max-width: 480px) {
+  .chat-tools { flex-wrap: wrap; gap: 6px; }
+  .chat-pick { padding: 0 12px; }
+  .chat-engine button { padding: 0 8px; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .chat-caret, .chat-pulse, .chat-tool .state i, .chat-agy i.run { animation: none; }
+  .chat-caret, .chat-pulse, .chat-tool .state i, .chat-engine i.run { animation: none; }
   .chat-root[data-mode='window'] .chat-side, .chat-root[data-mode='float'] .chat-side { transition: none; }
 }
 @keyframes chat-blink { 50% { opacity: 0; } }

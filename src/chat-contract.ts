@@ -35,7 +35,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '  2. A fenced ```text Executor Prompt block (use repo-relative paths only, e.g. src/..., server/...):',
       '     Task: <one-sentence clear goal>',
       '     Type: UI | non-UI',
-      '     Scenario for screenshots: <scenario name, e.g. standard or inbox, or "none" if non-UI> (page: pulpit|zadania|kalendarz|system|zdarzenia|ustawienia, open: none|tile:<kind>|mail|chat|chat-wide|task|event|bank|<css-selector>)',
+      '     Scenario for screenshots: <scenario name, e.g. standard or inbox, or "none" if non-UI> (page: pulpit|zadania|kalendarz|system|zdarzenia|ustawienia, open: none|tile:<kind>|mail|chat|chat-wide|chat-answer|chat-approval|task|event|bank|<css-selector>; --hermes down for the chat without Hermes)',
       '     Relevant files (from recon):',
       '     - src/...',
       '     - server/...',
@@ -53,20 +53,45 @@ export function skillItem(skill: ChatSkill): ContextItem {
   return { kind: 'skill', id: skill.id, title: skill.title, text: skill.prompt };
 }
 
+/**
+ * Which agent a conversation runs on. Hermes (a long-running local API) is the default for new chats; `agy` is the
+ * Antigravity CLI the chat started with. A conversation keeps its engine for life: the two never share a session.
+ */
+export const chatEngines = ['hermes', 'agy'] as const;
+export type ChatEngine = typeof chatEngines[number];
+export const DEFAULT_ENGINE: ChatEngine = 'hermes';
+export const ENGINE_LABEL: Record<ChatEngine, string> = { hermes: 'Hermes', agy: 'AGY' };
+/** Whether an engine can take a message now; `error` says why not, in Polish. */
+export interface EngineStatus { engine: ChatEngine; available: boolean; error?: string }
+
 export const MAX_CONTEXT = 10;
 export const MAX_MESSAGE = 8000;
 /** A new message, with the dashboard elements it is about. */
 export const chatSendSchema = z.object({
   text: z.string().trim().min(1).max(MAX_MESSAGE),
   context: z.array(contextItemSchema).max(MAX_CONTEXT).default([]),
+  /** Only when a conversation starts: the engine it runs on (the saved preference otherwise). */
+  engine: z.enum(chatEngines).optional(),
+  /** One per draft: the same message sent twice (a retry after a timeout) starts one turn, not two. */
+  nonce: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
 }).strict();
 export type ChatSend = z.input<typeof chatSendSchema>;
 export const chatRenameSchema = z.object({ title: z.string().trim().min(1).max(120) }).strict();
+export const chatEngineSchema = z.object({ engine: z.enum(chatEngines) }).strict();
+/** The user's answer to a tool the agent wants to run. */
+export const chatApprovalSchema = z.object({
+  approvalId: z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/),
+  decision: z.enum(['approve', 'deny']),
+}).strict();
+export type ChatApproval = z.infer<typeof chatApprovalSchema>;
 
-/** The agent's answer is a sequence of text and tool steps, in the order they happened. */
+/** The agent's answer is a sequence of text, tool and approval steps, in the order they happened. */
 export type ChatPart =
   | { type: 'text'; text: string }
-  | { type: 'tool'; id: string; name: string; input: string; output?: string; state: 'running' | 'done' };
+  /** `startedAt`/`endedAt` (epoch ms) let the window show how long a slow tool has been running. */
+  | { type: 'tool'; id: string; name: string; input: string; output?: string; state: 'running' | 'done'; startedAt?: number; endedAt?: number; error?: boolean }
+  /** The agent asks before running a tool; the run waits for the user's decision (or Hermes's own timeout). */
+  | { type: 'approval'; id: string; tool: string; detail: string; state: 'pending' | 'approved' | 'denied' | 'expired'; at: number };
 
 export type MessageStatus = 'streaming' | 'done' | 'error' | 'stopped';
 /**
@@ -87,6 +112,8 @@ export interface ChatMessage {
   usage?: ChatUsage;
   status?: MessageStatus;
   error?: string;
+  /** While streaming: what the panel is doing about the run (e.g. reconnecting, reading its status), in Polish. */
+  notice?: string;
 }
 
 export interface ChatSummary {
@@ -96,7 +123,11 @@ export interface ChatSummary {
   updatedAt: number;
   messages: number;
   running: boolean;
+  /** Missing only from a server that predates engines: those chats are agy's. */
+  engine?: ChatEngine;
 }
+/** `GET /api/chats`: the conversations, which engines can take a message and the one new chats start on. */
+export interface ChatList { chats: ChatSummary[]; engines?: EngineStatus[]; engine?: ChatEngine }
 export interface ChatDetail extends ChatSummary { items: ChatMessage[] }
 
 /** Server-sent events of one open chat: the whole chat once, then each message that changes. */
