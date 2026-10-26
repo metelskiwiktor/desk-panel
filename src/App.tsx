@@ -47,6 +47,7 @@ import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
 import { useTodos } from './useTodos';
 import { useTraining } from './useTraining';
+import { useBank } from './useBank';
 import { UsageBreakdownCard } from './UsageBreakdownCard';
 import { WorkoutDetail } from './TrainingCard';
 import { usePollingEnabled } from './polling';
@@ -85,6 +86,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
   const todos = useTodos();
+  const bank = useBank();
   const training = useTraining();
   const [clockNow, setNow] = useState(Date.now);
   // Data can arrive between clock ticks; compare to wall time on every render.
@@ -418,7 +420,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} todos={todos} now={now} open={open}
+                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} todos={todos} bank={bank} now={now} open={open}
                   showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} pulpit={pulpits.active} />
               </>
             ) : (

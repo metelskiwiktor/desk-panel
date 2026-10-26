@@ -1,5 +1,38 @@
 {
   "description": "Zwykły dzień pracy: zadania w Cezarze, spotkanie za 12 min, wysokie zużycie limitu Claude.",
+  "bank": {
+    "live": true,
+    "name": "PKO BP",
+    "status": "connected",
+    "observedAt": "now-40m",
+    "consentUntil": "now+120d",
+    "data": {
+      "accounts": [
+        { "id": "acc-1", "name": "Konto osobiste", "last4": "4245", "currency": "PLN", "balance": 903.98, "balanceAt": "now-40m" }
+      ],
+      "transactions": [
+        {"id": "acc-1:t1", "accountId": "acc-1", "at": "today@12:00", "amount": 1000, "currency": "PLN", "title": "FIRMA INFORMATYCZNA WIKTOR METELSKI", "note": "PRZELEW IKO NA NUMER RACHUNKU TRANSFER-IN"},
+        {"id": "acc-1:t2", "accountId": "acc-1", "at": "today@12:00", "amount": -43.9, "currency": "PLN", "title": "Płatność telefonem"},
+        {"id": "acc-1:t3", "accountId": "acc-1", "at": "today-1@12:00", "amount": -35.46, "currency": "PLN", "title": "LESZNOJMP S.A. BIEDRONKA 5133", "note": "Płatność kartą"},
+        {"id": "acc-1:t4", "accountId": "acc-1", "at": "today-1@12:00", "amount": -7.95, "currency": "PLN", "title": "LesznoSPOLEM PSS Sklep nr 12", "note": "Płatność kartą"},
+        {"id": "acc-1:t5", "accountId": "acc-1", "at": "today-2@12:00", "amount": -80.59, "currency": "PLN", "title": "Płatność telefonem"},
+        {"id": "acc-1:t6", "accountId": "acc-1", "at": "today-2@12:00", "amount": -156.29, "currency": "PLN", "title": "LESZNOORLEN STACJA NR 4398", "note": "Płatność kartą"},
+        {"id": "acc-1:t7", "accountId": "acc-1", "at": "today-2@12:00", "amount": -75, "currency": "PLN", "title": "Los GatosNetflix.comNL", "note": "Płatność kartą"},
+        {"id": "acc-1:t8", "accountId": "acc-1", "at": "today-3@12:00", "amount": -70.85, "currency": "PLN", "title": "Płatność BLIK"},
+        {"id": "acc-1:t9", "accountId": "acc-1", "at": "today-3@12:00", "amount": 500, "currency": "PLN", "title": "FIRMA INFORMATYCZNA WIKTOR METELSKI", "note": "PRZELEW IKO NA NUMER RACHUNKU TRANSFER-IN"},
+        {"id": "acc-1:t10", "accountId": "acc-1", "at": "today-4@12:00", "amount": -51.97, "currency": "PLN", "title": "LESZNOZABKA ZD623 K.1", "note": "Płatność kartą"},
+        {"id": "acc-1:t11", "accountId": "acc-1", "at": "today-4@12:00", "amount": -45.9, "currency": "PLN", "title": "LesznoMcDonalds Galeria Lesz", "note": "Płatność kartą"},
+        {"id": "acc-1:t12", "accountId": "acc-1", "at": "today-5@12:00", "amount": -23.69, "currency": "PLN", "title": "LESZNOCUKIERNIA HOFFMANNPL", "note": "Płatność kartą"},
+        {"id": "acc-1:t13", "accountId": "acc-1", "at": "today-5@12:00", "amount": -120, "currency": "PLN", "title": "Anna Kowalska", "note": "Zwrot za kolację"},
+        {"id": "acc-1:t14", "accountId": "acc-1", "at": "today-6@12:00", "amount": -1868.49, "currency": "PLN", "title": "Płatność telefonem"},
+        {"id": "acc-1:t15", "accountId": "acc-1", "at": "today-6@12:00", "amount": -101.2, "currency": "PLN", "title": "ANTHROPIC.COMANTHROPIC* CLAU", "note": "Płatność kartą"},
+        {"id": "acc-1:t16", "accountId": "acc-1", "at": "today-7@12:00", "amount": -220, "currency": "PLN", "title": "LESZNOCENTRUM MEDYCZNE SPO 0", "note": "Płatność kartą"},
+        {"id": "acc-1:t17", "accountId": "acc-1", "at": "today-8@12:00", "amount": 500, "currency": "PLN", "title": "JONASZ METELSKI", "note": "LAPTOP OSTATNIA CZESCOD: 48667178938"},
+        {"id": "acc-1:t18", "accountId": "acc-1", "at": "today-9@12:00", "amount": 1000, "currency": "PLN", "title": "FIRMA INFORMATYCZNA WIKTOR METELSKI", "note": "PRZELEW IKO NA NUMER RACHUNKU TRANSFER-IN"},
+        {"id": "acc-1:t19", "accountId": "acc-1", "at": "today-9@12:00", "amount": -63.04, "currency": "PLN", "title": "LESZNOJMP S.A. BIEDRONKA 4452", "note": "Płatność kartą"}
+      ]
+    }
+  },
   "cezar": {
     "observedAt": "now",
     "partial": false,

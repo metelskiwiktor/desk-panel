@@ -125,6 +125,8 @@ export const MAX_AGE = {
   system: 15_000,
   mail: 2 * MINUTE,
   training: 45 * MINUTE,
+  /** The server reads the bank every 7 hours (four unattended reads a day is the limit). */
+  bank: 9 * 60 * MINUTE,
 };
 export function fresh<T>(source: Source<T>, now: number, maxAge: number): boolean {
   return (

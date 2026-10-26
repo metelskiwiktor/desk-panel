@@ -12,6 +12,7 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_EXTRA_CALENDARS` | brak | Dodatkowe kalendarze tego samego konta, rozdzielone przecinkami (identyfikator z ustawień kalendarza Google, np. zasubskrybowany plan Garmin `…@import.calendar.google.com`); ich zdarzenia trafiają do tej samej agendy |
 | `DESK_MAIL_ACCOUNTS` | konto z `DESK_CALENDAR_ID` | Konta Gmail na liście poczty, rozdzielone przecinkami (np. `a@gmail.com,b@gmail.com`) |
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
+| `DESK_BANK_APP_ID`, `DESK_BANK_KEY_FILE`, `DESK_BANK_REDIRECT_URL` | brak | Konto bankowe przez Enable Banking, zob. [bank.md](bank.md) |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |
 
 Usługa Windows czyta dodatkowo opcjonalny plik `%USERPROFILE%\.desk-panel\panel.env`
@@ -52,7 +53,7 @@ pod drugą, a układ nie zależy od urządzenia:
   zużycie wyprzedza czas; przycisk w rogu otwiera podział zużycia), Cezarem (najpierw zadania czekające na Ciebie, potem
   te w toku i zakończone), pocztą (lista nadawca / temat / początek wiadomości, w lewo przeczytane, w prawo kosz; w
   kafelku jednokomórkowym tylko nadawca i temat) albo komputerem (CPU i RAM jako dwa paski, od dwóch komórek jako wykresy
-  z ostatnich 5 minut). Kafelek zawsze rysuje się w całości: jeśli źródło milczy, mówi to spokojnie, zamiast znikać.
+  z ostatnich 5 minut), albo kontem bankowym (saldo, sumy 30 dni i ostatnie operacje, zob. [bank.md](bank.md)). Kafelek zawsze rysuje się w całości: jeśli źródło milczy, mówi to spokojnie, zamiast znikać.
   Cały obszar to jedna karta, a kafelki dzielą tylko cienkie linie. Komórka bez kafelka to pusty kafelek z ikonami tego, co można w niej postawić (bez tego, co już stoi na siatce i co
   wyłączono w Ustawieniach); dotknięcie ikony stawia kafelek 1×1.
   Dopóki niczego nie ułożysz, układ jest automatyczny: limity i poczta po lewej, Cezar po prawej na dwa wiersze, a przy

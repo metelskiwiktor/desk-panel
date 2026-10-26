@@ -57,7 +57,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/todos/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -66,6 +66,8 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         if (url.pathname === '/api/google/connect') {
           const { email } = await readJson(req, connectSchema);
           res.end(JSON.stringify({ authorizationUrl: await sources.googleConnect(email) }));
+        } else if (url.pathname === '/api/bank/connect') {
+          res.end(JSON.stringify({ authorizationUrl: await sources.bankConnect() }));
         } else if (url.pathname === '/api/cezar/action') {
           const { id, action } = await readJson(req, cezarActionSchema);
           await sources.cezarAction(id, action);
@@ -78,11 +80,12 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         }
       } catch (error) {
-        const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' ? 409 : 502;
+        const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
         // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
         const reason = error instanceof TodoError ? error.message
           : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'
-          : status === 409 && url.pathname === '/api/google/connect' ? 'Dodaj plik klienta OAuth Google.' : 'Nie udało się wykonać akcji.';
+          : status === 409 && url.pathname === '/api/google/connect' ? 'Dodaj plik klienta OAuth Google.'
+          : status === 409 && url.pathname === '/api/bank/connect' ? 'Konto bankowe nie jest skonfigurowane albo bank odmówił rozpoczęcia zgody.' : 'Nie udało się wykonać akcji.';
         res.writeHead(status).end(JSON.stringify({ error: reason }));
       }
       return;
@@ -110,6 +113,14 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       const { ok, message } = await sources.googleCallback(url.searchParams);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.writeHead(ok ? 200 : 400).end(`<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Desk Panel · Google</title><body style="background:#10151f;color:#eee;font:20px system-ui;padding:40px"><h1>Konto Google</h1><p>${message}</p><a style="color:#8bf" href="/">Wróć do panelu</a></body></html>`);
+      return;
+    }
+    if (url.pathname === '/api/bank/callback') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      const { ok, message } = await sources.bankCallback(url.searchParams);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.writeHead(ok ? 200 : 400).end(`<!doctype html><html lang="pl"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Desk Panel · Bank</title><body style="background:#10151f;color:#eee;font:20px system-ui;padding:40px"><h1>Konto bankowe</h1><p>${message}</p><a style="color:#8bf" href="/">Wróć do panelu</a></body></html>`);
       return;
     }
     if (url.pathname.startsWith('/api/')) { res.writeHead(404).end(); return; }

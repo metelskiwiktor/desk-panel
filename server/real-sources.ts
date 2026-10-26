@@ -1,6 +1,8 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BankError, createBank } from './bank';
+import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
 import { cezarAction, createFinishedReader } from './cezar-finished';
 import { createCalendarReader } from './calendar';
@@ -36,6 +38,13 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   // The plan day boundaries follow the machine's zone unless set explicitly.
   const readTraining = createGarminReader({ api: createGarminApi(garminTokenFile(env)), timeZone: env.DESK_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone });
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
+  // PKO BP through Enable Banking. The consent returns to the panel's own address: the Tailscale name when there is one.
+  const bank = createBank({
+    appId: env.DESK_BANK_APP_ID?.trim() || undefined,
+    keyFile: env.DESK_BANK_KEY_FILE || join(dir, 'enablebanking', 'private.pem'),
+    redirectUrl: env.DESK_BANK_REDIRECT_URL || (env.DESK_ALLOWED_HOST ? `https://${env.DESK_ALLOWED_HOST.trim().toLowerCase()}/api/bank/callback` : `http://127.0.0.1:${options.port}/api/bank/callback`),
+    store: { read: name => readPrivate(join(dir, `bank-${name}.dpapi`)), write: (name, value) => writePrivate(join(dir, `bank-${name}.dpapi`), value) },
+  });
   const readSystem = createSystemReader();
   const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -81,6 +90,21 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     quotas: () => readQuotas(),
     todos: () => todoStore.read(),
     todoAction: action => todoStore.apply(action),
+    bank: () => bank.read(),
+    async bankConnect() {
+      try { return await bank.begin(); }
+      catch { throw new SourceError(409); }
+    },
+    async bankCallback(params) {
+      try {
+        if (!bank.owns(params)) throw new BankError('invalid_callback');
+        await bank.finish(params);
+        return { ok: true, message: 'Połączono konto PKO BP. Możesz wrócić do Desk Panelu.' };
+      } catch (error) {
+        if (error instanceof BankError && error.reason === 'storage_failed') return { ok: false, message: 'Nie udało się bezpiecznie zapisać zgody na tym komputerze.' };
+        return { ok: false, message: 'Nie udało się połączyć konta. Wróć do panelu i rozpocznij łączenie ponownie.' };
+      }
+    },
     usageBreakdown: readUsageBreakdown,
     warmup:warmup.read,
     saveWarmup:warmup.save,

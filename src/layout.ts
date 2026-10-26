@@ -8,6 +8,7 @@ export const widgetNames = {
   insights: 'Zdarzenia panelu',
   mail: 'Poczta',
   todo: 'Zadania · listy do zrobienia (kafelków może być kilka)',
+  bank: 'Konto bankowe · saldo i ostatnie operacje',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 /** Order, displayMode and priority are kept from earlier layouts; the dashboard sizes sections by content. */

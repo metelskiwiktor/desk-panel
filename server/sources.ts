@@ -1,3 +1,4 @@
+import type { BankSource } from '../src/bank-contract';
 import type { CezarAction, CezarSnapshot } from '../src/cezar-contract';
 import type { CalendarSource } from '../src/calendar-contract';
 import type { GoogleAccountStatus } from '../src/google-contract';
@@ -29,6 +30,11 @@ export interface PanelSources {
   /** The user's to-do lists: the panel's own data, changed only by `todoAction`. */
   todos(): Promise<TodoSource>;
   todoAction(action: TodoAction): Promise<TodoResult>;
+  /** The bank account (balance and booked operations), read-only; the consent is given in the bank, see `bankConnect`. */
+  bank(): Promise<BankSource>;
+  /** Starts the bank consent and resolves to the address where the user signs in to the bank. */
+  bankConnect(): Promise<string>;
+  bankCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;
   usageBreakdown?(): Promise<UsageBreakdown>;
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
@@ -54,6 +60,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/system': () => sources.system(),
     '/api/quotas': () => sources.quotas(),
     '/api/todos': () => sources.todos(),
+    '/api/bank': () => sources.bank(),
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };

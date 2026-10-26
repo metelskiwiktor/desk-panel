@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { bankSourceSchema } from '../src/bank-contract';
 import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
@@ -39,6 +40,8 @@ export const scenarioSchema = z.object({
   quotas: endpoint(quotaSourceSchema),
   /** The lists the scenario starts with; the actions taken in this session are remembered in memory. Empty when left out. */
   todos: z.union([special, todoSourceSchema]).default({ live: true, name: 'Zadania', status: 'connected', observedAt: null, data: { lists: [] } }),
+  /** The bank account; `now-…` and `today-…` give the day of each operation. */
+  bank: endpoint(bankSourceSchema),
   warmup: endpoint(warmupStatusSchema),
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
@@ -145,6 +148,9 @@ export function createScenarioSources(file: string): PanelSources {
     async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
+    bank: () => serve('bank'),
+    bankConnect: async () => { throw new SourceError(409); },
+    bankCallback: async () => ({ ok: false, message: 'Scenariusz nie obsługuje łączenia z bankiem.' }),
     warmup:async()=>warmup ?? serve('warmup'),
     runWarmup:async(provider)=>(await serve('warmupRun'))[provider],
     saveWarmup:async(provider,value)=>{

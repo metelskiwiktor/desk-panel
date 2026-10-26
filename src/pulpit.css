@@ -605,3 +605,57 @@
 .todo-dlg-actions button.danger { color: var(--quota-red); }
 .todo-dlg-actions button.save { min-width: 130px; background: var(--p2-cal); color: #0b1020; font-weight: 600; }
 .todo-dlg-actions button svg { margin-left: 0; }
+
+/* The bank account tile: the balance (and what came in and went out) above the latest operations. */
+.bank:not(.wide):not(.tall) { padding: 6px 8px 8px; }
+.bank .p2-card-head svg { margin-left: 0; color: var(--p2-muted); }
+.bank .p2-card-head .p2-badge { margin-left: auto; }
+.bank-top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 14px; padding: 0 6px 4px; }
+.bank-balance { font-size: 30px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--p2-text); }
+.bank:not(.tall) .bank-balance { font-size: 24px; }
+.bank-flow { display: inline-flex; align-items: baseline; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.bank-flow small { font-size: 12px; color: var(--p2-faint); }
+.bank-flow .in { color: var(--quota-green); }
+.bank .out { color: var(--p2-text); }
+.bank-flow .out { color: var(--p2-muted); }
+/* Category identity: hues of the chart palette, never the status colours. Avatar, bar segment and legend dot read the same --c. */
+.cat-income { --c: var(--quota-green); }
+.cat-grocery { --c: #1baf7a; }
+.cat-fuel { --c: #eda100; }
+.cat-eat { --c: #eb6834; }
+.cat-sub { --c: #8f7be8; }
+.cat-health { --c: #e87ba4; }
+.cat-transfer { --c: #4d93e6; }
+.cat-phone, .cat-atm { --c: var(--p2-muted); }
+.cat-other { --c: var(--p2-faint); }
+.bank-kinds { display: flex; flex-direction: column; gap: 6px; padding: 2px 6px 6px; }
+.bank-bar { display: flex; height: 8px; gap: 2px; border-radius: 4px; overflow: hidden; }
+.bank-bar i { background: var(--c); min-width: 3px; }
+.bank-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--p2-muted); }
+.bank-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.bank-legend i { width: 8px; height: 8px; border-radius: 3px; background: var(--c); }
+.bank-legend b { font-weight: 500; color: var(--p2-text); font-variant-numeric: tabular-nums; }
+.bank-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+.bank-days { display: flex; flex-direction: column; }
+.bank-day h3 { display: flex; justify-content: space-between; margin: 0; padding: 12px 6px 4px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--p2-muted); }
+.bank-day h3 .num { font-variant-numeric: tabular-nums; }
+.bank-day ul { margin: 0; padding: 0; list-style: none; }
+.bank-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 5px 6px; border-top: 1px solid color-mix(in srgb, var(--p2-line) 60%, transparent); }
+.bank-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+.bank-avatar svg { margin-left: 0; }
+.bank-what { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.bank-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; color: var(--p2-text); }
+.bank-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--p2-muted); }
+.bank-amount { flex: none; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--p2-text); }
+.bank:not(.wide) .bank-note, .bank:not(.tall) .bank-day h3 { display: none; }
+.bank:not(.wide) .bank-row { min-height: 44px; gap: 10px; }
+.bank:not(.wide) .bank-avatar { width: 30px; height: 30px; }
+.bank-day h3 .in, .bank-amount.in { color: var(--quota-green); }
+.bank-connect { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+.bank-button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 16px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); color: var(--p2-cal); font-size: 15px; text-decoration: none; }
+.bank-button.primary { background: var(--p2-cal); border-color: var(--p2-cal); color: #0b1020; font-weight: 600; }
+.bank-row { cursor: default; border-radius: 8px; }
+.bank-row:hover, .bank-row:focus-visible { background: color-mix(in srgb, var(--p2-text) 6%, transparent); outline: none; }
+.bank-raw { position: fixed; z-index: 40; max-width: calc(100vw - 16px); max-height: min(70vh, 420px); overflow: auto; padding: 10px 12px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); box-shadow: 0 14px 36px #000b; pointer-events: none; }
+.bank-raw p { margin: 0 0 6px; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--p2-muted); }
+.bank-raw pre { margin: 0; font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--p2-text); white-space: pre-wrap; overflow-wrap: anywhere; }

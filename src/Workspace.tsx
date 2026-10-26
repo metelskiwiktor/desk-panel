@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Bot, Cpu, Gem, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
+import { Bot, Cpu, Gem, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
+import { BankTile } from './BankTile';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
 import { MailFeed } from './MailFeed';
@@ -9,6 +10,7 @@ import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
 import type { TodosState } from './useTodos';
+import type { BankHook } from './useBank';
 import {
   COLS, ROWS, add, autoTiles, configure, emptyCells, move, newTileId, readWorkspace, readingOrder, remove, resize, saveWorkspace, targetRect, type Plan, type Rect, type Tile,
 } from './tile-grid';
@@ -28,6 +30,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   mail: { title: 'Poczta', icon: Mail },
   system: { title: 'Komputer', icon: Cpu },
   todo: { title: 'Zadania', icon: ListChecks },
+  bank: { title: 'Konto', icon: Landmark },
 };
 /** Name and icon of a kind. Claude and Codex are known before the first reading; an Antigravity group is named by its card. */
 function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: LucideIcon } {
@@ -79,8 +82,8 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
  * stretch it, and the X in its corner switches it off. A tile that grows over others asks them to move to free cells,
  * and only stops where they have nowhere to go. The arrangement is kept in the browser.
  */
-export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
-  data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState;
+export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
+  data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; bank: BankHook;
   showTasks: () => void; showBreakdown?: () => void; available: (kind: string) => boolean; systemThreshold: number;
   /** The virtual desktop whose arrangement this is (pulpits.ts); each one is kept under its own key. */
   pulpit?: string;
@@ -161,6 +164,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, showT
       finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />;
     if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={open} compact={!roomy} />;
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={open} roomy={roomy} threshold={systemThreshold} />;
+    if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);

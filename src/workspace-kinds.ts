@@ -2,7 +2,7 @@ import type { WidgetId } from './layout';
 import type { QuotaCardItem } from './quota-cards';
 import type { QuotaVisibility } from './quota-visibility';
 
-/** What a tile can show: 'cezar', 'mail', 'system', or one AI limit as `quota:<card id>` (Claude, Codex, agy:<model group>). */
+/** What a tile can show: 'cezar', 'mail', 'system', 'bank', or one AI limit as `quota:<card id>` (Claude, Codex, agy:<model group>). */
 export const kindOfCard = (card: QuotaCardItem) => `quota:${card.id}`;
 
 /** Whether the settings let the tile exist at all; a tile of a switched-off kind leaves the layout and is not offered. */
@@ -11,6 +11,7 @@ export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, 
   if (kind === 'mail') return visible('mail');
   if (kind === 'system') return visible('system');
   if (kind === 'todo') return visible('todo');
+  if (kind === 'bank') return visible('bank');
   if (!kind.startsWith('quota:') || !visible('quotas')) return false;
   const id = kind.slice('quota:'.length);
   if (id === 'Claude' || id === 'Codex') return !hidden.hiddenProviders.includes(id);
@@ -32,6 +33,6 @@ export const MULTI_KINDS: readonly string[] = ['todo'];
  * repeat. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
  */
 export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean, multi: readonly string[] = MULTI_KINDS): string[] {
-  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', ...multi])];
+  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', ...multi])];
   return kinds.filter(kind => (multi.includes(kind) || !placed.includes(kind)) && available(kind));
 }
