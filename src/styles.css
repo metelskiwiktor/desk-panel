@@ -1087,3 +1087,212 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 .pulpit-card-head { position: relative; min-height: 44px; align-items: center; }
 .card-link { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: none; border-radius: 12px; cursor: pointer; }
 .card-link:hover:not(:disabled) { background: #ffffff08; }
+
+/* ── Smart Actions Tile ── */
+.smart-actions {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sa-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.sa-title-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.sa-zap-icon {
+  color: var(--amber);
+}
+.sa-count {
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+}
+.sa-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+.sa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 80px;
+  gap: 8px;
+  color: var(--muted);
+}
+.sa-empty-icon {
+  color: var(--quota-green);
+  opacity: 0.8;
+}
+.sa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sa-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease;
+}
+.sa-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sa-item-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.sa-prio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sa-prio-dot.prio-high {
+  background: var(--quota-red);
+  box-shadow: 0 0 6px var(--quota-red);
+}
+.sa-prio-dot.prio-medium {
+  background: var(--quota-yellow);
+}
+.sa-prio-dot.prio-low {
+  background: var(--muted);
+}
+.sa-category-icon {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+.sa-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(129, 174, 239, 0.15);
+  color: var(--blue);
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sa-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sa-item-title-row {
+  display: flex;
+  align-items: center;
+}
+.sa-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e9edf5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sa-item-snippet {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+.sa-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: #151d2a;
+  color: #c9d3e1;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sa-btn:hover {
+  background: #202c3e;
+  border-color: #3b485d;
+  color: #ffffff;
+}
+.sa-btn-primary {
+  background: rgba(129, 174, 239, 0.12);
+  border-color: rgba(129, 174, 239, 0.3);
+  color: #a7cbff;
+}
+.sa-btn-primary:hover {
+  background: rgba(129, 174, 239, 0.22);
+  border-color: rgba(129, 174, 239, 0.5);
+  color: #ffffff;
+}
+.sa-btn-read {
+  color: var(--quota-green);
+  width: 26px;
+  padding: 0;
+}
+.sa-btn-read:hover {
+  background: rgba(117, 212, 155, 0.15);
+  border-color: rgba(117, 212, 155, 0.4);
+}
+.sa-btn-dismiss {
+  color: var(--muted);
+  width: 26px;
+  padding: 0;
+}
+.sa-btn-dismiss:hover {
+  background: rgba(242, 136, 139, 0.15);
+  border-color: rgba(242, 136, 139, 0.4);
+  color: var(--quota-red);
+}
+
+.smart-actions:not(.wide) .sa-btn-label {
+  display: none;
+}
+.smart-actions:not(.wide) .sa-btn-action {
+  width: 26px;
+  padding: 0;
+}
+.smart-actions.wide .sa-item {
+  padding: 8px 10px;
+}
+.smart-actions.tall .sa-list {
+  gap: 8px;
+}

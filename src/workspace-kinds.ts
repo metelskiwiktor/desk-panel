@@ -12,6 +12,7 @@ export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, 
   if (kind === 'system') return visible('system');
   if (kind === 'todo') return visible('todo');
   if (kind === 'bank') return visible('bank');
+  if (kind === 'smart-actions') return visible('smart-actions');
   if (!kind.startsWith('quota:') || !visible('quotas')) return false;
   const id = kind.slice('quota:'.length);
   if (id === 'Claude' || id === 'Codex') return !hidden.hiddenProviders.includes(id);
@@ -33,6 +34,6 @@ export const MULTI_KINDS: readonly string[] = ['todo'];
  * repeat. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
  */
 export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean, multi: readonly string[] = MULTI_KINDS): string[] {
-  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', ...multi])];
+  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', 'smart-actions', ...multi])];
   return kinds.filter(kind => (multi.includes(kind) || !placed.includes(kind)) && available(kind));
 }

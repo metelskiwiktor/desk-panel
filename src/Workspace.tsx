@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Bot, Cpu, Gem, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, type LucideIcon } from 'lucide-react';
+import { Bot, Cpu, Gem, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
 import { BankTile } from './BankTile';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
@@ -7,6 +7,7 @@ import { MailFeed } from './MailFeed';
 import type { DashboardData, Detail } from './model';
 import { MissingLimit, QuotaTile } from './QuotaBars';
 import { getQuotaCards, type QuotaCardItem } from './quota-cards';
+import { SmartActionsTile } from './SmartActionsTile';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
 import type { TodosState } from './useTodos';
@@ -31,6 +32,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   system: { title: 'Komputer', icon: Cpu },
   todo: { title: 'Zadania', icon: ListChecks },
   bank: { title: 'Konto', icon: Landmark },
+  'smart-actions': { title: 'Smart Actions', icon: Zap },
 };
 /** Name and icon of a kind. Claude and Codex are known before the first reading; an Antigravity group is named by its card. */
 function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: LucideIcon } {
@@ -92,7 +94,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
   const cards = getQuotaCards(data.quotas.data);
   // Until the panel is arranged by hand the layout follows what there is to show; then the saved one is kept as it is.
   // A tile of a kind the settings switched off is not drawn, and the next change drops it from the saved layout for good.
-  const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar'].filter(available))).filter(t => available(t.kind));
+  const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar', 'smart-actions'].filter(available))).filter(t => available(t.kind));
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
   const commit = (next: Tile[]) => { tilesRef.current = next; setStored(next); saveWorkspace(next, workspaceKey(pulpit)); };
@@ -165,6 +167,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={open} compact={!roomy} />;
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={open} roomy={roomy} threshold={systemThreshold} />;
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
+    if (tile.kind === 'smart-actions') return <SmartActionsTile mail={mail} tasks={data.tasks} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);

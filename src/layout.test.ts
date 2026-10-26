@@ -47,6 +47,7 @@ describe('wersjonowany układ', () => {
       ['mail', false],
       ['todo', false],
       ['bank', false],
+      ['smart-actions', false],
     ]);
   });
   it('wczytuje układ zapisany ze starą kartą zegara, bez niej', () => {
@@ -57,7 +58,7 @@ describe('wersjonowany układ', () => {
     const saved = { version: 2, widgets: defaultLayout().widgets.filter((w) => w.id !== 'mail').reverse() };
     saved.widgets[0] = { ...saved.widgets[0], visible: false };
     const layout = parseLayout(JSON.stringify(saved));
-    expect(layout.widgets.map((w) => w.id)).toEqual(['bank', 'todo', 'insights', 'breakdown', 'quotas', 'training', 'calendar', 'system', 'cezar', 'mail']);
+    expect(layout.widgets.map((w) => w.id)).toEqual(['smart-actions', 'bank', 'todo', 'insights', 'breakdown', 'quotas', 'training', 'calendar', 'system', 'cezar', 'mail']);
     expect(layout.widgets[0].visible).toBe(false);
     expect(layout.widgets.at(-1)!.visible).toBe(true);
   });
