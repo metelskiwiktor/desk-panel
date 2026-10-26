@@ -561,6 +561,7 @@
         "from": "Anna Nowak",
         "subject": "Spotkanie w czwartek",
         "snippet": "Cześć, czy możemy przesunąć spotkanie na 15:00? Mam konflikt w kalendarzu.",
+        "body": "Cześć,\n\nCzy możemy przesunąć spotkanie na 15:00?\nMam konflikt w kalendarzu o 14:00.\n\nDaj znać czy Ci pasuje,\nAnna",
         "receivedAt": "now-6m",
         "messages": 1,
         "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d401"
@@ -572,6 +573,7 @@
         "from": "GitHub",
         "subject": "[desk-panel] PR #3: Gmail w panelu",
         "snippet": "metelskiwiktor requested your review on this pull request.",
+        "body": "metelskiwiktor requested your review on this pull request.\n\nPR #3: Gmail w panelu\nBranch: feat/gmail\n\nChanges include:\n- Read-only thread view\n- Swipe actions for read and trash",
         "receivedAt": "now-25m",
         "messages": 2,
         "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d402"
@@ -583,6 +585,7 @@
         "from": "Bank Millennium",
         "subject": "Potwierdzenie przelewu",
         "snippet": "Przelew na kwotę 120,00 zł został zrealizowany.",
+        "body": "Dzień dobry,\n\nInformujemy, że przelew na kwotę 120,00 zł został zrealizowany poprawnie.\n\nNumer transakcji: TR-2026-98124\nData waluty: dzisiaj\n\nPozdrawiamy,\nBank Millennium",
         "receivedAt": "now-1h10m",
         "messages": 1,
         "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d403"
@@ -594,6 +597,7 @@
         "from": "Jira",
         "subject": "Nowe zadanie przypisane do Ciebie",
         "snippet": "DESK-42 Przegląd układu na ekranie pionowym.",
+        "body": "Nowe zadanie przypisane do Ciebie:\n\nDESK-42 Przegląd układu na ekranie pionowym.\nPriorytet: Wysoki\nOpis: Sprawdź zachowanie kafelków i przewijania na ekranie medialove-14 w trybie portretowym.\n\nLink: https://jira.local/browse/DESK-42",
         "receivedAt": "now-3h",
         "messages": 1,
         "sourceUrl": "https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404"
@@ -605,6 +609,7 @@
         "from": "Allegro",
         "subject": "Twoja paczka jest w drodze",
         "snippet": "Przesyłka zostanie dostarczona jutro do paczkomatu.",
+        "body": "Twoja paczka jest już w drodze!\n\nPrzewidywany termin dostawy: jutro do godziny 14:00.\nNumer przesyłki: A000987654321\nPaczkomat docelowy: WAW01M, ul. Marszałkowska 10.\n\nDziękujemy za zakupy na Allegro!",
         "receivedAt": "now-1d2h",
         "messages": 3,
         "sourceUrl": "https://mail.google.com/mail/u/owner@gmail.com/#inbox/18c2f0a1b2c3d405"
