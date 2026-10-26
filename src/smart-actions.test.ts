@@ -50,6 +50,22 @@ describe('parseEmailAction', () => {
     expect(action?.sourceBadge).toContain('Centrum Medyczne');
   });
 
+  it('extracts ZnanyLekarz confirmation link when asking "Czy pojawisz się na wizycie"', () => {
+    const thread: MailThread = {
+      ...baseThread,
+      from: 'mgr Artur Wierusz',
+      subject: '️❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?',
+      snippet: 'Wizyta umówiona przez ZnanyLekarz Platforma dla lekarzy i pacjentów Potwierdź swoją obecność na wizycie',
+      body: 'Wizyta dla Wiktor\nśroda 28 października 2026\n17:30 (GMT+1)\nFabryczna 15, Leszno\n\nPotwierdź lub przełóż (https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi)\n\nkontakt@znanylekarz.pl',
+      sourceUrl: 'https://mail.google.com/mail/u/metelski.wiktor%40gmail.com/#inbox/1a1790d1e9092fca',
+    };
+    const action = parseEmailAction(thread);
+    expect(action).not.toBeNull();
+    expect(action?.category).toBe('appointment');
+    expect(action?.actionLabel).toBe('Potwierdź wizytę');
+    expect(action?.actionUrl).toBe('https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi');
+  });
+
   it('detects PR review requests', () => {
     const thread: MailThread = {
       ...baseThread,

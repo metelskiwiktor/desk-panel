@@ -195,6 +195,18 @@ describe('Gmail reader', () => {
     };
     expect(projectThread('user@gmail.com', rawHtmlOnlyMultipart).body).toBe('Cześć,\n\nTo jest wiadomość HTML & link.');
 
+    const rawHtmlWithLinks = {
+      id: 'html-link', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Snippet fallback', internalDate: '1000',
+        payload: {
+          mimeType: 'text/html',
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          body: { data: Buffer.from('<div><a href="https://example.com/confirm?token=123&amp;x=1">Potwierdź wizytę</a> lub <a href="mailto:kontakt@example.com">Napisz</a></div>').toString('base64url') },
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawHtmlWithLinks).body).toBe('Potwierdź wizytę (https://example.com/confirm?token=123&x=1) lub Napisz');
+
     const rawHtmlOnlySinglePart = {
       id: 'html2', historyId: '1', messages: [{
         labelIds: ['UNREAD'], snippet: 'Snippet fallback', internalDate: '1000',

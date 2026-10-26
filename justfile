@@ -59,8 +59,8 @@ update *args:
     node scripts/update.mjs {{args}}
 
 # Manage the Windows service: STATUS, START, STOP, RESTART; RUN runs in foreground.
-service action="STATUS":
-    & ./servy/desk-panel.ps1 -Action '{{action}}'
+service action="STATUS" *args:
+    & ./servy/desk-panel.ps1 -Action '{{action}}' {{args}}
 
 # Build and register the service with automatic startup (Windows credential dialog).
 install: check

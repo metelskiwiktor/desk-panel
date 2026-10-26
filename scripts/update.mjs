@@ -26,7 +26,9 @@ function fail(message, details = []) {
 }
 function service(action) {
   if (!windows) { console.log(`(pomijam ${action} usługi — to nie Windows)`); return true; }
-  return run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'servy/desk-panel.ps1', '-Action', action]);
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'servy/desk-panel.ps1', '-Action', action];
+  if (action === 'RESTART') args.push('-NoBuild');
+  return run('powershell.exe', args);
 }
 /**
  * 'Running', 'Stopped', … ; '' when the service is not registered (before `just install`);

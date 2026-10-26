@@ -28,6 +28,23 @@ export function extractUrl(text?: string): string | undefined {
   return match[0].replace(/[.,;:)]+$/, '');
 }
 
+export function extractAppointmentUrl(text?: string): string | undefined {
+  if (!text) return undefined;
+  const confirmPatterns = [
+    /(?:potwierd[a-ząćęłńóśźż]*|obecnoś[ćci]|przełóż|wizyt[a-zęóąśłżźćń]*)\b[^\n\r]*?(https?:\/\/[^\s<>"]+)/i,
+    /(https?:\/\/[^\s<>"]+)[^\n\r]*?(?:potwierd[a-ząćęłńóśźż]*|obecnoś[ćci]|przełóż)/i,
+    /https?:\/\/[^\s<>"]*(?:znanylekarz|potwierdz|confirm|wizyt)[^\s<>"]*/i,
+  ];
+  for (const pattern of confirmPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const url = match[1] || match[0];
+      return url.replace(/[.,;:)]+$/, '');
+    }
+  }
+  return extractUrl(text);
+}
+
 const APPOINTMENT_REGEX = /(?:potwierd(?:zenie|ź)\s+wizyt|wizyt[aęy]|dr\s+[a-z]|lekarz|stomatolog|przychodni|znanylekarz|termin\s+wizyt|appointment\s+confirm|doctor\s+visit)/i;
 const PR_REVIEW_REGEX = /(?:requested\s+your\s+review|review\s+requested|prośba\s+o\s+review|pull\s+request|pr\s*#\d+|code\s+review)/i;
 const PAYMENT_REGEX = /(?:do\s+opłacenia|faktur[ayę]|invoice|opłać\b|rachun(?:ek|ku)|płatnoś(?:ć|ci)|oczekuje\s+na\s+opłacenie|termin\s+płatności|payment\s+due|zapłać)/i;
@@ -43,6 +60,7 @@ export function parseEmailAction(thread: MailThread): SmartAction | null {
   const directUrl = extractUrl(body) || extractUrl(snippet) || thread.sourceUrl;
 
   if (APPOINTMENT_REGEX.test(fullText)) {
+    const appointmentUrl = extractAppointmentUrl(body) || extractAppointmentUrl(snippet) || directUrl;
     return {
       id: `mail:${thread.id}`,
       source: 'mail',
@@ -53,7 +71,7 @@ export function parseEmailAction(thread: MailThread): SmartAction | null {
       category: 'appointment',
       priority: 'high',
       timestamp: thread.receivedAt,
-      actionUrl: directUrl,
+      actionUrl: appointmentUrl,
       actionLabel: 'Potwierdź wizytę',
       mailThread: thread,
     };

@@ -41,6 +41,14 @@ function stripHtml(html: string): string {
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|h[1-6])>/gi, '\n\n')
     .replace(/<\/(div|tr|li)>/gi, '\n')
+    .replace(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, content) => {
+      const cleanContent = content.replace(/<[^>]+>/g, '').trim();
+      const cleanHref = decode(href.trim());
+      if (!cleanHref || /^(?:mailto|javascript|tel):/i.test(cleanHref)) {
+        return cleanContent;
+      }
+      return cleanContent ? `${cleanContent} (${cleanHref})` : cleanHref;
+    })
     .replace(/<[^>]+>/g, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')

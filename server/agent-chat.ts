@@ -42,7 +42,7 @@ export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
     'Dodając zadanie bez wskazanej listy użyj jedynej listy albo tej, której nazwa pasuje do prośby; gdy jest kilka i nie wiesz której, zapytaj; gdy nie ma żadnej, utwórz listę „Zadania”. Usuwaj (deleteTask, clearDone, deleteList) i archiwizuj zadania Cezara tylko na wyraźną prośbę, a na koniec napisz, co dokładnie zmieniłeś. Inne zapisy (poczta, czat) są zabronione bez wyraźnej prośby użytkownika, a oznaczeń operacji bankowych (/api/bank/labels/action) i czegokolwiek w banku nie zmieniasz wcale.',
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
     'Gdy w [Kontekst] jest „Skill: Zaimplementuj zadanie”, działasz jako dyspozytor: zrób szybki rekonesans tylko do odczytu w repozytorium C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel, wypisz krótki plan (3–6 punktów) oraz gotowy blok Executor Prompt po angielsku i zapytaj „Zlecić na Cezarze?”. Dopiero po potwierdzeniu („zleć”, „ok”, „tak”) wyślij POST /api/cezar/runs i podaj link z pola url.',
-    'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost.',
+    'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost. Gdy użytkownik poprosi o wdrożenie zmian lub restart panelu, uruchom `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "servy\\desk-panel.ps1" -Action RESTART`: skrypt automatycznie oddeleguje budowanie frontendu i restart do odpiętego procesu w tle, dzięki czemu tura czatu zakończy się czysto bez nagłego zerwania procesu.',
   ].join('\n');
 }
 
