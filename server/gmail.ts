@@ -7,10 +7,13 @@ export const MAIL_QUERY = 'in:inbox is:unread newer_than:30d';
 const MAX_PER_ACCOUNT = 200;
 const header = z.object({ name: z.string(), value: z.string() });
 const threadList = z.object({ threads: z.array(z.object({ id: z.string(), historyId: z.string() })).optional(), nextPageToken: z.string().optional() });
-const threadDetail = z.object({ id: z.string(), historyId: z.string(), messages: z.array(z.object({
-  labelIds: z.array(z.string()).optional(), snippet: z.string().optional(), internalDate: z.string(),
-  payload: z.object({ headers: z.array(header).optional() }).optional(),
-})).min(1) });
+interface MessagePart { mimeType?: string; body?: { data?: string; size?: number }; parts?: MessagePart[] }
+const messagePartSchema: z.ZodType<MessagePart> = z.lazy(() => z.object({ mimeType: z.string().optional(), body: z.object({ data: z.string().optional(), size: z.number().optional() }).optional(), parts: z.array(messagePartSchema).optional() }));
+const messageDetail = z.object({
+  labelIds: z.array(z.string()).optional(), snippet: z.string().optional(), body: z.string().optional(), internalDate: z.string(),
+  payload: z.object({ headers: z.array(header).optional(), mimeType: z.string().optional(), body: z.object({ data: z.string().optional(), size: z.number().optional() }).optional(), parts: z.array(messagePartSchema).optional() }).optional(),
+});
+const threadDetail = z.object({ id: z.string(), historyId: z.string(), messages: z.array(messageDetail).min(1) });
 
 type Account = Pick<GoogleAccount, 'email' | 'request'>;
 interface AccountState { status: MailSource['accounts'][number]['status']; observedAt: number | null; message?: string;
@@ -20,6 +23,67 @@ interface AccountState { status: MailSource['accounts'][number]['status']; obser
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", nbsp: ' ' };
 const decode = (text: string) => text.replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e: string) => entities[e])
   .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)));
+
+function decodeBody(data: string): string {
+  if (/[\s<>]/.test(data) || !/^[A-Za-z0-9_-]+=*$/.test(data)) return data;
+  try {
+    const decoded = Buffer.from(data, 'base64url').toString('utf8');
+    if (decoded && !decoded.includes('\ufffd')) return decoded;
+  } catch {}
+  return data;
+}
+
+function stripHtml(html: string): string {
+  const text = html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|h[1-6])>/gi, '\n\n')
+    .replace(/<\/(div|tr|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return decode(text);
+}
+
+function findPart(parts: MessagePart[], mimeType?: string): MessagePart | undefined {
+  for (const part of parts) {
+    if ((!mimeType || part.mimeType === mimeType) && part.body?.data) return part;
+    if (part.parts) {
+      const found = findPart(part.parts, mimeType);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+export function extractBody(msg: z.infer<typeof messageDetail>): string {
+  if (msg.body && msg.body.trim()) return decode(msg.body);
+  const payload = msg.payload;
+  if (payload) {
+    if (payload.parts && payload.parts.length > 0) {
+      const plain = findPart(payload.parts, 'text/plain');
+      if (plain?.body?.data) {
+        const text = decodeBody(plain.body.data);
+        if (text.trim()) return decode(text);
+      }
+      const html = findPart(payload.parts, 'text/html');
+      if (html?.body?.data) {
+        const text = decodeBody(html.body.data);
+        const stripped = stripHtml(text);
+        if (stripped.trim()) return stripped;
+      }
+    } else if (payload.body?.data && (!payload.mimeType || payload.mimeType.startsWith('text/'))) {
+      const text = decodeBody(payload.body.data);
+      const isHtml = payload.mimeType === 'text/html' || (!payload.mimeType && /<(p|div|html|body|br|span|table|h[1-6])[^>]*>/i.test(text));
+      const clean = isHtml ? stripHtml(text) : decode(text);
+      if (clean.trim()) return clean;
+    }
+  }
+  return decode(msg.snippet ?? '');
+}
 /** `"Jan Kowalski" <jan@x.pl>` → `Jan Kowalski`; a bare address stays as is. */
 export function sender(from: string) {
   const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
@@ -30,12 +94,12 @@ export function projectThread(email: string, raw: unknown): MailThread {
   const latest = [...thread.messages].reverse().find(m => m.labelIds?.includes('UNREAD')) ?? thread.messages.at(-1)!;
   const get = (name: string) => latest.payload?.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
   return { id: `${email}:${thread.id}`, account: email, threadId: thread.id, from: sender(get('From')),
-    subject: get('Subject').trim() || '(bez tematu)', snippet: decode(latest.snippet ?? ''),
+    subject: get('Subject').trim() || '(bez tematu)', snippet: decode(latest.snippet ?? ''), body: extractBody(latest) || decode(latest.snippet ?? ''),
     receivedAt: Number(latest.internalDate), messages: thread.messages.length,
     sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox/${thread.id}` };
 }
 
-/** Unread inbox conversations of every account, merged newest first. Never sends or reads message bodies. */
+/** Unread inbox conversations of every account, merged newest first. Never sends or permanently deletes messages. */
 export function createMailReader(accounts: Account[], now = Date.now) {
   const states = new Map<string, AccountState>(accounts.map(a => [a.email, { status: 'loading', observedAt: null, threads: [], partial: false, cache: new Map(), retryAt: 0, rateLimitFailures: 0 }]));
   let lastAttempt = -Infinity;
@@ -53,12 +117,12 @@ export function createMailReader(accounts: Account[], now = Date.now) {
       } while (pageToken && listed.length < MAX_PER_ACCOUNT);
       const threads: MailThread[] = [];
       for (let i = 0; i < Math.min(listed.length, MAX_PER_ACCOUNT); i += 10) {
-        // Metadata only; unchanged conversations (same historyId) come from the cache.
+        // Unchanged conversations (same historyId) come from the cache.
         threads.push(...await Promise.all(listed.slice(i, i + 10).map(async ({ id, historyId }) => {
           const cached = state.cache.get(id);
           if (cached?.historyId === historyId) return cached.thread;
           const thread = projectThread(account.email, await account.request('mail', `${BASE}/threads/${id}`,
-            { params: { format: 'metadata', metadataHeaders: ['From', 'Subject'] } }));
+            { params: { format: 'full' } }));
           state.cache.set(id, { historyId, thread });
           return thread;
         })));

@@ -10,8 +10,8 @@ Przesunięcie w lewo oznacza wątek jako przeczytany, w prawo przenosi go do Kos
 odwrotną (nieprzeczytane / przywróć z kosza). Gdy Gmail odmówi, wątek wraca na listę.
 
 Lista przewija się wewnątrz karty o stałej wysokości (`--mail-list-height`), a kolejne
-porcje po 30 wątków doczytuje się przy przewijaniu. Backend czyta tylko metadane (nadawca,
-temat, podgląd Gmaila, data), nigdy treści ani załączników; niezmienione wątki (ten sam
+porcje po 30 wątków doczytuje się przy przewijaniu. Backend czyta metadane i treść wątku (nadawca,
+temat, podgląd, treść, data), nigdy załączników; niezmienione wątki (ten sam
 `historyId`) bierze z pamięci. Odczyt co 30 s; po błędzie zostaje ostatnia lista i jej czas.
 
 Zakres `gmail.modify` pozwala czytać, zmieniać etykiety i przenosić do kosza. Konto

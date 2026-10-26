@@ -61,8 +61,26 @@ describe('Poczta', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Jira/ }));
     expect(screen.getByRole('heading', { name: 'Nowe zadanie przypisane do Ciebie' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe('https://mail.google.com/mail/u/praca@gmail.com/#inbox/18c2f0a1b2c3d404');
+    expect(screen.getByText(/Sprawdź zachowanie kafelków/)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: /Oznacz jako przeczytane/ }));
     await waitFor(() => expect(actions(fetcher)).toEqual(['read']));
+  });
+  it('renders the full email body in the detail modal and falls back to snippet when absent', async () => {
+    renderWith('standard');
+    await userEvent.click(await screen.findByRole('button', { name: /^Anna Nowak/ }));
+    expect(screen.getByText(/Mam konflikt w kalendarzu o 14:00/)).toBeTruthy();
+  });
+  it('falls back to snippet in detail modal when body is absent', async () => {
+    renderWith('standard', (url) => {
+      if (url.startsWith('/api/mail')) {
+        return new Response(JSON.stringify({
+          live: true, name: 'Gmail', status: 'connected', observedAt: Date.now(), total: 1, accounts: [{ email: 'a@x.pl', status: 'connected', observedAt: Date.now(), unread: 1 }],
+          data: [{ id: 'a@x.pl:1', account: 'a@x.pl', threadId: '1', from: 'Nadawca', subject: 'Temat', snippet: 'Tylko snippet tutaj', receivedAt: Date.now(), messages: 1, sourceUrl: 'https://mail.google.com' }],
+        }), { headers: { 'content-type': 'application/json' } });
+      }
+    });
+    await userEvent.click(await screen.findByRole('button', { name: /^Nadawca/ }));
+    expect(screen.getByText('Tylko snippet tutaj')).toBeTruthy();
   });
   it('loads further pages as the list scrolls', async () => {
     const fetcher = renderWith('mail-many');
