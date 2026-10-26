@@ -33,11 +33,24 @@ function decodeBody(data: string): string {
   return data;
 }
 
+function stripHtml(html: string): string {
+  const text = html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|h[1-6])>/gi, '\n\n')
+    .replace(/<\/(div|tr|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return decode(text);
+}
+
 function findPart(parts: MessagePart[], mimeType?: string): MessagePart | undefined {
   for (const part of parts) {
-    if (mimeType ? part.mimeType === mimeType : part.body?.data) {
-      if (part.body?.data) return part;
-    }
+    if ((!mimeType || part.mimeType === mimeType) && part.body?.data) return part;
     if (part.parts) {
       const found = findPart(part.parts, mimeType);
       if (found) return found;
@@ -50,21 +63,23 @@ export function extractBody(msg: z.infer<typeof messageDetail>): string {
   if (msg.body && msg.body.trim()) return decode(msg.body);
   const payload = msg.payload;
   if (payload) {
-    if (payload.body?.data) {
-      const text = decodeBody(payload.body.data);
-      if (text.trim()) return decode(text);
-    }
-    if (payload.parts) {
+    if (payload.parts && payload.parts.length > 0) {
       const plain = findPart(payload.parts, 'text/plain');
       if (plain?.body?.data) {
         const text = decodeBody(plain.body.data);
         if (text.trim()) return decode(text);
       }
-      const anyPart = findPart(payload.parts);
-      if (anyPart?.body?.data) {
-        const text = decodeBody(anyPart.body.data);
-        if (text.trim()) return decode(text);
+      const html = findPart(payload.parts, 'text/html');
+      if (html?.body?.data) {
+        const text = decodeBody(html.body.data);
+        const stripped = stripHtml(text);
+        if (stripped.trim()) return stripped;
       }
+    } else if (payload.body?.data && (!payload.mimeType || payload.mimeType.startsWith('text/'))) {
+      const text = decodeBody(payload.body.data);
+      const isHtml = payload.mimeType === 'text/html' || (!payload.mimeType && /<(p|div|html|body|br|span|table|h[1-6])[^>]*>/i.test(text));
+      const clean = isHtml ? stripHtml(text) : decode(text);
+      if (clean.trim()) return clean;
     }
   }
   return decode(msg.snippet ?? '');

@@ -180,4 +180,91 @@ describe('Gmail reader', () => {
     };
     expect(projectThread('user@gmail.com', rawFallback).body).toBe('Tylko & podgląd');
   });
+
+  it('handles HTML-only emails by stripping HTML tags to plain text or falling back to snippet', () => {
+    const rawHtmlOnlyMultipart = {
+      id: 'html1', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Snippet fallback', internalDate: '1000',
+        payload: {
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          parts: [
+            { mimeType: 'text/html', body: { data: Buffer.from('<p>Cześć,</p><p>To jest <b>wiadomość HTML</b> &amp; link.</p>').toString('base64url') } },
+          ],
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawHtmlOnlyMultipart).body).toBe('Cześć,\n\nTo jest wiadomość HTML & link.');
+
+    const rawHtmlOnlySinglePart = {
+      id: 'html2', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Snippet fallback', internalDate: '1000',
+        payload: {
+          mimeType: 'text/html',
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          body: { data: Buffer.from('<div>Pierwsza linia<br/>Druga linia</div>').toString('base64url') },
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawHtmlOnlySinglePart).body).toBe('Pierwsza linia\nDruga linia');
+
+    const rawEmptyHtml = {
+      id: 'html3', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Podgląd ze snippetu', internalDate: '1000',
+        payload: {
+          mimeType: 'text/html',
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          body: { data: Buffer.from('<div><img src="cid:abc" /><style>body{color:red;}</style></div>').toString('base64url') },
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawEmptyHtml).body).toBe('Podgląd ze snippetu');
+  });
+
+  it('does not decode non-text MIME types into body and falls back to snippet', () => {
+    const rawMultipartWithAttachmentOnly = {
+      id: 'att1', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Podgląd załącznika', internalDate: '1000',
+        payload: {
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          parts: [
+            { mimeType: 'application/pdf', body: { data: Buffer.from('%PDF-1.4 binary data').toString('base64url') } },
+            { mimeType: 'image/png', body: { data: Buffer.from('fake png data').toString('base64url') } },
+          ],
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawMultipartWithAttachmentOnly).body).toBe('Podgląd załącznika');
+
+    const rawSinglePartNonText = {
+      id: 'att2', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Podgląd pliku', internalDate: '1000',
+        payload: {
+          mimeType: 'application/pdf',
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          body: { data: Buffer.from('%PDF-1.4 raw binary').toString('base64url') },
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawSinglePartNonText).body).toBe('Podgląd pliku');
+
+    const rawNestedMultipart = {
+      id: 'nested1', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Snippet', internalDate: '1000',
+        payload: {
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          parts: [
+            {
+              mimeType: 'multipart/alternative',
+              parts: [
+                { mimeType: 'text/html', body: { data: Buffer.from('<b>Ignorowany HTML</b>').toString('base64url') } },
+                { mimeType: 'text/plain', body: { data: Buffer.from('Zagnieżdżony tekst plain').toString('base64url') } },
+              ],
+            },
+            { mimeType: 'application/pdf', body: { data: Buffer.from('%PDF-1.4').toString('base64url') } },
+          ],
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawNestedMultipart).body).toBe('Zagnieżdżony tekst plain');
+  });
 });
