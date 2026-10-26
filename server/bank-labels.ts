@@ -239,8 +239,10 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
     }
     const pending = ops.filter(o => bookedOn(o.t.at) >= file.since && !file.labels[o.t.id]?.category).map(o => o.t.id);
     const proposals = new Map<string, Proposal>();
+    // Every operation without a category gets its suggestion, also one older than "to be marked" counts from: it is not
+    // asked for, but when the user opens it the panel says what it knows.
     for (const o of ops) {
-      if (!pending.includes(o.t.id)) continue;
+      if (file.labels[o.t.id]?.category) continue;
       const proposal = suggest(o.t.id, o.op, ctx);
       if (proposal) proposals.set(o.t.id, proposal);
     }

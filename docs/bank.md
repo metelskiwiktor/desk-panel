@@ -130,6 +130,9 @@ plik chwilowo nieczytelny (DPAPI, blokada) zostaje nietknięty i nic nie jest za
 
 Tylko przez powiązania, które trzymają (`server/bank-suggest.ts`), bez ukrytego modelu, przedziałów kwot i pory dnia (bank jej nie podaje):
 
+Podpowiedź liczy się dla każdej operacji bez kategorii, także starszej niż dzień „do przypisania” (nie jest liczona, ale po otwarciu
+okno mówi, co wiadomo).
+
 1. **Kto**: tekst sprzedawcy z banku, rachunek, pełny numer telefonu albo nazwa z banku należą do znanego sprzedawcy lub osoby. Okno od razu
    pokazuje, kto to jest, także bez wcześniejszych oznaczeń. Zamaskowany numer (pierwsza i trzy ostatnie cyfry) tylko podpowiada, z prośbą o
    sprawdzenie.

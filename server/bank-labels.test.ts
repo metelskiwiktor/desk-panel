@@ -168,6 +168,11 @@ describe('bank label store', () => {
     expect(data.known['acc:O;3']).toEqual({ merchant: spolem });
     expect(data.suggestions['acc:O;3']).toEqual({ sure: true, options: [{ category: food, tags: ['zakupy'], merchant: spolem, reasons: ['ten sam sprzedawca w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
     expect(data.labels['acc:O;3']).toBeUndefined();
+    // Older than the day "to be marked" counts from: not counted, but still suggested when opened.
+    await store.apply({ action: 'setSince', since: '2026-10-25' });
+    data = (await store.read()).data!;
+    expect(data.pending).toEqual([]);
+    expect(data.suggestions['acc:O;3'].sure).toBe(true);
     await store.apply({ action: 'accept', tx: 'acc:O;3' });
     data = (await store.read()).data!;
     expect(data.labels['acc:O;3']).toEqual({ category: food, tags: ['zakupy'], merchant: spolem, person: null, recurring: false, comment: '' });
