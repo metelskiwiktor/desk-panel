@@ -44,8 +44,8 @@ lives only in scenarios/ — add a file there instead of branching in the UI. Co
 real observation timestamps on failures. Cezar is read-only except
 `POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked); never start,
 resume or answer tasks. Quota reads must never send model prompts
-or start agent turns. Gmail uses `gmail.modify` only: metadata reads, read/unread
-and Trash/untrash — never message bodies, sending or permanent deletion. Garmin Connect
+or start agent turns. Gmail uses `gmail.modify` only: thread reads, read/unread
+and Trash/untrash — never sending or permanent deletion. Garmin Connect
 (unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and
 recordings' basics reach the UI (no body, sleep, places or ids); what else the account returns is catalogued in
 docs/garmin-data.md. Do not commit .env, OAuth clients, tokens, logs, screenshots,

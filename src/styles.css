@@ -631,6 +631,8 @@ main:focus {
   line-height: 1.9;
   margin: 24px 0;
   color: #b8c6d9;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 dl {
   display: grid;

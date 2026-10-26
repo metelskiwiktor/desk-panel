@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { createMailReader, MAIL_QUERY, sender } from './gmail';
+import { createMailReader, MAIL_QUERY, projectThread, sender } from './gmail';
 import { GoogleAuthError, type GoogleService } from './google-oauth';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 type Init = { method?: string; params?: Record<string, string | string[]>; data?: unknown };
-function message(from: string, subject: string, at: number, unread = true, snippet = 'Podgląd &amp; treść') {
-  return { labelIds: unread ? ['UNREAD', 'INBOX'] : ['INBOX'], snippet, internalDate: String(at),
+function message(from: string, subject: string, at: number, unread = true, snippet = 'Podgląd &amp; treść', body?: string) {
+  return { labelIds: unread ? ['UNREAD', 'INBOX'] : ['INBOX'], snippet, internalDate: String(at), ...(body ? { body } : {}),
     payload: { headers: [{ name: 'From', value: from }, { name: 'Subject', value: subject }] } };
 }
 /** A fake Gmail account: `threads` maps id → messages, `fail` makes the next calls throw. */
@@ -22,7 +22,7 @@ function account(email: string, threads: Record<string, ReturnType<typeof messag
     }
     const id = url.slice(`${BASE}/threads/`.length).split('/')[0];
     if (init.method === 'POST') return {};
-    expect(init.params).toMatchObject({ format: 'metadata' });
+    expect(init.params).toMatchObject({ format: 'full' });
     return { id, historyId: history[id] ?? '1', messages: threads[id] };
   });
   return { email, request, state };
@@ -104,7 +104,7 @@ describe('Gmail reader', () => {
     const result = await reader.read(10);
     expect(result).toMatchObject({ status: 'connected', observedAt: now, total: 2 });
     expect(result.data!.map(t => [t.id, t.from, t.subject, t.messages])).toEqual([['b@gmail.com:bb2', 'GitHub', '(bez tematu)', 1], ['a@gmail.com:aa1', 'Stary', 'Wątek', 2]]);
-    expect(result.data![1]).toMatchObject({ snippet: 'Podgląd & treść', sourceUrl: 'https://mail.google.com/mail/u/a%40gmail.com/#inbox/aa1' });
+    expect(result.data![1]).toMatchObject({ snippet: 'Podgląd & treść', body: 'Podgląd & treść', sourceUrl: 'https://mail.google.com/mail/u/a%40gmail.com/#inbox/aa1' });
     expect((await reader.read(1)).data).toHaveLength(1);
   });
   it('reuses metadata of unchanged conversations and keeps the last list with its time on failure', async () => {
@@ -137,5 +137,47 @@ describe('Gmail reader', () => {
     expect(a.request).toHaveBeenCalledWith('mail', `${BASE}/threads/aa2/untrash`, { method: 'POST' });
     await expect(reader.act('other@gmail.com', 'aa1', 'read')).rejects.toThrow();
     await expect(reader.act('a@gmail.com', '../labels', 'read')).rejects.toThrow();
+  });
+  it('extracts full message body when projecting Gmail threads and falls back to snippet', () => {
+    const rawWithDirectBody = {
+      id: 'aa1', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Krótki podgląd', body: 'Pełna treść wiadomości\nz nową linią', internalDate: '1000',
+        payload: { headers: [{ name: 'From', value: 'Test <t@x.pl>' }, { name: 'Subject', value: 'Temat' }] },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawWithDirectBody).body).toBe('Pełna treść wiadomości\nz nową linią');
+
+    const rawWithBase64Payload = {
+      id: 'aa2', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Podgląd', internalDate: '1000',
+        payload: {
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          body: { data: Buffer.from('Treść z payload.body').toString('base64url') },
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawWithBase64Payload).body).toBe('Treść z payload.body');
+
+    const rawWithMultipart = {
+      id: 'aa3', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Podgląd', internalDate: '1000',
+        payload: {
+          headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }],
+          parts: [
+            { mimeType: 'text/html', body: { data: Buffer.from('<p>HTML</p>').toString('base64url') } },
+            { mimeType: 'text/plain', body: { data: Buffer.from('Czysty tekst z parts').toString('base64url') } },
+          ],
+        },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawWithMultipart).body).toBe('Czysty tekst z parts');
+
+    const rawFallback = {
+      id: 'aa4', historyId: '1', messages: [{
+        labelIds: ['UNREAD'], snippet: 'Tylko &amp; podgląd', internalDate: '1000',
+        payload: { headers: [{ name: 'From', value: 't@x.pl' }, { name: 'Subject', value: 'S' }] },
+      }],
+    };
+    expect(projectThread('user@gmail.com', rawFallback).body).toBe('Tylko & podgląd');
   });
 });

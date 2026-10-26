@@ -4,7 +4,7 @@ const status = z.enum(['connected', 'offline', 'unavailable', 'loading']);
 /** One unread inbox conversation; `id` is unique across accounts. */
 export const mailThreadSchema = z.object({
   id: z.string(), account: z.string(), threadId: z.string().regex(/^[0-9a-f]+$/i),
-  from: z.string(), subject: z.string(), snippet: z.string(),
+  from: z.string(), subject: z.string(), snippet: z.string(), body: z.string().optional(),
   receivedAt: z.number().finite(), messages: z.number().int().positive(), sourceUrl: z.url(),
 });
 export const mailAccountSchema = z.object({

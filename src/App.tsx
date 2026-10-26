@@ -277,7 +277,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
       const thread = mail.threads?.find((t) => t.id === detail.id);
       return thread ? (
         <Card title={thread.subject} icon={<Mail />}>
-          <p className="detail-copy">{thread.snippet}</p>
+          <p className="detail-copy">{thread.body || thread.snippet}</p>
           <dl>
             <dt>Od</dt>
             <dd>{thread.from}</dd>
