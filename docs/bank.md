@@ -2,7 +2,7 @@
 
 Kafelek **Konto** pokazuje saldo konta prywatnego w PKO BP, wpływy i wydatki z ostatnich 30 dni, pasek z podziałem wydatków
 na **kategorie użytkownika** i operacje pogrupowane po dniach („Dziś”, „Wczoraj”, „Pt, 23 paź”, z sumą dnia). Każda operacja ma kółko
-w kolorze i z ikoną swojej kategorii, czystą nazwę, podpis („Jedzenie · karta”, znaczniki: cykliczne, osoba, komentarz) i kwotę ze
+w kolorze i z ikoną swojej kategorii, czystą nazwę, podpis („Jedzenie · karta”, znaczniki: cykliczne, opis) i kwotę ze
 znakiem + lub −; wpływy są zielone. Kafelek 1×1 pokazuje tylko saldo i listę, od szerokości dwóch komórek są sumy 30 dni, podpisy i
 podpowiedzi przy wierszach, a od wysokości dwóch pasek kategorii. Dane z banku są tylko do odczytu: panel nie ma przelewów ani żadnej
 operacji zapisu w banku; oznaczenia są lokalne.
@@ -65,34 +65,44 @@ Każde pole odpowiada na jedno pytanie:
 
 | Pole | Pytanie | Kto wypełnia |
 | --- | --- | --- |
+| Druga strona | kto | rozpoznawana z tego, co pokazuje bank (tekst płatności kartą, rachunek, telefon, nazwa); przy telefonie i BLIK wybierana z listy |
 | Kategoria (dokładnie jedna) | na co poszły pieniądze; jeden kawałek paska | użytkownik, własna lista z kolorem i ikoną |
+| Cel (przy osobie) | po co: pożyczka, zwrot, dokładka, prezent | użytkownik, własna lista jak etykiety |
 | Etykiety (dowolnie wiele) | szczegóły, po których potem szukasz (`#internet`, `#tabnote`, `#ogrzewanie`) | użytkownik, tworzone w locie |
-| Sprzedawca | gdzie | rozpoznany z tekstu banku (karta) albo rachunku i nazwy (przelew); przy telefonie i BLIK wybierany z listy |
 | Metoda płatności | jak | sama z kodu, którym PKO kończy tytuł: karta, przelew na telefon, przelew na rachunek, BLIK, telefon w sklepie; nie jest oznaczeniem |
-| Osoba | komu, od kogo | przy przelewach; rozpoznawana po rachunku, telefonie, nazwie z banku |
 | Cykliczne, opis | | użytkownik |
 
-Kategoria to to, co chcesz widzieć jako osobny kawałek paska (Rachunki, Spożywcze, Jedzenie na mieście, Subskrypcje, Pożyczka); reszta to
-etykiety. Przykłady: Inea = sprzedawca Inea, kategoria Rachunki, `#internet`, cykliczne; dokładka do ogrzewania dla taty = kategoria Rachunki,
-`#ogrzewanie`, osoba Tata, opis; domena w OVH = sprzedawca OVH, kategoria wg budżetu, `#domena #tabnote`, opis. Operacja bez kategorii jest
-jawnie „Bez kategorii” (na pasku prążkowany odcinek), bez zgadywania. **Do przypisania** są tylko operacje zaksięgowane od wybranego dnia
-(domyślnie dzień, w którym usługa pierwszy raz otworzyła oznaczenia; zmiana w ustawieniach na kafelku): przerywane kółko, „przypisz” i
-„N do przypisania” w nagłówku (otwiera pierwszą i po zapisie przechodzi do następnej). Starsze zostają „Bez kategorii”, bez licznika.
+**Druga strona** ma rodzaj, od którego zależy, o co pyta okno:
 
-Wiersz pokazuje nazwę sprzedawcy (gdy jest znany, zamiast tekstu banku), kategorię w jej kolorze, etykiety, sposób płatności („sklep
-nieznany” znika, gdy płatność telefonem ma sprzedawcę) i znaczniki: cykliczne, osoba, opis. Dotknięcie otwiera okno: podpowiedź albo wybór
-na górze, sprzedawca (dla karty wypełniony nazwą z banku, zapisuje się jako nowy sprzedawca przy pierwszym oznaczeniu), kategorie, etykiety
-(dotknięcie przełącza, „+ etykieta” dopisuje), „Cykliczne”, osoba (lista z identyfikatorami, „Dodaj osobę”), opis, Wyczyść i Zapisz oraz
-„Odpowiedź banku”. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
+- **Firma** (Inea, Społem, pyszne.pl, OVH): kategoria, etykiety, cykliczne. Przykład: Inea, kategoria Rachunki, `#internet`, cykliczne.
+- **Osoba** (Alicja, tata, Daniel): do tego **cel**. Przykład: przelew do taty to cel „dokładka”, kategoria Rachunki, `#ogrzewanie` i opis.
+  Pożyczka to cel, nie kategoria. Rozliczenie z osobą (widok agenta) sumuje jej operacje według celu ze znakiem: pożyczka −400 i zwrot
+  +150 to 250 jeszcze nieoddane, a dokładka nie wygląda jak dług.
+- **Ja** (własna firma, inne własne konto): **przelew własny**. Kategoria jest niepotrzebna i operacja nie wisi jako „do przypisania”, ale
+  zgodnie z wyborem użytkownika liczy się do sum wpływów i wydatków (to jego pensja). Wydatek na własne konto ma na pasku osobny odcinek
+  „Przelewy własne”.
 
-Pożyczka to kategoria z osobą: pieniądze do osoby mają znak −, od osoby +, więc suma operacji osoby mówi, kto komu ile jest winien (widok
-agenta już tak liczy). Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc przyszłe widoki
-pożyczek i operacji cyklicznych mają całą historię bez migracji. Plik pierwszej wersji (kategoria, osoba, cykliczne, komentarz) jest
-przenoszony sam przy odczycie: oznaczenia zostają, etykiety i sprzedawcy startują puste.
+Kategoria to to, co chcesz widzieć jako osobny kawałek paska (Rachunki, Spożywcze, Jedzenie na mieście, Subskrypcje); reszta to etykiety.
+Operacja jest **załatwiona**, gdy ma kategorię albo cel, albo jej druga strona to „Ja” (także rozpoznana, zanim ją oznaczysz). **Do
+przypisania** są niezałatwione operacje zaksięgowane od wybranego dnia (domyślnie dzień, w którym usługa pierwszy raz otworzyła oznaczenia;
+zmiana w ustawieniach na kafelku): przerywane kółko, „przypisz” i „N do przypisania” w nagłówku (otwiera pierwszą i po zapisie przechodzi do
+następnej). Starsze zostają „Bez kategorii”, bez licznika.
 
-### Osoby, sprzedawcy i ich identyfikatory
+Wiersz pokazuje nazwę drugiej strony (gdy jest znana, zamiast tekstu banku), kategorię w jej kolorze albo „Przelew własny”, cel, etykiety,
+sposób płatności („sklep nieznany” znika, gdy płatność telefonem ma drugą stronę) i znaczniki: cykliczne, opis. Dotknięcie otwiera okno:
+podpowiedź albo wybór na górze, „Kto to?” dla nieznanego kontrahenta przelewu (Osoba, Firma, Ja), druga strona (lista z identyfikatorami; nowa
+z wyborem rodzaju; dla karty wypełniona nazwą z banku jako firma; rodzaj znanej zmienia się jednym dotknięciem), potem pola zależne od rodzaju,
+etykiety, „Cykliczne”, opis, Wyczyść i Zapisz oraz „Odpowiedź banku”. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
 
-Osoba (`p-…`) i sprzedawca (`m-…`) to encje z listą identyfikatorów. Co bank faktycznie daje (sprawdzone na odczycie konta, 150 operacji):
+Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc przyszłe widoki pożyczek i operacji
+cyklicznych mają całą historię bez migracji. Pliki wcześniejszych wersji są przenoszone same przy odczycie: osoby i sprzedawcy stają się drugą
+stroną rodzaju osoba i firma, a oznaczenie kategorią „Pożyczka” dostaje cel „pożyczka” (pieniądze wyszły) albo „zwrot” (przyszły), a sama
+kategoria znika.
+
+### Druga strona i jej identyfikatory
+
+Druga strona (`k-…`; `p-…` i `m-…` to osoby i sprzedawcy z wcześniejszych wersji) to encja z listą identyfikatorów. Co bank faktycznie
+daje (sprawdzone na odczycie konta, 150 operacji):
 
 | Operacja | Nazwa | Rachunek | Telefon | Tekst sprzedawcy |
 | --- | --- | --- | --- | --- |
@@ -103,16 +113,14 @@ Osoba (`p-…`) i sprzedawca (`m-…`) to encje z listą identyfikatorów. Co ba
 | telefon lub BLIK w sklepie | brak | brak | brak | brak |
 
 W tytule przelewu na telefon jest też **własny** numer (`OD:` przy wychodzącym, `DO:` przy przychodzącym); panel bierze tylko stronę
-kontrahenta i nigdy własnego rachunku. Po oznaczeniu identyfikatory strony operacji dopisują się do wskazanej osoby (rachunek, telefon, a z
-pełnego numeru także jego zamaskowana postać, nazwa z banku), a gdy osoby nie ma, do sprzedawcy; tekst płatności kartą (bez miasta i numeru
-sklepu) zawsze do sprzedawcy. Identyfikator należy do jednej encji (ostatnie oznaczenie wygrywa), a w ustawieniach można go zapomnieć.
+kontrahenta i nigdy własnego rachunku. Po oznaczeniu identyfikatory strony operacji (rachunek, telefon, a z pełnego numeru także jego
+zamaskowana postać, nazwa z banku, tekst płatności kartą bez miasta i numeru sklepu) dopisują się do wskazanej drugiej strony. Identyfikator
+należy do jednej (ostatnie oznaczenie wygrywa), a w ustawieniach można go zapomnieć. Panel nie zgaduje, czy nieznany kontrahent przelewu to
+osoba, firma czy „Ja”; pyta raz („Kto to?”) i potem rozpoznaje sam.
 
-Przelew od lub do kogoś jeszcze nieznanego pokazuje w oknie „Z banku: Alicja Kowalska. Kto to?” z przyciskami **Osoba** i **Sprzedawca**:
-panel nie zgaduje, czy to człowiek, czy firma (jak Inea), ale jedno dotknięcie tworzy właściwą encję, a po zapisie jej identyfikatory są
-rozpoznawane same.
-
-Dwie osoby mogą mieć to samo imię: rozróżnia je to, co pokazał bank. Lista osób w oknie i w ustawieniach pokazuje przy imieniu nazwę z
-banku i końcówki („Daniel · „DANIEL KOWALSKI” · rach. ··2874 · tel. ··321”); rachunek ma 4 cyfry, telefon 3, bo resztę maskuje bank.
+Dwie osoby mogą mieć to samo imię (firma i „Ja” o tej samej nazwie to ta sama): rozróżnia je to, co pokazał bank. Lista w oknie i w
+ustawieniach pokazuje przy imieniu nazwę z banku i końcówki („Daniel · „DANIEL KOWALSKI” · rach. ··2874 · tel. ··321”); rachunek ma 4 cyfry,
+telefon 3, bo resztę maskuje bank.
 
 **Przechowywanie.** Identyfikator to `rodzaj:HMAC-SHA256(klucz, rodzaj:wartość)`; klucz (32 losowe bajty) jest tylko w pliku oznaczeń.
 Dopasowanie wymaga tylko równości, więc pełnego numeru nie trzeba trzymać; numer telefonu (mała przestrzeń) dałoby się odgadnąć ze
@@ -122,29 +130,27 @@ nie wymaga nowego odczytu banku. Rachunki działają od pierwszego odczytu po wd
 telefony i tekst sprzedawcy od razu.
 
 Plik `~/.desk-panel/bank-labels.dpapi` jest zaszyfrowany DPAPI dla użytkownika Windows, jak odczyt banku: oznaczenia trzymają kopie operacji,
-opisy, sprzedawców i osoby powiązane z kwotami, więc to dane bankowe, a nie zwykła lista jak `todos.json`. Zapis jest atomowy (plik tymczasowy
-i rename, `private-store.ts`); plik, który się odszyfrował, ale nie pasuje do schematu, jest odkładany (`.corrupt-<czas>`) z komunikatem, a
-plik chwilowo nieczytelny (DPAPI, blokada) zostaje nietknięty i nic nie jest zapisywane, dopóki się nie odczyta.
+opisy i drugie strony powiązane z kwotami, więc to dane bankowe, a nie zwykła lista jak `todos.json`. Zapis jest atomowy (plik tymczasowy i
+rename, `private-store.ts`); plik, który się odszyfrował, ale nie pasuje do schematu, jest odkładany (`.corrupt-<czas>`) z komunikatem, a plik
+chwilowo nieczytelny (DPAPI, blokada) zostaje nietknięty i nic nie jest zapisywane, dopóki się nie odczyta.
 
 ### Podpowiedzi
 
-Tylko przez powiązania, które trzymają (`server/bank-suggest.ts`), bez ukrytego modelu, przedziałów kwot i pory dnia (bank jej nie podaje):
-
-Podpowiedź liczy się dla każdej operacji bez kategorii, także starszej niż dzień „do przypisania”, i stoi przy jej wierszu (✓ i ✕ albo
+Tylko przez powiązania, które trzymają (`server/bank-suggest.ts`), bez ukrytego modelu, przedziałów kwot i pory dnia (bank jej nie podaje).
+Podpowiedź liczy się dla każdej niezałatwionej operacji, także starszej niż dzień „do przypisania”, i stoi przy jej wierszu (✓ i ✕ albo
 „N możliwości”); starsza nie jest tylko liczona w „do przypisania”.
 
-1. **Kto**: tekst sprzedawcy z banku, rachunek, pełny numer telefonu albo nazwa z banku należą do znanego sprzedawcy lub osoby. Okno od razu
-   pokazuje, kto to jest, także bez wcześniejszych oznaczeń. Zamaskowany numer (pierwsza i trzy ostatnie cyfry) tylko podpowiada, z prośbą o
-   sprawdzenie.
-2. **Co**: wcześniejsze oznaczenia tego sprzedawcy (z tym samym kierunkiem pieniędzy) albo tej osoby, pogrupowane po tym, co mówiły
-   (kategoria, etykiety, cykliczne). Wystarczy jedno oznaczenie: sprzedawca jest rozpoznany pewnie.
+1. **Kto**: tekst sprzedawcy z banku, rachunek, pełny numer telefonu albo nazwa z banku należą do znanej drugiej strony. Okno od razu pokazuje,
+   kto to jest, także bez wcześniejszych oznaczeń. Zamaskowany numer (pierwsza i trzy ostatnie cyfry) tylko podpowiada, z prośbą o sprawdzenie.
+2. **Co**: wcześniejsze oznaczenia tej strony z tym samym kierunkiem pieniędzy, pogrupowane po tym, co mówiły (kategoria, cel, etykiety,
+   cykliczne). Wystarczy jedno oznaczenie: strona jest rozpoznana pewnie.
 3. **Płatność bez nazwy** (telefon, BLIK): tylko ta sama kwota co do grosza; zawsze jako wybór, nigdy jako pewna podpowiedź.
 
 Gdy pewne powiązanie prowadzi do oznaczeń, które wszystkie mówią to samo, podpowiedź jest **pewna**: wypełnia okno, a ✓ przy wierszu albo
 Przyjmij ją zapisuje. Gdy wcześniej bywało różnie albo łączy tylko kwota, są **do wyboru** (najwyżej trzy, najczęstsze i najnowsze pierwsze):
 jedno dotknięcie zapisuje wybrane, „Żadne” je odrzuca. Bez powiązania nie ma podpowiedzi. Nic nie zapisuje się samo. Odrzucenie jest
 pamiętane dla tej operacji, a zapisanie czegoś innego niż pewna podpowiedź sprawia, że następnym razem to samo będzie już tylko wyborem.
-Opcję „zawsze automatycznie dla tego sprzedawcy lub osoby” można dodać później jako regułę na tej samej podstawie; dziś jej nie ma.
+Opcję „zawsze automatycznie dla tej strony” można dodać później jako regułę na tej samej podstawie; dziś jej nie ma.
 
 Sprawdzenie na odczycie konta (pierwsza wersja reguł, symulacja oznaczania od najstarszej): płatności kartą miały wcześniejsze oznaczenie
 tego samego sprzedawcy w 54 z 95 przypadków, kontrahent przelewu był rozpoznany 14 z 14 razy, a płatności bez nazwy powtarzały kwotę tylko
@@ -154,9 +160,9 @@ w 3 z 33.
 
 | Trasa | Co robi |
 | --- | --- |
-| `GET /api/bank/labels` | kategorie, etykiety, sprzedawcy i osoby (identyfikatory w postaci uciętej), oznaczenia operacji z ostatniego odczytu, kto jest po drugiej stronie (`known`), podpowiedzi, lista „do przypisania” (`src/bank-labels-contract.ts`) |
-| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label`, `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `renameTag`, `deleteTag`, `createMerchant`, `renameMerchant`, `deleteMerchant`, `createPerson`, `renamePerson`, `deletePerson`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
-| `GET /api/agent/bank` | tekst dla agenta czatu: saldo, operacje z zakresu (`from`, `to`, domyślnie 30 dni, najwyżej 400; `kategoria`, `etykieta`, `sprzedawca`, `osoba`, `nieprzypisane=1`), wydatki według kategorii, rozliczenie z osobami z całej historii; bez pełnych numerów |
+| `GET /api/bank/labels` | kategorie, etykiety, cele, drugie strony z rodzajem (identyfikatory w postaci uciętej), oznaczenia operacji z ostatniego odczytu, rozpoznana druga strona (`known`), podpowiedzi, lista „do przypisania” (`src/bank-labels-contract.ts`) |
+| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label`, `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `renameTag`, `deleteTag`, `renamePurpose`, `deletePurpose`, `createParty`, `updateParty` (nazwa, rodzaj), `deleteParty`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
+| `GET /api/agent/bank` | tekst dla agenta czatu: saldo, operacje z zakresu (`from`, `to`, domyślnie 30 dni, najwyżej 400; `kategoria`, `etykieta`, `strona`, `cel`, `nieprzypisane=1`), wydatki według kategorii, rozliczenie z osobami według celu z całej historii; bez pełnych numerów |
 
 Przeglądarka czyta oznaczenia co minutę i zaraz po każdej akcji; to odczyt pamięci serwera, bank nie jest pytany. Agent oznaczeń nie
 zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/bank`, trafia do dostawcy modelu `agy` ([czat.md](czat.md)).
@@ -164,8 +170,7 @@ zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/ba
 ## Scenariusze
 
 `scenarios/standard.json` ma klucz `bank` w kształcie API (`src/bank-contract.ts`); `at` operacji to chwila w dniu
-(`"today-1@12:00"`), a `raw` może mieć pełne (zmyślone) numery, bo scenariusz maskuje je przy wyjściu jak usługa. Klucz `bankLabels`
-(`since`, `categories`, `merchants`, `people`, `labels` po id operacji z `category`, `tags`, `merchant`, `person`, `recurring`, `comment`) to
-oznaczenia na start; sprzedawcy i osoby uczą się identyfikatorów z nich jak z gestu, a akcje
-są pamiętane w pamięci do restartu. Scenariusz standardowy ma pożyczkę i zwrot (Anna, Jonasz), pewne podpowiedzi (Biedronka, Claude, Firma, Anna) i wybór
-po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.
+(`"today-1@12:00"`), a `raw` może mieć pełne (zmyślone) numery, bo scenariusz maskuje je przy wyjściu jak usługa. Klucz `bankLabels` (`since`, `categories`, `parties` z `kind`, `labels` po id operacji z `category`, `tags`, `party`,
+`purpose`, `recurring`, `comment`) to oznaczenia na start; drugie strony uczą się identyfikatorów z nich jak z gestu, a akcje są
+pamiętane w pamięci do restartu. Scenariusz standardowy ma pożyczkę i zwrot (Anna, Jonasz), przelewy własne z firmy, pewne
+podpowiedzi (Biedronka, Claude, Moja firma, Anna) i wybór po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.

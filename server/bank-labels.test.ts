@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { BankTransaction } from '../src/bank-contract';
 import { bankLabelsSourceSchema } from '../src/bank-labels-contract';
 import { mapTransaction } from './bank';
-import { createBankLabelStore, type BankLabelPersistence } from './bank-labels';
+import { createBankLabelStore, type BankLabelFile, type BankLabelPersistence } from './bank-labels';
 import { maskPhones, partiesOf, publicTransaction } from './bank-parties';
 import { agentViews } from './agent-views';
 import type { PanelSources } from './sources';
@@ -88,10 +88,10 @@ describe('bank label store', () => {
     expect(src.data?.pending).toEqual(['acc:O;1']);
     const food = (await store.apply({ action: 'createCategory', name: 'Spożywcze' })).category!.id;
     expect((await store.apply({ action: 'createCategory', name: 'spożywcze' })).category).toEqual({ id: food, created: false });
-    await store.apply({ action: 'label', tx: 'acc:O;1', category: food, tags: ['#zakupy', 'zakupy ', 'Zakupy'], recurring: false, person: null, comment: ' rano ' });
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: food, tags: ['#zakupy', 'zakupy ', 'Zakupy'], recurring: false, comment: ' rano ' });
     src = bankLabelsSourceSchema.parse(await store.read());
     expect(src.data?.pending).toEqual([]);
-    expect(src.data?.labels['acc:O;1']).toEqual({ category: food, tags: ['zakupy'], merchant: null, person: null, recurring: false, comment: 'rano' });
+    expect(src.data?.labels['acc:O;1']).toEqual({ category: food, tags: ['zakupy'], party: null, purpose: null, recurring: false, comment: 'rano' });
     expect(src.data?.tags).toEqual(['zakupy']);
     await store.apply({ action: 'setSince', since: '2026-10-01' });
     const again = setup(ops, persistence).store;
@@ -112,16 +112,53 @@ describe('bank label store', () => {
     const persistence = memory(v1);
     const src = await setup([map(raw.card('O;1', '2026-10-26', '43.90'))], persistence).store.read();
     expect(src.message).toBeUndefined();
-    expect(src.data?.labels['acc:O;1']).toEqual({ category: 'c-00000001', tags: [], merchant: null, person: 'p-00000001', recurring: false, comment: '' });
-    expect((persistence.file as { version: number }).version).toBe(2);
+    expect(src.data?.labels['acc:O;1']).toEqual({ category: 'c-00000001', tags: [], party: 'p-00000001', purpose: null, recurring: false, comment: '' });
+    expect((persistence.file as { version: number }).version).toBe(3);
+  });
+
+  it('upgrades the second version: people and merchants become sides, a “Pożyczka” category becomes the purpose', async () => {
+    const op = (amount: number) => ({ at: Date.parse('2026-10-26T12:00:00Z'), amount, currency: 'PLN', name: 'x', method: 'transfer', merchant: 'X', keys: [] });
+    const v2 = {
+      version: 2, secret: 'x'.repeat(43), since: '2026-10-26', categories: [{ id: 'c-00000001', name: 'Pożyczka', color: 'blue', icon: 'handCoins' }, { id: 'c-00000002', name: 'Jedzenie', color: 'orange', icon: 'utensils' }],
+      tags: ['restauracja'], merchants: [{ id: 'm-00000001', name: 'pyszne.pl', createdAt: 1, identifiers: [] }], people: [{ id: 'p-00000001', name: 'Anna', createdAt: 1, identifiers: [] }],
+      labels: {
+        'acc:O;1': { category: 'c-00000001', tags: [], merchant: null, person: 'p-00000001', recurring: false, comment: '', labeledAt: 1, op: op(-400) },
+        'acc:O;2': { category: 'c-00000001', tags: [], merchant: null, person: 'p-00000001', recurring: false, comment: '', labeledAt: 1, op: op(150) },
+        'acc:O;3': { category: 'c-00000002', tags: ['restauracja'], merchant: 'm-00000001', person: null, recurring: false, comment: '', labeledAt: 1, op: op(-70) },
+      }, rejections: [],
+    };
+    const persistence = memory(v2);
+    await setup([], persistence).store.read();
+    const file = persistence.file as BankLabelFile;
+    expect(file.version).toBe(3);
+    expect(file.categories.map(c => c.name)).toEqual(['Jedzenie']);
+    expect(file.parties.map(p => `${p.name} ${p.kind}`)).toEqual(['Anna person', 'pyszne.pl company']);
+    expect(file.purposes).toEqual(['pożyczka', 'zwrot']);
+    expect(file.labels['acc:O;1']).toMatchObject({ category: null, party: 'p-00000001', purpose: 'pożyczka' });
+    expect(file.labels['acc:O;2']).toMatchObject({ category: null, party: 'p-00000001', purpose: 'zwrot' });
+    expect(file.labels['acc:O;3']).toMatchObject({ category: 'c-00000002', party: 'm-00000001', purpose: null, tags: ['restauracja'] });
+  });
+
+  it('treats money between the user’s own pockets as done without a category, recognised the next time by its account', async () => {
+    const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00'))];
+    const { store } = setup(ops);
+    const mine = (await store.apply({ action: 'createParty', name: 'Moja firma', kind: 'self' })).party!.id;
+    expect((await store.apply({ action: 'createParty', name: 'moja firma', kind: 'self' })).party).toEqual({ id: mine, created: false });
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: null, tags: ['pensja'], party: mine, recurring: true });
+    const data = (await store.read()).data!;
+    // Known by its account, so not asked for even before it is marked; the suggestion still offers the tags.
+    expect(data.known['acc:O;2']).toBe(mine);
+    expect(data.pending).toEqual([]);
+    expect(data.suggestions['acc:O;2']).toEqual({ sure: true, options: [{ tags: ['pensja'], party: mine, recurring: true, reasons: ['ten sam rachunek ··0000: Moja firma', '#pensja · cykliczne: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:O;1']).toBeUndefined();
   });
 
   it('refuses what it cannot do and changes nothing then', async () => {
     const persistence = memory();
     const { store } = setup([map(raw.card('O;1', '2026-10-26', '43.90'))], persistence);
-    await expect(store.apply({ action: 'label', tx: 'acc:nope', category: null, recurring: true, person: null })).rejects.toMatchObject({ status: 404 });
-    await expect(store.apply({ action: 'label', tx: 'acc:O;1', category: 'c-00000000', recurring: false, person: null })).rejects.toMatchObject({ status: 404 });
-    await expect(store.apply({ action: 'label', tx: 'acc:O;1', category: null, merchant: 'm-00000000', recurring: false, person: null })).rejects.toMatchObject({ status: 404 });
+    await expect(store.apply({ action: 'label', tx: 'acc:nope', category: null, recurring: true })).rejects.toMatchObject({ status: 404 });
+    await expect(store.apply({ action: 'label', tx: 'acc:O;1', category: 'c-00000000', recurring: false })).rejects.toMatchObject({ status: 404 });
+    await expect(store.apply({ action: 'label', tx: 'acc:O;1', category: null, party: 'k-00000000', recurring: false })).rejects.toMatchObject({ status: 404 });
     await expect(store.apply({ action: 'accept', tx: 'acc:O;1' })).rejects.toMatchObject({ status: 409 });
     await expect(store.apply({ action: 'nuke' } as never)).rejects.toMatchObject({ status: 400 });
     const failing = { ...persistence, write: async () => { throw new Error('disk'); } };
@@ -144,29 +181,29 @@ describe('bank label store', () => {
     const next = map(raw.phoneOut('O;2', '2026-10-26', '400.00'));
     const other = map(raw.transferIn('O;3', '2026-10-22', '50.00', 'DANIEL NOWAK', 'PL10105000997603123456789123'));
     const { store } = setup([next, other, first]);
-    const anna = (await store.apply({ action: 'createPerson', name: 'Daniel' })).person!.id;
-    const second = (await store.apply({ action: 'createPerson', name: 'Daniel' })).person!.id;
+    const anna = (await store.apply({ action: 'createParty', name: 'Daniel', kind: 'person' })).party!.id;
+    const second = (await store.apply({ action: 'createParty', name: 'Daniel', kind: 'person' })).party!.id;
     expect(second).not.toBe(anna);
     expect((await store.read()).data?.suggestions['acc:O;2']).toBeUndefined();
-    await store.apply({ action: 'label', tx: 'acc:O;1', category: null, recurring: false, person: anna });
-    await store.apply({ action: 'label', tx: 'acc:O;3', category: null, recurring: false, person: second });
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: null, recurring: false, party: anna });
+    await store.apply({ action: 'label', tx: 'acc:O;3', category: null, recurring: false, party: second });
     const src = (await store.read()).data!;
-    expect(src.people.find(p => p.id === anna)!.identifiers.map(i => `${i.kind} ${i.hint}`).sort()).toEqual(['account ··5387', 'name Anna Kowalska', 'phone ··321', 'phoneTail ··321']);
-    expect(src.people.find(p => p.id === second)!.identifiers.map(i => `${i.kind} ${i.hint}`).sort()).toEqual(['account ··9123', 'name DANIEL NOWAK']);
+    expect(src.parties.find(p => p.id === anna)!.identifiers.map(i => `${i.kind} ${i.hint}`).sort()).toEqual(['account ··5387', 'name Anna Kowalska', 'phone ··321', 'phoneTail ··321']);
+    expect(src.parties.find(p => p.id === second)!.identifiers.map(i => `${i.kind} ${i.hint}`).sort()).toEqual(['account ··9123', 'name DANIEL NOWAK']);
     // Going out the bank sends to another account and masks the number; the bank's name still says who it is.
-    expect(src.known['acc:O;2']).toEqual({ person: anna });
-    expect(src.suggestions['acc:O;2']).toEqual({ sure: true, options: [{ person: anna, reasons: ['ta sama nazwa w banku („Anna Kowalska”): Daniel'] }] });
+    expect(src.known['acc:O;2']).toBe(anna);
+    expect(src.suggestions['acc:O;2']).toEqual({ sure: true, options: [{ party: anna, reasons: ['ta sama nazwa w banku („Anna Kowalska”): Daniel'] }] });
   });
 
   it('learns a merchant from its text in the bank and proposes its earlier mark after one time, never marking by itself', async () => {
     const ops = ['O;1', 'O;2', 'O;3'].map((ref, i) => map(raw.card(ref, `2026-10-2${i}`, `${20 + i}.00`, 'LESZNOSPOLEM PSS Sklep nr 12PL')));
     const { store } = setup(ops);
     const food = (await store.apply({ action: 'createCategory', name: 'Spożywcze' })).category!.id;
-    const spolem = (await store.apply({ action: 'createMerchant', name: 'Społem' })).merchant!.id;
-    await store.apply({ action: 'label', tx: 'acc:O;1', category: food, tags: ['zakupy'], merchant: spolem, recurring: false, person: null });
+    const spolem = (await store.apply({ action: 'createParty', name: 'Społem', kind: 'company' })).party!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: food, tags: ['zakupy'], party: spolem, recurring: false });
     let data = (await store.read()).data!;
-    expect(data.known['acc:O;3']).toEqual({ merchant: spolem });
-    expect(data.suggestions['acc:O;3']).toEqual({ sure: true, options: [{ category: food, tags: ['zakupy'], merchant: spolem, reasons: ['ten sam sprzedawca w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
+    expect(data.known['acc:O;3']).toBe(spolem);
+    expect(data.suggestions['acc:O;3']).toEqual({ sure: true, options: [{ category: food, tags: ['zakupy'], party: spolem, reasons: ['ten sam tekst w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
     expect(data.labels['acc:O;3']).toBeUndefined();
     // Older than the day "to be marked" counts from: not counted, but still suggested when opened.
     await store.apply({ action: 'setSince', since: '2026-10-25' });
@@ -175,7 +212,7 @@ describe('bank label store', () => {
     expect(data.suggestions['acc:O;3'].sure).toBe(true);
     await store.apply({ action: 'accept', tx: 'acc:O;3' });
     data = (await store.read()).data!;
-    expect(data.labels['acc:O;3']).toEqual({ category: food, tags: ['zakupy'], merchant: spolem, person: null, recurring: false, comment: '' });
+    expect(data.labels['acc:O;3']).toEqual({ category: food, tags: ['zakupy'], party: spolem, purpose: null, recurring: false, comment: '' });
     // A rejection is remembered for that operation, and puts the same mark in doubt for the others.
     await store.apply({ action: 'reject', tx: 'acc:O;2' });
     data = (await store.read()).data!;
@@ -190,28 +227,28 @@ describe('bank label store', () => {
     const { store } = setup(ops);
     const a = (await store.apply({ action: 'createCategory', name: 'Kawa' })).category!.id;
     const b = (await store.apply({ action: 'createCategory', name: 'Spotkania' })).category!.id;
-    const cafe = (await store.apply({ action: 'createMerchant', name: 'Kawiarnia' })).merchant!.id;
-    const pyszne = (await store.apply({ action: 'createMerchant', name: 'pyszne.pl' })).merchant!.id;
-    await store.apply({ action: 'label', tx: 'acc:O;1', category: a, merchant: cafe, recurring: false, person: null });
-    await store.apply({ action: 'label', tx: 'acc:O;2', category: b, merchant: cafe, recurring: false, person: null });
-    await store.apply({ action: 'label', tx: 'acc:P;1', category: a, tags: ['restauracja'], merchant: pyszne, recurring: false, person: null });
+    const cafe = (await store.apply({ action: 'createParty', name: 'Kawiarnia', kind: 'company' })).party!.id;
+    const pyszne = (await store.apply({ action: 'createParty', name: 'pyszne.pl', kind: 'company' })).party!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: a, party: cafe, recurring: false });
+    await store.apply({ action: 'label', tx: 'acc:O;2', category: b, party: cafe, recurring: false });
+    await store.apply({ action: 'label', tx: 'acc:P;1', category: a, tags: ['restauracja'], party: pyszne, recurring: false });
     const data = (await store.read()).data!;
     expect(data.suggestions['acc:O;3'].sure).toBe(false);
     expect(data.suggestions['acc:O;3'].options.map(o => o.category)).toEqual([b, a]);
-    expect(data.suggestions['acc:P;2']).toEqual({ sure: false, options: [{ category: a, tags: ['restauracja'], merchant: pyszne, reasons: [expect.stringMatching(/^ta sama kwota 76,93\s?zł, bez nazwy sklepu$/), 'pyszne.pl · Kawa · #restauracja: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:P;2']).toEqual({ sure: false, options: [{ category: a, tags: ['restauracja'], party: pyszne, reasons: [expect.stringMatching(/^ta sama kwota 76,93\s?zł, bez nazwy sklepu$/), 'pyszne.pl · Kawa · #restauracja: 1 z 1 raz'] }] });
     // No ranges and no guessing: another amount has nothing.
     expect(data.suggestions['acc:P;3']).toBeUndefined();
     await store.apply({ action: 'accept', tx: 'acc:O;3', option: 1 });
-    expect((await store.read()).data!.labels['acc:O;3']).toMatchObject({ category: a, merchant: cafe });
+    expect((await store.read()).data!.labels['acc:O;3']).toMatchObject({ category: a, party: cafe });
   });
 
   it('renames and deletes tags everywhere, and deleting a category or merchant unmarks only that part', async () => {
     const ops = ['O;1', 'O;2'].map((ref, i) => map(raw.card(ref, `2026-10-2${i}`, '10.00', 'LESZNOKAWIARNIA 7PL')));
     const { store } = setup(ops);
     const a = (await store.apply({ action: 'createCategory', name: 'Kawa' })).category!.id;
-    const cafe = (await store.apply({ action: 'createMerchant', name: 'Kawiarnia' })).merchant!.id;
-    await store.apply({ action: 'label', tx: 'acc:O;1', category: a, tags: ['kawa', 'praca'], merchant: cafe, recurring: true, person: null });
-    await store.apply({ action: 'label', tx: 'acc:O;2', category: null, tags: ['praca'], merchant: null, recurring: false, person: null });
+    const cafe = (await store.apply({ action: 'createParty', name: 'Kawiarnia', kind: 'company' })).party!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: a, tags: ['kawa', 'praca'], party: cafe, recurring: true });
+    await store.apply({ action: 'label', tx: 'acc:O;2', category: null, tags: ['praca'], party: null, recurring: false });
     await store.apply({ action: 'renameTag', tag: 'praca', name: 'kawa' });
     let data = (await store.read()).data!;
     expect(data.labels['acc:O;1'].tags).toEqual(['kawa']);
@@ -219,9 +256,9 @@ describe('bank label store', () => {
     expect((await store.apply({ action: 'deleteTag', tag: 'kawa' })).removed).toBe(2);
     data = (await store.read()).data!;
     expect(data.labels['acc:O;2']).toBeUndefined();
-    expect((await store.apply({ action: 'deleteMerchant', merchant: cafe })).removed).toBe(1);
+    expect((await store.apply({ action: 'deleteParty', party: cafe })).removed).toBe(1);
     expect((await store.apply({ action: 'deleteCategory', category: a })).removed).toBe(1);
-    expect((await store.read()).data!.labels['acc:O;1']).toEqual({ category: null, tags: [], merchant: null, person: null, recurring: true, comment: '' });
+    expect((await store.read()).data!.labels['acc:O;1']).toEqual({ category: null, tags: [], party: null, purpose: null, recurring: true, comment: '' });
   });
 });
 
@@ -232,21 +269,21 @@ describe('the agent’s bank view', () => {
     const shrink = map(raw.card('O;3', '2026-10-22', '200.00', 'LESZNOGABINET PSYCHOLOGICZNY 3PL'));
     const open = map(raw.phonePay('O;4', '2026-10-26', '33.10'));
     const { store, reading } = setup([open, back, shrink, lent]);
-    const loan = (await store.apply({ action: 'createCategory', name: 'Pożyczka' })).category!.id;
     const psych = (await store.apply({ action: 'createCategory', name: 'Psycholog' })).category!.id;
-    const anna = (await store.apply({ action: 'createPerson', name: 'Anna' })).person!.id;
-    await store.apply({ action: 'label', tx: lent.id, category: loan, recurring: false, person: anna, comment: 'na bilety' });
-    await store.apply({ action: 'label', tx: back.id, category: loan, recurring: false, person: anna });
-    await store.apply({ action: 'label', tx: shrink.id, category: psych, recurring: true, person: null });
+    const anna = (await store.apply({ action: 'createParty', name: 'Anna', kind: 'person' })).party!.id;
+    await store.apply({ action: 'label', tx: lent.id, category: null, purpose: 'pożyczka', recurring: false, party: anna, comment: 'na bilety' });
+    await store.apply({ action: 'label', tx: back.id, category: null, purpose: 'zwrot', recurring: false, party: anna });
+    await store.apply({ action: 'label', tx: shrink.id, category: psych, recurring: true });
     const sources = {
       bank: async () => ({ live: true, name: 'PKO BP', status: 'connected', observedAt: NOW, consentUntil: null, data: { accounts: ACCOUNTS, transactions: reading.transactions.map(publicTransaction) } }),
       bankLedger: () => store.ledger(),
     } as unknown as PanelSources;
     const view = (q = '') => agentViews(sources).bank(new URL(`http://x/api/agent/bank${q}`), NOW);
     const text = await view();
-    expect(text).toContain('Anna: wysłano 400,00 PLN, otrzymano 150,00 PLN; Pożyczka −250,00 PLN');
-    expect(text).toContain('Wydatki według kategorii: Pożyczka 400,00 PLN; Psycholog 200,00 PLN; bez kategorii 33,10 PLN.');
-    expect(text).toContain('komentarz: „na bilety”');
+    expect(text).toContain('Anna: wysłano 400,00 PLN, otrzymano 150,00 PLN; zwrot +150,00 PLN, pożyczka −400,00 PLN');
+    expect(text).toContain('Wydatki według kategorii: bez kategorii 433,10 PLN; Psycholog 200,00 PLN.');
+    expect(text).toContain('opis: „na bilety”');
+    expect(text).toContain('cel: pożyczka');
     expect(text).toContain('Do przypisania: 1.');
     expect(text).not.toMatch(/\d{9}/);
     expect(text).not.toContain('PL61');
@@ -274,21 +311,23 @@ describe('the bank label routes (standard scenario)', () => {
   it('serves marks and suggestions, takes actions only from the panel’s own page, and keeps numbers out', async () => {
     const { base, post } = await start();
     const labels = bankLabelsSourceSchema.parse(await (await fetch(`${base}/api/bank/labels`)).json());
-    expect(labels.data!.suggestions['acc-1:t13']).toMatchObject({ sure: true, options: [{ person: 'p-0000000a', category: 'c-0000000d' }] });
+    expect(labels.data!.suggestions['acc-1:t13']).toEqual({ sure: true, options: [{ party: 'k-00000012', reasons: ['ta sama nazwa w banku („Anna Kowalska”): Anna'] }] });
+    expect(labels.data!.suggestions['acc-1:t1'].options[0]).toMatchObject({ party: 'k-00000010', tags: ['pensja'], recurring: true });
+    expect(labels.data!.pending).not.toContain('acc-1:t1');
     expect(labels.data!.suggestions['acc-1:t22'].sure).toBe(false);
-    expect((await post({ action: 'accept', tx: 'acc-1:t13' }, null)).status).toBe(403);
-    expect((await post({ action: 'accept', tx: 'acc-1:t13' }, 'http://evil.example')).status).toBe(403);
+    expect((await post({ action: 'accept', tx: 'acc-1:t3' }, null)).status).toBe(403);
+    expect((await post({ action: 'accept', tx: 'acc-1:t3' }, 'http://evil.example')).status).toBe(403);
     expect((await post({ action: 'nuke' })).status).toBe(400);
-    const missing = await post({ action: 'label', tx: 'acc-1:none', category: null, recurring: true, person: null });
+    const missing = await post({ action: 'label', tx: 'acc-1:none', category: null, recurring: true });
     expect(await missing.json()).toEqual({ error: 'Nie ma takiej operacji w ostatnim odczycie banku.' });
-    expect((await post({ action: 'accept', tx: 'acc-1:t13' })).status).toBe(200);
+    expect((await post({ action: 'accept', tx: 'acc-1:t3' })).status).toBe(200);
     const after = bankLabelsSourceSchema.parse(await (await fetch(`${base}/api/bank/labels`)).json());
-    expect(after.data!.labels['acc-1:t13']).toEqual({ category: 'c-0000000d', tags: [], merchant: null, recurring: false, person: 'p-0000000a', comment: '' });
-    expect(after.data!.pending).not.toContain('acc-1:t13');
+    expect(after.data!.labels['acc-1:t3']).toEqual({ category: 'c-0000000a', tags: [], party: 'k-0000000a', purpose: null, recurring: false, comment: '' });
+    expect(after.data!.pending).not.toContain('acc-1:t3');
     const everything = await (await fetch(`${base}/api/bank`)).text() + await (await fetch(`${base}/api/bank/labels`)).text();
     for (const number of ['PL61109010140000071219812874', '48667178938', '667178938']) expect(everything).not.toContain(number);
     const agent = await (await fetch(`${base}/api/agent/bank?nieprzypisane=1`)).text();
-    expect(agent).toContain('Anna: wysłano 120,00 PLN, otrzymano 120,00 PLN; Pożyczka 0,00 PLN');
+    expect(agent).toContain('Anna: wysłano 0,00 PLN, otrzymano 120,00 PLN; pożyczka +120,00 PLN');
     expect(agent).not.toMatch(/667178938|0071219812874/);
   });
 });

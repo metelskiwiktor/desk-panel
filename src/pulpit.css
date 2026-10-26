@@ -621,6 +621,7 @@
 /* Category identity: hues of the chart palette, never the status colours. Avatar, bar segment and legend dot read the same --c. */
 /* A category's colour comes as --c from its own setting; without a category there is no colour to guess. */
 .bank-row, .bank-bar i, .bank-legend li { --c: var(--p2-faint); }
+.bank-bar i.own, .bank-legend .own i { background: var(--p2-muted); opacity: 0.55; }
 .bank-bar i.uncat, .bank-legend .uncat i { background: repeating-linear-gradient(135deg, var(--p2-faint) 0 3px, transparent 3px 6px); }
 .bank-kinds { display: flex; flex-direction: column; gap: 6px; padding: 2px 6px 6px; }
 .bank-bar { display: flex; height: 8px; gap: 2px; border-radius: 4px; overflow: hidden; }
@@ -709,6 +710,11 @@ button.p2-badge.bank-todo { border: 0; cursor: pointer; background: color-mix(in
 .bank-chips.tags button[aria-pressed='true'] { --c: var(--p2-cal); }
 .bank-tag-input { width: 180px; max-width: 100%; height: 34px; padding: 0 10px; border: 1px dashed var(--p2-line); border-radius: 17px; background: transparent; color: var(--p2-text); font: inherit; font-size: 13.5px; outline: none; }
 .bank-tag-input:focus { border-color: var(--p2-cal); border-style: solid; }
+.bank-party-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bank-kinds-switch { display: inline-flex; padding: 2px; border: 1px solid var(--p2-line); border-radius: 18px; }
+.bank-kinds-switch button { min-height: 30px; padding: 0 12px; border-radius: 15px; background: transparent; color: var(--p2-muted); font-size: 13px; }
+.bank-kinds-switch button[aria-pressed='true'] { background: color-mix(in srgb, var(--p2-cal) 24%, transparent); color: var(--p2-text); font-weight: 600; }
+.bank-new-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--p2-muted); font-size: 13px; }
 .bank-dlg-who { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--p2-line); border-radius: 14px; background: var(--p2-surface); }
 .bank-dlg-who p { margin: 0; font-size: 15px; }
 .bank-dlg-who small { color: var(--p2-muted); font-size: 12.5px; }

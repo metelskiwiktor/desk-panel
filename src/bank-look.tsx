@@ -1,9 +1,9 @@
 import {
   Baby, Banknote, BookOpen, Brain, Bus, Car, Coffee, Dumbbell, Film, Fuel, Gamepad2, Gift, GraduationCap, HandCoins, HeartPulse, House, Music,
-  PawPrint, PiggyBank, Plane, Receipt, Repeat, Shirt, ShoppingCart, Smartphone, Tag, User, UtensilsCrossed, Wrench, Zap, type LucideIcon,
+  PawPrint, PiggyBank, Plane, Receipt, Repeat, Shirt, ShoppingCart, Smartphone, Store, Tag, User, UtensilsCrossed, Wrench, Zap, ArrowLeftRight, type LucideIcon,
 } from 'lucide-react';
 import type { BankTransaction } from './bank-contract';
-import type { BankColor, BankIcon, BankLabelsData, BankOption, BankPerson } from './bank-labels-contract';
+import type { BankColor, BankIcon, BankLabelsData, BankOption, BankParty, BankPartyKind } from './bank-labels-contract';
 import { describe, humanNote } from './bank-merchants';
 
 /** How a category's colour and icon look; the names are what the server keeps. */
@@ -51,11 +51,15 @@ export function howPaid(t: BankTransaction, named = false): string {
   return `${methodName(t) ?? (t.amount > 0 ? 'wpływ' : 'przelew')}${note ? ` · ${note}` : ''}`;
 }
 
+/** The kinds of the other side, in the words and icons the screen uses. */
+export const KIND_WORDS: Record<BankPartyKind, string> = { person: 'Osoba', company: 'Firma', self: 'Ja' };
+export const KIND_ICONS: Record<BankPartyKind, LucideIcon> = { person: User, company: Store, self: ArrowLeftRight };
+
 /**
  * What tells a person apart from another of the same name: the bank's name for them, and the ends of their account and phone
  * number ("„DANIEL KOWALSKI” · rach. ··2874 · tel. ··321"); empty while nothing has been learnt.
  */
-export function personHint(p: Pick<BankPerson, 'identifiers'>): string {
+export function personHint(p: Pick<BankParty, 'identifiers'>): string {
   const of = (kind: string) => p.identifiers.filter(i => i.kind === kind);
   const phones = of('phone').length ? of('phone') : of('phoneTail');
   return [...of('name').map(i => `„${i.hint}”`), ...of('account').map(i => `rach. ${i.hint}`), ...phones.map(i => `tel. ${i.hint}`)].join(' · ');
@@ -63,8 +67,7 @@ export function personHint(p: Pick<BankPerson, 'identifiers'>): string {
 
 /** One proposed mark in words: "Inea · Rachunki · #internet · cykliczne". */
 export function optionText(o: BankOption, data: BankLabelsData): string {
-  const merchant = o.merchant && data.merchants.find(m => m.id === o.merchant)?.name;
-  const person = o.person && data.people.find(p => p.id === o.person)?.name;
+  const party = o.party && data.parties.find(p => p.id === o.party)?.name;
   const category = o.category && data.categories.find(c => c.id === o.category)?.name;
-  return [merchant, person, category, ...(o.tags ?? []).map(t => `#${t}`), o.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ');
+  return [party, o.purpose, category, ...(o.tags ?? []).map(t => `#${t}`), o.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ');
 }

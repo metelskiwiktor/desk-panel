@@ -19,7 +19,7 @@ const connected = (over: Partial<BankSource> = {}): BankSource => ({
   }, ...over,
 });
 const marks = (data: Partial<BankLabelsData> = {}, act: BankLabelsHook['act'] = vi.fn(async () => ({ ok: true as const }))): BankLabelsHook => ({
-  source: { live: true, name: 'Oznaczenia', status: 'connected', observedAt: NOW, data: { since: '2026-10-20', categories: [], tags: [], merchants: [], people: [], labels: {}, suggestions: {}, known: {}, pending: [], ...data } },
+  source: { live: true, name: 'Oznaczenia', status: 'connected', observedAt: NOW, data: { since: '2026-10-20', categories: [], tags: [], purposes: [], parties: [], labels: {}, suggestions: {}, known: {}, pending: [], ...data } },
   error: '', clearError: vi.fn(), act,
 });
 const hook = (source: BankSource, over: Partial<BankHook> = {}): BankHook => ({ source, signIn: null, error: '', busy: false, connect: vi.fn(async () => {}), refresh: vi.fn(), labels: marks(), ...over });
@@ -44,7 +44,7 @@ describe('bank helpers', () => {
   });
   it('splits the last 30 days of spending by the user’s own categories, the rest as one uncategorised share, without income', () => {
     const list = [tx('a', '2026-10-24', -100, 'Płatność telefonem'), tx('b', '2026-10-23', -40, 'LESZNOJMP S.A. BIEDRONKA 5133', { note: 'Płatność kartą' }), tx('e', '2026-10-23', -15, 'x'), tx('c', '2026-10-22', 900, 'Pensja'), tx('d', '2026-08-01', -999, 'Płatność telefonem')];
-    const mark = { tags: [], merchant: null, recurring: false, person: null, comment: '' };
+    const mark = { tags: [], party: null, purpose: null, recurring: false, comment: '' };
     const labels = { b: { ...mark, category: FOOD.id }, e: { ...mark, category: 'c-0000dead' } };
     expect(spending(list, NOW, 'PLN', labels, [FOOD])).toEqual([{ category: null, sum: 115 }, { category: FOOD, sum: 40 }]);
     expect(spending(list, NOW, 'PLN')).toEqual([{ category: null, sum: 155 }]);

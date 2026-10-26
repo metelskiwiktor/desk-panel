@@ -44,18 +44,20 @@ export function sums(transactions: BankTransaction[], now: number, currency: str
 }
 
 /**
- * What the last `SUM_DAYS` days went on, by the user's own categories, largest first; money that came in is not counted and
- * whatever has no category (or one since deleted) is one "Bez kategorii" share, never guessed.
+ * What the last `SUM_DAYS` days went on, by the user's own categories, largest first; money that came in is not counted,
+ * money sent to the user's own accounts (`own`) is one "Przelewy własne" share, and whatever has no category (or one since
+ * deleted) is one "Bez kategorii" share, never guessed.
  */
-export function spending(transactions: BankTransaction[], now: number, currency: string, labels: Record<string, BankLabel> = {}, categories: BankCategory[] = []): { category: BankCategory | null; sum: number }[] {
+export function spending(transactions: BankTransaction[], now: number, currency: string, labels: Record<string, BankLabel> = {}, categories: BankCategory[] = [], own: Set<string> = new Set()): { category: BankCategory | null; own?: true; sum: number }[] {
   const known = new Map(categories.map(c => [c.id, c]));
-  const by = new Map<string, { category: BankCategory | null; sum: number }>();
+  const by = new Map<string, { category: BankCategory | null; own?: true; sum: number }>();
   for (const t of transactions) {
     if (t.currency !== currency || t.amount >= 0 || now - t.at > SUM_DAYS * DAY) continue;
     const category = known.get(labels[t.id]?.category ?? '') ?? null;
-    const entry = by.get(category?.id ?? '') ?? { category, sum: 0 };
+    const key = category?.id ?? (own.has(t.id) ? 'own' : '');
+    const entry = by.get(key) ?? { category, ...(key === 'own' ? { own: true as const } : {}), sum: 0 };
     entry.sum -= t.amount;
-    by.set(category?.id ?? '', entry);
+    by.set(key, entry);
   }
   return [...by.values()].sort((a, b) => b.sum - a.sum);
 }
@@ -99,15 +101,17 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
   const data = source.data;
   const labels: BankLabelsData | null = marks.source.data;
   const categories = new Map((labels?.categories ?? []).map(c => [c.id, c]));
-  const people = new Map((labels?.people ?? []).map(p => [p.id, p]));
-  const merchants = new Map((labels?.merchants ?? []).map(m => [m.id, m]));
+  const parties = new Map((labels?.parties ?? []).map(p => [p.id, p]));
+  // The other side the user named, or the one the bank's text or account is known to be.
+  const sideOf = (id: string) => parties.get(labels?.labels[id]?.party ?? labels?.known[id] ?? '');
+  const own = new Set((data?.transactions ?? []).filter(t => sideOf(t.id)?.kind === 'self').map(t => t.id));
   const pending = new Set(labels?.pending ?? []);
   const accounts = data?.accounts ?? [];
   const currency = accounts[0]?.currency ?? 'PLN';
   const balances = accounts.filter(a => a.currency === currency);
   const total = balances.length && balances.every(a => a.balance !== null) ? balances.reduce((s, a) => s + (a.balance ?? 0), 0) : null;
   const flow = data ? sums(data.transactions, now, currency) : null;
-  const kinds = data ? spending(data.transactions, now, currency, labels?.labels, labels?.categories) : [];
+  const kinds = data ? spending(data.transactions, now, currency, labels?.labels, labels?.categories, own) : [];
   const spent = kinds.reduce((s, k) => s + k.sum, 0);
   const daysLeft = source.consentUntil ? Math.floor((source.consentUntil - now) / DAY) : null;
   const expiring = !source.loginRequired && daysLeft !== null && daysLeft <= CONSENT_WARN_DAYS;
@@ -128,8 +132,8 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
     if (!o) return;
     const before = labels?.labels[t.id];
     void marks.act({ action: 'accept', tx: t.id, option: 0 }, d => withLabel(d, t.id, {
-      category: o.category ?? before?.category ?? null, tags: o.tags ?? before?.tags ?? [], merchant: o.merchant ?? before?.merchant ?? null,
-      person: o.person ?? before?.person ?? null, recurring: o.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
+      category: o.category ?? before?.category ?? null, tags: o.tags ?? before?.tags ?? [], party: o.party ?? before?.party ?? null,
+      purpose: o.purpose ?? before?.purpose ?? null, recurring: o.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
     }));
   };
   const reject = (t: BankTransaction) => void marks.act({ action: 'reject', tx: t.id }, d => { const suggestions = { ...d.suggestions }; delete suggestions[t.id]; return { ...d, suggestions }; });
@@ -161,10 +165,10 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
       </div>
       {tall && spent > 0 && <div className="bank-kinds">
         <div className="bank-bar" role="img" aria-label={`Wydatki z ${SUM_DAYS} dni według kategorii`}>
-          {kinds.map(k => <i key={k.category?.id ?? 'none'} className={k.category ? undefined : 'uncat'} style={{ flex: k.sum, ...tint(k.category) }} title={`${k.category?.name ?? 'Bez kategorii'}: ${money(k.sum, currency)}`} />)}
+          {kinds.map(k => <i key={k.category?.id ?? (k.own ? 'own' : 'none')} className={k.category ? undefined : k.own ? 'own' : 'uncat'} style={{ flex: k.sum, ...tint(k.category) }} title={`${k.category?.name ?? (k.own ? 'Przelewy własne' : 'Bez kategorii')}: ${money(k.sum, currency)}`} />)}
         </div>
         <ul className="bank-legend">
-          {kinds.slice(0, wide ? 4 : 3).map(k => <li key={k.category?.id ?? 'none'} className={k.category ? undefined : 'uncat'} style={tint(k.category)}><i />{k.category?.name ?? 'Bez kategorii'} <b>{Math.round((k.sum / spent) * 100)}%</b></li>)}
+          {kinds.slice(0, wide ? 4 : 3).map(k => <li key={k.category?.id ?? (k.own ? 'own' : 'none')} className={k.category ? undefined : k.own ? 'own' : 'uncat'} style={tint(k.category)}><i />{k.category?.name ?? (k.own ? 'Przelewy własne' : 'Bez kategorii')} <b>{Math.round((k.sum / spent) * 100)}%</b></li>)}
         </ul>
       </div>}
       {marks.error && !editing && <p className="p2-note warn" role="status">{marks.error}</p>}
@@ -178,10 +182,8 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
                 const d = describe(t);
                 const mark = labels?.labels[t.id];
                 const category = mark?.category ? categories.get(mark.category) : undefined;
-                const person = mark?.person ? people.get(mark.person) : undefined;
-                // The merchant the user named, or the one the bank's text or account is known to be.
-                const merchant = merchants.get(mark?.merchant ?? labels?.known[t.id]?.merchant ?? '');
-                const name = merchant?.name ?? d.name;
+                const side = sideOf(t.id);
+                const name = side?.name ?? d.name;
                 const todo = pending.has(t.id);
                 // Any operation without a category shows what the panel knows, also one older than the day "to be marked" counts from.
                 const suggestion = category ? undefined : labels?.suggestions[t.id];
@@ -196,11 +198,12 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
                   <span className="bank-what">
                     <span className="bank-title">{name}</span>
                     <span className="bank-note">
-                      {todo && !category ? <span className="bank-assign">przypisz</span> : <span className={category ? 'bank-cat' : 'bank-uncat'}>{category?.name ?? 'Bez kategorii'}</span>}
+                      {side?.kind === 'self' && !category ? <span className="bank-uncat">Przelew własny</span>
+                        : todo && !category ? <span className="bank-assign">przypisz</span> : <span className={category ? 'bank-cat' : 'bank-uncat'}>{category?.name ?? 'Bez kategorii'}</span>}
+                      {mark?.purpose ? <span className="bank-tags">{' · '}{mark.purpose}</span> : null}
                       {mark?.tags.length ? <span className="bank-tags">{' '}{mark.tags.map(tag => `#${tag}`).join(' ')}</span> : null}
-                      <span>{' · '}{howPaid(t, !!merchant)}</span>
+                      <span>{' · '}{howPaid(t, !!side)}</span>
                       {mark?.recurring && <Repeat size={12} className="bank-flag" aria-label="cykliczne" />}
-                      {person && <span className="bank-flag person"><User size={12} aria-hidden="true" />{person.name}</span>}
                       {mark?.comment && <MessageSquare size={12} className="bank-flag" aria-label={`opis: ${mark.comment}`} />}
                     </span>
                     {suggestion && first && wide && (suggestion.options.length > 1

@@ -47,11 +47,11 @@ export function featuresOf(t: BankTransaction, keys: string[]): OpFeatures {
 }
 
 /** A mark as the rules see it. */
-export interface Marked { tx: string; op: OpFeatures; category: string | null; tags: string[]; merchant: string | null; person: string | null; recurring: boolean }
+export interface Marked { tx: string; op: OpFeatures; category: string | null; tags: string[]; party: string | null; purpose: string | null; recurring: boolean }
 /** "None of these" for one operation: the options shown then, by what they were based on. */
 export interface Rejection { tx: string; basis: string; signature: string; at: number }
-/** A person or a merchant, with the keys of what the bank showed for them. */
-export interface Owner { id: string; name: string; kind: 'person' | 'merchant'; identifiers: { key: string; kind: string; hint: string }[] }
+/** The other side (a person, a company or the user themself), with the keys of what the bank showed for it. */
+export interface Owner { id: string; name: string; identifiers: { key: string; kind: string; hint: string }[] }
 export interface SuggestContext { marked: Marked[]; categories: BankCategory[]; owners: Owner[]; rejections: Rejection[] }
 /** The suggestion with what it was based on and each option's signature, so a rejection is remembered against both. */
 export interface Proposal { suggestion: BankSuggestion; basis: string; signatures: string[] }
@@ -59,7 +59,7 @@ export interface Proposal { suggestion: BankSuggestion; basis: string; signature
 /** The order identifiers are looked up in; all but a masked phone number name one side for sure. */
 const KIND_ORDER = ['merchant', 'account', 'phone', 'name', 'phoneTail'] as const;
 const LINK_REASON: Record<(typeof KIND_ORDER)[number], (hint: string, name: string) => string> = {
-  merchant: (_, name) => `ten sam sprzedawca w banku: ${name}`,
+  merchant: (_, name) => `ten sam tekst w banku: ${name}`,
   account: (hint, name) => `ten sam rachunek ${hint}: ${name}`,
   phone: (hint, name) => `ten sam numer telefonu ${hint}: ${name}`,
   name: (hint, name) => `ta sama nazwa w banku („${hint}”): ${name}`,
@@ -77,37 +77,35 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
   const categories = new Map(ctx.categories.map(c => [c.id, c]));
   const owners = new Map(ctx.owners.map(o => [o.id, o]));
 
-  // Who it is, by the first identifier that belongs to someone: a merchant and a person are looked for apart.
-  const found: Partial<Record<Owner['kind'], { owner: Owner; reason: string; reliable: boolean }>> = {};
+  // Who it is, by the first identifier that belongs to someone, the surest kind first.
+  let link: { owner: Owner; reason: string; reliable: boolean } | undefined;
   for (const kind of KIND_ORDER) {
     for (const key of op.keys.filter(k => k.startsWith(`${kind}:`))) {
       const owner = ctx.owners.find(o => o.identifiers.some(i => i.key === key));
-      if (!owner || found[owner.kind]) continue;
-      found[owner.kind] = { owner, reason: LINK_REASON[kind](owner.identifiers.find(i => i.key === key)!.hint, owner.name), reliable: kind !== 'phoneTail' };
+      if (owner) { link = { owner, reason: LINK_REASON[kind](owner.identifiers.find(i => i.key === key)!.hint, owner.name), reliable: kind !== 'phoneTail' }; break; }
     }
+    if (link) break;
   }
-  const link = found.merchant ?? found.person;
   const sign = Math.sign(op.amount);
-  // A mark that only says who (no category, tags or recurring) says nothing about what it was.
-  const marks = ctx.marked.filter(m => m.tx !== tx && (m.category || m.tags.length || m.recurring));
+  // A mark that only says who (nothing about what or why) says nothing about what it was.
+  const marks = ctx.marked.filter(m => m.tx !== tx && (m.category || m.tags.length || m.purpose || m.recurring) && Math.sign(m.op.amount) === sign);
 
-  // What it was the other times: the merchant's or person's earlier marks; without a name, only the very same amount.
-  let basis: string, history: Marked[], reliable: boolean, linkReason: string | undefined;
+  // What it was the other times: this side's earlier marks, money going the same way; without a name, only the very same amount.
+  let basis: string, history: Marked[], reliable: boolean;
   if (link) {
-    basis = `${link.owner.kind}:${link.owner.id}`;
-    history = marks.filter(m => link.owner.kind === 'merchant' ? m.merchant === link.owner.id && Math.sign(m.op.amount) === sign : m.person === link.owner.id);
+    basis = `party:${link.owner.id}`;
+    history = marks.filter(m => m.party === link!.owner.id);
     reliable = link.reliable;
-    linkReason = [found.merchant?.reason, found.person?.reason].filter(Boolean).join('; ');
   } else if (op.merchant === null) {
     basis = `amount:${group(op.method)}:${Math.round(op.amount * 100)}`;
-    history = marks.filter(m => m.op.merchant === null && group(m.op.method) === group(op.method) && Math.sign(m.op.amount) === sign && sameAmount(m.op.amount, op.amount));
+    history = marks.filter(m => m.op.merchant === null && group(m.op.method) === group(op.method) && sameAmount(m.op.amount, op.amount));
     reliable = false;
   } else return null;
 
   // Earlier marks grouped by what they said (category, tags, recurring, and the merchant when only the amount links them).
   const signature = (m: Marked) => JSON.stringify({
-    c: m.category && categories.has(m.category) ? m.category : null, t: [...m.tags].sort(), r: m.recurring,
-    m: !link && m.merchant && owners.has(m.merchant) ? m.merchant : null,
+    c: m.category && categories.has(m.category) ? m.category : null, t: [...m.tags].sort(), r: m.recurring, p: m.purpose,
+    s: !link && m.party && owners.has(m.party) ? m.party : null,
   });
   const groups = new Map<string, { marks: Marked[]; last: number }>();
   for (const m of history) {
@@ -125,19 +123,19 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
   for (const [s, g] of ranked) {
     const first = g.marks[0];
     const category = first.category && categories.has(first.category) ? first.category : undefined;
-    const merchant = found.merchant?.owner.id ?? (!link && first.merchant && owners.has(first.merchant) ? first.merchant : undefined);
-    const words = [merchant && !found.merchant ? owners.get(merchant)!.name : null, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
+    const party = link?.owner.id ?? (first.party && owners.has(first.party) ? first.party : undefined);
+    const words = [!link && party ? owners.get(party)!.name : null, first.purpose, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
     const count = `${words}: ${g.marks.length} z ${total} ${times(total)}`;
     options.push({
-      ...(category ? { category } : {}), ...(first.tags.length ? { tags: [...first.tags] } : {}), ...(merchant ? { merchant } : {}),
-      ...(found.person ? { person: found.person.owner.id } : {}), ...(first.recurring ? { recurring: true as const } : {}),
-      reasons: link ? [linkReason!, count] : [`ta sama kwota ${money(op.amount, op.currency)}, bez nazwy sklepu`, count],
+      ...(category ? { category } : {}), ...(first.tags.length ? { tags: [...first.tags] } : {}), ...(party ? { party } : {}),
+      ...(first.purpose ? { purpose: first.purpose } : {}), ...(first.recurring ? { recurring: true as const } : {}),
+      reasons: link ? [link.reason, count] : [`ta sama kwota ${money(op.amount, op.currency)}, bez nazwy sklepu`, count],
     });
     signatures.push(s);
   }
   // A known side with nothing marked before still says who it is.
   if (!options.length && link && !shownBefore.has('who') && !groups.size) {
-    options.push({ ...(found.merchant ? { merchant: found.merchant.owner.id } : {}), ...(found.person ? { person: found.person.owner.id } : {}), reasons: [linkReason!] });
+    options.push({ party: link.owner.id, reasons: [link.reason] });
     signatures.push('who');
   }
   if (!options.length) return null;

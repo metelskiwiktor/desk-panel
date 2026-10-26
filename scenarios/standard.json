@@ -42,36 +42,33 @@
       {"id": "c-0000000a", "name": "Spożywcze", "color": "green", "icon": "cart"},
       {"id": "c-0000000b", "name": "Jedzenie na mieście", "color": "orange", "icon": "utensils"},
       {"id": "c-0000000c", "name": "Subskrypcje", "color": "violet", "icon": "repeat"},
-      {"id": "c-0000000d", "name": "Pożyczka", "color": "blue", "icon": "handCoins"},
-      {"id": "c-0000000e", "name": "Zdrowie", "color": "pink", "icon": "brain"},
-      {"id": "c-0000000f", "name": "Wpływy", "color": "teal", "icon": "banknote"}
+      {"id": "c-0000000d", "name": "Rachunki", "color": "blue", "icon": "receipt"},
+      {"id": "c-0000000e", "name": "Zdrowie", "color": "pink", "icon": "brain"}
     ],
-    "merchants": [
-      {"id": "m-0000000a", "name": "Biedronka"},
-      {"id": "m-0000000b", "name": "Żabka"},
-      {"id": "m-0000000c", "name": "McDonald’s"},
-      {"id": "m-0000000d", "name": "Cukiernia Hoffmann"},
-      {"id": "m-0000000e", "name": "Claude"},
-      {"id": "m-0000000f", "name": "Gabinet psychologiczny"},
-      {"id": "m-00000010", "name": "Firma"},
-      {"id": "m-00000011", "name": "pyszne.pl"}
-    ],
-    "people": [
-      {"id": "p-0000000a", "name": "Anna"},
-      {"id": "p-0000000b", "name": "Jonasz"}
+    "parties": [
+      {"id": "k-0000000a", "name": "Biedronka", "kind": "company"},
+      {"id": "k-0000000b", "name": "Żabka", "kind": "company"},
+      {"id": "k-0000000c", "name": "McDonald’s", "kind": "company"},
+      {"id": "k-0000000d", "name": "Cukiernia Hoffmann", "kind": "company"},
+      {"id": "k-0000000e", "name": "Claude", "kind": "company"},
+      {"id": "k-0000000f", "name": "Gabinet psychologiczny", "kind": "company"},
+      {"id": "k-00000010", "name": "Moja firma", "kind": "self"},
+      {"id": "k-00000011", "name": "pyszne.pl", "kind": "company"},
+      {"id": "k-00000012", "name": "Anna", "kind": "person"},
+      {"id": "k-00000013", "name": "Jonasz", "kind": "person"}
     ],
     "labels": {
-      "acc-1:t8": {"category": "c-0000000b", "merchant": "m-00000011", "tags": ["restauracja"]},
-      "acc-1:t9": {"category": "c-0000000f", "merchant": "m-00000010", "tags": ["wynagrodzenie"], "recurring": true},
-      "acc-1:t10": {"category": "c-0000000a", "merchant": "m-0000000b"},
-      "acc-1:t11": {"category": "c-0000000b", "merchant": "m-0000000c", "tags": ["fast-food"]},
-      "acc-1:t12": {"category": "c-0000000b", "merchant": "m-0000000d", "tags": ["urodziny"], "comment": "Tort na urodziny"},
-      "acc-1:t16": {"category": "c-0000000e", "merchant": "m-0000000f", "tags": ["psycholog"], "recurring": true, "comment": "Sesja co tydzień"},
-      "acc-1:t17": {"category": "c-0000000d", "tags": ["laptop"], "person": "p-0000000b", "comment": "Laptop, ostatnia część"},
-      "acc-1:t18": {"category": "c-0000000f", "merchant": "m-00000010", "tags": ["wynagrodzenie"], "recurring": true},
-      "acc-1:t19": {"category": "c-0000000a", "merchant": "m-0000000a"},
-      "acc-1:t20": {"category": "c-0000000d", "person": "p-0000000a"},
-      "acc-1:t21": {"category": "c-0000000c", "merchant": "m-0000000e", "tags": ["ai"], "recurring": true}
+      "acc-1:t8": {"category": "c-0000000b", "party": "k-00000011", "tags": ["restauracja"]},
+      "acc-1:t9": {"party": "k-00000010", "tags": ["pensja"], "recurring": true},
+      "acc-1:t10": {"category": "c-0000000a", "party": "k-0000000b"},
+      "acc-1:t11": {"category": "c-0000000b", "party": "k-0000000c", "tags": ["fast-food"]},
+      "acc-1:t12": {"category": "c-0000000b", "party": "k-0000000d", "tags": ["urodziny"], "comment": "Tort na urodziny"},
+      "acc-1:t16": {"category": "c-0000000e", "party": "k-0000000f", "tags": ["psycholog"], "recurring": true, "comment": "Sesja co tydzień"},
+      "acc-1:t17": {"party": "k-00000013", "purpose": "zwrot", "tags": ["laptop"], "comment": "Laptop, ostatnia część"},
+      "acc-1:t18": {"party": "k-00000010", "tags": ["pensja"], "recurring": true},
+      "acc-1:t19": {"category": "c-0000000a", "party": "k-0000000a"},
+      "acc-1:t20": {"party": "k-00000012", "purpose": "pożyczka", "comment": "Anna pożyczyła na kolację"},
+      "acc-1:t21": {"category": "c-0000000c", "party": "k-0000000e", "tags": ["ai"], "recurring": true}
     }
   },
   "cezar": {
