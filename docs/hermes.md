@@ -135,6 +135,8 @@ Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]
 - `just scenario NAME` i `just screenshots NAME --open chat` używają tej samej atrapy (Hermes odpowiada ze skryptu; wiadomość ze słowem
   „zgoda” pokazuje prośbę o zgodę). `--open chat-answer` fotografuje skończoną turę z krokiem narzędzia, `--open chat-approval` kartę
   zgody, a `--hermes down` okno przy wyłączonym Hermesie.
+- `server/hermes-lock.test.ts` — `servy/hermes.lock.json`: pełne commity Hermesa i providera, prawdziwy SHA-256 pliku łatki, łatka
+  zmienia tylko bramkę strumienia w pliku `target` i tylko dla `antigravity-oauth` na `api_server`.
 - Testów na prawdziwym Hermesie w repozytorium nie ma (wymagają działającej instalacji i klucza); po instalacji sprawdź ręcznie:
   `just hermes CHECK`, jedna tura z narzędziem `panel_calendar`, prośba o zgodę (np. polecenie powłoki), stop, restart panelu w trakcie
   odpowiedzi.
