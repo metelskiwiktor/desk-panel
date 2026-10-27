@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within, act } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
 import { ChatWindow, groupOf, messageCount } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
+import { clearChatDraft, getChatDraft } from './chat-draft';
 
 const ID = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11';
 const NOW = new Date('2026-10-25T12:00:00').getTime();
@@ -108,9 +109,10 @@ function mockServer(chats: ChatSummary[] = [summary()], status = 200) {
 beforeEach(() => {
   FakeSource.instances = [];
   vi.stubGlobal('EventSource', FakeSource);
+  vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; isPrimary = true; });
   vi.useRealTimers();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.body.removeAttribute('data-picking'); document.body.removeAttribute('data-chat-dock'); window.history.replaceState(null, '', '/'); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearChatDraft(); localStorage.clear(); document.body.removeAttribute('data-picking'); document.body.removeAttribute('data-chat-dock'); window.history.replaceState(null, '', '/'); });
 
 /** The conversations sit behind the title of the window. */
 async function openConversation(user: ReturnType<typeof userEvent.setup>, title: RegExp) {
@@ -560,5 +562,53 @@ describe('CHAT_SKILLS', () => {
     expect(skill!.prompt).toContain('Phase 2 (Synthesis and Implementation)');
     expect(skill!.prompt).toContain('panel_cezar');
     expect(skill!.prompt).toContain('panel_cezar_propose');
+  });
+});
+
+describe('chat resizing, minimizing, and draft preservation', () => {
+  it('minimizes the chat window via minimize button', async () => {
+    mockServer();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={onClose} />);
+    await listed();
+    await user.click(screen.getByRole('button', { name: 'Zminimalizuj czat' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders interactive resize handle and supports dragging to resize', async () => {
+    mockServer();
+    render(<ChatWindow onClose={() => {}} />);
+    await listed();
+    const handle = screen.getByTestId('chat-resize-handle');
+    expect(handle).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: 'Czat z agentem' });
+    expect(dialog).toBeTruthy();
+
+    fireEvent.pointerDown(handle, { clientX: 500, clientY: 400 });
+    fireEvent.pointerMove(window, { clientX: 600, clientY: 450 });
+    fireEvent.pointerUp(window, { clientX: 600, clientY: 450 });
+
+    const saved = JSON.parse(localStorage.getItem('desk-panel:chat-size') || '{}');
+    expect(saved.width).toBeGreaterThanOrEqual(400);
+    expect(saved.height).toBeGreaterThanOrEqual(300);
+  });
+
+  it('preserves unsent draft text in the chat input when re-rendering', async () => {
+    mockServer();
+    const user = userEvent.setup();
+    const { unmount } = render(<ChatWindow onClose={() => {}} />);
+    await listed();
+    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, 'Niewysłana wiadomość robocza');
+    expect(input.value).toBe('Niewysłana wiadomość robocza');
+    expect(getChatDraft().text).toBe('Niewysłana wiadomość robocza');
+
+    unmount();
+
+    render(<ChatWindow onClose={() => {}} />);
+    await listed();
+    const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    expect(reopenedInput.value).toBe('Niewysłana wiadomość robocza');
   });
 });

@@ -1,7 +1,8 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronLeft, MessageSquare, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, MessageSquare, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import type { ContextItem } from './chat-contract';
+import { getChatDraft, setChatDraftContext } from './chat-draft';
 import { Cockpit } from './cockpit/Cockpit';
 import { useLiveCockpit } from './cockpit/live';
 import { useMockCockpit } from './cockpit/mock';
@@ -58,13 +59,100 @@ function Conversations({ source, close }: { source: CockpitSource; close: () => 
  * the dashboard narrows beside it; what is pointed at becomes chips on the next message.
  */
 function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: () => void }) {
-  const [context, setContext] = useState<ContextItem[]>([]);
+  const [context, setContextState] = useState<ContextItem[]>(() => getChatDraft().context);
+  const setContext: Dispatch<SetStateAction<ContextItem[]>> = (updater) => {
+    setContextState(prev => {
+      const next = typeof updater === 'function' ? (updater as (p: ContextItem[]) => ContextItem[])(prev) : updater;
+      setChatDraftContext(next);
+      return next;
+    });
+  };
   const [picking, setPicking] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   /** Narrow screens show one column at a time. */
   const [pane, setPane] = useState<'chat' | 'cockpit'>('chat');
-  usePointing(picking, context, setContext as Dispatch<SetStateAction<ContextItem[]>>);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(() => {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    try {
+      const saved = window.localStorage.getItem('desk-panel:chat-size');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.width === 'number' && typeof parsed.height === 'number') {
+          return {
+            width: Math.max(400, Math.min(window.innerWidth - 32, parsed.width)),
+            height: Math.max(300, Math.min(window.innerHeight - 32, parsed.height)),
+          };
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    if (picking || !sectionRef.current || typeof ResizeObserver === 'undefined') return;
+    const el = sectionRef.current;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width >= 400 && height >= 300) {
+          try {
+            window.localStorage.setItem('desk-panel:chat-size', JSON.stringify({ width: Math.round(width), height: Math.round(height) }));
+          } catch {}
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [picking]);
+
+  const onResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture?.(e.pointerId);
+
+    const rect = sectionRef.current?.getBoundingClientRect();
+    const startW = rect?.width || 1100;
+    const startH = rect?.height || 750;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    let currentW = startW;
+    let currentH = startH;
+
+    const onPointerMove = (ev: PointerEvent | MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const maxW = Math.max(400, window.innerWidth - 32);
+      const maxH = Math.max(300, window.innerHeight - 32);
+      currentW = Math.max(400, Math.min(maxW, Math.round(startW + dx * 2)));
+      currentH = Math.max(300, Math.min(maxH, Math.round(startH + dy * 2)));
+      setSize({ width: currentW, height: currentH });
+      try {
+        window.localStorage.setItem('desk-panel:chat-size', JSON.stringify({ width: currentW, height: currentH }));
+      } catch {}
+    };
+
+    const onPointerUp = (ev: PointerEvent | MouseEvent) => {
+      target.releasePointerCapture?.((ev as PointerEvent).pointerId);
+      window.removeEventListener('pointermove', onPointerMove as EventListener);
+      window.removeEventListener('pointerup', onPointerUp as EventListener);
+      window.removeEventListener('mousemove', onPointerMove as EventListener);
+      window.removeEventListener('mouseup', onPointerUp as EventListener);
+      try {
+        window.localStorage.setItem('desk-panel:chat-size', JSON.stringify({ width: currentW, height: currentH }));
+      } catch {}
+    };
+
+    window.addEventListener('pointermove', onPointerMove as EventListener);
+    window.addEventListener('pointerup', onPointerUp as EventListener);
+    window.addEventListener('mousemove', onPointerMove as EventListener);
+    window.addEventListener('mouseup', onPointerUp as EventListener);
+  };
+
+  usePointing(picking, context, setContext);
 
   useEffect(() => { setConfirmDelete(false); }, [source.activeId]);
   useEffect(() => {
@@ -98,7 +186,8 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
   return createPortal(
     <div className="chat-root ck-root tw:font-ck tw:text-ck-text" data-mode={mode}>
       {mode === 'window' && <div className="tw:fixed tw:inset-0 tw:z-[90] tw:bg-[rgba(6,9,15,0.62)]" aria-hidden="true" onClick={onClose} />}
-      <section role={picking ? 'complementary' : 'dialog'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem"
+      <section ref={sectionRef} role={picking ? 'complementary' : 'dialog'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem"
+        style={mode === 'window' && size ? { width: `${size.width}px`, height: `${size.height}px` } : undefined}
         className={mode === 'window'
           ? 'tw:fixed tw:inset-0 tw:z-[91] tw:flex tw:flex-col tw:overflow-hidden tw:bg-ck-surface tw:min-[900px]:inset-x-8 tw:min-[900px]:inset-y-5 tw:min-[900px]:mx-auto tw:min-[900px]:max-w-[1440px] tw:min-[900px]:rounded-3xl tw:min-[900px]:border tw:min-[900px]:border-ck-line-2 tw:min-[900px]:shadow-[0_30px_80px_rgba(0,0,0,0.55)]'
           : 'tw:fixed tw:inset-x-0 tw:bottom-0 tw:z-[91] tw:flex tw:h-[52dvh] tw:flex-col tw:border-t tw:border-ck-line-2 tw:bg-ck-surface tw:min-[900px]:inset-y-0 tw:min-[900px]:left-auto tw:min-[900px]:h-auto tw:min-[900px]:w-[min(460px,100vw)] tw:min-[900px]:border-t-0 tw:min-[900px]:border-l tw:shadow-[-20px_0_50px_rgba(0,0,0,0.35)]'}>
@@ -126,6 +215,7 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
                 {source.activeId && (confirmDelete
                   ? <button type="button" className="tw:min-h-10 tw:rounded-xl tw:bg-ck-red/15 tw:px-3 tw:text-sm tw:font-medium tw:text-ck-red" onClick={() => { setConfirmDelete(false); source.remove(); }}>Usunąć?</button>
                   : <button type="button" className={icon} aria-label="Usuń rozmowę" onClick={() => setConfirmDelete(true)}><Trash2 size={18} aria-hidden="true" /></button>)}
+                <button type="button" className={icon} aria-label="Zminimalizuj czat" onClick={onClose}><Minus size={18} aria-hidden="true" /></button>
                 <button type="button" className={icon} aria-label="Zamknij czat" onClick={onClose}><X size={20} aria-hidden="true" /></button>
               </>}
           </div>
@@ -138,6 +228,20 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
               <Cockpit source={source} />
             </aside>
           </div>}
+        {mode === 'window' && (
+          <div
+            className="chat-resize-handle"
+            data-testid="chat-resize-handle"
+            role="separator"
+            aria-label="Uchwyt zmiany rozmiaru okna"
+            title="Przeciągnij, aby zmienić rozmiar"
+            onPointerDown={onResizeStart}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M10 2L2 10M10 6L6 10M10 10L10 10.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
       </section>
     </div>,
     document.body,

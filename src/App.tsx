@@ -57,6 +57,7 @@ import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
 import { PulpitMenu } from './PulpitMenu';
 import { usePulpits } from './pulpits';
+import './chat.css';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
@@ -405,7 +406,6 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <button className="top-button" aria-label="Pokaż zegar (tryb ambient)" onClick={ambient.enter}><Clock size={20} /></button>
-          <button className="top-button" aria-label="Otwórz czat z agentem" aria-haspopup="dialog" aria-expanded={chatOpen} onClick={() => setChatOpen(open => !open)}><MessageSquare size={20} /></button>
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>
@@ -494,6 +494,18 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
         </footer>
       )}
       {chatOpen && <Suspense fallback={null}><ChatWindow onClose={() => setChatOpen(false)} /></Suspense>}
+      <button
+        type="button"
+        className="chat-toggle-fab"
+        data-pick-through
+        aria-label="Otwórz czat z agentem"
+        aria-haspopup="dialog"
+        aria-expanded={chatOpen}
+        title="Czat z agentem"
+        onClick={() => setChatOpen((open) => !open)}
+      >
+        <MessageSquare size={22} aria-hidden="true" />
+      </button>
       <nav aria-label="Główna nawigacja">
         {(Object.keys(pageNames) as Page[]).map((id) => {
           const Icon = navIcons[id];
