@@ -14,7 +14,7 @@ nodes:
       git rm --cached -r . >/dev/null 2>&1 || true
       git reset --hard >/dev/null 2>&1 || true
       mkdir -p .ai/screenshots
-      node -e "const fs=require('fs'),p=require('path'); for(const rel of ['../../../../node_modules','../../../node_modules']){ if(!fs.existsSync('node_modules')&&fs.existsSync(rel)){ fs.symlinkSync(p.resolve(rel),'node_modules','junction'); break; } } for(const base of ['../../../../scripts','../../../scripts','scripts']){ for(const f of ['scenario.ts','pr-screenshots.mjs']){ const src=p.resolve(base,f), dst=p.resolve('.ai',f); if(fs.existsSync(src)){ fs.copyFileSync(src,dst); } } }"
+      node -e "const fs=require('fs'),p=require('path'),cp=require('child_process'); for(const rel of ['../../../../node_modules','../../../node_modules']){ if(!fs.existsSync('node_modules')&&fs.existsSync(rel)){ try{fs.symlinkSync(p.resolve(rel),'node_modules','junction');}catch(_){} break; } } for(const base of ['../../../../scripts','../../../scripts','scripts']){ for(const f of ['scenario.ts','pr-screenshots.mjs']){ const src=p.resolve(base,f), dst=p.resolve('.ai',f); if(fs.existsSync(src)){ try{fs.copyFileSync(src,dst);}catch(_){} } } } if(!fs.existsSync('node_modules/.bin/tsc')&&!fs.existsSync('node_modules/.bin/tsc.cmd')){ console.log('node_modules incomplete or tsc binary missing; installing...'); cp.execSync('npm install --no-audit --no-fund',{stdio:'inherit'}); }"
 
   - id: implement
     name: Implement
