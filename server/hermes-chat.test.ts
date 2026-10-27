@@ -140,6 +140,32 @@ describe('Hermes chat', () => {
     expect(after.items[1].parts?.[0]).toMatchObject({ type: 'tool', output: 'Lista „Zadania” (l-1): 2 do zrobienia.' });
   });
 
+  it('reads the history where Hermes 0.21 keeps it (/api/sessions, in pages), and where older ones did', async () => {
+    const first = hermes();
+    const { id } = await first.create({ text: 'Co tu jest?' });
+    const before = await finishedChat(first, id);
+    await first.drain();
+    first.close();
+    const session = (JSON.parse(await readFile(path.join(dir, 'hermes-chats', `${id}.json`), 'utf8')) as { session: string }).session;
+    // A long conversation: more than one page of 500 messages, oldest first.
+    const history = mock.sessions.get(session)!;
+    const older = Array.from({ length: 600 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `stare ${i}` }));
+    history.unshift(...older);
+    const client = createHermesClient({ url: mock.url, key: KEY });
+    const asked = mock.requests.length;
+    const read = await client.history(session);
+    expect(read).toHaveLength(history.length);
+    expect(read[0].content).toBe('stare 0');
+    expect(read.at(-1)!.content).toBe(answerOf(before.items[1]));
+    expect(mock.requests.slice(asked).filter(r => r.path === `/api/sessions/${session}/messages`)).toHaveLength(2);
+    history.splice(0, older.length);
+
+    mock.configure({ legacySessions: true });
+    const second = hermes();
+    expect(answerOf((await second.get(id)).items[1])).toBe(answerOf(before.items[1]));
+    expect(mock.requests.some(r => r.path === `/v1/sessions/${session}/messages`)).toBe(true);
+  });
+
   it('reconnects after a dropped stream with Last-Event-ID and shows no step twice', async () => {
     mock.configure({ stepMs: 15 });
     const service = hermes();

@@ -19,7 +19,7 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
 - **Tylko oficjalne, stale działające API.** Panel nie uruchamia CLI Hermesa na turę. Tura to `POST /v1/runs`
   (`{input, session_id}`), potem strumień SSE `GET /v1/runs/<run>/events`; zgoda `POST /v1/runs/<run>/approval`, stop
   `POST /v1/runs/<run>/cancel` (starszy serwer: `/stop`), stan przebiegu `GET /v1/runs/<run>`, historia
-  `GET /v1/sessions/<sesja>/messages`, zdrowie `GET /health`. Ścieżki i nazwy pól są w jednym miejscu (`HERMES_ROUTES` i
+  `GET /api/sessions/<sesja>/messages?limit=500&offset=…` (Hermes 0.21+, strony od najnowszych; starszy: `/v1/sessions/<sesja>/messages`), zdrowie `GET /health`. Ścieżki i nazwy pól są w jednym miejscu (`HERMES_ROUTES` i
   `hermesEventOf` w `server/hermes-api.ts`); pola zdarzeń są czytane z kilku znanych wariantów nazw, bo rosły między wersjami.
 - **Sesje Hermesa są kanoniczne.** `~/.desk-panel/hermes-chats/<id>.json` trzyma tylko mapowanie: id sesji Hermesa
   (`desk-panel-<id rozmowy>`, więc przebieg, który dotarł do Hermesa przed zapisem mapowania, i tak jest w tej sesji), id przebiegu

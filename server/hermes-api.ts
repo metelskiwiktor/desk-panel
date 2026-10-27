@@ -15,10 +15,16 @@ export const HERMES_ROUTES = {
   cancel: (run: string) => `/v1/runs/${encodeURIComponent(run)}/cancel`,
   /** Older servers stop a run here instead. */
   stop: (run: string) => `/v1/runs/${encodeURIComponent(run)}/stop`,
-  sessionMessages: (session: string) => `/v1/sessions/${encodeURIComponent(session)}/messages`,
+  /** A session's history, a page of at most 500 messages (`offset` counts from the newest, each page oldest first). */
+  sessionMessages: (session: string, offset = 0) => `/api/sessions/${encodeURIComponent(session)}/messages?limit=${HISTORY_PAGE}&offset=${offset}`,
+  /** Servers before 0.21 kept the history here, whole. */
+  legacySessionMessages: (session: string) => `/v1/sessions/${encodeURIComponent(session)}/messages`,
 } as const;
 
 export const DEFAULT_HERMES_URL = 'http://127.0.0.1:8642';
+export const HISTORY_PAGE = 500;
+/** A conversation is read up to this many pages back (10 000 messages). */
+const HISTORY_PAGES = 20;
 
 /** Ids that go into a path or a body: what Hermes hands out, nothing a path could be built from. */
 export const HERMES_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
@@ -288,6 +294,22 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
         await request(HERMES_ROUTES.stop(run), { method: 'POST', body: {} });
       }
     },
-    async history(session) { return historyOf(await request(HERMES_ROUTES.sessionMessages(session))); },
+    async history(session) {
+      const pages: HistoryMessage[][] = [];
+      for (let n = 0; n < HISTORY_PAGES; n++) {
+        let body: unknown;
+        try { body = await request(HERMES_ROUTES.sessionMessages(session, n * HISTORY_PAGE)); }
+        catch (error) {
+          // An older Hermes has no /api/sessions: its history is all in one answer at the old path.
+          if (n === 0 && error instanceof HermesError && error.status === 404) return historyOf(await request(HERMES_ROUTES.legacySessionMessages(session)));
+          throw error;
+        }
+        pages.unshift(historyOf(body));
+        const returned = rec(rec(body).pagination).returned;
+        const count = typeof returned === 'number' ? returned : Array.isArray(rec(body).data) ? (rec(body).data as unknown[]).length : 0;
+        if (count < HISTORY_PAGE) break;
+      }
+      return pages.flat();
+    },
   };
 }

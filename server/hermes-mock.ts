@@ -18,6 +18,8 @@ export interface MockHermesOptions {
   deltas?: boolean;
   /** False: events carry no `id:` lines, so a stream cannot resume after an id. */
   eventIds?: boolean;
+  /** True: the history is where Hermes kept it before 0.21 (`/v1/sessions/…/messages`, whole). */
+  legacySessions?: boolean;
 }
 
 interface MockRun {
@@ -214,11 +216,16 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
         return json(res, 200, { ok: true, status: run.status });
       }
     }
-    const sessionMatch = /^\/v1\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
+    // The history where Hermes keeps it now (`/api/sessions`, pages of the newest first, each oldest first), or where it
+    // was before 0.21 (`/v1/sessions`, whole) when `legacySessions` is set.
+    const sessionMatch = (options.legacySessions ? /^\/v1\/sessions\/([^/]+)\/messages$/ : /^\/api\/sessions\/([^/]+)\/messages$/).exec(url.pathname);
     if (sessionMatch) {
       const messages = sessions.get(decodeURIComponent(sessionMatch[1]));
       if (!messages) return json(res, 404, { error: { message: 'Session not found' } });
-      return json(res, 200, { session_id: sessionMatch[1], messages });
+      if (options.legacySessions) return json(res, 200, { session_id: sessionMatch[1], messages });
+      const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 500), offset = Number(url.searchParams.get('offset') ?? 0);
+      const page = messages.slice(Math.max(0, messages.length - offset - limit), Math.max(0, messages.length - offset));
+      return json(res, 200, { object: 'list', session_id: sessionMatch[1], data: page, pagination: { limit, offset, order: 'latest', returned: page.length } });
     }
     json(res, 404, { error: { message: 'Not found' } });
   });
