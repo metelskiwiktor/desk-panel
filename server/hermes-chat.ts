@@ -19,9 +19,9 @@ import {
 /** The cockpit contract for Hermes, line by line from the same table the MCP tools describe themselves with. */
 export function cockpitRules(): string[] {
   return [
-    'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI, subtaski). Kokpit niczego sam nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Narzędzia kokpitu i kiedy ich używać:',
+    'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI). Kokpit niczego sam nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Narzędzia kokpitu i kiedy ich używać:',
     ...Object.entries(COCKPIT_TOOLS).map(([name, tool]) => `- ${name}: ${tool.purpose} Kiedy: ${tool.when} Skutek: ${tool.effect}`),
-    'Poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś. Skill „Zaimplementuj zadanie”: panel_recon_report, krótki plan, panel_cezar_propose i koniec odpowiedzi; promptu nie powtarzasz tekstem i nie pytasz „Zlecić?” tekstem.',
+    'Poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś. Skill „Zaimplementuj zadanie” (zarówno faza analizy workflow: "analysis", jak i implementacji desk-panel-task): panel_recon_report, krótki plan, panel_cezar_propose i koniec odpowiedzi; promptu nie powtarzasz tekstem i nie pytasz „Zlecić?” tekstem.',
   ];
 }
 

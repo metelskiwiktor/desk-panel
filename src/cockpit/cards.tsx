@@ -91,7 +91,7 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const busy = running || sending || waiting;
   const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
     setSending(true); setError('');
-    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, todoId: args.todoId }); setEditing(null); }
+    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId }); setEditing(null); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };

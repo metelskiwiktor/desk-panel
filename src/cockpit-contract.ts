@@ -51,10 +51,14 @@ export interface CockpitView {
 
 /** `projekt/uuid`: a project name that cannot be a path step (`..`), and a run id. */
 export const cezarRunId = z.string().regex(/^[A-Za-z0-9][\w.-]{0,127}\/[0-9A-Za-z-]{1,128}$/);
+/** The Cezar workflows a dispatch card may start; anything else is refused. */
+export const CEZAR_WORKFLOWS = ['analysis', 'desk-panel-task'] as const;
 export const cockpitDispatchSchema = z.object({
   toolCallId: z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/),
   decision: z.enum(['dispatch', 'reject']),
   title: z.string().trim().min(1).max(120),
+  /** The Cezar workflow: `analysis` (read-only, its findings come back to the chat) or `desk-panel-task` (implementation). */
+  workflow: z.enum(CEZAR_WORKFLOWS).optional(),
   /** What goes to the executor: the agent's prompt, or the user's correction of it. */
   prompt: z.string().trim().min(1).max(32_000),
   /** A to-do item the task implements (Cezar gets it with the run). */
@@ -91,7 +95,7 @@ export const COCKPIT_TOOLS = {
     card: 'recon',
   },
   panel_cezar_propose: {
-    purpose: 'Skill „Zaimplementuj zadanie”: propozycja zlecenia taska na Cezarze (tytuł i Executor Prompt).',
+    purpose: 'Skill „Zaimplementuj zadanie”: propozycja zlecenia taska na Cezarze (tytuł, Executor Prompt, opcjonalny workflow: "analysis" lub "desk-panel-task").',
     when: 'gdy prompt jest gotowy i użytkownik chce zlecić zadanie teraz; nie wtedy, gdy dopiero je omawiacie. Potem zakończ odpowiedź.',
     effect: 'użytkownik widzi kartę „Zlecić na Cezarze?”; task zleca panel dopiero po kliknięciu „Zleć”, i od tej chwili kokpit go obserwuje. Ty niczego nie zlecasz.',
     card: 'dispatch',

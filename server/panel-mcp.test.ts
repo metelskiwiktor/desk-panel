@@ -97,6 +97,10 @@ describe('panel MCP for Hermes', () => {
     expect(await call('panel_recon_report', { files: [], kind: 'maybe', prompt: 'x' })).toMatchObject({ isError: true });
     const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x' });
     expect(propose.content[0].text).toContain('zleca panel');
+    const proposeAnalysis = await call('panel_cezar_propose', { title: 'Analiza pasków', prompt: 'Task: analiza', workflow: 'analysis' });
+    expect(proposeAnalysis.isError).toBeUndefined();
+    // Only the two workflows the skill knows; anything else never reaches a card, let alone Cezar.
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'x', workflow: 'rm-rf' })).toMatchObject({ isError: true });
     expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'x', todoId: 'zadanie' })).toMatchObject({ isError: true });
     const watch = await call('panel_cezar_watch', { id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001' });
     expect(JSON.parse(watch.content[0].text).task).toMatchObject({ id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', status: expect.any(String) });

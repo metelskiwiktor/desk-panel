@@ -137,12 +137,12 @@ describe('the cockpit of a conversation', () => {
 
   it('dispatches only on the user\'s answer, once, with the prompt as the user left it, and touches no to-do list', async () => {
     const { cockpit, created, file, todos, gh } = setup();
-    const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT };
+    const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT, workflow: 'analysis' as const };
     const outcome = await cockpit.dispatch(CHAT, answer);
     expect(outcome).toMatchObject({ decision: 'dispatched', taskId: RUN, prompt: PROMPT });
     expect(await cockpit.dispatch(CHAT, answer)).toEqual(outcome); // a double click
     expect(created).toHaveBeenCalledTimes(1);
-    expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski stref' });
+    expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski stref', workflow: 'analysis' });
     expect((await todos.read()).data!.lists).toEqual([]);
 
     const view = await cockpit.view(CHAT, [said('other/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11'), tool('panel_cezar_propose', 'call_1')]);

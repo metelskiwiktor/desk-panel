@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
-import { cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
+import { CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
 import { todoActionSchema } from '../src/todo-contract';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
@@ -129,10 +129,16 @@ export const PANEL_TOOLS: Record<string, Tool> = {
   },
   panel_cezar_propose: {
     description: cockpitToolDescription('panel_cezar_propose'),
-    input: z.object({ title: text(120), prompt: text(32_000), todoId: z.string().regex(/^t-[0-9a-f]{8}$/).optional() }).strict(),
+    input: z.object({
+      title: text(120),
+      prompt: text(32_000),
+      workflow: z.enum(CEZAR_WORKFLOWS).optional(),
+      todoId: z.string().regex(/^t-[0-9a-f]{8}$/).optional(),
+    }).strict(),
     schema: schema({
       title: { type: 'string', description: 'Krótki tytuł taska po polsku' },
       prompt: { type: 'string', description: 'Pełny Executor Prompt (ten sam co w panel_recon_report)' },
+      workflow: { type: 'string', enum: [...CEZAR_WORKFLOWS], description: 'Workflow na Cezarze: "analysis" (analiza) lub "desk-panel-task" (implementacja, domyślnie)' },
       todoId: { type: 'string', description: 'Id zadania z list (t-…), gdy task je realizuje' },
     }, ['title', 'prompt']),
     async run() { return 'Karta „Zlecić na Cezarze?” jest u użytkownika: decyzja należy do niego, a zleca panel. Nie wysyłaj niczego do Cezara. Zakończ odpowiedź jednym zdaniem.'; },

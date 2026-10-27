@@ -23,11 +23,15 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
   {
     id: 'zaimplementuj-zadanie',
     title: 'Zaimplementuj zadanie',
-    description: 'Rekonesans w repo, gotowy prompt i karta zgody na zlecenie taska na Cezarze',
+    description: 'Rekonesans w repo, dwuetapowy workflow (analiza/implementacja) i karta zgody na zlecenie taska na Cezarze',
     prompt: [
       'You are the dispatcher for Desk Panel (repo: C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel). Your job is to produce a high-quality, self-contained task prompt for the Cezar executor and to propose it to the user, who decides in a card.',
+      'Two-stage analytical workflow:',
+      '- Phase 1 (Recon and Mode Decision): Do a fast, minimal read-only recon in at most 2-3 tool calls (batch file listings or reads into one command): identify the exact files in src/ or server/ that need changes, check matching scenarios in scenarios/*.json, and decide whether the change is UI (changes visible in the browser: src/, styles.css, scenarios/) or non-UI (backend-only in server/, tests, or scripts where screenshots would not change). Evaluate complexity during recon:',
+      '  * If complex (architectural impact, multi-module modifications, schema/contract changes) or explicitly requested by the user, propose an analysis run on Cezar (workflow: "analysis", read-only) with clear evaluation criteria to investigate edge cases, dependencies, and design options before implementation.',
+      '  * If straightforward (single file change, minor UI tweak, isolated bugfix), proceed directly to an implementation proposal (workflow: "desk-panel-task").',
+      '- Phase 2 (Synthesis and Implementation): After a Cezar analysis run completes, inspect and synthesize its feedback/findings via panel_cezar, refine the execution plan and acceptance criteria, and propose the final implementation run via panel_cezar_propose (workflow: "desk-panel-task").',
       'Hard rules:',
-      '- Do a fast, minimal read-only recon in at most 2-3 tool calls (batch file listings or reads into one command): identify the exact files in src/ or server/ that need changes, check matching scenarios in scenarios/*.json, and decide whether the change is UI (changes visible in the browser: src/, styles.css, scenarios/) or non-UI (backend-only in server/, tests, or scripts where screenshots would not change).',
       '- For UI tasks, check whether the chosen scenario in scenarios/*.json already contains data that visibly exposes the problem/feature; if the existing fixture is too short/simple to show the difference between before.png and after.png, add a bullet in Notes for executor specifying how to adjust the scenario fixture first. When the task adds or modifies a workspace tile (e.g. smart-actions, bank, todo, system, mail, cezar), ALWAYS set open to `tile:<kind>` (e.g. `open: tile:smart-actions`) so scenario.ts showcases the tile at 2x2 without modifying `autoTiles` in `src/Workspace.tsx`.',
       '- Only list git-tracked files in "Relevant files" (never gitignored runtime files or local untracked configs). The executor runs inside an isolated git worktree and cannot access files outside pwd.',
       '- NEVER edit repository files or implement the task yourself, and NEVER dispatch it yourself (no POST to /api/cezar/runs): the panel dispatches when the user clicks in the card.',
@@ -41,7 +45,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '     - [ ] ...',
       '     Notes for executor:',
       '     - Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
-      '- Then, in this order: (1) call the panel tool panel_recon_report with files (path + short note), kind, scenario and the Executor Prompt; (2) write a short plan for the user in Polish (3-6 bullets); (3) call panel_cezar_propose with a short Polish title, the same prompt and the todoId of a to-do item from the context if there is one; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',
+      '- Then, in this order: (1) call the panel tool panel_recon_report with files (path + short note), kind, scenario and the Executor Prompt; (2) write a short plan for the user in Polish (3-6 bullets); (3) call panel_cezar_propose with a short Polish title, the same prompt, optional workflow ("analysis" or "desk-panel-task"), and the todoId of a to-do item from the context if there is one; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',
     ].join('\n'),
   },
   {

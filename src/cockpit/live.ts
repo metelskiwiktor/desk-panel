@@ -124,9 +124,9 @@ export function useLiveCockpit(): CockpitSource {
     async respond(id: string, response: unknown) {
       if (response === 'approve' || response === 'deny') { await chat.approve(id, response); return; }
       // A dispatch card: the panel dispatches (or not) as the user answered; the card shows the outcome from the cockpit.
-      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; todoId?: string };
+      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string };
       if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
-      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.todoId ? { todoId: r.todoId } : {}) });
+      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}) });
       refresh();
     },
     chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, updatedAt: c.updatedAt })) ?? null,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ChatDetail, ChatEvent, ChatMessage, ChatPart, ChatSummary } from './chat-contract';
+import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
 import { ChatWindow, groupOf, messageCount } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
@@ -463,7 +463,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
   const turn: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'done', parts: [
     { type: 'tool', id: 'r1', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/zones.ts', note: 'rozmiary' }], kind: 'UI', scenario: 'standard', prompt }), output: 'ok', state: 'done' },
     { type: 'text', text: 'Plan gotowy.' },
-    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt }), output: 'Karta jest u użytkownika.', state: 'done' },
+    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt, workflow: 'analysis' }), output: 'Karta jest u użytkownika.', state: 'done' },
   ] };
   const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, ...over });
   const running = {
@@ -503,7 +503,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(calls.some(c => c.url.endsWith('/dispatch') || c.url === '/api/cezar/runs')).toBe(false);
 
     await user.click(within(card).getByRole('button', { name: 'Zleć na Cezarze' }));
-    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt }));
+    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt, workflow: 'analysis' }));
     expect(await within(card).findByText('Zlecono na Cezarze')).toBeTruthy();
     const task = await screen.findByRole('region', { name: 'Aktywny task Cezara' });
     await waitFor(() => expect(within(task).getByText('RUNNING')).toBeTruthy());
@@ -546,5 +546,19 @@ describe('the live cockpit (Hermes and the panel)', () => {
     // Which task is watched the server decides from the conversation: the window asks without a hint.
     await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit`)).toBe(true));
     expect(calls.some(c => c.url.includes('/cockpit?'))).toBe(false);
+  });
+});
+
+describe('CHAT_SKILLS', () => {
+  it('defines @Zaimplementuj zadanie with two-stage analytical workflow instructions', () => {
+    const skill = CHAT_SKILLS.find(s => s.id === 'zaimplementuj-zadanie');
+    expect(skill).toBeDefined();
+    expect(skill!.title).toBe('Zaimplementuj zadanie');
+    expect(skill!.prompt).toContain('Two-stage analytical workflow:');
+    expect(skill!.prompt).toContain('Phase 1 (Recon and Mode Decision)');
+    expect(skill!.prompt).toContain('workflow: "analysis"');
+    expect(skill!.prompt).toContain('Phase 2 (Synthesis and Implementation)');
+    expect(skill!.prompt).toContain('panel_cezar');
+    expect(skill!.prompt).toContain('panel_cezar_propose');
   });
 });
