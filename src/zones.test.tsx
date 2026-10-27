@@ -35,7 +35,7 @@ describe('zone sizes', () => {
   it('remembers a change and goes back to the default when the panel idles', () => {
     const { result, rerender } = renderHook(({ idle }) => useZones(idle), { initialProps: { idle: false } });
     act(() => result.current.setBottom('month'));
-    expect(JSON.parse(localStorage.getItem(ZONES_KEY)!)).toEqual({ top: 'std', bottom: 'month' });
+    expect(JSON.parse(localStorage.getItem(ZONES_KEY)!)).toEqual({ top: 'cmp', bottom: 'month' });
     expect(renderHook(() => useZones(false)).result.current.zones.bottom).toBe('month');
     rerender({ idle: true });
     expect(result.current.zones).toEqual(DEFAULT_ZONES);
@@ -44,11 +44,11 @@ describe('zone sizes', () => {
 });
 
 describe('three zones', () => {
-  it('starts with the standard top, the work area and the medium week', async () => {
+  it('starts with the compact top, the work area and the short week', async () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
-    expect(frame().getAttribute('data-top')).toBe('std');
-    expect(frame().getAttribute('data-bottom')).toBe('mid');
+    expect(frame().getAttribute('data-top')).toBe('cmp');
+    expect(frame().getAttribute('data-bottom')).toBe('short');
     expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
   });
@@ -58,6 +58,10 @@ describe('three zones', () => {
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
     await user.click(grip());
+    expect(frame().getAttribute('data-bottom')).toBe('mid');
+    expect(screen.getByRole('region', { name: 'Claude' })).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
+    await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('month');
     expect(screen.queryByRole('region', { name: 'Claude' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
@@ -65,23 +69,20 @@ describe('three zones', () => {
     expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).bottom).toBe('month');
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('short');
-    expect(screen.getByRole('region', { name: 'Claude' })).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
-    await user.click(grip());
-    expect(frame().getAttribute('data-bottom')).toBe('mid');
     expect(await screen.findByRole('region', { name: 'Poczta' })).toBeTruthy();
   });
   it('steps the top between the standard strip and a line', async () => {
     const user = userEvent.setup();
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
-    await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
     expect(frame().getAttribute('data-top')).toBe('cmp');
-    await user.click(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getByRole('button', { name: /^Pokaż dzień: Pt/ }));
-    expect(frame().getAttribute('data-top')).toBe('cmp');
-    expect(screen.getByRole('region', { name: /piątek/ })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
     expect(frame().getAttribute('data-top')).toBe('std');
+    await user.click(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getByRole('button', { name: /^Pokaż dzień: Pt/ }));
+    expect(frame().getAttribute('data-top')).toBe('std');
+    expect(screen.getByRole('region', { name: /piątek/ })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' }));
+    expect(frame().getAttribute('data-top')).toBe('cmp');
   });
   it('shows the selected day on top, and today again from today\'s card; there are no arrows', async () => {
     const user = userEvent.setup();
@@ -117,18 +118,18 @@ describe('dragging the grips', () => {
   it('picks the size nearest to the height', () => {
     expect([nearestSize([40, 60, 124], 10), nearestSize([40, 60, 124], 52), nearestSize([40, 60, 124], 95), nearestSize([40, 60, 124], 900)]).toEqual([0, 1, 2, 2]);
   });
-  it('drags the top edge up to a line, and down again to the standard strip', async () => {
+  it('drags the top edge down to the standard strip, and up again to a line', async () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
+    drag(grip(), 300, 460); // 44 + 160 = 204: nearest is the standard strip (124)
+    expect(frame().getAttribute('data-top')).toBe('std');
     drag(grip(), 300, 230); // 124 - 70 = 54: nearest is the line (44)
     expect(frame().getAttribute('data-top')).toBe('cmp');
     drag(grip(), 300, 400); // 44 + 100 = 144, held at the standard height
     expect(frame().getAttribute('data-top')).toBe('std');
     drag(grip(), 300, 100); // all the way up: held at the line
     expect(frame().getAttribute('data-top')).toBe('cmp');
-    drag(grip(), 300, 460);
-    expect(frame().getAttribute('data-top')).toBe('std');
     expect((frame() as HTMLElement).style.getPropertyValue('--p3-top')).toBe('');
   });
   it('drags the bottom edge up to a month and down to chips; a drag is not also a tap', async () => {
@@ -145,23 +146,25 @@ describe('dragging the grips', () => {
     await screen.findByRole('region', { name: 'Poczta' });
     const bottom = screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
     fireEvent.pointerDown(bottom, { clientY: 500, button: 0 });
-    fireEvent.pointerMove(bottom, { clientY: 100 }); // 224 + 400, held at the month
+    fireEvent.pointerMove(bottom, { clientY: 100 }); // 64 + 400 = 464, held at the month
     expect(frame().getAttribute('data-bottom')).toBe('month');
     expect(screen.queryByRole('region', { name: 'Poczta' })).toBeNull();
-    fireEvent.pointerMove(bottom, { clientY: 700 }); // 224 - 200: the shortest
+    fireEvent.pointerMove(bottom, { clientY: 700 }); // 64 - 200: clamped to short
     expect(frame().getAttribute('data-bottom')).toBe('short');
     expect(localStorage.getItem(ZONES_KEY)).toBeNull(); // nothing is saved before the grip is let go
     fireEvent.pointerCancel(bottom);
-    expect(frame().getAttribute('data-bottom')).toBe('mid');
+    expect(frame().getAttribute('data-bottom')).toBe('short');
     const top = screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
     fireEvent.pointerDown(top, { clientY: 300, button: 0 });
-    fireEvent.pointerMove(top, { clientY: 100 });
-    expect(frame().getAttribute('data-top')).toBe('cmp');
-    expect(frame().hasAttribute('data-dragging')).toBe(true);
-    expect(document.querySelector('.p3-day.cmp .p3-items')).toBeTruthy();
-    fireEvent.pointerMove(top, { clientY: 340 }); // back to the standard strip, with the same grip
+    fireEvent.pointerMove(top, { clientY: 460 }); // 44 + 160 = 204: the standard strip
     expect(frame().getAttribute('data-top')).toBe('std');
-    fireEvent.pointerUp(top, { clientY: 340 });
+    expect(frame().hasAttribute('data-dragging')).toBe(true);
+    fireEvent.pointerMove(top, { clientY: 100 }); // 44 - 200: clamped to cmp
+    expect(frame().getAttribute('data-top')).toBe('cmp');
+    expect(document.querySelector('.p3-day.cmp .p3-items')).toBeTruthy();
+    fireEvent.pointerMove(top, { clientY: 460 }); // back to the standard strip, with the same grip
+    expect(frame().getAttribute('data-top')).toBe('std');
+    fireEvent.pointerUp(top, { clientY: 460 });
     expect(frame().hasAttribute('data-dragging')).toBe(false);
     expect(frame().getAttribute('data-top')).toBe('std');
     expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).top).toBe('std');
@@ -174,6 +177,6 @@ describe('dragging the grips', () => {
     fireEvent.pointerMove(grip, { clientY: 302 });
     fireEvent.pointerUp(grip, { clientY: 302 });
     fireEvent.click(grip, { detail: 1 });
-    expect(frame().getAttribute('data-top')).toBe('cmp');
+    expect(frame().getAttribute('data-top')).toBe('std');
   });
 });

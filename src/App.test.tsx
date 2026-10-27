@@ -49,13 +49,9 @@ describe('interaktywny panel', () => {
     const user = userEvent.setup();
     renderWith();
     const today = await screen.findByRole('region', { name: 'Dziś' });
-    // Meetings as a list with a countdown to the first; today's workout in full beside them.
-    expect(within(today).getByRole('heading', { name: /^Spotkania · 3$/ })).toBeTruthy();
-    expect(within(today).getByText('12 min')).toBeTruthy();
-    expect(within(today).getByText('do spotkania')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Trening: Długa jazda/ })).toBeTruthy();
+    expect(within(today).getByRole('button', { name: /^Trening: Długa jazda/ })).toBeTruthy();
     const week = screen.getByRole('region', { name: 'Najbliższe dni' });
-    expect(within(week).getByRole('button', { name: /^Próg/ })).toBeTruthy();
+    expect(within(week).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
     await user.click(within(today).getByRole('button', { name: /Planowanie Tabnote/ }));
     expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
   });
@@ -187,7 +183,7 @@ describe('interaktywny panel', () => {
     expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
     expect(within(await screen.findByRole('region', { name: 'Cezar' })).getByText('Nic nie czeka ani nie trwa.')).toBeTruthy();
     expect(within(await screen.findByRole('region', { name: 'Poczta' })).getByText('Brak nieprzeczytanych wiadomości.')).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('bez spotkań')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('Dziś bez treningu i spotkań')).toBeTruthy();
   });
   it('obszar roboczy to zawsze siatka 4×2: kafelki i pola do wyboru zajmują każdą komórkę', async () => {
     renderWith('standard');
