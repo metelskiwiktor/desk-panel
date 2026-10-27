@@ -59,6 +59,43 @@ const answerFor = (input: string) => {
     : `To **Hermes w trybie scenariusza**: odpowiadam z gotowego skryptu na „${message.trim().slice(0, 80)}”. Wskaż element na pulpicie, a pokażę, co do mnie dotarło.`;
 };
 
+/** The first run a scenario dispatches (server/scenario.ts numbers them). */
+export const MOCK_DISPATCHED = 'desk-panel/00000000-0000-4000-8000-000000000001';
+const MOCK_PROMPT = [
+  'Task: Show the Cezar task status chip in the chat cockpit header.',
+  'Type: UI',
+  'Scenario for screenshots: standard (page: pulpit, open: cockpit)',
+  'Relevant files (from recon):',
+  '- src/ChatWindow.tsx',
+  '- src/cockpit/Cockpit.tsx',
+  'Acceptance criteria:',
+  '- [ ] The header shows RUNNING / REVIEW / DONE of the watched task',
+  '- [ ] Colours from the panel palette',
+  '- [ ] Screenshots before/after on the standard scenario',
+].join('\n');
+type MockTool = { name: string; args: Record<string, unknown>; output: string };
+/** The panel tools a message makes the stand-in call, like Hermes with the two skills, and the answer after them. */
+function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
+  // A skill picked with @ comes as a context item; the typed text counts too (the preamble names both skills, so not it).
+  const message = messageOf(input);
+  const skill = (name: string) => new RegExp(`^\\d+\\. Skill: ${name}`, 'mi').test(input);
+  if (skill('Zaimplementuj zadanie') || /zaimplementuj/i.test(message)) return {
+    tools: [
+      { name: 'mcp_desk-panel_panel_recon_report', output: 'Karta rekonesansu jest u użytkownika.', args: {
+        files: [{ path: 'src/ChatWindow.tsx', note: 'nagłówek okna' }, { path: 'src/cockpit/Cockpit.tsx', note: 'kokpit taska' }, { path: 'scenarios/standard.json', note: 'dane do zrzutów' }],
+        kind: 'UI', scenario: 'standard', prompt: MOCK_PROMPT,
+      } },
+      { name: 'mcp_desk-panel_panel_cezar_propose', output: 'Karta „Zlecić na Cezarze?” jest u użytkownika.', args: { title: 'Chip statusu taska w kokpicie', prompt: MOCK_PROMPT } },
+    ],
+    answer: '**Plan**\n\n- chip statusu obok tytułu kokpitu,\n- kolory z palety panelu,\n- zrzuty przed i po na scenariuszu `standard`.\n\nDecyzja w karcie poniżej.',
+  };
+  if (skill('Nasłuchuj Cezara') || /nasłuchuj|nasluchuj/i.test(message)) return {
+    tools: [{ name: 'mcp_desk-panel_panel_cezar_watch', args: { id: MOCK_DISPATCHED }, output: JSON.stringify({ task: { id: MOCK_DISPATCHED, title: 'Chip statusu taska w kokpicie', status: 'RUNNING', progress: 0.33, steps: [] } }) }],
+    answer: `Nasłuchuję Cezara: **${MOCK_DISPATCHED}**. Postęp widać w karcie i w kokpicie obok.`,
+  };
+  return { tools: [{ name: 'mcp_desk-panel_panel_todos', args: { list: 'Zadania' }, output: 'Lista „Zadania” (l-1): 2 do zrobienia.' }] };
+}
+
 export async function startMockHermes(initial: MockHermesOptions = {}): Promise<MockHermes> {
   let options: MockHermesOptions = { stepMs: 40, deltas: true, eventIds: true, ...initial };
   const runs = new Map<string, MockRun>();
@@ -96,14 +133,17 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
       push(run, 'approval.resolved', { approval_id: approval, choice: approved ? 'once' : 'deny' });
       prefix = approved ? 'Zgoda przyjęta: polecenie wykonane. ' : 'Bez zgody nie uruchomiłem polecenia. ';
     }
-    await later(run, step);
-    if (over(run)) return;
-    push(run, 'tool.started', { tool_call_id: call, tool_name: 'mcp_desk-panel_panel_todos', arguments: { list: 'Zadania' } });
-    await later(run, step * 3);
-    if (over(run)) return;
-    const toolOutput = 'Lista „Zadania” (l-1): 2 do zrobienia.';
-    push(run, 'tool.completed', { tool_call_id: call, tool_name: 'mcp_desk-panel_panel_todos', output: toolOutput });
-    const output = `${prefix}${answerFor(run.input)}`;
+    const script = scriptFor(run.input);
+    const calls = script.tools.map((tool, i) => ({ ...tool, id: i ? `${call}_${i}` : call }));
+    for (const tool of calls) {
+      await later(run, step);
+      if (over(run)) return;
+      push(run, 'tool.started', { tool_call_id: tool.id, tool_name: tool.name, arguments: tool.args });
+      await later(run, step * 3);
+      if (over(run)) return;
+      push(run, 'tool.completed', { tool_call_id: tool.id, tool_name: tool.name, output: tool.output });
+    }
+    const output = `${prefix}${script.answer ?? answerFor(run.input)}`;
     if (options.deltas) {
       for (const word of output.match(/\S+\s*/g) ?? []) {
         await later(run, step);
@@ -115,8 +155,8 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
     if (over(run)) return;
     run.status = 'completed';
     run.output = output;
-    history.push({ role: 'assistant', content: '', tool_calls: [{ id: call, type: 'function', function: { name: 'mcp_desk-panel_panel_todos', arguments: '{"list":"Zadania"}' } }] });
-    history.push({ role: 'tool', tool_call_id: call, content: toolOutput });
+    history.push({ role: 'assistant', content: '', tool_calls: calls.map(t => ({ id: t.id, type: 'function', function: { name: t.name, arguments: JSON.stringify(t.args) } })) });
+    for (const t of calls) history.push({ role: 'tool', tool_call_id: t.id, content: t.output });
     history.push({ role: 'assistant', content: output });
     push(run, 'run.completed', { output, session_id: run.session, usage: { input_tokens: 1200, output_tokens: 80 } });
   };

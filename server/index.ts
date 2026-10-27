@@ -1,8 +1,10 @@
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentChat } from './agent-chat';
 import { createPanelServer } from './app';
 import { createChatHub } from './chat-hub';
+import { createCockpit } from './cockpit';
 import { createHermesClient, hermesUrl } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { mcpToken } from './panel-mcp';
@@ -27,6 +29,8 @@ const hermes = createHermesChat({
   turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
 });
 const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ panelUrl: `http://127.0.0.1:${port}` }) } });
-const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken() }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+// The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
+const cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
+const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

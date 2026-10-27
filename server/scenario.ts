@@ -95,10 +95,31 @@ export function loadScenario(file: string, now = Date.now()): Scenario {
  * Serves a scenario file; it is re-read on every request so edits apply live.
  * Mail actions are remembered in memory, so swiping behaves like Gmail until restart.
  */
+/** The steps of the desk-panel workflow, as Cezar names them. */
+const SCENARIO_STEPS = ['Prepare worktree (LF line endings)', 'Implement', 'Verify (tests + build + clean commit)', 'Pre-PR Code Review', 'Open PR', 'Attach before/after screenshots to PR'];
+export const SCENARIO_STEP_MS = 2500;
+export const SCENARIO_PR = 'https://github.com/metelskiwiktor/desk-panel/pull/42';
+/** A dispatched scenario run as Cezar would describe it `ms` after it started: one step every SCENARIO_STEP_MS. */
+export function scenarioRun(id: string, made: { at: number; title: string; task: string }, now: number): Record<string, any> {
+  const done = Math.floor((now - made.at) / SCENARIO_STEP_MS);
+  const finished = done >= SCENARIO_STEPS.length;
+  const run = id.slice(id.indexOf('/') + 1);
+  return {
+    id: run, title: made.title, titleSummary: made.title, task: made.task, status: finished ? 'done' : 'running',
+    startedAt: new Date(made.at).toISOString(), branch: `cez/${run.slice(0, 8)}`,
+    worktreePath: `C:\\repo\\desk-panel\\.ai\\cezar\\worktrees\\${run}`,
+    tokensUsed: Math.min(done, SCENARIO_STEPS.length) * 21_400 + 3_200,
+    steps: SCENARIO_STEPS.map((name, i) => ({ id: `s${i}`, name, status: i < done ? 'done' : i === done ? 'running' : 'pending' })),
+    ...(done > 4 ? { pullRequestUrl: SCENARIO_PR, prNumber: 42 } : {}),
+  };
+}
+
 export function createScenarioSources(file: string): PanelSources {
   const handled = new Set<string>();
   /** What the panel changed on finished Cezar tasks, so a scenario answers like Cezar would. */
   const finishedChanges = new Map<string, { archived?: boolean; unread?: boolean }>();
+  /** Runs dispatched in this scenario: each walks through its steps, then opens a made-up PR. */
+  const created = new Map<string, { at: number; title: string; task: string }>();
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   /** Made from the scenario the first time the lists are asked for, so they stay as the session changed them. */
   let todoStore: TodoStore | undefined;
@@ -130,6 +151,8 @@ export function createScenarioSources(file: string): PanelSources {
       return { ...source, finished };
     },
     async cezarRun(id) {
+      const made = created.get(id);
+      if (made) return scenarioRun(id, made, Date.now());
       const source = await serve('cezar');
       if (!('finished' in source)) return null;
       const found = source.finished.find(t => t.id === id);
@@ -147,7 +170,8 @@ export function createScenarioSources(file: string): PanelSources {
     },
     async cezarCreateRun(input) {
       const project = input.project || 'desk-panel';
-      const id = '00000000-0000-0000-0000-000000000001';
+      const id = `00000000-0000-4000-8000-${String(created.size + 1).padStart(12, '0')}`;
+      created.set(`${project}/${id}`, { at: Date.now(), title: input.title ?? 'Task', task: input.task });
       return {
         ok: true,
         id: `${project}/${id}`,

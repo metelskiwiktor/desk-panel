@@ -42,8 +42,9 @@ defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
 lives only in scenarios/ — add a file there instead of branching in the UI. Contract schemas validate provider data. Preserve
 real observation timestamps on failures. Cezar is read-only except
-`POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked); never start,
-resume or answer tasks. Quota reads must never send model prompts
+`POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked) and the chat cockpit's
+dispatch card (`POST /api/chats/:id/dispatch`, Origin-checked: the panel starts the run only on the user's click, see
+docs/czat.md); never resume or answer tasks, and no agent dispatches by itself. Quota reads must never send model prompts
 or start agent turns. Gmail uses `gmail.modify` only: thread reads, read/unread
 and Trash/untrash — never sending or permanent deletion. Garmin Connect
 (unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and
@@ -71,7 +72,8 @@ through its long-running API server on loopback (`DESK_HERMES_URL`, key `DESK_HE
 or logs); its sessions are canonical and `~/.desk-panel/hermes-chats` keeps only the mapping (session, run ids, what the user
 typed and pointed at). Hermes reads the panel through the narrow MCP tools at `/api/mcp` (server/panel-mcp.ts: loopback only,
 bearer token from `~/.desk-panel/mcp-token`, requests with an Origin refused), the same views and two writes as the agy
-preamble; a new tool there needs the same care as a new agent view. No silent fallback: Hermes down is shown, AGY is the
+preamble, plus three card tools that only show things in the chat (recon report, dispatch proposal, Cezar watch); a new tool
+there needs the same care as a new agent view. No silent fallback: Hermes down is shown, AGY is the
 user's manual choice. `just hermes CHECK|RUN|…`, `just hermes-setup`, `just hermes-install`; never start or register it without
 the user.
 

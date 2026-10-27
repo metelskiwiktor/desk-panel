@@ -21,11 +21,23 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   Hermesa o zgodę na narzędzie. Inne narzędzia to zwijany wiersz.
 - **Hermes niedostępny**: nad polem wiadomości karta „Hermes nie odpowiada” z przyciskiem „Ponów próbę” (pyta serwer
   jeszcze raz); szkic i wskazane elementy zostają, nic nie jest wysyłane.
-- **Kokpit dziś działa na makiecie**: nasłuchiwanie Cezara, PR i subtaski nie są jeszcze podłączone do prawdziwych danych,
-  więc z prawdziwym Hermesem prawa kolumna mówi, że nic nie jest monitorowane. Cały przebieg (rekonesans → zgoda → task
-  Cezara → PR → review) gra skryptowa makieta: `?cockpit=mock` w adresie (`&hermes=down` bez Hermesa, `&cockpitSpeed=0.3`
-  szybciej), nic nie idzie do serwera. Zrzuty: `just screenshots standard --pages pulpit --open cockpit-approval`
-  (także `cockpit`, `cockpit-recon`, `cockpit-watch`, `cockpit-review`; z `--hermes down`).
+- **Skąd kokpit ma dane** (`server/cockpit.ts`, `GET /api/chats/:id/cockpit`, tylko odczyt): obserwowany task to ostatni
+  zlecony z tej rozmowy, a bez niego ostatni task Cezara, o którym rozmowa mówi (id `projekt/uuid`, link do taska,
+  `panel_cezar_watch`). Status, kroki worktree, tokeny, worktree (ścieżka w projekcie) i PR czyta z runu Cezara; tytuł, stan
+  i checki CI PR-a z GitHub CLI (`gh pr view --json …`, bez powłoki, co 20 s, gdy coś trwa, co 5 min po rozstrzygnięciu;
+  bez `gh` karta mówi, że checki są nieznane). REVIEW to zakończony run z otwartym PR-em, DONE po scaleniu. Okno pyta
+  co 5 s, gdy task albo check trwa, inaczej co 30 s.
+- **Zlecenie z karty** (`POST /api/chats/:id/dispatch`, Origin-checked): Hermes tylko proponuje (`panel_cezar_propose`);
+  „Zleć na Cezarze” albo „Zleć z poprawkami” to panel wywołujący `cezarCreateRun` z promptem w wersji użytkownika, raz na
+  kartę (drugie kliknięcie zwraca to samo). Odpowiedź (też „Odrzuć”) i powiązania (rozmowa → runy, run → lista) panel trzyma
+  w `~/.desk-panel/cockpit.json` (poza Gitem, same id i prompty), więc karta pokazuje decyzję także po restarcie.
+- **Subtaski**: kryteria akceptacji promptu (`- [ ] …`) stają się listą „Wektor · <tytuł>” w listach zadań (`by: agent`),
+  a gdy task realizuje zadanie z list (`todoId`), subtaskami jest lista tego zadania. Odhaczenie w kokpicie to
+  `updateTask` w `todos.json`, jak na kafelku.
+- **Makieta i zrzuty**: `?cockpit=mock` w adresie gra cały przebieg bez serwera (`&hermes=down` bez Hermesa,
+  `&cockpitSpeed=0.3` szybciej); `just screenshots standard --pages pulpit --open cockpit-approval` (także `cockpit`,
+  `cockpit-recon`, `cockpit-watch`, `cockpit-review`). Prawdziwy przebieg na zastępczym Hermesie scenariusza, z runem
+  i PR-em zmyślonymi przez scenariusz: `--open chat-dispatch`, `chat-dispatched`, `chat-review`.
 - **Style**: tylko okno czatu używa Tailwind CSS v4 (`src/cockpit/cockpit.css`): klasy z prefiksem `tw:`, bez preflight,
   utilities jako `!important`, skanowane tylko `src/cockpit` i `src/ChatWindow.tsx`; reszta panelu ma swoje style bez zmian.
 - **Wskaż element**: okno zwija się do samej rozmowy przyklejonej do prawej krawędzi, a pulpit **zsuwa się w lewo** obok niego (tylko

@@ -1,12 +1,16 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, Circle, CircleX, FileCode2, LoaderCircle, Pencil, Radar, Rocket, Send, ShieldQuestion, Wrench, X } from 'lucide-react';
+import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, Wrench, X } from 'lucide-react';
 import {
-  type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
+  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
 } from './types';
 
-/** What a card can do: answer on behalf of the user, and whether the thread is busy (cards wait then). */
-export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void; running: boolean }>({ respond: () => {}, running: false });
+/**
+ * What a card can do and see: answer on behalf of the user (a promise that fails says why), whether the thread is busy
+ * (cards wait then), and the task the cockpit watches now, so a watch card shows it live.
+ */
+export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask }>({ respond: () => {}, running: false });
+const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
 
 /** `0:53`, `2:05`: how long something has been going. */
 export const elapsed = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -20,23 +24,26 @@ function StepIcon({ state }: { state: StepState }) {
   if (state === 'done') return <Check size={15} className="tw:text-ck-green" aria-hidden="true" />;
   if (state === 'running') return <LoaderCircle size={15} className="tw:text-ck-agent tw:animate-spin" aria-hidden="true" />;
   if (state === 'failed') return <CircleX size={15} className="tw:text-ck-red" aria-hidden="true" />;
+  if (state === 'skipped') return <Minus size={15} className="tw:text-ck-faint" aria-hidden="true" />;
   return <Circle size={15} className="tw:text-ck-faint" aria-hidden="true" />;
 }
-const STEP_LABEL: Record<StepState, string> = { done: 'gotowe', running: 'w toku', pending: 'czeka', failed: 'błąd' };
+const STEP_LABEL: Record<StepState, string> = { done: 'gotowe', running: 'w toku', pending: 'czeka', failed: 'błąd', skipped: 'pominięty' };
 
 function Steps({ steps }: { steps: { label: string; state: StepState }[] }) {
   return <ol className="tw:flex tw:flex-col tw:gap-1.5 tw:m-0 tw:p-0 tw:list-none">
-    {steps.map(s => <li key={s.label} className="tw:flex tw:items-center tw:gap-2.5" data-state={s.state}>
+    {steps.map((s, i) => <li key={`${i}:${s.label}`} className="tw:flex tw:items-center tw:gap-2.5" data-state={s.state}>
       <StepIcon state={s.state} />
-      <span className={s.state === 'pending' ? 'tw:text-ck-faint' : s.state === 'running' ? 'tw:text-ck-text tw:font-medium' : 'tw:text-ck-muted'}>{s.label}</span>
+      <span className={s.state === 'pending' || s.state === 'skipped' ? 'tw:text-ck-faint' : s.state === 'running' ? 'tw:text-ck-text tw:font-medium' : 'tw:text-ck-muted'}>{s.label}</span>
       <span className="tw:sr-only">({STEP_LABEL[s.state]})</span>
     </li>)}
   </ol>;
 }
 
 /** `@Zaimplementuj zadanie`: what the recon found, step by step, and the prompt it wrote for the executor. */
+const REPORTED = ['Przeszukano repo', 'Ustalono typ zadania', 'Napisano prompt dla executora'];
 export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>) {
-  const steps = args.steps ?? [];
+  // Hermes reports a finished recon: its steps are all done.
+  const steps = args.steps ?? REPORTED.map(label => ({ label, done: true }));
   const running = status.type === 'running';
   // The first step not done is the one in progress while the recon runs.
   const current = running ? steps.findIndex(s => !s.done) : -1;
@@ -51,7 +58,7 @@ export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>)
       {!!args.files?.length && <div>
         <div className={`${eyebrow} tw:mb-2`}>Przeszukane pliki</div>
         <ul className="tw:m-0 tw:p-0 tw:list-none tw:grid tw:gap-1">
-          {args.files.map(f => <li key={f.path} className="tw:flex tw:items-baseline tw:gap-2 tw:min-w-0">
+          {args.files.map((f, i) => <li key={`${i}:${f.path}`} className="tw:flex tw:items-baseline tw:gap-2 tw:min-w-0">
             <FileCode2 size={14} className="tw:text-ck-cal tw:translate-y-0.5" aria-hidden="true" />
             <code className="tw:font-ck-mono tw:text-[12.5px] tw:text-ck-text">{f.path}</code>
             <span className="tw:text-xs tw:text-ck-faint tw:truncate">{f.note}</span>
@@ -75,12 +82,21 @@ export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>)
 export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartProps<DispatchArgs, DispatchResult>) {
   const { respond, running } = useContext(CardActions);
   const [editing, setEditing] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
   const decided = result as DispatchResult | undefined;
+  const busy = running || sending;
+  const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
+    setSending(true); setError('');
+    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, todoId: args.todoId }); setEditing(null); }
+    catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
+    finally { setSending(false); }
+  };
   return <section className={`${card} ${decided ? '' : 'tw:border-ck-agent/60 tw:shadow-[0_0_0_1px_rgba(183,156,255,0.25)]'}`} aria-label="Zgoda na zlecenie taska">
     <div className={head}>
       <ShieldQuestion size={16} className="tw:text-ck-agent" aria-hidden="true" />
       <b className="tw:font-semibold tw:text-ck-text">{!decided ? 'Zlecić na Cezarze?' : decided.decision === 'dispatched' ? 'Zlecono na Cezarze' : 'Odrzucono'}</b>
-      <span className="tw:ml-auto tw:rounded-md tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:font-ck-mono tw:text-xs tw:text-ck-muted">{args.repo}</span>
+      <span className="tw:ml-auto tw:rounded-md tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:font-ck-mono tw:text-xs tw:text-ck-muted">{args.repo ?? 'desk-panel'}</span>
     </div>
     <div className="tw:grid tw:gap-3 tw:p-4">
       <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
@@ -91,39 +107,57 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
       {!decided && <div className="tw:flex tw:flex-wrap tw:gap-2">
         {editing !== null
           ? <>
-            <button type="button" className={`${btn} tw:bg-ck-agent tw:text-ck-bg tw:hover:bg-[#c8b4ff]`} disabled={running || !editing.trim()} onClick={() => respond(toolCallId, { decision: 'dispatch', prompt: editing.trim() })}><Send size={15} aria-hidden="true" />Zleć z poprawkami</button>
+            <button type="button" className={`${btn} tw:bg-ck-agent tw:text-ck-bg tw:hover:bg-[#c8b4ff]`} disabled={busy || !editing.trim()} onClick={() => void answer({ decision: 'dispatch', prompt: editing.trim() })}><Send size={15} aria-hidden="true" />Zleć z poprawkami</button>
             <button type="button" className={`${btn} tw:bg-ck-surface-2 tw:text-ck-text tw:hover:bg-ck-line`} onClick={() => setEditing(null)}>Anuluj edycję</button>
           </>
           : <>
-            <button type="button" className={`${btn} tw:bg-ck-agent tw:text-ck-bg tw:hover:bg-[#c8b4ff]`} disabled={running} onClick={() => respond(toolCallId, { decision: 'dispatch', prompt: args.prompt })}><Rocket size={15} aria-hidden="true" />Zleć na Cezarze</button>
-            <button type="button" className={`${btn} tw:bg-ck-surface-2 tw:text-ck-text tw:hover:bg-ck-line`} disabled={running} onClick={() => setEditing(args.prompt)}><Pencil size={15} aria-hidden="true" />Edytuj prompt</button>
-            <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={running} onClick={() => respond(toolCallId, { decision: 'reject' })}><X size={15} aria-hidden="true" />Odrzuć</button>
+            <button type="button" className={`${btn} tw:bg-ck-agent tw:text-ck-bg tw:hover:bg-[#c8b4ff]`} disabled={busy} onClick={() => void answer({ decision: 'dispatch' })}><Rocket size={15} aria-hidden="true" />Zleć na Cezarze</button>
+            <button type="button" className={`${btn} tw:bg-ck-surface-2 tw:text-ck-text tw:hover:bg-ck-line`} disabled={busy} onClick={() => setEditing(args.prompt)}><Pencil size={15} aria-hidden="true" />Edytuj prompt</button>
+            <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={busy} onClick={() => void answer({ decision: 'reject' })}><X size={15} aria-hidden="true" />Odrzuć</button>
           </>}
       </div>}
-      {decided?.decision === 'dispatched' && <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Task <code className="tw:font-ck-mono">{decided.taskId}</code> poszedł do Cezara.</p>}
+      {sending && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zapisuję decyzję…</p>}
+      {error && <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4]" role="alert">{error}</p>}
+      {decided?.decision === 'dispatched' && <p className="tw:m-0 tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:text-ck-green" role="status">
+        <Check size={15} aria-hidden="true" />Task <code className="tw:font-ck-mono">{decided.taskId}</code> poszedł do Cezara.
+        {decided.url && <a href={decided.url} target="_blank" rel="noopener noreferrer" className="tw:inline-flex tw:items-center tw:gap-1 tw:text-ck-cal"><ExternalLink size={13} aria-hidden="true" />Otwórz</a>}
+      </p>}
     </div>
   </section>;
 }
 
 /** `@nasłuchuj cezara`: the agent waits for a Cezar task, with the steps of its worktree. */
-export function WatchCard({ args, status }: ToolCallMessagePartProps<WatchArgs>) {
-  const running = status.type === 'running';
-  const pct = Math.round(Math.min(1, Math.max(0, args.progress ?? 0)) * 100);
+export function WatchCard({ args, result, status }: ToolCallMessagePartProps<WatchArgs>) {
+  const { watched } = useContext(CardActions);
+  const id = args.taskId ?? args.id ?? '';
+  // Hermes: its tool answers with the task as it was; the cockpit's reading of the same task is newer.
+  const reported = parseTask(result);
+  const live = watched && watched.id === id ? watched : reported;
+  const steps = args.steps ?? live?.steps ?? [];
+  const running = status.type === 'running' || (!!live && ACTIVE.has(live.status));
+  const pct = Math.round(Math.min(1, Math.max(0, args.progress ?? live?.progress ?? 0)) * 100);
   return <section className={card} aria-label="Nasłuchiwanie Cezara">
     <div className={head}>
       <Radar size={16} className={running ? 'tw:text-ck-amber tw:animate-ck-pulse' : 'tw:text-ck-green'} aria-hidden="true" />
       <span className={eyebrow}>@Nasłuchuj Cezara</span>
-      <code className="tw:font-ck-mono tw:text-xs tw:text-ck-text">{args.taskId}</code>
-      <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{running ? 'Czekam na Cezara…' : 'Zakończono'}</span>
+      <code className="tw:min-w-0 tw:truncate tw:font-ck-mono tw:text-xs tw:text-ck-text">{id}</code>
+      <span className="tw:ml-auto tw:flex-none tw:text-xs tw:text-ck-muted">{running ? 'Czekam na Cezara…' : live?.status ?? 'Zakończono'}</span>
     </div>
     <div className="tw:grid tw:gap-4 tw:p-4">
       <div role="progressbar" aria-label="Postęp taska" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="tw:relative tw:h-2 tw:overflow-hidden tw:rounded-full tw:bg-ck-surface-2">
         <div className={`tw:absolute tw:inset-y-0 tw:left-0 tw:rounded-full tw:transition-[width] tw:duration-500 ${running ? 'tw:bg-ck-amber' : 'tw:bg-ck-green'}`} style={{ width: `${pct}%` }} />
         {running && <div className="tw:absolute tw:inset-y-0 tw:w-1/3 tw:bg-gradient-to-r tw:from-transparent tw:via-white/25 tw:to-transparent tw:animate-ck-sweep" aria-hidden="true" />}
       </div>
-      <Steps steps={args.steps ?? []} />
+      {steps.length ? <Steps steps={steps} /> : <p className="tw:m-0 tw:text-xs tw:text-ck-faint">Cezar nie podał kroków tego taska.</p>}
     </div>
   </section>;
+}
+/** The task in a watch tool's answer (`{"task":{…}}`), if it has one. */
+function parseTask(result: unknown): CockpitTask | undefined {
+  try {
+    const value = (typeof result === 'string' ? JSON.parse(result) : result) as { task?: CockpitTask } | undefined;
+    return value?.task && typeof value.task.id === 'string' ? value.task : undefined;
+  } catch { return undefined; }
 }
 
 const DECIDED: Record<Exclude<HermesApprovalArgs['state'], 'pending'>, string> = { approved: 'Zezwolono', denied: 'Odmówiono', expired: 'Prośba o zgodę wygasła' };

@@ -81,7 +81,7 @@ export function useMockCockpit({ hermesDown = false, speed = 1 }: { hermesDown?:
   const implement = () => {
     const a = startAnswer(), recon = id('recon');
     const reconStep = (i: number, extra: Partial<ReconArgs> = {}) => tool<ReconArgs>(a, recon, args => ({
-      args: { ...args, ...extra, steps: args.steps.map((s, j) => j === i ? { ...s, done: true } : s) },
+      args: { ...args, ...extra, steps: args.steps!.map((s, j) => j === i ? { ...s, done: true } : s) },
       ...(i === RECON_STEPS.length - 1 ? { running: false, result: 'ok' } : {}),
     }));
     play([
@@ -105,7 +105,7 @@ export function useMockCockpit({ hermesDown = false, speed = 1 }: { hermesDown?:
     const a = startAnswer(), w = id('watch');
     const n = WATCH_STEPS.length;
     const set = (i: number, state: 'running' | 'done') => tool<WatchArgs>(a, w, args => ({
-      args: { ...args, progress: state === 'done' ? (i + 1) / n : (i + 0.4) / n, steps: args.steps.map((s, j) => j === i ? { ...s, state } : s) },
+      args: { ...args, progress: state === 'done' ? (i + 1) / n : (i + 0.4) / n, steps: args.steps!.map((s, j) => j === i ? { ...s, state } : s) },
     }));
     setCockpit(c => ({
       watching: true, since: Date.now(),

@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema } from '../src/chat-contract';
+import { cezarRunId, cockpitDispatchSchema } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
+import type { Cockpit } from './cockpit';
+import { SourceError } from './sources';
 
 const MAX_BODY = 64 * 1024;
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -30,8 +33,8 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval))?)?\/?$/.exec(url.pathname);
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit): Promise<boolean> {
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
@@ -61,6 +64,18 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       if (!chat.approve) throw new ChatError(409, 'Ten silnik nie pyta o zgodę.');
       await chat.approve(id, parse(chatApprovalSchema, await readBody(req)));
       return json(res, 200, { ok: true }), true;
+    } else if (action === 'cockpit' && req.method === 'GET') {
+      // What the conversation's cockpit shows: read-only (Cezar, GitHub CLI, the to-do lists).
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const hint = url.searchParams.get('run') ?? undefined;
+      if (hint !== undefined && !cezarRunId.safeParse(hint).success) throw new ChatError(400, 'Nieprawidłowe id taska Cezara.');
+      return json(res, 200, await cockpit.view(id, hint)), true;
+    } else if (action === 'dispatch' && req.method === 'POST') {
+      // The user's answer on a dispatch card: the only way the chat dispatches a task to Cezar.
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(cockpitDispatchSchema, await readBody(req));
+      await chat.get(id);
+      return json(res, 200, await cockpit.dispatch(id, input)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;
@@ -80,7 +95,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     }
     res.writeHead(405).end();
   } catch (error) {
-    const status = error instanceof ChatError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const status = error instanceof ChatError || error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 500;
     const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
       ? error.message
       : undefined;

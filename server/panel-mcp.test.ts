@@ -91,6 +91,19 @@ describe('panel MCP for Hermes', () => {
     expect(unknown.error.code).toBe(-32602);
   });
 
+  it('has card tools that show things to the user and dispatch nothing themselves', async () => {
+    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx', note: 'okno' }], kind: 'UI', scenario: 'standard', prompt: 'Task: x' });
+    expect(recon.isError).toBeUndefined();
+    expect(await call('panel_recon_report', { files: [], kind: 'maybe', prompt: 'x' })).toMatchObject({ isError: true });
+    const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x' });
+    expect(propose.content[0].text).toContain('zleca panel');
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'x', todoId: 'zadanie' })).toMatchObject({ isError: true });
+    const watch = await call('panel_cezar_watch', { id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001' });
+    expect(JSON.parse(watch.content[0].text).task).toMatchObject({ id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', status: expect.any(String) });
+    expect(await call('panel_cezar_watch', { id: 'desk-panel/00000000-0000-0000-0000-00000000dead' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_watch', { id: '../etc' })).toMatchObject({ isError: true });
+  });
+
   it('makes the to-do changes the chat agent may make', async () => {
     const made = await call('panel_todo_action', { action: { action: 'createList', name: 'Z Hermesa' } });
     expect(made.isError).toBeUndefined();

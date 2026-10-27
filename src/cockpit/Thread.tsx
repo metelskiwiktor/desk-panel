@@ -202,7 +202,7 @@ export function Thread({ source, context, setContext, picking, setPicking, empty
     onCancel: async () => source.stop(),
   });
   runtimeRef.current = runtime;
-  const actions = useMemo(() => ({ respond: source.respond, running: source.running }), [source.respond, source.running]);
+  const actions = useMemo(() => ({ respond: source.respond, running: source.running, watched: source.cockpit.task }), [source.respond, source.running, source.cockpit.task]);
 
   return <AssistantRuntimeProvider runtime={runtime}>
     <CardActions.Provider value={actions}>

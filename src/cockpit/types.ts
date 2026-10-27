@@ -1,4 +1,7 @@
 import type { ContextItem } from '../chat-contract';
+import type { CezarStatus, CheckState, CockpitPrView, CockpitTaskView, StepState } from '../cockpit-contract';
+
+export type { CezarStatus, CheckState, StepState };
 
 /**
  * The cockpit's own view of a conversation, independent of where it comes from (the mock script or Hermes through
@@ -25,8 +28,9 @@ export interface CockpitMessage {
 /** `@Zaimplementuj zadanie`: the read-only recon before a task goes to Cezar. */
 export const RECON = 'skill_recon';
 export interface ReconArgs {
-  steps: { label: string; done: boolean }[];
-  files: { path: string; note: string }[];
+  /** Only while the recon runs (the mock); Hermes reports a finished one. */
+  steps?: { label: string; done: boolean }[];
+  files: { path: string; note?: string }[];
   kind?: 'UI' | 'non-UI';
   scenario?: string;
   prompt?: string;
@@ -34,13 +38,13 @@ export interface ReconArgs {
 
 /** Human in the loop: the agent asks before it hands a task to Cezar. */
 export const DISPATCH = 'cezar_dispatch';
-export interface DispatchArgs { title: string; repo: string; prompt: string }
-export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string } | { decision: 'rejected' };
+export interface DispatchArgs { title: string; repo?: string; prompt: string; todoId?: string }
+export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string } | { decision: 'rejected' };
 
 /** `@nasłuchuj cezara`: the agent watches a running Cezar task (watchdog). */
 export const WATCH = 'cezar_watch';
-export type StepState = 'done' | 'running' | 'pending' | 'failed';
-export interface WatchArgs { taskId: string; steps: { label: string; state: StepState }[]; progress: number }
+/** The mock gives the steps; Hermes gives the task id (`id`) and its tool answers with the task as JSON. */
+export interface WatchArgs { taskId?: string; id?: string; steps?: { label: string; state: StepState }[]; progress?: number }
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
@@ -48,10 +52,8 @@ export interface HermesApprovalArgs { tool: string; detail: string; state: 'pend
 
 // ── The right pane ──
 
-export type CezarStatus = 'QUEUED' | 'RUNNING' | 'REVIEW' | 'DONE' | 'FAILED';
-export interface CockpitTask { id: string; title: string; status: CezarStatus; repo: string; worktree: string; tokens: number; url: string }
-export type CheckState = 'pass' | 'fail' | 'running' | 'pending';
-export interface CockpitPr { number: number; title: string; branch: string; url: string; checks: { name: string; state: CheckState }[] }
+export type CockpitTask = Omit<CockpitTaskView, 'steps' | 'progress'> & Partial<Pick<CockpitTaskView, 'steps' | 'progress'>>;
+export type CockpitPr = Omit<CockpitPrView, 'state'> & { state?: CockpitPrView['state'] };
 /** A to-do item of the panel's lists (todos.json), shown as a subtask of the task in flight. */
 export interface CockpitSubtask { id: string; title: string; done: boolean }
 export interface CockpitState {
@@ -86,11 +88,13 @@ export interface CockpitSource {
   stop(): void;
   retry(): void;
   /** The user's answer on a card: a dispatch decision or a Hermes approval. */
-  respond(toolCallId: string, response: unknown): void;
+  respond(toolCallId: string, response: unknown): void | Promise<void>;
   chats: CockpitChat[] | null;
   activeId: string | null;
   open(id: string | null): void;
   remove(): void;
   cockpit: CockpitState;
   toggleSubtask(id: string): void;
+  /** The cockpit could not be read (live only), in Polish. */
+  cockpitError?: string;
 }

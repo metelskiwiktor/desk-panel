@@ -5,8 +5,10 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
+import { cezarRunId } from '../src/cockpit-contract';
 import { todoActionSchema } from '../src/todo-contract';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
+import { cezarTaskView } from './cockpit';
 import { SourceError, type PanelSources } from './sources';
 import { TodoError } from './todos';
 
@@ -29,7 +31,7 @@ interface Tool {
   input: z.ZodType<Record<string, unknown>>;
   /** JSON Schema of the arguments as MCP lists it. */
   schema: Record<string, unknown>;
-  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number }): Promise<string>;
+  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string }): Promise<string>;
 }
 
 const view = (name: string, params: (args: Record<string, any>) => Record<string, string | undefined>) =>
@@ -108,6 +110,44 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       return JSON.stringify(await sources.todoAction(parsed.data));
     },
   },
+  // ── Cards of the chat cockpit: what these tools get is shown to the user as a card, by the tool's name. ──
+  panel_recon_report: {
+    description: 'Skill „Zaimplementuj zadanie”: pokaż użytkownikowi wynik rekonesansu jako kartę (przeszukane pliki, typ UI/non-UI, scenariusz zrzutów, Executor Prompt). Niczego nie zmienia. Wywołaj raz, po rekonesansie, przed panel_cezar_propose.',
+    input: z.object({
+      files: z.array(z.object({ path: text(300), note: z.string().max(200).optional() }).strict()).max(30),
+      kind: z.enum(['UI', 'non-UI']),
+      scenario: text(80).optional(),
+      prompt: text(32_000),
+    }).strict(),
+    schema: schema({
+      files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string', description: 'Ścieżka względem repo, np. src/App.tsx' }, note: { type: 'string', description: 'Po co ten plik' } }, required: ['path'], additionalProperties: false } },
+      kind: { type: 'string', enum: ['UI', 'non-UI'] },
+      scenario: { type: 'string', description: 'Scenariusz zrzutów, np. standard (dla UI)' },
+      prompt: { type: 'string', description: 'Pełny Executor Prompt po angielsku' },
+    }, ['files', 'kind', 'prompt']),
+    async run() { return 'Karta rekonesansu jest u użytkownika. Teraz wywołaj panel_cezar_propose z tytułem i tym samym promptem.'; },
+  },
+  panel_cezar_propose: {
+    description: 'Skill „Zaimplementuj zadanie”: zaproponuj zlecenie taska na Cezarze. Użytkownik dostaje kartę „Zlecić na Cezarze?” (Zleć / Edytuj prompt / Odrzuć) i to panel zleca task po jego kliknięciu. Sam nie zlecasz: po tym wywołaniu zakończ odpowiedź.',
+    input: z.object({ title: text(120), prompt: text(32_000), todoId: z.string().regex(/^t-[0-9a-f]{8}$/).optional() }).strict(),
+    schema: schema({
+      title: { type: 'string', description: 'Krótki tytuł taska po polsku' },
+      prompt: { type: 'string', description: 'Pełny Executor Prompt (ten sam co w panel_recon_report)' },
+      todoId: { type: 'string', description: 'Id zadania z list (t-…), gdy task je realizuje' },
+    }, ['title', 'prompt']),
+    async run() { return 'Karta „Zlecić na Cezarze?” jest u użytkownika: decyzja należy do niego, a zleca panel. Nie wysyłaj niczego do Cezara. Zakończ odpowiedź jednym zdaniem.'; },
+  },
+  panel_cezar_watch: {
+    description: 'Skill „Nasłuchuj Cezara”: stan jednego taska Cezara (status, kroki worktree, postęp, tokeny, PR) jako JSON; użytkownik widzi go na żywo w karcie. Tylko odczyt.',
+    input: z.object({ id: cezarRunId }).strict(),
+    schema: schema({ id: { type: 'string', description: 'Id taska projekt/uuid (z panel_cezar)' } }, ['id']),
+    async run(args, { sources, cezarUrl }) {
+      const raw = sources.cezarRun ? await sources.cezarRun(args.id) : null;
+      if (!raw) throw new AgentViewError(404, `Cezar nie zna taska ${args.id}.`);
+      const task = cezarTaskView(args.id, raw, cezarUrl);
+      return JSON.stringify({ task: { id: task.id, title: task.title, status: task.status, progress: Math.round(task.progress * 100) / 100, tokens: task.tokens, steps: task.steps, pr: task.prUrl ?? null, url: task.url } });
+    },
+  },
   panel_cezar_action: {
     description: 'Na prośbę użytkownika: archive, unarchive, read albo unread jednego zakończonego zadania Cezara (id projekt/uuid z panel_cezar).',
     input: z.object({ id: text(200), action: z.enum(['archive', 'unarchive', 'read', 'unread']) }).strict(),
@@ -136,7 +176,7 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number }): Promise<unknown | null> {
+export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string }): Promise<unknown | null> {
   if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return rpcError(message?.id, -32600, 'Invalid Request');
   const notification = message.id === undefined;
   if (notification) return null;
@@ -148,7 +188,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. panel_recon_report, panel_cezar_propose i panel_cezar_watch pokazują użytkownikowi karty w czacie.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };
@@ -161,7 +201,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       const args = tool.input.safeParse(params.arguments ?? {});
       if (!args.success) return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: `Niepoprawne argumenty: ${args.error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}` }] } };
       try {
-        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now() });
+        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/' });
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: out }] } };
       } catch (error) {
         const reason = error instanceof AgentViewError || error instanceof TodoError ? error.message
@@ -179,7 +219,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -191,7 +231,7 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
-  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now };
+  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);
   if (!answers.length) { res.writeHead(202).end(); return; }

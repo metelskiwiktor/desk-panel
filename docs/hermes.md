@@ -70,8 +70,12 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
 | `panel_todo_action` | jedna akcja list zadań (`todoActionSchema`) |
 | `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
+| `panel_recon_report` | `files`, `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu w czacie, niczego nie zmienia |
+| `panel_cezar_propose` | `title`, `prompt`, `todoId`: karta „Zlecić na Cezarze?”; zleca panel po kliknięciu użytkownika, nie narzędzie |
+| `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta pokazuje go na żywo |
 
-Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara. Dostęp: tylko adresy loopback (nazwa Tailscale
+Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę).
+Okno rozpoznaje karty po nazwie narzędzia z przedrostkiem serwera (`mcp__desk_panel__panel_…` albo `mcp_desk-panel_panel_…`). Dostęp: tylko adresy loopback (nazwa Tailscale
 dostaje `403`), żądanie z nagłówkiem `Origin` (przeglądarka) dostaje `403`, a bez tokenu `Authorization: Bearer <~/.desk-panel/mcp-token>`
 dostaje `401`. Token tworzy panel przy pierwszym starcie (albo `DESK_MCP_TOKEN`) i `just hermes-setup`; leży poza Gitem.
 

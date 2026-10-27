@@ -483,3 +483,78 @@ describe('the cockpit on its mock (?cockpit=mock)', () => {
     expect(await screen.findByText(/To makieta Wektora/)).toBeTruthy();
   });
 });
+
+describe('the live cockpit (Hermes and the panel)', () => {
+  const H = '1b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
+  const RUN = 'desk-panel/f2c9501e-7121-4746-8fc8-19ee3ee9d968';
+  const prompt = 'Task: Paski\nAcceptance criteria:\n- [ ] Jedno';
+  const turn: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'done', parts: [
+    { type: 'tool', id: 'r1', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/zones.ts', note: 'rozmiary' }], kind: 'UI', scenario: 'standard', prompt }), output: 'ok', state: 'done' },
+    { type: 'text', text: 'Plan gotowy.' },
+    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt }), output: 'Karta jest u użytkownika.', state: 'done' },
+  ] };
+  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, list: null, dispatches: {}, ...over });
+  const running = {
+    id: RUN, title: 'Paski stref', status: 'RUNNING', repo: 'desk-panel', worktree: '.ai/cezar/worktrees/f2c9501e', tokens: 12_345,
+    url: 'http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e', steps: [{ label: 'Implement', state: 'running' }, { label: 'Open PR', state: 'pending' }], progress: 0.5,
+  };
+  function liveServer() {
+    const calls: Call[] = [];
+    let cockpit: ReturnType<typeof view> & { dispatches: Record<string, unknown> } = view();
+    const reply = (value: unknown, code = 200) => new Response(JSON.stringify(value), { status: code, headers: { 'Content-Type': 'application/json' } });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      calls.push({ url, method, body });
+      if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
+      if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
+      if (url === `/api/chats/${H}/dispatch`) {
+        cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } },
+          list: { id: 'l-1a2b3c4d', name: 'Wektor · Paski stref', tasks: [{ id: 't-0000a001', title: 'Jedno', done: false }] } });
+        return reply(cockpit.dispatches.p1);
+      }
+      return reply({ ok: true });
+    }));
+    return calls;
+  }
+
+  it('shows the recon and dispatch cards of Hermes, and dispatches through the panel only when the user clicks', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turn], { id: H }) });
+    const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
+    expect(within(recon).getByText('src/zones.ts')).toBeTruthy();
+    expect(within(recon).getByText('Rekonesans gotowy')).toBeTruthy();
+    const card = screen.getByRole('region', { name: 'Zgoda na zlecenie taska' });
+    expect(within(card).getByText('Zlecić na Cezarze?')).toBeTruthy();
+    expect(calls.some(c => c.url.endsWith('/dispatch') || c.url === '/api/cezar/runs')).toBe(false);
+
+    await user.click(within(card).getByRole('button', { name: 'Zleć na Cezarze' }));
+    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt }));
+    expect(await within(card).findByText('Zlecono na Cezarze')).toBeTruthy();
+    const task = await screen.findByRole('region', { name: 'Aktywny task Cezara' });
+    await waitFor(() => expect(within(task).getByText('RUNNING')).toBeTruthy());
+    expect(within(task).getByText('12 345')).toBeTruthy();
+    expect(screen.getByText('Wektor monitoruje task')).toBeTruthy();
+
+    // A subtask ticked here is ticked on the to-do list.
+    await user.click(within(screen.getByRole('region', { name: 'Subtaski' })).getByRole('checkbox', { name: /Jedno/ }));
+    await waitFor(() => expect(calls.find(c => c.url === '/api/todos/action')?.body).toEqual({ action: 'updateTask', task: 't-0000a001', done: true }));
+  });
+
+  it('watches the task the conversation names, and shows the watch card live', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const watch: ChatMessage = { id: 'a3', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'w1', name: 'mcp_desk-panel_panel_cezar_watch', input: JSON.stringify({ id: RUN }), output: JSON.stringify({ task: { ...running, status: 'QUEUED', steps: [] } }), state: 'done' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, watch], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Nasłuchiwanie Cezara' });
+    expect(within(card).getByText(RUN)).toBeTruthy();
+    await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit?run=${encodeURIComponent(RUN)}`)).toBe(true));
+  });
+});

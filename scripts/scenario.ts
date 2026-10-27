@@ -6,15 +6,19 @@
 //   npm run scenario -- standard --shot --pages pulpit --open chat --hermes down   (the chat when Hermes is not running)
 //   npm run scenario -- standard --shot --pages pulpit --open cockpit-approval     (the chat cockpit on its mock: cockpit,
 //     cockpit-recon, cockpit-approval, cockpit-watch, cockpit-review; with --hermes down the mock starts without Hermes)
+//   npm run scenario -- standard --shot --pages pulpit --open chat-dispatched     (the live chat on the Hermes stand-in:
+//     chat-dispatch, chat-dispatched, chat-review; the run and its PR are made up by the scenario)
 // The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import type { AddressInfo } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type Browser } from 'playwright';
 import { createPanelServer } from '../server/app';
-import { createScenarioSources, loadScenario } from '../server/scenario';
+import { createCockpit } from '../server/cockpit';
+import { createScenarioSources, loadScenario, SCENARIO_PR } from '../server/scenario';
 import { createScenarioChat } from '../server/scenario-chat';
 import { devices, viewportsOf, type Viewport } from '../src/devices';
 
@@ -41,7 +45,15 @@ try { loadScenario(file); } catch (error) { console.error((error as Error).messa
 // The chat answers from a script (no agy, no Hermes, no limit spent), so it can be tried and photographed.
 // `--hermes down` shows the chat as it is when Hermes is not running.
 const chat = await createScenarioChat({ hermes: values.hermes === 'down' ? 'down' : 'up' });
-const api = createPanelServer(createScenarioSources(file), join(process.cwd(), 'dist'), undefined, chat).listen(0, '127.0.0.1');
+// The cockpit of the live chat: dispatched runs are made up by the scenario, and GitHub answers from a stand-in.
+const sources = createScenarioSources(file);
+let checksAsked = 0;
+const cockpit = createCockpit({
+  sources, file: join(mkdtempSync(join(tmpdir(), 'desk-panel-cockpit-')), 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/',
+  gh: async () => JSON.stringify({ number: 42, title: 'Chip statusu taska w kokpicie', state: 'OPEN', headRefName: 'cez/00000000', url: SCENARIO_PR,
+    statusCheckRollup: ['test', 'typecheck', 'build'].map((name, i) => ({ name, status: checksAsked++ > 2 + i ? 'COMPLETED' : 'IN_PROGRESS', conclusion: checksAsked > 3 + i ? 'SUCCESS' : '' })) }),
+});
+const api = createPanelServer(sources, join(process.cwd(), 'dist'), undefined, chat, { cockpit }).listen(0, '127.0.0.1');
 await new Promise(done => api.once('listening', done));
 // Read by vite.config.ts, so it must be set before Vite loads the config.
 process.env.DESK_API_URL = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
@@ -109,6 +121,22 @@ if (!values.shot) {
               if (values.open === 'cockpit-review') await page.getByText('Gotowe do przeglądu', { exact: false }).waitFor({ timeout: 20_000 });
             }
           } else if (values.hermes === 'down') await input.fill('@Zaimplementuj zadanie: chip statusu');
+          await page.waitForTimeout(500);
+        } else if (values.open === 'chat-dispatch' || values.open === 'chat-dispatched' || values.open === 'chat-review') {
+          // The live chat with the Hermes stand-in: recon and dispatch cards, then the made-up Cezar run in the cockpit.
+          await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+          const input = page.getByLabel('Wiadomość do agenta');
+          await input.fill('@zaimpl');
+          await input.press('Enter');
+          await input.fill('Dodaj chip statusu taska w nagłówku kokpitu');
+          await input.press('Enter');
+          await page.getByRole('button', { name: 'Zleć na Cezarze' }).waitFor({ timeout: 20_000 });
+          if (values.open !== 'chat-dispatch') {
+            await page.getByRole('button', { name: 'Zleć na Cezarze' }).click();
+            await page.getByText('poszedł do Cezara').waitFor();
+            if (values.open === 'chat-review') await page.getByText('Task czeka na Twój przegląd.').waitFor({ timeout: 40_000 });
+            else await page.waitForTimeout(6000);
+          }
           await page.waitForTimeout(500);
         } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
           // A Hermes turn of the stand-in: an answer with a tool step, or one waiting for the user's approval.
