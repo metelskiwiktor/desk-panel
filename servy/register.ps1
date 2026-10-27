@@ -52,6 +52,7 @@ try {
             $backup[$name]=$original
             $running[$name]=($service.Status -eq 'Running')
             $config=Get-Content -LiteralPath $original -Raw | ConvertFrom-Json
+            $config.StartupType='Automatic'
             $config.Parameters=$parameters
             $config.StartupDirectory=$context.ProjectRoot
             $config.StdoutPath=Join-Path $logDir 'stdout.log'
@@ -67,7 +68,7 @@ try {
                 if (!$credential) { throw 'Credential entry cancelled.' }
                 $env:SERVY_PASSWORD=$credential.GetNetworkCredential().Password
             }
-            Invoke-RegistrationCli @('install',"--name=$name","--displayName=$name","--path=$powershell","--startupDir=$($context.ProjectRoot)","--params=$parameters",'--startupType=AutomaticDelayedStart',"--user=$($credential.UserName)","--stdout=$(Join-Path $logDir 'stdout.log')","--stderr=$(Join-Path $logDir 'stderr.log')",'--enableSizeRotation','--rotationSize=10','--maxRotations=5','--enableHealth','--recoveryAction=RestartProcess','--recoveryOnCleanExit','--heartbeatInterval=10','--maxRestartAttempts=5','--stopTimeout=15')
+            Invoke-RegistrationCli @('install',"--name=$name","--displayName=$name","--path=$powershell","--startupDir=$($context.ProjectRoot)","--params=$parameters",'--startupType=Automatic',"--user=$($credential.UserName)","--stdout=$(Join-Path $logDir 'stdout.log')","--stderr=$(Join-Path $logDir 'stderr.log')",'--enableSizeRotation','--rotationSize=10','--maxRotations=5','--enableHealth','--recoveryAction=RestartProcess','--recoveryOnCleanExit','--heartbeatInterval=10','--maxRestartAttempts=5','--stopTimeout=15')
         }
         if ($Start -or $running[$name]) { Start-Service -Name $name }
     }

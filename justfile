@@ -43,6 +43,10 @@ kiosk-setup:
 kiosk-autostart action="STATUS" display="1":
     & ./scripts/kiosk-autostart.ps1 -Action '{{action}}' -Display {{display}}
 
+# Hide or show the Windows taskbar on a specific monitor: HIDE (default), SHOW or STATUS.
+kiosk-taskbar action="HIDE" display="1":
+    & ./scripts/kiosk-taskbar.ps1 -Action '{{action}}' -Display {{display}}
+
 # Sign in to Garmin Connect once; e-mail, password and MFA are typed in the terminal, only DPAPI-encrypted tokens are saved.
 garmin-login:
     npx tsx scripts/garmin-login.ts

@@ -29,11 +29,11 @@ Endpoint jest lokalny, read-only; nie zbiera danych dysku.
 
 ## Tryb kiosku (okno bez przeglądarki)
 
-`just kiosk` otwiera Pulpit w Chrome jako gołe okno na całym monitorze: bez kart, paska adresu i przycisku „wyjdź z pełnego
+`just kiosk` (`scripts/kiosk.ps1`) otwiera Pulpit w Chrome jako gołe okno na całym monitorze: bez kart, paska adresu i przycisku „wyjdź z pełnego
 ekranu”, który Chrome pokazuje po najechaniu na górę (zamknięcie: Alt+F4). Numer monitora to `\.DISPLAYn` (`just monitor`
-pokazuje je jako zrzuty), domyślnie 1: `just kiosk 2`. Skrypt czeka, aż usługa odpowie, więc może startować razem z systemem.
-`just kiosk-autostart ON` (albo `OFF`, `STATUS`) rejestruje zadanie użytkownika w Harmonogramie zadań, które uruchamia kiosk
-20 s po zalogowaniu; nie wymaga uprawnień administratora. Start bez wpisywania hasła wymaga automatycznego logowania
+pokazuje je jako zrzuty), domyślnie 1: `just kiosk 2`. Przy starcie automatycznie ukrywa pasek zadań Windows na tym konkretnym monitorze (`scripts/kiosk-taskbar.ps1`), nie ruszając pasków na pozostałych ekranach. Ręczne sterowanie paskiem: `just kiosk-taskbar HIDE|SHOW|STATUS [DISPLAY]`. Skrypt czeka, aż usługa odpowie (do 300 s) i monitor będzie dostępny (do 30 s), więc może startować razem z systemem. Przebieg startu i ewentualne błędy zapisywane są w `%USERPROFILE%\.desk-panel\kiosk.log`.
+`just kiosk-autostart ON` (albo `OFF`, `STATUS`, skrypt `scripts/kiosk-autostart.ps1`) rejestruje zadanie użytkownika w Harmonogramie zadań, które uruchamia kiosk
+20 s po zalogowaniu; w razie błędu Harmonogram ponawia próbę do 3 razy co minutę. Nie wymaga uprawnień administratora. Start bez wpisywania hasła wymaga automatycznego logowania
 Windows (`netplwiz`), co jest kompromisem bezpieczeństwa.
 
 Okno ma własny profil Chrome (`%LOCALAPPDATA%desk-panelkiosk-chrome`), bo uruchomiony już Chrome przejmuje każde nowe

@@ -18,7 +18,7 @@ Wybierz to samo konto, na którym połączono Google Calendar — DPAPI wiąże 
 z kontem. Hasło trafia bezpośrednio do Servy, nie do plików projektu ani logów.
 Ponowna rejestracja zachowuje istniejące konto usługi.
 
-Usługa `Desk-Panel` ma automatyczny opóźniony start, odzyskiwanie po awarii
+Usługa `Desk-Panel` ma automatyczny start (startuje razem z systemem), odzyskiwanie po awarii
 i rotację logów (10 MB, do 5 plików). Serwuje zbudowany `dist` na
 http://127.0.0.1:5174, także bez otwartej sesji terminala.
 

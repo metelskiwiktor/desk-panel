@@ -14,8 +14,8 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   idle clock instead of walking the pages.
 - `just devices`: target screens from devices.json with derived CSS sizes.
   Screen sizes live only there; the layout is fluid and never reads it.
-- `just kiosk [DISPLAY]` / `just kiosk-autostart ON|OFF|STATUS`: the dashboard as a bare full-screen Chrome
-  window on one monitor (own Chrome profile), and starting it at sign-in. Windows PowerShell 5.1 reads these
+- `just kiosk [DISPLAY]` / `just kiosk-autostart ON|OFF|STATUS` / `just kiosk-taskbar HIDE|SHOW|STATUS`: the dashboard as a bare full-screen Chrome
+  window on one monitor (own Chrome profile), starting it at sign-in, and hiding its Windows taskbar. Windows PowerShell 5.1 reads these
   scripts as ANSI: keep them ASCII.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
   DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
