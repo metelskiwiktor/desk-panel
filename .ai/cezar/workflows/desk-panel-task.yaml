@@ -1,0 +1,289 @@
+version: 2
+name: desk-panel-task
+description: Implement a Desk Panel task with visually verified before/after screenshots, verify with tests+build, run pre-PR AI code review (with auto-fix round), open a PR ready for review, and post screenshots + review summary.
+
+nodes:
+  - id: start
+    type: start
+
+  - id: prepare
+    name: Prepare worktree (LF line endings, node_modules & .ai helpers)
+    type: check
+    command: |
+      git config core.autocrlf false
+      git rm --cached -r . >/dev/null 2>&1 || true
+      git reset --hard >/dev/null 2>&1 || true
+      mkdir -p .ai/screenshots
+      node -e "const fs=require('fs'),p=require('path'); for(const rel of ['../../../../node_modules','../../../node_modules']){ if(!fs.existsSync('node_modules')&&fs.existsSync(rel)){ fs.symlinkSync(p.resolve(rel),'node_modules','junction'); break; } } for(const base of ['../../../../scripts','../../../scripts','scripts']){ for(const f of ['scenario.ts','pr-screenshots.mjs']){ const src=p.resolve(base,f), dst=p.resolve('.ai',f); if(fs.existsSync(src)){ fs.copyFileSync(src,dst); } } }"
+
+  - id: implement
+    name: Implement
+    type: agent
+    runner: agy
+    model: gemini-3.8-flash-medium
+    prompt: |
+      {{task}}
+
+      ---
+      # Desk Panel Executor Instructions (follow in exact order)
+
+      CRITICAL EXECUTION & EFFICIENCY RULES:
+      - Work strictly inside your isolated git worktree (`pwd`).
+      - When calling `read_file`, `view_file`, `edit_file`, or `write_file`, ALWAYS pass full absolute paths inside your current worktree (never relative paths and never paths in the parent checkout `C:/Users/Viktor/AndroidStudioProjects/desk-panel/...` outside `.ai/cezar/worktrees/...`).
+      - Read whole files in a single `read_file` call (omit `StartLine`/`EndLine` unless a file exceeds 500 lines) instead of reading 30 lines at a time.
+      - All files in this worktree use LF (`\n`) line endings — batch contiguous edits into a single multi-line `edit_file` call per region instead of editing one line at a time.
+      - Never call `just check` or the full `npm test` suite during implementation (the automated `verify` step runs the full test suite and build right after you finish). Instead, run only the targeted test file(s) you touched plus typecheck: `npx vitest run <test-file>; npm run typecheck`.
+
+      ## Phase 1 — Prepare Scenario Data & Capture Baseline Screenshot (UI tasks ONLY)
+      If Type is `UI` (and Scenario is not `none`):
+      The goal of `before.png` vs `after.png` is to **visually prove and clearly showcase** the UI change: `before.png` MUST show the problem/limitation/old UI before your code change, and `after.png` MUST prominently and legibly showcase the fixed/new UI after your code change.
+      1. **Check the scenario data first (`scenarios/<scenario>.json`)**:
+         - Before touching any code in `src/` or `server/`, inspect the target item in `scenarios/<scenario>.json` (e.g. the first mail in `inbox.json` when `--open mail` is used, or the relevant data for a tile when `--open tile:<kind>` is used).
+         - If the existing scenario data does not clearly expose the problem (for example, the task is about truncated long emails, overflowing text, or a missing detail, but the scenario only has a short 1-sentence string), update `scenarios/<scenario>.json` FIRST (using only fields valid in the current schema on `main`, e.g. a visibly truncated `snippet` ending with `…`) so that the old UI clearly exhibits the "Before" state.
+         - IMPORTANT: Do NOT `git cherry-pick` or edit `src/` / `server/` before capturing `before.png`!
+      2. **Choose the right `--open` target so the feature is prominently showcased**:
+         - For a new or modified workspace tile (`smart-actions`, `bank`, `todo`, `system`, `mail`, `cezar`, or any new tile `<kind>`), ALWAYS pass `--open tile:<kind>` (e.g. `--open tile:smart-actions`). This showcases the tile at `2x2` on `after.png` (and falls back cleanly to the default grid on `before.png` if the tile did not exist yet) WITHOUT needing to add optional tiles to `autoTiles` in `src/Workspace.tsx`!
+         - For modals/drawers, pass `--open mail`, `--open chat`, `--open chat-wide`, `--open task`, `--open event`, `--open bank`, or a CSS selector.
+      3. **Capture `before.png` using `.ai/scenario.ts`** (which loads this worktree's own `server/` and `src/`):
+         ```powershell
+         Set-Location "<worktree-abs-path>"
+         npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/before.png
+         ```
+         (Omit `--open <open-target>` only if `open` is `none` and the change is already prominent on the main page.)
+
+      ## Phase 2 — Implement & Targeted Check
+      1. Make the required code changes in `src/`, `server/`, `scenarios/`, or `docs/` inside this worktree (and add any new schema fields like `body` to `scenarios/<scenario>.json` now).
+         - Do NOT add new optional workspace tiles to `autoTiles(...)` in `src/Workspace.tsx` (default `autoTiles` is strictly for quota cards, `mail`, and `cezar`, and changing it breaks `src/Workspace.test.tsx` and `src/pulpits.test.tsx`). Use `--open tile:<kind>` in `.ai/scenario.ts` to showcase new tiles instead.
+         - Design compact (`1x1`) tile layouts carefully: a `1x1` cell on `medialove-14` is only `~195px` wide. Never put a badge, a title, and multiple action buttons on a single `nowrap` flex row in a `1x1` tile (that crushes the title into `...`); use `flex-wrap: wrap` so the title gets its own full-width line in `1x1` tiles.
+         - If the task explicitly asks for a capability that `AGENTS.md` or `docs/` previously restricted, implement the user's requested task and update the relevant line in `AGENTS.md` / `docs/` to match.
+      2. Update or add unit/integration tests covering your changes. Prefer fixing code over weakening tests.
+      3. Run your new test file(s) AND existing test files for every module you modified (e.g. if you edited `src/Workspace.tsx` or `src/layout.ts`, include `src/Workspace.test.tsx src/pulpits.test.tsx src/layout.test.ts`) plus typecheck in a single command (with `WaitMsBeforeAsync: 10000` so it does not background):
+         ```powershell
+         Set-Location "<worktree-abs-path>"; npx vitest run <new-and-affected.test.ts>; npm run typecheck
+         ```
+
+      ## Phase 3 — Capture After Screenshot & Visually Inspect Both (UI tasks ONLY)
+      If Type is `UI` (and Scenario is not `none`):
+      1. Run the exact same `.ai/scenario.ts` command from your worktree, outputting to `.ai/screenshots/after.png`:
+         ```powershell
+         Set-Location "<worktree-abs-path>"
+         npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/after.png
+         ```
+      2. **Mandatory critical visual inspection with `read_file`**:
+         - Call `read_file` on `<worktree-abs-path>/.ai/screenshots/before.png` and `read_file` on `<worktree-abs-path>/.ai/screenshots/after.png` to view both images yourself.
+         - Check ALL THREE visual quality criteria:
+           (a) **Prominence**: Is the target view, modal, or tile prominently visible and open in `after.png` (e.g. showcased at `2x2` via `--open tile:<kind>` for tile tasks, or modal open via `--open mail`)?
+           (b) **Clear Before/After contrast**: Does `before.png` show the old/problem state while `after.png` clearly demonstrates the new/fixed state?
+           (c) **Legibility & Layout quality**: Can a human actually read the titles, labels, and values inside the new/modified UI on `after.png`? If titles or text are squashed into `...` (ellipsis with zero/few readable words), clipped, overlapping, or barely visible in a tiny corner, you MUST fix the CSS/layout or `--open` flag and re-capture `after.png` before finishing!
+         - If the task turned out to be purely backend with zero visual UI difference, delete `.ai/screenshots/before.png` and `.ai/screenshots/after.png`.
+
+      ## Phase 4 — Commit
+      1. Stage only your code/test/scenario/doc changes (`git add <files>` — never stage `.ai/` or `output/`).
+      2. Commit on the current branch (`git commit -m "<concise description>"`).
+      3. Confirm `git status --porcelain` is empty. Do NOT push or open a PR yourself — Cezar runs verification and pre-PR review next.
+
+      Print this final checklist before finishing, and end with `CEZ:DONE` on the last line:
+      - [ ] before.png captured before code edits & shows the "before" problem state (UI) or skipped (non-UI)
+      - [ ] targeted tests and typecheck passed
+      - [ ] after.png captured & visually verified via read_file to differ from before.png (UI) or skipped (non-UI)
+      - [ ] changes committed, git status --porcelain is empty
+      CEZ:DONE
+
+  - id: verify
+    name: Verify (tests + build + clean commit)
+    type: check
+    command: |
+      set -e
+      npm test
+      npm run build
+      rm -rf output/screenshots
+      dirty=$(git status --porcelain)
+      if [ -n "$dirty" ]; then
+        echo "Uncommitted tracked/untracked changes remain in the worktree (commit them or remove temporary files outside .ai/):"
+        echo "$dirty"
+        exit 1
+      fi
+      mkdir -p .ai
+      git diff origin/main...HEAD > .ai/diff.patch 2>/dev/null || git diff HEAD~1...HEAD > .ai/diff.patch 2>/dev/null || true
+
+  - id: verify-retry
+    name: Retry after verify
+    type: loop
+    max: 2
+
+  - id: fix
+    name: Fix verification or commit
+    type: agent
+    runner: agy
+    model: gemini-3.8-flash-medium
+    session:
+      continue: implement
+    prompt: |
+      Verification failed (round {{nodes.verify-retry.iteration}}/{{nodes.verify-retry.max}}):
+
+      {{nodes.verify.output}}
+
+      Fix the cause (do not weaken or delete tests), re-capture `.ai/screenshots/after.png` using `npx tsx .ai/scenario.ts ...` if this is a UI task and you changed UI code (then remove `output/screenshots`), and commit all intentional changes so `git status --porcelain` is empty.
+      End with `CEZ:DONE`.
+
+  - id: changed
+    name: Changed the repo?
+    type: if
+    condition:
+      kind: diff-files
+      op: '>'
+      value: 0
+
+  - id: review
+    name: Pre-PR Code Review
+    type: agent
+    runner: agy
+    model: gemini-3.8-flash-medium
+    verdicts:
+      - approve
+      - changes
+    prompt: |
+      You are the pre-PR code reviewer for this Desk Panel task:
+
+      {{task}}
+
+      ---
+      CRITICAL REVIEW RULES (fast & read-only):
+      - The `verify` step JUST ran the full `npm test` suite and `npm run build` and both PASSED with zero errors. Do NOT run `npm test`, `npm run build`, or `just check` again.
+      - Do NOT edit, create, or delete any files, and do NOT run mutating git commands.
+      - When calling `read_file`, ALWAYS pass full absolute paths inside your current worktree (`pwd`) and read whole files at once (do not slice into 30-line chunks).
+
+      Review procedure:
+      1. Read `<worktree-abs-path>/.ai/diff.patch` in full with `read_file` to see all changes on this branch.
+      2. Read the modified files in `<worktree-abs-path>` with `read_file` where needed to verify context around the diff.
+      3. If Type is `UI`, call `read_file` on `<worktree-abs-path>/.ai/screenshots/before.png` and `<worktree-abs-path>/.ai/screenshots/after.png` and critically inspect both:
+         - Are the screenshots identical or showing the wrong view?
+         - In `after.png`, is the new/modified UI prominently showcased and **genuinely legible** (or are item titles/text squashed into `...` ellipsis, cramped in a tiny corner instead of using `--open tile:<kind>`, or cut off)?
+         - If `after.png` is identical to `before.png`, barely shows the feature, or has unreadable `...`-truncated titles, report it as a `P2` finding (`CEZ:VERDICT changes`) with concrete instructions on how to fix the CSS layout and/or re-capture with `--open tile:<kind>`.
+      4. Check for real issues only:
+         - Correctness & edge cases (e.g. MIME/HTML handling, null/undefined states, broken UI rendering).
+         - Security invariants (loopback-only server, `Origin` check on `POST` mutations, no leaked credentials/DPAPI/full account numbers).
+         - Zod contract & scenario fixture parity.
+         - Note: if the task prompt explicitly requested a capability that `AGENTS.md` previously restricted, implementing that capability is intentional, not a defect.
+      5. Format your response concisely:
+         - List findings ordered by severity (`P0` blocker, `P1` bug/regression, `P2` edge-case/missing test/identical UI screenshots, `P3` minor nit) as `P<0-3> <repo-relative-path>:<line> — <problem and suggested fix>`, or write `Findings: none`.
+      6. End your message with the verdict marker on the final line:
+         - Output `CEZ:VERDICT changes` ONLY if you found at least one real `P0`, `P1`, or `P2` issue that should be fixed before opening the PR.
+         - Output `CEZ:VERDICT approve` if there are no issues or only `P3` minor nits.
+
+  - id: review-retry
+    name: Address review round
+    type: loop
+    max: 1
+
+  - id: address
+    name: Address review findings
+    type: agent
+    runner: agy
+    model: gemini-3.8-flash-medium
+    session:
+      continue: implement
+    prompt: |
+      The pre-PR code reviewer requested changes before opening the PR:
+
+      {{nodes.review.summary}}
+
+      Fix every P0, P1, and P2 finding above in your worktree:
+      1. Edit the affected source, scenario, and test files using full absolute paths inside your worktree (`pwd`).
+      2. Run targeted tests and typecheck (`npx vitest run <changed.test.ts>; npm run typecheck`).
+      3. If your fix changed visible UI or the reviewer flagged `.ai/screenshots/before.png` / `.ai/screenshots/after.png`, re-capture them using `npx tsx .ai/scenario.ts ...` inside your worktree and verify them with `read_file`.
+      4. Stage and commit all changes (`git add <files> && git commit -m "Address pre-PR review findings"`) and confirm `git status --porcelain` is empty.
+      End with `CEZ:DONE`.
+
+  - id: pr
+    name: Open PR
+    type: github.draft-pr
+    ready: true
+
+  - id: screenshots-comment
+    name: Attach before/after screenshots to PR (non-blocking)
+    type: check
+    command: |
+      if [ -f .ai/pr-screenshots.mjs ]; then
+        node .ai/pr-screenshots.mjs || true
+      elif [ -f scripts/pr-screenshots.mjs ]; then
+        node scripts/pr-screenshots.mjs || true
+      elif [ -f ../../../../scripts/pr-screenshots.mjs ]; then
+        node ../../../../scripts/pr-screenshots.mjs || true
+      elif [ -f ../../../scripts/pr-screenshots.mjs ]; then
+        node ../../../scripts/pr-screenshots.mjs || true
+      fi
+
+  - id: review-comment
+    name: Post pre-PR review summary on PR
+    type: github.pr-comment
+    body: |
+      ## Automated Pre-PR Review (`{{nodes.review.model}}` — verdict: `{{nodes.review.verdict}}`)
+
+      {{nodes.review.summary}}
+
+  - id: done
+    name: PR ready for review
+    type: end
+    status: success
+
+  - id: no-changes
+    name: No repo changes, no PR
+    type: end
+    status: success
+
+  - id: verify-failed
+    name: Verification failed after retries
+    type: end
+    status: failed
+
+  - id: pr-failed
+    name: PR creation failed
+    type: end
+    status: failed
+
+edges:
+  - from: start
+    to: prepare
+  - from: prepare.pass
+    to: implement
+  - from: prepare.fail
+    to: implement
+  - from: implement.done
+    to: verify
+  - from: verify.pass
+    to: changed
+  - from: verify.fail
+    to: verify-retry
+  - from: verify-retry.repeat
+    to: fix
+  - from: verify-retry.exhausted
+    to: verify-failed
+  - from: fix.done
+    to: verify
+  - from: changed.true
+    to: review
+  - from: changed.false
+    to: no-changes
+  - from: review.approve
+    to: pr
+  - from: review.changes
+    to: review-retry
+  - from: review-retry.repeat
+    to: address
+  - from: review-retry.exhausted
+    to: pr
+  - from: address.done
+    to: verify
+  - from: pr.created
+    to: screenshots-comment
+  - from: pr.failed
+    to: pr-failed
+  - from: screenshots-comment.pass
+    to: review-comment
+  - from: screenshots-comment.fail
+    to: review-comment
+  - from: review-comment.done
+    to: done
+  - from: review-comment.failed
+    to: done

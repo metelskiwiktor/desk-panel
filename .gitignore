@@ -16,4 +16,8 @@ dist.old/
 .deployed
 
 # Local agent working directory (may hold launch keys)
-.ai/
+.ai/**
+!.ai/cezar/
+!.ai/cezar/.gitignore
+!.ai/cezar/workflows/
+!.ai/cezar/workflows/**
