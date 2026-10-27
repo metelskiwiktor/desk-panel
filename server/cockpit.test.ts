@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cezarIdsIn, criteriaOf } from '../src/cockpit-contract';
+import { COCKPIT_TOOLS, cockpitToolDescription, criteriaOf, watchedTask } from '../src/cockpit-contract';
 import { cezarTaskView, createCockpit, prFromGh } from './cockpit';
 import type { PanelSources } from './sources';
 import { createTodoStore } from './todos';
@@ -23,6 +23,9 @@ const raw = (over: Record<string, unknown> = {}) => ({
   ],
   ...over,
 });
+/** Steps of a conversation as Hermes leaves them: panel tools with the server prefix. */
+const tool = (name: string, id: string, args: unknown = {}, error = false) => ({ role: 'agent', parts: [{ type: 'tool', id, name: `mcp__desk_panel__${name}`, input: JSON.stringify(args), output: '{}', ...(error ? { error } : {}) }] });
+const said = (text: string) => ({ role: 'agent', parts: [{ type: 'text', text }] });
 const PROMPT = 'Task: x\nAcceptance criteria:\n- [ ] Pierwsze kryterium\n- [x] Drugie\n* [ ] Trzecie\nNotes for executor:\n- not a criterion';
 
 describe('a Cezar run in the cockpit', () => {
@@ -67,12 +70,42 @@ describe('a Cezar run in the cockpit', () => {
     ]);
   });
 
-  it('finds the acceptance criteria and the Cezar tasks a text mentions', () => {
+  it('finds the acceptance criteria of a prompt', () => {
     expect(criteriaOf(PROMPT)).toEqual(['Pierwsze kryterium', 'Drugie', 'Trzecie']);
-    const a = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11', b = '1b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
-    expect(cezarIdsIn(`Task desk-panel/${a} i link http://127.0.0.1:4321/p/inne/tasks/${b} oraz ?project=desk-panel&run=${a}`))
-      .toEqual([`desk-panel/${a}`, `inne/${b}`, `desk-panel/${a}`]);
-    expect(cezarIdsIn('nic tu nie ma')).toEqual([]);
+  });
+});
+
+describe('the cockpit contract', () => {
+  const OTHER = 'desk-panel/1b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
+  const dispatched = { decision: 'dispatched' as const, taskId: RUN, prompt: 'p', url: 'u', at: 1 };
+
+  it('never guesses: a task id in text, files or other tools is not a reason to watch it', () => {
+    expect(watchedTask([
+      said(`W pliku jest ${RUN}, a link http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e-7121-4746-8fc8-19ee3ee9d968`),
+      { role: 'agent', parts: [{ type: 'tool', id: 'r', name: 'read_file', input: '{}', output: `id: ${RUN}` }] },
+      tool('panel_cezar', 'c', { id: RUN }),
+      tool('panel_cezar_propose', 'p0'), // proposed, never dispatched
+    ], {})).toBeNull();
+  });
+
+  it('watches after a dispatch from the card or a watch call, the last event winning; clear ends it', () => {
+    expect(watchedTask([tool('panel_cezar_propose', 'p1')], { p1: dispatched })).toBe(RUN);
+    expect(watchedTask([tool('panel_cezar_propose', 'p1')], { p1: { decision: 'rejected', at: 1 } })).toBeNull();
+    expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: OTHER })], {})).toBe(OTHER);
+    expect(watchedTask([tool('panel_cezar_propose', 'p1'), tool('panel_cezar_watch', 'w1', { id: OTHER })], { p1: dispatched })).toBe(OTHER);
+    expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: OTHER }), tool('panel_cezar_propose', 'p1')], { p1: dispatched })).toBe(RUN);
+    expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: OTHER }), tool('panel_cockpit_clear', 'x')], {})).toBeNull();
+    // A failed call or arguments that are not a task id change nothing.
+    expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: OTHER }), tool('panel_cezar_watch', 'w2', { id: RUN }, true)], {})).toBe(OTHER);
+    expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: '../etc' })], {})).toBeNull();
+    // Hermes names the server either way.
+    expect(watchedTask([{ role: 'agent', parts: [{ type: 'tool', id: 'w', name: 'mcp_desk-panel_panel_cezar_watch', input: JSON.stringify({ id: OTHER }) }] }], {})).toBe(OTHER);
+  });
+
+  it('describes every cockpit tool with what it is, when to call it and what follows', () => {
+    for (const name of Object.keys(COCKPIT_TOOLS) as (keyof typeof COCKPIT_TOOLS)[]) {
+      expect(cockpitToolDescription(name)).toMatch(/\S.* Kiedy: \S.* Skutek: \S/);
+    }
   });
 });
 
@@ -95,10 +128,10 @@ describe('the cockpit of a conversation', () => {
     return { cockpit: createCockpit({ sources, file, cezarUrl: CEZAR, gh }), created, gh, file, todos, sources };
   }
 
-  it('watches nothing until the conversation dispatches or mentions a task', async () => {
+  it('watches nothing until the conversation dispatches a task or Hermes watches one', async () => {
     const { cockpit } = setup();
-    expect(await cockpit.view(CHAT)).toMatchObject({ task: null, pr: null, list: null, dispatches: {} });
-    const view = await cockpit.view(CHAT, RUN);
+    expect(await cockpit.view(CHAT, [said(`Task ${RUN} był w pliku.`)])).toMatchObject({ task: null, pr: null, list: null, dispatches: {} });
+    const view = await cockpit.view(CHAT, [tool('panel_cezar_watch', 'w1', { id: RUN })]);
     expect(view.task).toMatchObject({ id: RUN, status: 'REVIEW' });
     expect(view.pr).toMatchObject({ number: 32, checks: [{ name: 'check', state: 'pass' }] });
   });
@@ -115,11 +148,11 @@ describe('the cockpit of a conversation', () => {
     expect(list.name).toBe('Wektor · Paski stref');
     expect(list.tasks.map(t => [t.title, t.by])).toEqual([['Pierwsze kryterium', 'agent'], ['Drugie', 'agent'], ['Trzecie', 'agent']]);
 
-    const view = await cockpit.view(CHAT, 'other/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11');
-    expect(view.task?.id).toBe(RUN); // what the chat dispatched wins over what it mentions
+    const view = await cockpit.view(CHAT, [said('other/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11'), tool('panel_cezar_propose', 'call_1')]);
+    expect(view.task?.id).toBe(RUN);
     expect(view.list).toMatchObject({ id: list.id, tasks: [{ title: 'Pierwsze kryterium', done: false }, {}, {}] });
     expect(view.dispatches.call_1).toMatchObject({ decision: 'dispatched' });
-    await cockpit.view(CHAT);
+    await cockpit.view(CHAT, [tool('panel_cezar_propose', 'call_1')]);
     expect(gh).toHaveBeenCalledTimes(1); // the PR is read gently
     expect(JSON.parse(readFileSync(file, 'utf8')).chats[CHAT].runs).toEqual([RUN]);
   });
@@ -130,7 +163,9 @@ describe('the cockpit of a conversation', () => {
     expect(created).not.toHaveBeenCalled();
     // A restarted panel shows the same answer on the card.
     const again = createCockpit({ sources, file, cezarUrl: CEZAR, gh: async () => '{}' });
-    expect((await again.view(CHAT)).dispatches.call_2).toMatchObject({ decision: 'rejected' });
+    const view = await again.view(CHAT, [tool('panel_cezar_propose', 'call_2')]);
+    expect(view.dispatches.call_2).toMatchObject({ decision: 'rejected' });
+    expect(view.task).toBeNull();
   });
 
   it('a to-do item the task implements gives its own list as the subtasks', async () => {
@@ -139,32 +174,33 @@ describe('the cockpit of a conversation', () => {
     const item = await todos.apply({ action: 'addTask', list: made.list!.id, title: 'Zrobić paski' });
     await cockpit.dispatch(CHAT, { toolCallId: 'call_3', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId: item.task!.id as `t-${string}` });
     expect((await todos.read()).data!.lists).toHaveLength(1);
-    expect((await cockpit.view(CHAT)).list).toMatchObject({ name: 'Moje', tasks: [{ title: 'Zrobić paski' }] });
+    expect((await cockpit.view(CHAT, [tool('panel_cezar_propose', 'call_3')])).list).toMatchObject({ name: 'Moje', tasks: [{ title: 'Zrobić paski' }] });
   });
 
   it('without the GitHub CLI says the checks are not known, and keeps the PR', async () => {
     const { sources, file } = setup();
     const cockpit = createCockpit({ sources, file, cezarUrl: CEZAR, gh: async () => { throw new Error('gh: not found'); } });
-    const view = await cockpit.view(CHAT, RUN);
+    const view = await cockpit.view(CHAT, [tool('panel_cezar_watch', 'w1', { id: RUN })]);
     expect(view.pr).toMatchObject({ number: 32, checks: [], checksError: expect.stringContaining('gh') });
   });
 });
 
 describe('cockpit routes', () => {
-  it('reads freely on loopback, but only the panel\'s own page may answer a card; ids are checked', async () => {
+  it('reads freely on loopback, but only the panel\'s own page may answer a card; the watched task follows from the chat', async () => {
     const { createPanelServer } = await import('./app');
     const { createScenarioSources } = await import('./scenario');
     const dir = mkdtempSync(join(tmpdir(), 'cockpit-route-'));
     const sources = createScenarioSources(join(process.cwd(), 'scenarios', 'standard.json'));
     const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: CEZAR, gh: async () => '{}' });
-    const chat = { get: async () => ({}) } as never;
+    // The conversation as the chat service has it: one dispatch card.
+    const chat = { get: async () => ({ items: [tool('panel_cezar_propose', 'call_1')] }) } as never;
     const server = createPanelServer(sources, dir, undefined, chat, { cockpit }).listen(0, '127.0.0.1');
     await new Promise(done => server.once('listening', done));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     const CHAT = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11';
     try {
       expect((await fetch(`${base}/api/chats/${CHAT}/cockpit`)).status).toBe(200);
-      expect((await fetch(`${base}/api/chats/${CHAT}/cockpit?run=../../etc`)).status).toBe(400);
+      expect((await (await fetch(`${base}/api/chats/${CHAT}/cockpit?run=desk-panel/f2c9501e-7121-4746-8fc8-19ee3ee9d968`)).json()).task).toBeNull(); // no hint is taken
       const body = JSON.stringify({ toolCallId: 'call_1', decision: 'dispatch', title: 'Paski', prompt: 'Task: x\n- [ ] Jedno' });
       expect((await fetch(`${base}/api/chats/${CHAT}/dispatch`, { method: 'POST', body, headers: { 'Content-Type': 'application/json' } })).status).toBe(403);
       const ok = await fetch(`${base}/api/chats/${CHAT}/dispatch`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', Origin: base } });

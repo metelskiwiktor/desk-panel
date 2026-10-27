@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ContextItem } from '../chat-contract';
-import { cezarIdsIn, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
+import { COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
 import { DISPATCH, HERMES_APPROVAL, RECON, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
@@ -17,9 +17,12 @@ const parseArgs = (input: string): Record<string, unknown> => {
   return input ? { input } : {};
 };
 
-/** The panel's MCP tools as Hermes names them (`mcp__desk_panel__panel_cezar_watch`, `mcp_desk-panel_…`): the cards. */
-const CARD_TOOLS: Record<string, string> = { panel_recon_report: RECON, panel_cezar_propose: DISPATCH, panel_cezar_watch: WATCH };
-export const cardOf = (name: string) => CARD_TOOLS[name.replace(/^mcp_+desk[-_]panel_+/i, '')] ?? name;
+/** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
+const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH } as const;
+export const cardOf = (name: string) => {
+  const tool = COCKPIT_TOOLS[panelToolName(name) as CockpitToolName] as { card?: keyof typeof CARDS } | undefined;
+  return tool?.card ? CARDS[tool.card] : name;
+};
 
 const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
   ? { decision: 'dispatched' as const, taskId: outcome.taskId, prompt: outcome.prompt, url: outcome.url }
@@ -42,23 +45,6 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
   };
 }
 
-/** The Cezar task a conversation is about, when the panel did not dispatch one from it: the last one it mentions. */
-export function mentionedTask(items: ChatMessage[]): string | undefined {
-  let last: string | undefined;
-  for (const m of items) {
-    for (const id of cezarIdsIn(m.text ?? '')) last = id;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text') for (const id of cezarIdsIn(p.text)) last = id;
-      else if (p.type === 'tool') {
-        const args = parseArgs(p.input);
-        if (cardOf(p.name) === WATCH && typeof args.id === 'string') last = args.id;
-        else for (const id of cezarIdsIn(`${p.input}\n${p.output ?? ''}`)) last = id;
-      }
-    }
-  }
-  return last;
-}
-
 async function call(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
   const payload = await response.json().catch(() => null) as { error?: string } | null;
@@ -67,22 +53,24 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 }
 
 /** The cockpit of the open conversation, read again while it shows something that changes. */
-function useCockpitView(chatId: string | null, hint: string | undefined) {
+function useCockpitView(chatId: string | null, items: readonly ChatMessage[]) {
   const [view, setView] = useState<CockpitView | null>(null);
   const [error, setError] = useState('');
   const [tick, setTick] = useState(0);
+  /** Grows with every message and step: a watch call inside a running answer counts too. */
+  const steps = items.reduce((n, m) => n + 1 + (m.parts?.length ?? 0), 0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
   useEffect(() => { setView(null); setError(''); }, [chatId]);
   useEffect(() => {
     if (!chatId) return;
     let gone = false;
-    const query = hint ? `?run=${encodeURIComponent(hint)}` : '';
-    call(`/api/chats/${chatId}/cockpit${query}`).then(
+    // Which task is watched the server decides from the conversation (the cockpit contract): read again as it grows.
+    call(`/api/chats/${chatId}/cockpit`).then(
       value => { if (!gone) { setView(value as CockpitView); setError(''); } },
       e => { if (!gone) setError(e instanceof Error ? e.message : 'Kokpit jest niedostępny.'); },
     );
     return () => { gone = true; };
-  }, [chatId, hint, tick]);
+  }, [chatId, steps, tick]);
   const busy = !!view && ((view.task && ACTIVE.has(view.task.status)) || view.pr?.checks.some(c => c.state === 'running' || c.state === 'pending'));
   useEffect(() => {
     if (!chatId) return;
@@ -99,8 +87,7 @@ export function useLiveCockpit(): CockpitSource {
   const nonce = useRef<string | null>(null);
   const down = chat.engines?.find(e => e.engine === 'hermes' && !e.available);
   const items = useMemo(() => chat.active && engineOf(chat.active) === 'hermes' ? chat.active.items : [], [chat.active]);
-  const hint = useMemo(() => mentionedTask(items), [items]);
-  const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, hint);
+  const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
   const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches)), [items, dispatches]);
   const activeId = chat.activeId;

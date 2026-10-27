@@ -72,7 +72,11 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
 | `panel_recon_report` | `files`, `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu w czacie, niczego nie zmienia |
 | `panel_cezar_propose` | `title`, `prompt`, `todoId`: karta „Zlecić na Cezarze?”; zleca panel po kliknięciu użytkownika, nie narzędzie |
-| `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta pokazuje go na żywo |
+| `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
+| `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
+
+Opisy czterech narzędzi kokpitu (co, kiedy, skutek) i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
+`src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 
 Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę).
 Okno rozpoznaje karty po nazwie narzędzia z przedrostkiem serwera (`mcp__desk_panel__panel_…` albo `mcp_desk-panel_panel_…`). Dostęp: tylko adresy loopback (nazwa Tailscale

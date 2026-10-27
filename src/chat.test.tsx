@@ -555,6 +555,8 @@ describe('the live cockpit (Hermes and the panel)', () => {
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, watch], { id: H }) });
     const card = await screen.findByRole('region', { name: 'Nasłuchiwanie Cezara' });
     expect(within(card).getByText(RUN)).toBeTruthy();
-    await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit?run=${encodeURIComponent(RUN)}`)).toBe(true));
+    // Which task is watched the server decides from the conversation: the window asks without a hint.
+    await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit`)).toBe(true));
+    expect(calls.some(c => c.url.includes('/cockpit?'))).toBe(false);
   });
 });

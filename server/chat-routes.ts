@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema } from '../src/chat-contract';
-import { cezarRunId, cockpitDispatchSchema } from '../src/cockpit-contract';
+import { cockpitDispatchSchema } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
@@ -67,9 +67,8 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     } else if (action === 'cockpit' && req.method === 'GET') {
       // What the conversation's cockpit shows: read-only (Cezar, GitHub CLI, the to-do lists).
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
-      const hint = url.searchParams.get('run') ?? undefined;
-      if (hint !== undefined && !cezarRunId.safeParse(hint).success) throw new ChatError(400, 'Nieprawidłowe id taska Cezara.');
-      return json(res, 200, await cockpit.view(id, hint)), true;
+      // Which task follows from the conversation itself (the cockpit contract), never from the request.
+      return json(res, 200, await cockpit.view(id, (await chat.get(id)).items)), true;
     } else if (action === 'dispatch' && req.method === 'POST') {
       // The user's answer on a dispatch card: the only way the chat dispatches a task to Cezar.
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }

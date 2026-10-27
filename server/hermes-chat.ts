@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
 import { HermesError, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
@@ -15,6 +16,15 @@ import {
  * read-only adapters over `/api/agent/*`, plus the two writes the agy chat has), not through a shell and `curl`: no
  * command approval, no raw JSON, and nothing it can reach that the UI does not show.
  */
+/** The cockpit contract for Hermes, line by line from the same table the MCP tools describe themselves with. */
+export function cockpitRules(): string[] {
+  return [
+    'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI, subtaski). Kokpit niczego sam nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Narzędzia kokpitu i kiedy ich używać:',
+    ...Object.entries(COCKPIT_TOOLS).map(([name, tool]) => `- ${name}: ${tool.purpose} Kiedy: ${tool.when} Skutek: ${tool.effect}`),
+    'Poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś. Skill „Zaimplementuj zadanie”: panel_recon_report, krótki plan, panel_cezar_propose i koniec odpowiedzi; promptu nie powtarzasz tekstem i nie pytasz „Zlecić?” tekstem.',
+  ];
+}
+
 export function hermesPreamble(): string {
   return [
     'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
@@ -26,7 +36,7 @@ export function hermesPreamble(): string {
     'Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.',
     'Topologia środowiska: repozytoria projektów użytkownika znajdują się w C:\\Users\\Viktor\\AndroidStudioProjects\\<projekt>. Artefakty zadań Cezara (logi, worktree) żyją wewnątrz danego projektu pod .ai/cezar/runs/<uuid>.* oraz .ai/cezar/worktrees/<uuid>. Nigdy nie przeszukuj całego profilu C:\\Users\\Viktor ani folderów chmury (OneDrive); operuj wyłącznie na konkretnym projekcie.',
     'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara.',
-    'Okno czatu pokazuje karty dla trzech narzędzi panelu. Skill „Zaimplementuj zadanie”: po rekonesansie wywołaj panel_recon_report (pliki, typ UI/non-UI, scenariusz, Executor Prompt), potem panel_cezar_propose (tytuł, ten sam prompt, todoId gdy jest) i zakończ odpowiedź: użytkownik decyduje w karcie, a task zleca panel; nie pisz bloku promptu drugi raz i nie pytaj „Zlecić?” tekstem. Skill „Nasłuchuj Cezara”: znajdź task (panel_cezar), wywołaj panel_cezar_watch z jego id i streść stan w 1–3 zdaniach; postęp na żywo widać w karcie i w kokpicie obok czatu.',
+    ...cockpitRules(),
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
 }

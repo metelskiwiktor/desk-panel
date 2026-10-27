@@ -102,6 +102,12 @@ describe('panel MCP for Hermes', () => {
     expect(JSON.parse(watch.content[0].text).task).toMatchObject({ id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', status: expect.any(String) });
     expect(await call('panel_cezar_watch', { id: 'desk-panel/00000000-0000-0000-0000-00000000dead' })).toMatchObject({ isError: true });
     expect(await call('panel_cezar_watch', { id: '../etc' })).toMatchObject({ isError: true });
+    expect((await call('panel_cockpit_clear', {})).content[0].text).toContain('nie obserwuje');
+    const listed = await (await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).json() as any;
+    // The cockpit tools describe themselves by the contract: what, when, and what follows.
+    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_cockpit_clear']) {
+      expect(listed.result.tools.find((t: { name: string }) => t.name === name).description).toMatch(/Kiedy: .* Skutek: /);
+    }
   });
 
   it('makes the to-do changes the chat agent may make', async () => {

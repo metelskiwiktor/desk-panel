@@ -21,9 +21,14 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   Hermesa o zgodę na narzędzie. Inne narzędzia to zwijany wiersz.
 - **Hermes niedostępny**: nad polem wiadomości karta „Hermes nie odpowiada” z przyciskiem „Ponów próbę” (pyta serwer
   jeszcze raz); szkic i wskazane elementy zostają, nic nie jest wysyłane.
-- **Skąd kokpit ma dane** (`server/cockpit.ts`, `GET /api/chats/:id/cockpit`, tylko odczyt): obserwowany task to ostatni
-  zlecony z tej rozmowy, a bez niego ostatni task Cezara, o którym rozmowa mówi (id `projekt/uuid`, link do taska,
-  `panel_cezar_watch`). Status, kroki worktree, tokeny, worktree (ścieżka w projekcie) i PR czyta z runu Cezara; tytuł, stan
+- **Kontrakt kokpitu i Hermesa** (`src/cockpit-contract.ts`, `COCKPIT_TOOLS`): kokpit nie zgaduje, którego taska
+  dotyczy rozmowa. Obserwuje task tylko po jawnym zdarzeniu w rozmowie, a liczy się ostatnie: zlecenie z karty
+  (`panel_cezar_propose` + „Zleć”), wywołanie `panel_cezar_watch` z id taska, albo `panel_cockpit_clear` (koniec
+  obserwowania). Id taska w tekście, w plikach czy w innych narzędziach nic nie zmienia. Rozstrzyga to `watchedTask` na
+  serwerze, z rozmowy, jaką ma czat; okno nie podsuwa żadnego id. Ta sama tabela daje opisy narzędzi MCP („co, kiedy,
+  skutek”) i reguły w preambule Hermesa (`cockpitRules()`), więc instrukcja i zachowanie się nie rozjeżdżają; nowe
+  narzędzie kokpitu to nowy wiersz tabeli i test w `server/cockpit.test.ts`.
+- **Skąd kokpit ma dane** (`server/cockpit.ts`, `GET /api/chats/:id/cockpit`, tylko odczyt): status, kroki worktree, tokeny, worktree (ścieżka w projekcie) i PR czyta z runu Cezara; tytuł, stan
   i checki CI PR-a z GitHub CLI (`gh pr view --json …`, bez powłoki, co 20 s, gdy coś trwa, co 5 min po rozstrzygnięciu;
   bez `gh` karta mówi, że checki są nieznane). REVIEW to zakończony run z otwartym PR-em, DONE po scaleniu. Okno pyta
   co 5 s, gdy task albo check trwa, inaczej co 30 s.

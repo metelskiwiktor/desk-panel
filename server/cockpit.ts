@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
-  criteriaOf, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
+  criteriaOf, watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { SourceError, type PanelSources } from './sources';
 
@@ -126,7 +126,8 @@ export function prFromGh(json: string, url: string): CockpitPrView {
 const PR_TTL_MS = 20_000, PR_SETTLED_TTL_MS = 5 * 60_000;
 
 export interface Cockpit {
-  view(chatId: string, hint?: string): Promise<CockpitView>;
+  /** `items`: the conversation as the chat has it; the watched task follows from it by the contract (`watchedTask`). */
+  view(chatId: string, items: Parameters<typeof watchedTask>[0]): Promise<CockpitView>;
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
 }
 
@@ -166,9 +167,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   }
 
   return {
-    async view(chatId, hint) {
+    async view(chatId, items) {
       const chat = store.chats[chatId];
-      const id = chat?.runs.at(-1) ?? hint;
+      const id = watchedTask(items, chat?.dispatches ?? {}) ?? undefined;
       let task: CockpitTaskView | null = null, pr: CockpitPrView | null = null;
       if (id && sources.cezarRun) {
         const raw = await sources.cezarRun(id).catch(() => null);
