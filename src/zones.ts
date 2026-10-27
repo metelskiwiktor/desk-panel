@@ -9,14 +9,14 @@ export const TOP_SIZES: readonly TopSize[] = ['cmp', 'std'];
 /** The order a tap on the grip goes through: from the standard strip to the line, and back. */
 export const TOP_CYCLE: readonly TopSize[] = ['std', 'cmp'];
 export const BOTTOM_SIZES: readonly BottomSize[] = ['short', 'mid', 'month'];
-export const DEFAULT_ZONES: Zones = { top: 'std', bottom: 'mid' };
+export const DEFAULT_ZONES: Zones = { top: 'cmp', bottom: 'short' };
 export const ZONES_KEY = 'desk-panel.zones';
 
 /** Heights (px) the sizes of the top zone are drawn at, in the order of TOP_SIZES. */
 export const TOP_HEIGHTS = [44, 124];
 /** Heights of the bottom zone in the order of BOTTOM_SIZES; the month takes what the top leaves of the frame. */
 export const bottomHeights = (frame: HTMLElement | null): number[] => {
-  const top = TOP_HEIGHTS[TOP_SIZES.indexOf((frame?.getAttribute('data-top') as TopSize | null) ?? 'std')] ?? 124;
+  const top = TOP_HEIGHTS[TOP_SIZES.indexOf((frame?.getAttribute('data-top') as TopSize | null) ?? 'cmp')] ?? 44;
   const month = frame && frame.clientHeight > 0 ? frame.clientHeight - top - 8 : 480;
   return [64, 224, Math.max(month, 300)];
 };
