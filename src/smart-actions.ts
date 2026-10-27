@@ -19,7 +19,31 @@ export interface SmartAction {
   mailThread?: MailThread;
 }
 
+export interface SmartActionMatchCriteria {
+  /** Domain patterns to check against sender or body (e.g. ['znanylekarz.pl']) */
+  senderDomains?: string[];
+  /** Sender keywords to check against from header or content (e.g. ['znanylekarz']) */
+  senderKeywords?: string[];
+  /** Subject keywords or phrases (case-insensitive substring match) */
+  subjectKeywords?: string[];
+  /** Body or snippet keywords or phrases (case-insensitive substring match) */
+  bodyKeywords?: string[];
+}
+
+export interface SmartActionRule {
+  id: string;
+  name: string;
+  description: string;
+  category: SmartActionCategory;
+  priority: SmartActionPriority;
+  enabled: boolean;
+  matchCriteria: SmartActionMatchCriteria;
+  matches?: (thread: MailThread) => boolean;
+  extract: (thread: MailThread) => SmartAction | null;
+}
+
 export const DISMISSED_STORAGE_KEY = 'desk-panel.dismissed-smart-actions';
+export const RULES_CONFIG_STORAGE_KEY = 'desk-panel.smart-action-rules-config';
 
 export function extractUrl(text?: string): string | undefined {
   if (!text) return undefined;
@@ -45,28 +69,71 @@ export function extractAppointmentUrl(text?: string): string | undefined {
   return extractUrl(text);
 }
 
-const APPOINTMENT_REGEX = /(?:potwierd(?:zenie|ź)\s+wizyt|wizyt[aęy]|dr\s+[a-z]|lekarz|stomatolog|przychodni|znanylekarz|termin\s+wizyt|appointment\s+confirm|doctor\s+visit)/i;
-const PR_REVIEW_REGEX = /(?:requested\s+your\s+review|review\s+requested|prośba\s+o\s+review|pull\s+request|pr\s*#\d+|code\s+review)/i;
-const PAYMENT_REGEX = /(?:do\s+opłacenia|faktur[ayę]|invoice|opłać\b|rachun(?:ek|ku)|płatnoś(?:ć|ci)|oczekuje\s+na\s+opłacenie|termin\s+płatności|payment\s+due|zapłać)/i;
-const TASK_ALERT_REGEX = /(?:nowe\s+zadanie|przypisane\s+do\s+ciebie|assigned\s+to\s+you|jira|critical|alert|incydent|action\s+required|wymaga\s+uwagi)/i;
+export function matchThreadCriteria(thread: MailThread, criteria: SmartActionMatchCriteria): boolean {
+  const from = (thread.from || '').toLowerCase();
+  const subject = (thread.subject || '').toLowerCase();
+  const snippet = (thread.snippet || '').toLowerCase();
+  const body = (thread.body || '').toLowerCase();
+  const content = `${subject} ${snippet} ${body}`;
 
-export function parseEmailAction(thread: MailThread): SmartAction | null {
-  const subject = thread.subject;
-  const from = thread.from;
-  const snippet = thread.snippet;
-  const body = thread.body ?? '';
-  const fullText = `${subject} ${from} ${snippet} ${body}`;
+  const hasDomains = Boolean(criteria.senderDomains && criteria.senderDomains.length > 0);
+  const hasSenderKeywords = Boolean(criteria.senderKeywords && criteria.senderKeywords.length > 0);
 
-  const directUrl = extractUrl(body) || extractUrl(snippet) || thread.sourceUrl;
+  if (hasDomains || hasSenderKeywords) {
+    let senderMatched = false;
 
-  if (APPOINTMENT_REGEX.test(fullText)) {
-    const appointmentUrl = extractAppointmentUrl(body) || extractAppointmentUrl(snippet) || directUrl;
+    if (hasDomains && criteria.senderDomains) {
+      if (criteria.senderDomains.some((d) => from.includes(d.toLowerCase()) || body.includes(d.toLowerCase()))) {
+        senderMatched = true;
+      }
+    }
+
+    if (!senderMatched && hasSenderKeywords && criteria.senderKeywords) {
+      if (criteria.senderKeywords.some((k) => from.includes(k.toLowerCase()) || content.includes(k.toLowerCase()))) {
+        senderMatched = true;
+      }
+    }
+
+    if (!senderMatched) return false;
+  }
+
+  if (criteria.subjectKeywords && criteria.subjectKeywords.length > 0) {
+    const hasSubjectMatch = criteria.subjectKeywords.some((kw) => subject.includes(kw.toLowerCase()));
+    if (!hasSubjectMatch) return false;
+  }
+
+  if (criteria.bodyKeywords && criteria.bodyKeywords.length > 0) {
+    const hasBodyMatch = criteria.bodyKeywords.some((kw) => content.includes(kw.toLowerCase()));
+    if (!hasBodyMatch) return false;
+  }
+
+  return true;
+}
+
+export const ZNANY_LEKARZ_RULE: SmartActionRule = {
+  id: 'znanylekarz-confirm',
+  name: 'ZnanyLekarz – Potwierdzenie wizyty',
+  description: 'Wykrywa wiadomości od ZnanyLekarz z prośbą o potwierdzenie wizyty i udostępnia szybki link akcji.',
+  category: 'appointment',
+  priority: 'high',
+  enabled: true,
+  matchCriteria: {
+    senderDomains: ['znanylekarz.pl'],
+    senderKeywords: ['znanylekarz'],
+    subjectKeywords: ['wizycie', 'wizyt', 'potwierdź', 'potwierdzenie', 'obecność', 'termin wizyty'],
+    bodyKeywords: ['znanylekarz', 'potwierdź', 'przełóż', 'wizyta', 'wizyty'],
+  },
+  extract: (thread: MailThread): SmartAction | null => {
+    const body = thread.body ?? '';
+    const snippet = thread.snippet ?? '';
+    const appointmentUrl = extractAppointmentUrl(body) || extractAppointmentUrl(snippet) || extractUrl(body) || extractUrl(snippet) || thread.sourceUrl;
+
     return {
       id: `mail:${thread.id}`,
       source: 'mail',
       sourceId: thread.id,
-      sourceBadge: from.replace(/<.*>/, '').trim() || 'Wizyta',
-      title: subject,
+      sourceBadge: 'ZnanyLekarz',
+      title: thread.subject,
       snippet: snippet || 'Wymagane potwierdzenie wizyty',
       category: 'appointment',
       priority: 'high',
@@ -75,59 +142,100 @@ export function parseEmailAction(thread: MailThread): SmartAction | null {
       actionLabel: 'Potwierdź wizytę',
       mailThread: thread,
     };
+  },
+};
+
+export class SmartActionRegistry {
+  private rules: Map<string, SmartActionRule> = new Map();
+
+  constructor(initialRules: SmartActionRule[] = [ZNANY_LEKARZ_RULE]) {
+    for (const rule of initialRules) {
+      this.register(rule);
+    }
   }
 
-  if (PR_REVIEW_REGEX.test(fullText) || /github|gitlab/i.test(from)) {
-    return {
-      id: `mail:${thread.id}`,
-      source: 'mail',
-      sourceId: thread.id,
-      sourceBadge: /github/i.test(from) ? 'GitHub' : 'PR Review',
-      title: subject,
-      snippet: snippet || 'Prośba o review w pull requeście',
-      category: 'pr_review',
-      priority: 'high',
-      timestamp: thread.receivedAt,
-      actionUrl: directUrl,
-      actionLabel: 'Zobacz PR',
-      mailThread: thread,
-    };
+  register(rule: SmartActionRule): void {
+    this.rules.set(rule.id, { ...rule });
   }
 
-  if (PAYMENT_REGEX.test(fullText)) {
-    return {
-      id: `mail:${thread.id}`,
-      source: 'mail',
-      sourceId: thread.id,
-      sourceBadge: from.replace(/<.*>/, '').trim() || 'Płatność',
-      title: subject,
-      snippet: snippet || 'Płatność lub faktura oczekująca na realizację',
-      category: 'payment',
-      priority: 'high',
-      timestamp: thread.receivedAt,
-      actionUrl: directUrl,
-      actionLabel: 'Opłać rachunek',
-      mailThread: thread,
-    };
+  unregister(id: string): void {
+    this.rules.delete(id);
   }
 
-  if (TASK_ALERT_REGEX.test(fullText)) {
-    return {
-      id: `mail:${thread.id}`,
-      source: 'mail',
-      sourceId: thread.id,
-      sourceBadge: /jira/i.test(from) ? 'Jira' : 'Alert',
-      title: subject,
-      snippet: snippet || 'Wymaga uwagi lub działania',
-      category: 'task_alert',
-      priority: 'high',
-      timestamp: thread.receivedAt,
-      actionUrl: directUrl,
-      actionLabel: 'Otwórz zadanie',
-      mailThread: thread,
-    };
+  getRules(): SmartActionRule[] {
+    return Array.from(this.rules.values());
   }
 
+  getRule(id: string): SmartActionRule | undefined {
+    return this.rules.get(id);
+  }
+
+  clear(): void {
+    this.rules.clear();
+  }
+}
+
+export const defaultRuleRegistry = new SmartActionRegistry([ZNANY_LEKARZ_RULE]);
+
+export function registerSmartActionRule(rule: SmartActionRule): void {
+  defaultRuleRegistry.register(rule);
+}
+
+export function unregisterSmartActionRule(id: string): void {
+  defaultRuleRegistry.unregister(id);
+}
+
+export function getRegisteredSmartActionRules(): SmartActionRule[] {
+  return defaultRuleRegistry.getRules();
+}
+
+export function loadRulesConfig(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(RULES_CONFIG_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Restricted environment
+  }
+  return {};
+}
+
+export function saveRulesConfig(config: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(RULES_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // Restricted environment
+  }
+}
+
+export function isRuleEnabled(rule: SmartActionRule, config?: Record<string, boolean>): boolean {
+  if (config && typeof config[rule.id] === 'boolean') {
+    return config[rule.id];
+  }
+  return rule.enabled;
+}
+
+export function parseEmailAction(
+  thread: MailThread,
+  rules: SmartActionRule[] = defaultRuleRegistry.getRules(),
+  rulesConfig?: Record<string, boolean>,
+): SmartAction | null {
+  for (const rule of rules) {
+    if (!isRuleEnabled(rule, rulesConfig)) {
+      continue;
+    }
+
+    const matches = rule.matches ? rule.matches(thread) : matchThreadCriteria(thread, rule.matchCriteria);
+    if (matches) {
+      const action = rule.extract(thread);
+      if (action) {
+        return action;
+      }
+    }
+  }
   return null;
 }
 
@@ -171,16 +279,21 @@ export function parseSmartActions(options: {
   threads?: MailThread[] | null;
   tasks?: Task[] | null;
   dismissedIds?: Set<string> | string[];
+  rules?: SmartActionRule[];
+  rulesConfig?: Record<string, boolean>;
 }): SmartAction[] {
   const dismissed = options.dismissedIds instanceof Set
     ? options.dismissedIds
     : new Set(options.dismissedIds ?? []);
 
+  const rules = options.rules ?? defaultRuleRegistry.getRules();
+  const rulesConfig = options.rulesConfig ?? loadRulesConfig();
+
   const actions: SmartAction[] = [];
 
   if (options.threads) {
     for (const thread of options.threads) {
-      const action = parseEmailAction(thread);
+      const action = parseEmailAction(thread, rules, rulesConfig);
       if (action && !dismissed.has(action.id)) {
         actions.push(action);
       }

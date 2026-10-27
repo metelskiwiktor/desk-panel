@@ -222,13 +222,13 @@
         "id": "owner@gmail.com:18c2f0a1b2c3d401",
         "account": "owner@gmail.com",
         "threadId": "18c2f0a1b2c3d401",
-        "from": "Centrum Medyczne",
-        "subject": "Potwierdzenie wizyty: Dr Jan Kowalski",
-        "snippet": "Prosimy o potwierdzenie wizyty lekarskiej w czwartek o godz. 11:30.",
-        "body": "Dzień dobry,\n\nPrzypominamy o wizycie u lekarza Dr Jan Kowalski w czwartek o 11:30.\n\nPotwierdź wizytę: https://przychodnia.local/wizyty/potwierdz/98124\n\nCentrum Medyczne",
+        "from": "ZnanyLekarz <kontakt@znanylekarz.pl>",
+        "subject": "❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?",
+        "snippet": "Wizyta umówiona przez ZnanyLekarz. Potwierdź swoją obecność na wizycie.",
+        "body": "Wizyta dla Wiktor\nśroda 28 października 2026\n17:30 (GMT+1)\nFabryczna 15, Leszno\n\nPotwierdź lub przełóż wizytę: https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi\n\nkontakt@znanylekarz.pl",
         "receivedAt": "now-6m",
         "messages": 1,
-        "sourceUrl": "https://przychodnia.local/wizyty/potwierdz/98124"
+        "sourceUrl": "https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi"
       },
       {
         "id": "praca@gmail.com:18c2f0a1b2c3d402",
