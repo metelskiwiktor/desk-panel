@@ -211,8 +211,9 @@ export function historyOf(body: unknown): HistoryMessage[] {
     const calls = Array.isArray(m.tool_calls) ? m.tool_calls.map(c => {
       const call = rec(c), fn = rec(call.function);
       const name = String(fn.name ?? call.name ?? 'narzędzie').slice(0, 120);
-      // The panel's own tools keep their arguments whole: a dispatch card carries the executor prompt (up to 32 000).
-      return { id: safeId(call.id) ?? '', name, arguments: text(fn.arguments ?? call.arguments, /desk[-_]panel/i.test(name) ? 32_000 : 600) };
+      // The panel's own tools keep their arguments whole (a dispatch card carries the executor prompt, up to 32 000), also
+      // inside `tool_call`, through which Hermes calls MCP tools.
+      return { id: safeId(call.id) ?? '', name, arguments: text(fn.arguments ?? call.arguments, /desk[-_]panel/i.test(name) || name === 'tool_call' ? 32_000 : 600) };
     }) : undefined;
     out.push({ role, content, ...(calls?.length ? { toolCalls: calls } : {}), ...(safeId(m.tool_call_id) ? { toolCallId: safeId(m.tool_call_id)! } : {}) });
   }

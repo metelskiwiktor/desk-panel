@@ -109,6 +109,36 @@ const unwrapResult = (content: string): string => {
   } catch { return content; }
 };
 
+/**
+ * Hermes puts a tool's answer in an envelope (`<untrusted_tool_result source="…">`, a warning paragraph, the answer),
+ * one per call: the answers by source, in order, without it. Text without an envelope is one answer, as it is.
+ */
+export function enveloped(content: string): { source?: string; text: string }[] {
+  const blocks = [...content.matchAll(/<untrusted_tool_result source="([^"]*)">\n([\s\S]*?)\n<\/untrusted_tool_result>/g)];
+  if (!blocks.length) return [{ text: content }];
+  // The first paragraph is Hermes's warning to itself, not the tool's answer.
+  return blocks.map(m => ({ source: m[1], text: m[2].replace(/^[^\n]*\n\n/, '') }));
+}
+
+/**
+ * Hermes calls MCP tools through its `tool_call` tool (`{"calls":[{"name","arguments"}]}`): in the window each call is
+ * the step it is, with its own name, arguments and answer, as the live stream shows it.
+ */
+function expandToolCalls(parts: ChatPart[]): ChatPart[] {
+  return parts.flatMap(p => {
+    if (p.type !== 'tool' || p.name !== 'tool_call') return [p];
+    let calls: { name?: unknown; arguments?: unknown }[] = [];
+    try { const parsed = JSON.parse(p.input) as { calls?: unknown }; if (Array.isArray(parsed.calls)) calls = parsed.calls as typeof calls; } catch { return [p]; }
+    if (!calls.length || calls.some(c => typeof c.name !== 'string')) return [p];
+    const answers = enveloped(p.output ?? '');
+    return calls.map((c, i) => {
+      const answer = answers.find(a => a.source === c.name && !(a as { used?: boolean }).used) ?? (calls.length === 1 ? answers[0] : undefined);
+      if (answer) (answer as { used?: boolean }).used = true;
+      return { ...p, id: calls.length === 1 ? p.id : `${p.id}:${i}`, name: String(c.name).slice(0, 120), input: JSON.stringify(c.arguments ?? {}), output: answer ? unwrapResult(answer.text).slice(0, 4000) : p.output };
+    });
+  });
+}
+
 /** A history of Hermes messages as the window's turns: each user message and what the agent did after it. */
 export function groupsOf(messages: HistoryMessage[]): { user: string; parts: ChatPart[] }[] {
   const groups: { user: string; parts: ChatPart[] }[] = [];
@@ -122,9 +152,12 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
     } else if (m.role === 'tool') {
       const tool = group.parts.find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.id === m.toolCallId)
         ?? [...group.parts].reverse().find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.output === undefined);
-      if (tool) tool.output = unwrapResult(m.content).slice(0, 4000);
+      // One answer: without its envelope; several (one `tool_call` of many calls): split by expandToolCalls below.
+      const answers = enveloped(m.content);
+      if (tool) tool.output = (answers.length === 1 ? unwrapResult(answers[0].text) : m.content).slice(0, answers.length === 1 ? 4000 : 64_000);
     }
   }
+  for (const group of groups) group.parts = expandToolCalls(group.parts);
   return groups;
 }
 
