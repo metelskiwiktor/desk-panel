@@ -46,7 +46,10 @@ describe('Cezar integration', () => {
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Real 0/ })[0]).toBeTruthy());
-    expect(within(screen.getByRole('region', { name: 'Cezar' })).getByText(/21 wymaga odpowiedzi/)).toBeTruthy();
+    const cezarRegion = screen.getByRole('region', { name: 'Cezar' });
+    expect(within(cezarRegion).getByText(/21 wymaga odpowiedzi/)).toBeTruthy();
+    expect(within(cezarRegion).getAllByRole('button', { name: /Real \d+/ })).toHaveLength(21);
+    expect(within(cezarRegion).queryByRole('button', { name: /więcej/ })).toBeNull();
     await user.click(screen.getAllByRole('button', { name: /Real 0/ })[0]);
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(data.tasks[0].sourceUrl);
   });

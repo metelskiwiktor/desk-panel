@@ -86,7 +86,8 @@ describe('interaktywny panel', () => {
     renderWith();
     const cezar = await screen.findByRole('region', { name: 'Cezar' });
     expect(within(cezar).getByRole('button', { name: /Potwierdź zakres testów kalendarza/ })).toBeTruthy();
-    expect(within(cezar).getByRole('button', { name: /więcej$/ })).toBeTruthy();
+    expect(within(cezar).getByRole('button', { name: /Widok notatki gotowy do przeglądu/ })).toBeTruthy();
+    expect(within(cezar).queryByRole('button', { name: /więcej$/ })).toBeNull();
     expect(screen.queryByText('KOMPUTER')).toBeNull();
     cleanup();
     renderWith('high-ram');

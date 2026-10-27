@@ -5,7 +5,7 @@
     "partial": false,
     "scheduled": 0,
     "counts": {
-      "running": 1,
+      "running": 3,
       "queue": 0,
       "needs-input": 0,
       "review": 0
@@ -44,6 +44,69 @@
           "total": 12,
           "passed": 12,
           "failed": 0
+        }
+      },
+      {
+        "id": "running-2",
+        "title": "Migracja bazy danych",
+        "project": "desk-panel",
+        "status": "running",
+        "startedAt": "now-2m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/desk-panel/tasks/running-2",
+        "description": "Migracja bazy danych do nowego schematu.",
+        "runner": "Claude",
+        "model": "claude-sonnet-5-5",
+        "branch": "feat/db-migration",
+        "workflow": "implement",
+        "activityDetail": {
+          "state": "executing_tool",
+          "activeTool": "BASH",
+          "activeToolInput": "npx prisma migrate deploy"
+        },
+        "currentStep": {
+          "id": "migrate",
+          "name": "Migracja schematu",
+          "status": "running"
+        },
+        "diffStat": {
+          "adds": 56,
+          "dels": 4,
+          "files": 3
+        },
+        "checks": {
+          "executed": true,
+          "total": 5,
+          "passed": 5,
+          "failed": 0
+        }
+      },
+      {
+        "id": "running-3",
+        "title": "Obsługa powiadomień push",
+        "project": "tabnote-poc-rn",
+        "status": "running",
+        "startedAt": "now-5m",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/tabnote/tasks/running-3",
+        "description": "Integracja FCM dla powiadomień.",
+        "runner": "Codex",
+        "model": "gpt-5",
+        "branch": "feat/push-notifications",
+        "workflow": "implement-review",
+        "activityDetail": {
+          "state": "thinking",
+          "message": "Analizuje format payloadu powiadomień"
+        },
+        "currentStep": {
+          "id": "design",
+          "name": "Projektowanie kontraktu",
+          "status": "running"
+        },
+        "diffStat": {
+          "adds": 89,
+          "dels": 12,
+          "files": 4
         }
       }
     ],
