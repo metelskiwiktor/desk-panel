@@ -1,15 +1,18 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch } from './test-fixtures';
+import { clearChatDraft } from './chat-draft';
 
 // The chat window is a lazy chunk of App: loaded once here, so opening it in a test does not wait for its first transform.
 beforeAll(() => import('./ChatWindow'), 60_000);
 
 // The whole panel with the chat on top of it; the chat service itself is not there (503), which pointing does not need.
 beforeEach(() => {
+  clearChatDraft();
   localStorage.clear();
+  vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; isPrimary = true; });
   vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-14T10:00:00Z').getTime());
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   const panel = scenarioFetch('standard');
@@ -18,6 +21,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  clearChatDraft();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.removeAttribute('data-picking');
@@ -62,12 +66,52 @@ describe('the chat window', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
   });
-  it('the chat button of the top bar opens and closes it', async () => {
+  it('the chat toggle button in the bottom-right corner opens and closes it', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const toggleBtn = screen.getByRole('button', { name: 'Otwórz czat z agentem' });
+    expect(toggleBtn.classList.contains('chat-toggle-fab')).toBe(true);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(toggleBtn);
+    await screen.findByRole('dialog', { name: 'Czat z agentem' });
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+
+    await user.click(toggleBtn);
+    expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('preserves unsent draft text and attached context chips when closing and reopening the chat', async () => {
+    const panel = scenarioFetch('standard');
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).startsWith('/api/chats')
+        ? Promise.resolve(new Response(JSON.stringify({ chats: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        : panel(input, init)));
     const user = userEvent.setup();
     render(<App />);
     await openChat(user);
-    await user.click(screen.getByRole('button', { name: 'Otwórz czat z agentem' }));
+    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, 'Projekt koncepcji');
+
+    await startPointing(user);
+    await user.click(screen.getByText('Anna Nowak'));
+    await user.click(screen.getByRole('button', { name: 'Gotowe' }));
+
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
+    await waitFor(() => expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Projekt koncepcji'));
+
+    // Close chat using toggle button
+    const toggleBtn = screen.getByRole('button', { name: 'Otwórz czat z agentem' });
+    await user.click(toggleBtn);
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
+
+    // Reopen chat using toggle button
+    await user.click(toggleBtn);
+    await screen.findByRole('dialog', { name: 'Czat z agentem' });
+
+    const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    expect(reopenedInput.value).toBe('Projekt koncepcji');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
   });
 });
 
