@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ChatDetail, ChatEvent, ChatMessage, ChatPart, ChatSummary } from './chat-contract';
+import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
 import { ChatWindow, groupOf, messageCount } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { Markdown } from './markdown-lite';
@@ -558,5 +558,19 @@ describe('the live cockpit (Hermes and the panel)', () => {
     // Which task is watched the server decides from the conversation: the window asks without a hint.
     await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit`)).toBe(true));
     expect(calls.some(c => c.url.includes('/cockpit?'))).toBe(false);
+  });
+});
+
+describe('CHAT_SKILLS', () => {
+  it('defines @Zaimplementuj zadanie with two-stage analytical workflow instructions', () => {
+    const skill = CHAT_SKILLS.find(s => s.id === 'zaimplementuj-zadanie');
+    expect(skill).toBeDefined();
+    expect(skill!.title).toBe('Zaimplementuj zadanie');
+    expect(skill!.prompt).toContain('Two-stage analytical workflow:');
+    expect(skill!.prompt).toContain('Phase 1 (Recon and Mode Decision)');
+    expect(skill!.prompt).toContain('workflow: "analysis"');
+    expect(skill!.prompt).toContain('Phase 2 (Synthesis and Implementation)');
+    expect(skill!.prompt).toContain('panel_cezar');
+    expect(skill!.prompt).toContain('panel_cezar_propose');
   });
 });

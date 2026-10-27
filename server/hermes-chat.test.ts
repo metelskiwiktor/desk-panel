@@ -6,7 +6,7 @@ import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract'
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
 import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
-import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble } from './hermes-chat';
+import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules } from './hermes-chat';
 import { watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
@@ -96,6 +96,14 @@ describe('Hermes API client', () => {
       { type: 'tool', id: 'c1', name: 'panel_mail', input: '{}', state: 'done', output: '2 nieprzeczytane' },
       { type: 'text', text: 'Masz dwa maile.' },
     ]);
+  });
+
+  it('keeps cockpit rules aligned with cockpit tools and the two-stage analytical workflow', () => {
+    const rules = cockpitRules().join('\n');
+    expect(rules).toContain('panel_recon_report');
+    expect(rules).toContain('panel_cezar_propose');
+    expect(rules).toContain('workflow: "analysis"');
+    expect(rules).toContain('Zaimplementuj zadanie');
   });
 });
 
