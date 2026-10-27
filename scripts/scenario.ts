@@ -4,6 +4,8 @@
 //   npm run scenario -- standard --shot --query ambient=night   (first screen with a URL query, no page walk)
 //   npm run scenario -- path/to/my.json --shot --pages pulpit,ustawienia --device medialove-14 --scale all
 //   npm run scenario -- standard --shot --pages pulpit --open chat --hermes down   (the chat when Hermes is not running)
+//   npm run scenario -- standard --shot --pages pulpit --open cockpit-approval     (the chat cockpit on its mock: cockpit,
+//     cockpit-recon, cockpit-approval, cockpit-watch, cockpit-review; with --hermes down the mock starts without Hermes)
 // The fixed bottom navigation is hidden in screenshots (a full-page shot would pin it over the content); --nav keeps it.
 // Screens come from devices.json: --device <id>|all (default: the first one), --scale <factor>|primary|all.
 import { existsSync, mkdirSync } from 'node:fs';
@@ -65,9 +67,12 @@ if (!values.shot) {
       const page = await browser.newPage({ viewport: { width: target.width, height: target.height }, deviceScaleFactor: target.scale, hasTouch: target.device.touch });
       page.on('pageerror', error => console.error(`Błąd strony: ${error.message}`));
       page.on('console', message => { if (message.type() === 'error') console.error(`Konsola: ${message.text()}`); });
-      await page.goto(values.query ? `${url}?${values.query}` : url);
+      // The cockpit modes run the window's own mock (`?cockpit=mock`), fast, instead of the scenario chat.
+      const cockpit = values.open?.startsWith('cockpit') ? `cockpit=mock&cockpitSpeed=0.3${values.hermes === 'down' ? '&hermes=down' : ''}` : null;
+      const query = [cockpit, values.query].filter(Boolean).join('&');
+      await page.goto(query ? `${url}?${query}` : url);
       await page.waitForTimeout(1500);
-      if (values.query) {
+      if (values.query && !cockpit) {
         // A query (e.g. ambient=night) changes what the first screen is; there is no navigation to walk through.
         const path = values.file ? resolve(values.file) : join(values.out, `${label}-${values.query.replace(/[^a-z0-9]+/gi, '-')}-${target.label}.png`);
         if (values.file) mkdirSync(dirname(path), { recursive: true });
@@ -85,12 +90,29 @@ if (!values.shot) {
         await page.waitForTimeout(600);
         if (values.open === 'chat' || values.open === 'chat-wide') {
           await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
-          if (values.open === 'chat-wide') await page.getByRole('button', { name: 'Powiększ okno czatu' }).click();
           await page.waitForTimeout(300);
+        } else if (cockpit) {
+          // The mock's flow: @Zaimplementuj zadanie → recon → approval card → Cezar watched → PR in review.
+          await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+          const input = page.getByLabel('Wiadomość do agenta');
+          if (values.open !== 'cockpit' && values.hermes !== 'down') {
+            await input.fill('@zaimpl');
+            await input.press('Enter');
+            await input.fill('Dodaj chip statusu taska w nagłówku kokpitu');
+            await input.press('Enter');
+            if (values.open === 'cockpit-recon') await page.getByText('Rekonesans…').waitFor();
+            else await page.getByRole('button', { name: 'Zleć na Cezarze' }).waitFor();
+            if (values.open === 'cockpit-watch' || values.open === 'cockpit-review') {
+              await page.getByRole('button', { name: 'Zleć na Cezarze' }).click();
+              if (values.open === 'cockpit-watch') await page.getByText('Implementacja').waitFor();
+              await page.waitForTimeout(values.open === 'cockpit-watch' ? 1200 : 0);
+              if (values.open === 'cockpit-review') await page.getByText('Gotowe do przeglądu', { exact: false }).waitFor({ timeout: 20_000 });
+            }
+          } else if (values.hermes === 'down') await input.fill('@Zaimplementuj zadanie: chip statusu');
+          await page.waitForTimeout(500);
         } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
           // A Hermes turn of the stand-in: an answer with a tool step, or one waiting for the user's approval.
           await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
-          await page.getByRole('button', { name: 'Powiększ okno czatu' }).click();
           await page.getByLabel('Wiadomość do agenta').fill(values.open === 'chat-approval' ? 'Pokaż procesy, potrzebna zgoda na polecenie' : 'Co mam dziś do zrobienia?');
           await page.getByLabel('Wiadomość do agenta').press('Enter');
           if (values.open === 'chat-approval') await page.getByRole('button', { name: 'Zezwól' }).waitFor();
@@ -138,7 +160,7 @@ if (!values.shot) {
           await page.locator(values.open).first().click();
           await page.waitForTimeout(300);
         }
-        const path = values.file ? resolve(values.file) : join(values.out, `${label}-${pageName}-${target.label}.png`);
+        const path = values.file ? resolve(values.file) : join(values.out, `${label}-${pageName}${cockpit ? `-${values.open}` : ''}-${target.label}.png`);
         if (values.file) mkdirSync(dirname(path), { recursive: true });
         const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
         await page.screenshot({ path, fullPage: true });

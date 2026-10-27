@@ -128,7 +128,41 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       return out.join('\n');
     },
 
-    async cezar() {
+    async cezar(url) {
+      const id = url.searchParams.get('id')?.trim();
+      if (id && sources.cezarRun) {
+        const run = await sources.cezarRun(id);
+        if (!run) return `Zadanie Cezara „${clip(id, 80)}”: brak danych lub zadanie nie istnieje.`;
+        const state: Record<string, string> = { 'needs-input': 'czeka na odpowiedź', review: 'do przeglądu', running: 'w toku', queue: 'w kolejce', done: 'zakończone', completed: 'zakończone', failed: 'nieudane' };
+        const statusText = state[run.status] ?? run.status;
+        const out = [
+          `Zadanie Cezara ${run.project ? `${run.project}/` : ''}${run.id ?? id}: ${clip(run.titleSummary || run.title || '', 120)} [${statusText}]`,
+        ];
+        if (run.error) out.push(`Błąd główny: ${clip(String(run.error), 300)}`);
+        if (run.worktreePath) out.push(`Worktree: ${run.worktreePath}`);
+        if (run.branch) out.push(`Gałąź: ${run.branch}`);
+        if (Array.isArray(run.steps) && run.steps.length) {
+          out.push('Kroki:');
+          for (const s of run.steps) {
+            const stepStatus = state[s.status] ?? s.status ?? 'nieznany';
+            const err = s.error ? ` — błąd: ${clip(String(s.error), 200)}` : '';
+            out.push(`  - ${s.id ?? s.name ?? 'krok'}: ${stepStatus}${err}`);
+          }
+        }
+        const verifyOutput = run.graphState?.outputs?.verify?.output;
+        if (typeof verifyOutput === 'string' && verifyOutput.trim()) {
+          const stripped = verifyOutput.replace(/\u001b\[[0-9;]*m/g, '');
+          const failLines = stripped.split('\n').filter(l => /(?:FAIL|Error:|AssertionError|failed|exited non-zero)/i.test(l)).slice(0, 8);
+          if (failLines.length) {
+            out.push('Wyjście weryfikacji (błędy):');
+            out.push(...failLines.map(l => `  ${clip(l.trim(), 140)}`));
+          }
+        }
+        if (run.task) {
+          out.push(`Zlecenie (początek): ${clip(String(run.task), 250)}`);
+        }
+        return out.join('\n');
+      }
       const snapshot = await sources.cezar();
       const zone = DEFAULT_ZONE;
       const out = [`Cezar, stan z ${stamp(snapshot.observedAt, zone)} (${zone}): w toku ${snapshot.counts.running}, w kolejce ${snapshot.counts.queue}, czeka na użytkownika ${snapshot.counts['needs-input']}, do przeglądu ${snapshot.counts.review}.`];

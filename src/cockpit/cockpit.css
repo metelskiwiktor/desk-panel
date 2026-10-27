@@ -1,0 +1,53 @@
+/*
+ * The chat cockpit (Wektor): the only part of the panel styled with Tailwind.
+ * - No preflight: the rest of the panel keeps its own reset (styles.css).
+ * - Every utility is prefixed (`tw:flex`), so nothing collides with the panel's class names.
+ * - `important`: the panel's global element rules (button, h2, button:hover…) are unlayered and would beat utilities.
+ * - Only src/cockpit and src/ChatWindow.tsx are scanned for classes.
+ */
+@import 'tailwindcss/theme.css' prefix(tw);
+@import 'tailwindcss/utilities.css' prefix(tw) important source(none);
+@source './';
+@source '../ChatWindow.tsx';
+
+/* The panel's dark palette (chat.css), as Tailwind colors: tw:bg-ck-surface, tw:text-ck-muted… */
+@theme {
+  --color-ck-bg: #0d121b;
+  --color-ck-surface: #141922;
+  --color-ck-surface-2: #1b2230;
+  --color-ck-side: #10151d;
+  --color-ck-line: #273044;
+  --color-ck-line-2: #2f3a52;
+  --color-ck-text: #eaeff6;
+  --color-ck-muted: #93a0b4;
+  --color-ck-faint: #5d6a80;
+  --color-ck-cal: #7ca9ff;
+  --color-ck-agent: #b79cff;
+  --color-ck-mail: #5ec4b6;
+  --color-ck-green: #75d49b;
+  --color-ck-amber: #e9c261;
+  --color-ck-red: #f2888b;
+  --font-ck: Inter, 'Segoe UI', system-ui, sans-serif;
+  --font-ck-mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
+  --animate-ck-sweep: ck-sweep 1.6s ease-in-out infinite;
+  --animate-ck-pulse: ck-pulse 1.4s ease-in-out infinite;
+  @keyframes ck-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+  @keyframes ck-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+}
+
+/* What utilities cannot say: the panel's global button reset and hover colour must not leak in. */
+:where(.ck-root) button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; text-align: left; }
+:where(.ck-root) button:focus-visible, :where(.ck-root) summary:focus-visible { outline: 3px solid #9ec9ff; outline-offset: 2px; }
+:where(.ck-root) textarea:focus { outline: none; }
+:where(.ck-root) svg { flex: none; }
+:where(.ck-root) summary { list-style: none; }
+:where(.ck-root) summary::-webkit-details-marker { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ck-root * { animation: none !important; transition: none !important; }
+}

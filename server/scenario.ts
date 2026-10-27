@@ -129,6 +129,13 @@ export function createScenarioSources(file: string): PanelSources {
       });
       return { ...source, finished };
     },
+    async cezarRun(id) {
+      const source = await serve('cezar');
+      if (!('finished' in source)) return null;
+      const found = source.finished.find(t => t.id === id);
+      if (!found) return null;
+      return { id: found.id, title: found.title, status: found.status, project: found.project };
+    },
     async cezarAction(id, action) {
       const source = await serve('cezar');
       if (!('finished' in source) || !source.finished.some(t => t.id === id)) throw new SourceError(404);

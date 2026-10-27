@@ -1,8 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch } from './test-fixtures';
+
+// The chat window is a lazy chunk of App: loaded once here, so opening it in a test does not wait for its first transform.
+beforeAll(() => import('./ChatWindow'), 60_000);
 
 // The whole panel with the chat on top of it; the chat service itself is not there (503), which pointing does not need.
 beforeEach(() => {
@@ -29,49 +32,33 @@ const openChat = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 const startPointing = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /Wskaż element/ }));
 
-describe('the floating chat', () => {
-  it('floats over the dashboard without blocking it, and does not squeeze it until pointing starts', async () => {
+describe('the chat window', () => {
+  it('opens as a big window with the cockpit beside the conversation, and docks to the edge while pointing', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openChat(user);
-    expect(root().dataset.mode).toBe('float');
-    expect(document.querySelector('.chat-scrim')).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Czat z agentem' }).getAttribute('aria-modal')).toBeNull();
+    expect(root().dataset.mode).toBe('window');
+    expect(screen.getByRole('dialog', { name: 'Czat z agentem' }).getAttribute('aria-modal')).toBe('true');
+    expect(screen.getByRole('complementary', { name: 'Kokpit taska' })).toBeTruthy();
+    expect(screen.getByRole('log', { name: 'Rozmowa' })).toBeTruthy();
     expect(document.body.hasAttribute('data-chat-dock')).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' })); // the dashboard behind it is usable
-    expect(screen.getByRole('dialog', { name: 'Czat z agentem' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Ustawienia' })).toBeTruthy();
     await startPointing(user);
     expect(root().dataset.mode).toBe('dock');
     expect(document.body.hasAttribute('data-chat-dock')).toBe(true);
+    expect(screen.queryByRole('complementary', { name: 'Kokpit taska' })).toBeNull(); // only the conversation beside the dashboard
     await user.click(screen.getByRole('button', { name: 'Gotowe' }));
-    expect(root().dataset.mode).toBe('float');
+    expect(root().dataset.mode).toBe('window');
     expect(document.body.hasAttribute('data-chat-dock')).toBe(false);
   });
-  it('widens into the big window and back, and remembers the size', async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(<App />);
-    await openChat(user);
-    await user.click(screen.getByRole('button', { name: 'Powiększ okno czatu' }));
-    expect(root().dataset.mode).toBe('window');
-    expect(document.querySelector('.chat-scrim')).toBeTruthy();
-    expect(screen.getByRole('dialog', { name: 'Czat z agentem' }).getAttribute('aria-modal')).toBe('true');
-    unmount();
-    render(<App />);
-    await openChat(user);
-    expect(root().dataset.mode).toBe('window');
-    await user.click(screen.getByRole('button', { name: 'Zmniejsz okno czatu' }));
-    expect(root().dataset.mode).toBe('float');
-    expect(localStorage.getItem('desk-panel.chat-wide')).toBe('0');
-  });
-  it('Escape closes it from inside, but not while the user is elsewhere on the dashboard', async () => {
+  it('Escape ends pointing first, then closes the window', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openChat(user);
-    (document.activeElement as HTMLElement).blur();
+    await startPointing(user);
     await user.keyboard('{Escape}');
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
     expect(screen.getByRole('dialog', { name: 'Czat z agentem' })).toBeTruthy();
-    screen.getByRole('button', { name: 'Powiększ okno czatu' }).focus(); // inside the chat (the field itself is off here: no agent)
+    (document.activeElement as HTMLElement | null)?.blur();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
   });

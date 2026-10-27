@@ -5,7 +5,7 @@ import { BankError, createBank } from './bank';
 import { createBankLabelStore, privateFile } from './bank-labels';
 import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
-import { cezarAction, createCezarRun, createFinishedReader } from './cezar-finished';
+import { cezarAction, createCezarRun, createFinishedReader, readCezarRun } from './cezar-finished';
 import { createCalendarReader } from './calendar';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
@@ -75,6 +75,9 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       // Finished tasks are a bonus: a Cezar that cannot list them still shows the rest, with the last list it gave.
       lastFinished = await finishedReader.read().catch(() => lastFinished);
       return { ...cache!, finished: lastFinished };
+    },
+    async cezarRun(id) {
+      return readCezarRun(options.cezarUrl, id);
     },
     async cezarAction(id, action) {
       try { await cezarAction(options.cezarUrl, id, action); }

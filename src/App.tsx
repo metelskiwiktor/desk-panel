@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -55,9 +55,11 @@ import { Ambient } from './AmbientClock';
 import { ambientLines, useAmbient, useNight } from './ambient-mode';
 import { withoutPlanDuplicates } from './week';
 import { sortSnapshots } from './quota-pace';
-import { ChatWindow } from './ChatWindow';
 import { PulpitMenu } from './PulpitMenu';
 import { usePulpits } from './pulpits';
+
+/** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
+const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -491,7 +493,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           DESK PANEL <span>Limity AI bez wywołań modelu</span>
         </footer>
       )}
-      {chatOpen && <ChatWindow onClose={() => setChatOpen(false)} />}
+      {chatOpen && <Suspense fallback={null}><ChatWindow onClose={() => setChatOpen(false)} /></Suspense>}
       <nav aria-label="Główna nawigacja">
         {(Object.keys(pageNames) as Page[]).map((id) => {
           const Icon = navIcons[id];

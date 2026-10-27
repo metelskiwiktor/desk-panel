@@ -106,7 +106,7 @@ class FakeSource {
   emit(event: ChatEvent) { act(() => this.onmessage?.({ data: JSON.stringify(event) })); }
 }
 
-const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({ id: ID, title: 'Zadanie z maila od Anny', createdAt: NOW - 3600_000, updatedAt: NOW - 1800_000, messages: 2, running: false, ...over });
+const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({ id: ID, title: 'Zadanie z maila od Anny', createdAt: NOW - 3600_000, updatedAt: NOW - 1800_000, messages: 2, running: false, engine: 'hermes', ...over });
 const detail = (items: ChatMessage[], over: Partial<ChatSummary> = {}): ChatDetail => ({ ...summary({ messages: items.length, ...over }), items });
 const mailChip = { kind: 'mail' as const, id: 't1', title: 'Anna Nowak', text: 'Od: Anna' };
 const history: ChatMessage[] = [
@@ -137,14 +137,22 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeSource);
   vi.useRealTimers();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.body.removeAttribute('data-picking'); document.body.removeAttribute('data-chat-dock'); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.body.removeAttribute('data-picking'); document.body.removeAttribute('data-chat-dock'); window.history.replaceState(null, '', '/'); });
+
+/** The conversations sit behind the title of the window. */
+async function openConversation(user: ReturnType<typeof userEvent.setup>, title: RegExp) {
+  await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+  await user.click(await within(screen.getByRole('group', { name: 'Poprzednie rozmowy' })).findByRole('button', { name: title }));
+}
+/** The list has loaded (the window asks for it when it opens). */
+const listed = () => waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/chats')).toBe(true));
 
 describe('ChatWindow', () => {
   it('lists conversations and continues one with its history', async () => {
     mockServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila od Anny/ }));
+    await openConversation(user, /Zadanie z maila od Anny/);
     expect(FakeSource.instances.at(-1)!.url).toBe(`/api/chats/${ID}/events`);
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
     const log = await screen.findByRole('log', { name: 'Rozmowa' });
@@ -158,7 +166,7 @@ describe('ChatWindow', () => {
     mockServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila/ }));
+    await openConversation(user, /Zadanie z maila/);
     const source = FakeSource.instances.at(-1)!;
     source.emit({ type: 'state', chat: detail(history) });
     const streaming: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'streaming', parts: [{ type: 'text', text: 'Pierwsza' }] };
@@ -175,7 +183,7 @@ describe('ChatWindow', () => {
     const calls = mockServer([]);
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Cześć{Shift>}{Enter}{/Shift}druga linia{Enter}');
     await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toEqual({ text: 'Cześć\ndruga linia', context: [], engine: 'hermes', nonce: expect.stringMatching(/^[0-9a-f-]{36}$/) }));
     await waitFor(() => expect(FakeSource.instances.at(-1)?.url).toBe(`/api/chats/${ID}/events`));
@@ -186,24 +194,19 @@ describe('ChatWindow', () => {
     const calls = mockServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila/ }));
+    await openConversation(user, /Zadanie z maila/);
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, { id: 'a2', role: 'agent', at: NOW, status: 'streaming', parts: [] }], { running: true }) });
     await user.click(await screen.findByRole('button', { name: 'Zatrzymaj odpowiedź' }));
     await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.url === `/api/chats/${ID}/stop`)).toBe(true));
   });
 
-  it('deletes only after a second tap, and renames', async () => {
+  it('deletes only after a second tap', async () => {
     const calls = mockServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila/ }));
+    await openConversation(user, /Zadanie z maila/);
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
-    await user.click(await screen.findByRole('button', { name: 'Zmień nazwę rozmowy' }));
-    const input = screen.getByLabelText('Nazwa rozmowy');
-    await user.clear(input);
-    await user.type(input, 'Nowa nazwa{Enter}');
-    await waitFor(() => expect(calls.find(c => c.method === 'PATCH')?.body).toEqual({ title: 'Nowa nazwa' }));
-    await user.click(screen.getByRole('button', { name: 'Usuń rozmowę' }));
+    await user.click(await screen.findByRole('button', { name: 'Usuń rozmowę' }));
     expect(calls.some(c => c.method === 'DELETE')).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Usunąć?' }));
     await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.url === `/api/chats/${ID}`)).toBe(true));
@@ -221,7 +224,7 @@ describe('ChatWindow', () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatWindow onClose={onClose} />);
-    await screen.findByText('Zadanie z maila od Anny');
+    await listed();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -230,7 +233,7 @@ describe('ChatWindow', () => {
     const calls = mockServer([]);
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
     const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
     await user.type(input, '@zaimp');
     const menu = await screen.findByRole('listbox', { name: 'Wybór skillów' });
@@ -257,7 +260,7 @@ describe('ChatWindow', () => {
     }));
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
     const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
     await user.type(input, 'Test błędu{Enter}');
     expect(await screen.findByText('Nieprawidłowe dane (context.0.text: Too big)')).toBeTruthy();
@@ -280,7 +283,7 @@ describe('pointing while chatting', () => {
     const onRow = vi.fn();
     const user = userEvent.setup();
     render(<><Dashboard onRow={onRow} /><ChatWindow onClose={() => {}} /></>);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
 
     await user.click(screen.getByRole('button', { name: /Wskaż element/ }));
     expect(document.body.hasAttribute('data-picking')).toBe(true);
@@ -312,7 +315,7 @@ describe('pointing while chatting', () => {
     const onRow = vi.fn();
     const user = userEvent.setup();
     render(<><Dashboard onRow={onRow} /><ChatWindow onClose={() => {}} /></>);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
     await user.click(screen.getByRole('button', { name: /Wskaż element/ }));
     await user.keyboard('{Escape}');
     expect(document.body.hasAttribute('data-picking')).toBe(false);
@@ -326,7 +329,7 @@ describe('pointing while chatting', () => {
   });
 });
 
-describe('chat engines', () => {
+describe('Hermes only', () => {
   const H = '1b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
   type Engines = { engine: 'hermes' | 'agy'; available: boolean; error?: string }[];
   function engineServer({ chats = [], engines = [{ engine: 'hermes', available: true }, { engine: 'agy', available: true }], engine = 'hermes', failPost = false }: { chats?: ChatSummary[]; engines?: Engines; engine?: 'hermes' | 'agy'; failPost?: boolean } = {}) {
@@ -336,73 +339,53 @@ describe('chat engines', () => {
       const url = String(input), method = init?.method ?? 'GET';
       calls.push({ url, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
       if (url === '/api/chats' && method === 'GET') return reply({ chats, engines, engine });
-      if (url === '/api/chats' && method === 'POST') return failPost ? reply({ error: 'Nie udało się: Hermes jest niedostępny (odmowa połączenia). Wiadomość nie została wysłana; możesz spróbować ponownie albo wybrać AGY.' }, 503) : reply({ id: H }, 201);
+      if (url === '/api/chats' && method === 'POST') return failPost ? reply({ error: 'Nie udało się: Hermes jest niedostępny (odmowa połączenia). Wiadomość nie została wysłana; możesz spróbować ponownie.' }, 503) : reply({ id: H }, 201);
       return reply({ ok: true });
     }));
     return calls;
   }
 
-  it('starts new chats on Hermes by default and shows each chat engine; old chats without one are AGY', async () => {
-    engineServer({ chats: [summary({ id: H, title: 'Hermesowa', engine: 'hermes' }), summary({ title: 'Stara z agy' })] });
-    render(<ChatWindow onClose={() => {}} />);
-    const list = await screen.findByRole('group', { name: 'Poprzednie rozmowy' });
-    expect(within(await within(list).findByRole('button', { name: /Hermesowa/ })).getByText('Hermes')).toBeTruthy();
-    expect(within(within(list).getByRole('button', { name: /Stara z agy/ })).getByText('AGY')).toBeTruthy();
-    const engine = screen.getByRole('radiogroup', { name: 'Silnik czatu' });
-    expect(within(engine).getByRole('radio', { name: 'Hermes' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('heading', { name: 'Nowy czat · Hermes' })).toBeTruthy();
-  });
-
-  it('remembers AGY as the choice and starts the next chat on it', async () => {
-    const calls = engineServer();
+  it('has no engine switch, starts new chats on Hermes even when the server remembers AGY, and lists only Hermes chats', async () => {
+    const calls = engineServer({ engine: 'agy', chats: [summary({ id: H, title: 'Hermesowa' }), summary({ title: 'Stara z agy', engine: undefined })] });
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await screen.findByText('Nie ma jeszcze rozmów.');
-    await user.click(screen.getByRole('radio', { name: 'AGY' }));
-    expect(calls.find(c => c.method === 'PUT')).toEqual({ url: '/api/chats/engine', method: 'PUT', body: { engine: 'agy' } });
+    await listed();
+    expect(screen.queryByRole('radiogroup', { name: 'Silnik czatu' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    const list = screen.getByRole('group', { name: 'Poprzednie rozmowy' });
+    expect(await within(list).findByRole('button', { name: /Hermesowa/ })).toBeTruthy();
+    expect(within(list).queryByRole('button', { name: /Stara z agy/ })).toBeNull();
+    await user.click(within(list).getByRole('button', { name: /Nowy czat/ }));
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Cześć{Enter}');
-    await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({ text: 'Cześć', engine: 'agy' }));
+    await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({ text: 'Cześć', engine: 'hermes' }));
+    expect(calls.some(c => c.method === 'PUT')).toBe(false);
   });
 
-  it('switching engine in an open chat goes to a new chat of that engine, keeping the draft', async () => {
-    engineServer({ chats: [summary({ engine: 'agy' })] });
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila od Anny/ }));
-    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history, { engine: 'agy' }) });
-    expect(screen.getByRole('radio', { name: 'AGY' }).getAttribute('aria-checked')).toBe('true');
-    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'szkic');
-    await user.click(screen.getByRole('radio', { name: 'Hermes' }));
-    expect(await screen.findByText(/zostaje w AGY.*nową rozmowę w Hermes/)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Nowy czat · Hermes' })).toBeTruthy();
-    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('szkic');
-  });
-
-  it('Hermes unavailable: says so, keeps the draft and offers AGY by hand, without sending anywhere', async () => {
+  it('Hermes unavailable: a card says so, keeps the draft, sends nothing, and Ponów próbę asks again', async () => {
     const calls = engineServer({ engines: [{ engine: 'hermes', available: false, error: 'Hermes jest niedostępny pod http://127.0.0.1:8642.' }, { engine: 'agy', available: true }] });
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
     const alert = await screen.findByText('Hermes nie odpowiada.');
     expect(alert.closest('[role="alert"]')!.textContent).toContain('szkic zostaje');
+    expect(screen.queryByRole('button', { name: /Przełącz na AGY/ })).toBeNull();
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Ważne pytanie{Enter}');
     expect(calls.some(c => c.method === 'POST')).toBe(false);
     expect((screen.getByRole('button', { name: 'Wyślij' }) as HTMLButtonElement).disabled).toBe(true);
-    await user.click(screen.getByRole('button', { name: 'Przełącz na AGY' }));
-    expect(screen.getByRole('radio', { name: 'AGY' }).getAttribute('aria-checked')).toBe('true');
     expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Ważne pytanie');
-    await user.click(screen.getByRole('button', { name: 'Wyślij' }));
-    await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({ text: 'Ważne pytanie', engine: 'agy' }));
+    const before = calls.filter(c => c.url === '/api/chats' && c.method === 'GET').length;
+    await user.click(screen.getByRole('button', { name: 'Ponów próbę' }));
+    await waitFor(() => expect(calls.filter(c => c.url === '/api/chats' && c.method === 'GET').length).toBe(before + 1));
   });
 
   it('a refused message keeps the draft, and the retry is the same message', async () => {
     const calls = engineServer({ failPost: true });
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await screen.findByText('Nie ma jeszcze rozmów.');
+    await listed();
     const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
     await user.type(input, 'Pytanie{Enter}');
     expect(await screen.findByText(/Hermes jest niedostępny \(odmowa/)).toBeTruthy();
-    expect(input.value).toBe('Pytanie');
+    await waitFor(() => expect(input.value).toBe('Pytanie'));
     await user.click(screen.getByRole('button', { name: 'Wyślij' }));
     await waitFor(() => expect(calls.filter(c => c.method === 'POST')).toHaveLength(2));
     const [first, second] = calls.filter(c => c.method === 'POST');
@@ -410,24 +393,93 @@ describe('chat engines', () => {
   });
 
   it('asks for approval with what will run and how long it waits, and sends the answer', async () => {
-    const calls = engineServer({ chats: [summary({ id: H, engine: 'hermes' })] });
+    const calls = engineServer({ chats: [summary({ id: H })] });
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    await user.click(await screen.findByRole('button', { name: /Zadanie z maila od Anny/ }));
+    await openConversation(user, /Zadanie z maila od Anny/);
     const tool: ChatPart = { type: 'tool', id: 'c1', name: 'panel_calendar', input: '{"from":"2026-10-26"}', state: 'running', startedAt: Date.now() - 65_000 };
     const ask: Extract<ChatPart, { type: 'approval' }> = { type: 'approval', id: 'ap_1', tool: 'terminal', detail: 'Get-Process', state: 'pending', at: Date.now() - 42_000 };
     const asking: ChatMessage = { id: 'a2', role: 'agent', at: Date.now(), status: 'streaming', parts: [tool, ask] };
-    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, asking], { id: H, engine: 'hermes', running: true }) });
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, asking], { id: H, running: true }) });
     const card = await screen.findByRole('group', { name: 'Prośba o zgodę: terminal' });
     expect(within(card).getByText('Get-Process')).toBeTruthy();
     expect(within(card).getByText(/czeka na Twoją decyzję · 0:4\d/)).toBeTruthy();
-    expect(screen.getByText(/Działa 1:0\d/)).toBeTruthy();
-    expect(screen.getByText(/Trwa dłużej niż zwykle/)).toBeTruthy();
+    expect(screen.getByText('panel_calendar')).toBeTruthy();
     await user.click(within(card).getByRole('button', { name: 'Zezwól' }));
     await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/approval`)?.body).toEqual({ approvalId: 'ap_1', decision: 'approve' }));
-    FakeSource.instances.at(-1)!.emit({ type: 'update', chat: summary({ id: H, engine: 'hermes', running: true }), message: { ...asking, notice: 'Zgoda wysłana: Hermes uruchamia narzędzie…', parts: [tool, { ...ask, state: 'approved' }] } });
+    FakeSource.instances.at(-1)!.emit({ type: 'update', chat: summary({ id: H, running: true }), message: { ...asking, notice: 'Zgoda wysłana: Hermes uruchamia narzędzie…', parts: [tool, { ...ask, state: 'approved' }] } });
     expect(await screen.findByText('Zezwolono')).toBeTruthy();
     expect(screen.getByText('Zgoda wysłana: Hermes uruchamia narzędzie…')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Zezwól' })).toBeNull();
+  });
+});
+
+describe('the cockpit on its mock (?cockpit=mock)', () => {
+  beforeEach(() => {
+    // The mock never talks to the server: any request fails the test.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('the mock must not call the server'); }));
+    window.history.replaceState(null, '', '/?cockpit=mock&cockpitSpeed=0.01');
+  });
+
+  it('runs @Zaimplementuj zadanie: recon, the approval card, then Cezar watched up to a PR in review', async () => {
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    expect(screen.getByText('Brak aktywnego monitorowania')).toBeTruthy();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), '@zaimpl{Enter}Dodaj chip statusu{Enter}');
+    const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
+    const approval = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
+    expect(within(recon).getByText('src/ChatWindow.tsx')).toBeTruthy();
+    expect(within(recon).getByText('UI')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('Żaden task');
+
+    // Correct the prompt, then dispatch the corrected one.
+    await user.click(within(approval).getByRole('button', { name: 'Edytuj prompt' }));
+    const prompt = within(approval).getByLabelText('Prompt dla executora');
+    await user.clear(prompt);
+    await user.type(prompt, 'Task: poprawiony prompt');
+    await user.click(within(approval).getByRole('button', { name: 'Zleć z poprawkami' }));
+    expect(await within(approval).findByText('Zlecono na Cezarze')).toBeTruthy();
+    expect(within(approval).getByText('Task: poprawiony prompt')).toBeTruthy();
+
+    expect(await screen.findByRole('region', { name: 'Nasłuchiwanie Cezara' })).toBeTruthy();
+    const task = screen.getByRole('region', { name: 'Aktywny task Cezara' });
+    await waitFor(() => expect(within(task).getByText('REVIEW')).toBeTruthy(), { timeout: 5000 });
+    expect(within(task).getByText('cz-7f3a91')).toBeTruthy();
+    expect(within(task).getByRole('link', { name: /Otwórz w Cezarze/ })).toBeTruthy();
+    const pr = screen.getByRole('region', { name: 'Pull request' });
+    expect(within(pr).getByText('#42')).toBeTruthy();
+    expect(within(pr).getAllByLabelText('przeszedł')).toHaveLength(3);
+    expect(screen.getByRole('progressbar', { name: 'Postęp taska' }).getAttribute('aria-valuenow')).toBe('100');
+  });
+
+  it('rejecting sends nothing to Cezar; subtasks can be ticked by hand', async () => {
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Zaimplementuj chip statusu{Enter}');
+    const approval = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' }, { timeout: 3000 });
+    await user.click(within(approval).getByRole('button', { name: 'Odrzuć' }));
+    expect(await screen.findByText('Odrzucone. Nic nie poszło do Cezara.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Nasłuchiwanie Cezara' })).toBeNull();
+
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'nasłuchuj cezara{Enter}');
+    const subtasks = await screen.findByRole('region', { name: 'Subtaski' });
+    const first = await within(subtasks).findByRole('checkbox', { name: /Chip statusu w nagłówku/ });
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('REVIEW'), { timeout: 5000 });
+    const was = first.getAttribute('aria-checked');
+    await user.click(first);
+    expect(first.getAttribute('aria-checked')).toBe(was === 'true' ? 'false' : 'true');
+  });
+
+  it('without Hermes shows the card, keeps the draft, and Ponów próbę brings it back', async () => {
+    window.history.replaceState(null, '', '/?cockpit=mock&cockpitSpeed=0.01&hermes=down');
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    expect(screen.getByText('Hermes nie odpowiada.')).toBeTruthy();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Halo{Enter}');
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Halo');
+    await user.click(screen.getByRole('button', { name: 'Ponów próbę' }));
+    await waitFor(() => expect(screen.queryByText('Hermes nie odpowiada.')).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Wyślij' }));
+    expect(await screen.findByText(/To makieta Wektora/)).toBeTruthy();
   });
 });

@@ -107,6 +107,40 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     expect(text45).toContain('… i 5 starszych zakończonych (nie pokazano).');
   });
 
+  it('cezar: z parametrem id zwraca pełne szczegóły i błędy zadania', async () => {
+    const withRun = {
+      cezar: async () => ({ observedAt: now, tasks: [], counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 }, partial: false, scheduled: 0, finished: [] }),
+      cezarRun: async () => ({
+        id: 'cb2f59e7',
+        project: 'desk-panel',
+        title: 'Nieudany task',
+        status: 'failed',
+        error: 'step "fix" failed: spawn ENAMETOOLONG',
+        worktreePath: 'C:/wt/cb2f59e7',
+        branch: 'cez/cb2f59e7',
+        steps: [
+          { id: 'prepare', status: 'done' },
+          { id: 'verify', status: 'pending', error: 'npm test exited non-zero' },
+          { id: 'fix', status: 'failed', error: 'spawn ENAMETOOLONG' },
+        ],
+        graphState: {
+          outputs: {
+            verify: {
+              output: 'FAIL src/test.tsx\nError: expected true but got false\n',
+            },
+          },
+        },
+      }),
+    } as unknown as PanelSources;
+    const text = await agentViews(withRun).cezar(new URL('http://x/api/agent/cezar?id=desk-panel/cb2f59e7'), now);
+    expect(text).toContain('Zadanie Cezara desk-panel/cb2f59e7: Nieudany task [nieudane]');
+    expect(text).toContain('Błąd główny: step "fix" failed: spawn ENAMETOOLONG');
+    expect(text).toContain('Worktree: C:/wt/cb2f59e7');
+    expect(text).toContain('  - fix: nieudane — błąd: spawn ENAMETOOLONG');
+    expect(text).toContain('Wyjście weryfikacji (błędy):');
+    expect(text).toContain('FAIL src/test.tsx');
+  });
+
   it('trening: kroki dopiero na prośbę', async () => {
     const wide = '?from=2026-10-01&to=2026-11-10';
     const plain = await view('training', wide);

@@ -22,6 +22,10 @@ Usługa `Desk-Panel` ma automatyczny start (startuje razem z systemem), odzyskiw
 i rotację logów (10 MB, do 5 plików). Serwuje zbudowany `dist` na
 http://127.0.0.1:5174, także bez otwartej sesji terminala.
 
+Dla silnika czatu Hermes dostępna jest osobna usługa `Desk-Panel-Hermes` (manifest `servy/hermes.json`, launcher `servy/hermes.ps1`).
+Rejestracja usługi: `just hermes-install` (okno poświadczeń Windows jak przy `just install`).
+Status i sterowanie: `just hermes [STATUS|START|STOP|RESTART|CHECK|RUN]`. Szczegóły: [docs/hermes.md](../docs/hermes.md).
+
 `just service` pokazuje stan, `just service RESTART` restartuje, a
 `just service STOP` zatrzymuje. Zmiany wdrażasz przez `just update`:
 

@@ -29,7 +29,7 @@ export function withMessage(items: ChatMessage[], message: ChatMessage): ChatMes
  * The chat with the agent: the list of conversations and the one that is open. An open conversation is a server-sent
  * stream: it sends the whole chat once and then each message that changes, and reconnects (and so catches up) by itself.
  */
-export function useChat() {
+export function useChat(fixed?: ChatEngine) {
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -38,7 +38,8 @@ export function useChat() {
   const [busy, setBusy] = useState(false);
   /** Which engines can take a message (null: the server does not say), and the one new chats start on. */
   const [engines, setEngines] = useState<EngineStatus[] | null>(null);
-  const [preferred, setPreferred] = useState<ChatEngine>(DEFAULT_ENGINE);
+  /** `fixed`: the window offers one engine only, so new chats start on it whatever the server remembers. */
+  const [preferred, setPreferred] = useState<ChatEngine>(fixed ?? DEFAULT_ENGINE);
   const activeRef = useRef<string | null>(null);
   activeRef.current = activeId;
   const preferredRef = useRef(preferred);
@@ -49,13 +50,13 @@ export function useChat() {
       const { chats: list, engines: status, engine } = await call('/api/chats') as ChatList;
       setChats([...list].sort(byRecent));
       setEngines(status ?? null);
-      if (engine) setPreferred(engine);
+      if (engine && !fixed) setPreferred(engine);
       setUnavailable(false);
     } catch (e) {
       if ((e as { status?: number }).status === 503) setUnavailable(true);
       setChats(previous => previous ?? []);
     }
-  }, []);
+  }, [fixed]);
   useEffect(() => { void refresh(); }, [refresh]);
   const listed = activeId ? chats?.find(c => c.id === activeId) : undefined;
   const engine: ChatEngine = active ? engineOf(active) : listed ? engineOf(listed) : preferred;

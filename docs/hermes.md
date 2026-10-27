@@ -63,7 +63,8 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
-| `panel_cezar`, `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
+| `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` pełne szczegóły i błędy zadania |
+| `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |
 | `panel_todos` | `list`, `ukonczone` |
 | `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
@@ -99,12 +100,12 @@ dowolna (panel pokazuje „Hermes niedostępny”, dopóki Hermes nie wstanie; n
    `servy/hermes.json` (`executable`). Zainstalowany program musi korzystać z tego checkoutu; skrypt nie sprawdza ścieżki importu
    uruchomionego procesu.
 3. Próba na pierwszym planie: `just hermes RUN` (Ctrl+C kończy), w drugim terminalu `just hermes CHECK` (wersja, łatka, `/health`).
-4. Usługa: `just hermes-install` (Servy, start automatyczny opóźniony, odzyskiwanie po awarii, logi w `servy/logs/Desk-Panel-Hermes`;
+4. Usługa: `just hermes-install` (Servy, start automatyczny, odzyskiwanie po awarii, logi w `servy/logs/Desk-Panel-Hermes`;
    okno poświadczeń Windows jak przy `just install`; to samo konto co panel). Potem `just hermes STATUS|START|STOP|RESTART`.
 5. Panel: `just service RESTART` (czyta nowe `panel.env`). W oknie czatu przełącznik pokazuje Hermesa z zieloną kropką.
 
 Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]` uruchamia gateway z API serverem; sprawdź
-`hermes gateway --help` w swojej wersji), prywatne zmienne w `~/.desk-panel/hermes.env` (opcjonalny), klucze w `~/.hermes/.env`.
+`hermes gateway --help` w swojej wersji), prywatne zmienne w `~/.desk-panel/hermes.env` (generowany przez `just hermes-setup` z `HERMES_GATEWAY_LOCK_DIR`), klucze w `~/.hermes/.env` oraz `%LOCALAPPDATA%\hermes\.env`.
 
 | Zmienna (panel.env) | Domyślnie | Znaczenie |
 | --- | --- | --- |

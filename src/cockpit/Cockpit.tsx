@@ -1,0 +1,95 @@
+import { Check, CircleDashed, CircleX, ExternalLink, GitBranch, GitPullRequest, LayoutPanelTop, LoaderCircle, Radar, Square, SquareCheck } from 'lucide-react';
+import type { CezarStatus, CheckState, CockpitSource } from './types';
+
+const section = 'tw:rounded-2xl tw:border tw:border-ck-line tw:bg-ck-surface tw:p-4';
+const eyebrow = 'tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-[0.14em] tw:text-ck-muted';
+const STATUS_LOOK: Record<CezarStatus, string> = {
+  QUEUED: 'tw:bg-ck-faint/20 tw:text-ck-muted',
+  RUNNING: 'tw:bg-ck-amber/15 tw:text-ck-amber',
+  REVIEW: 'tw:bg-ck-agent/15 tw:text-ck-agent',
+  DONE: 'tw:bg-ck-green/15 tw:text-ck-green',
+  FAILED: 'tw:bg-ck-red/15 tw:text-ck-red',
+};
+const tokens = new Intl.NumberFormat('pl-PL');
+const time = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
+
+function CheckIcon({ state }: { state: CheckState }) {
+  if (state === 'pass') return <Check size={14} className="tw:text-ck-green" aria-label="przeszedł" />;
+  if (state === 'fail') return <CircleX size={14} className="tw:text-ck-red" aria-label="nie przeszedł" />;
+  if (state === 'running') return <LoaderCircle size={14} className="tw:animate-spin tw:text-ck-amber" aria-label="w toku" />;
+  return <CircleDashed size={14} className="tw:text-ck-faint" aria-label="czeka" />;
+}
+
+/**
+ * The right column: what Wektor is watching. The task in Cezar, its pull request and CI, the subtasks from the panel's
+ * to-do lists, and room for later views (a diff, screenshots).
+ */
+export function Cockpit({ source }: { source: CockpitSource }) {
+  const { cockpit } = source;
+  const { task, pr } = cockpit;
+  const done = cockpit.subtasks.filter(s => s.done).length;
+  return <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-3 tw:overflow-y-auto tw:p-4">
+    <div className={`tw:flex tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:px-4 tw:py-3 ${cockpit.watching ? 'tw:border-ck-amber/40 tw:bg-ck-amber/10' : 'tw:border-ck-line tw:bg-ck-surface'}`} role="status">
+      <Radar size={18} className={cockpit.watching ? 'tw:text-ck-amber tw:animate-ck-pulse' : 'tw:text-ck-faint'} aria-hidden="true" />
+      <div className="tw:min-w-0">
+        <div className="tw:text-sm tw:font-semibold tw:text-ck-text">{cockpit.watching ? 'Wektor monitoruje task' : task ? 'Wektor nie monitoruje teraz' : 'Brak aktywnego monitorowania'}</div>
+        <div className="tw:text-xs tw:text-ck-muted">{cockpit.watching && cockpit.since ? `od ${time.format(cockpit.since)} · odświeża co kilka sekund`
+          : task ? 'Task czeka na Twój przegląd.'
+          : source.mode === 'live' ? 'Nasłuchiwanie Cezara z czatu nie jest jeszcze podłączone (podgląd na makiecie: ?cockpit=mock).' : 'Zleć zadanie przez @Zaimplementuj zadanie, a tu pojawi się jego postęp.'}</div>
+      </div>
+    </div>
+
+    <section className={section} aria-label="Aktywny task Cezara">
+      <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><span className={eyebrow}>Task Cezara</span>
+        {task && <span className={`tw:ml-auto tw:rounded-full tw:px-2.5 tw:py-0.5 tw:text-[11px] tw:font-bold tw:tracking-wide ${STATUS_LOOK[task.status]}`}>{task.status}</span>}
+      </div>
+      {task ? <>
+        <div className="tw:mb-3 tw:font-medium tw:text-ck-text">{task.title}</div>
+        <dl className="tw:m-0 tw:grid tw:grid-cols-[auto_1fr] tw:gap-x-4 tw:gap-y-1.5 tw:text-[13px]">
+          <dt className="tw:text-ck-muted">ID</dt><dd className="tw:m-0 tw:font-ck-mono tw:text-ck-text">{task.id}</dd>
+          <dt className="tw:text-ck-muted">Repo</dt><dd className="tw:m-0 tw:text-ck-text">{task.repo}</dd>
+          <dt className="tw:text-ck-muted">Worktree</dt><dd className="tw:m-0 tw:truncate tw:font-ck-mono tw:text-ck-text">{task.worktree}</dd>
+          <dt className="tw:text-ck-muted">Tokeny</dt><dd className="tw:m-0 tw:tabular-nums tw:text-ck-text">{tokens.format(task.tokens)}</dd>
+        </dl>
+        <a href={task.url} className="tw:mt-4 tw:inline-flex tw:min-h-10 tw:items-center tw:gap-2 tw:rounded-xl tw:bg-ck-surface-2 tw:px-4 tw:text-sm tw:font-medium tw:text-ck-text tw:no-underline tw:hover:bg-ck-line">
+          <ExternalLink size={15} aria-hidden="true" />Otwórz w Cezarze
+        </a>
+      </> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">Żaden task nie jest teraz obserwowany.</p>}
+    </section>
+
+    <section className={section} aria-label="Pull request">
+      <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><GitPullRequest size={15} className="tw:text-ck-green" aria-hidden="true" /><span className={eyebrow}>Pull request</span>
+        {pr && <a href={pr.url} className="tw:ml-auto tw:text-sm tw:font-semibold tw:text-ck-cal tw:no-underline">#{pr.number}</a>}
+      </div>
+      {pr ? <>
+        <div className="tw:mb-1 tw:font-medium tw:text-ck-text">{pr.title}</div>
+        <div className="tw:mb-3 tw:flex tw:items-center tw:gap-1.5 tw:font-ck-mono tw:text-xs tw:text-ck-muted"><GitBranch size={13} aria-hidden="true" />{pr.branch}</div>
+        <ul className="tw:m-0 tw:flex tw:list-none tw:flex-wrap tw:gap-2 tw:p-0" aria-label="Checki CI">
+          {pr.checks.map(c => <li key={c.name} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:rounded-lg tw:border tw:border-ck-line tw:bg-ck-side tw:px-2.5 tw:py-1 tw:text-xs tw:text-ck-text"><CheckIcon state={c.state} />{c.name}</li>)}
+        </ul>
+      </> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">PR pojawi się, gdy Cezar go otworzy.</p>}
+    </section>
+
+    <section className={section} aria-label="Subtaski">
+      <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><span className={eyebrow}>Subtaski</span>
+        {cockpit.list && <span className="tw:truncate tw:text-xs tw:text-ck-faint">{cockpit.list.name}</span>}
+        {!!cockpit.subtasks.length && <span className="tw:ml-auto tw:text-xs tw:tabular-nums tw:text-ck-muted">{done}/{cockpit.subtasks.length}</span>}
+      </div>
+      {cockpit.subtasks.length ? <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:p-0">
+        {cockpit.subtasks.map(s => <li key={s.id}>
+          <button type="button" role="checkbox" aria-checked={s.done} onClick={() => source.toggleSubtask(s.id)}
+            className="tw:flex tw:min-h-10 tw:w-full tw:items-center tw:gap-3 tw:rounded-xl tw:px-2 tw:text-sm tw:hover:bg-ck-surface-2">
+            {s.done ? <SquareCheck size={18} className="tw:text-ck-green" aria-hidden="true" /> : <Square size={18} className="tw:text-ck-faint" aria-hidden="true" />}
+            <span className={s.done ? 'tw:text-ck-faint tw:line-through' : 'tw:text-ck-text'}>{s.title}</span>
+          </button>
+        </li>)}
+      </ul> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">Subtaski z list zadań pojawią się przy aktywnym tasku.</p>}
+    </section>
+
+    {/* Room for the next views of a task: its diff, before/after screenshots. */}
+    <section className="tw:flex tw:min-h-32 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:rounded-2xl tw:border tw:border-dashed tw:border-ck-line-2 tw:p-4 tw:text-center" aria-label="Strefa rozszerzeń" data-cockpit-slot="">
+      <LayoutPanelTop size={20} className="tw:text-ck-faint" aria-hidden="true" />
+      <span className="tw:text-sm tw:text-ck-muted">Miejsce na diff kodu i podgląd zrzutów ekranu</span>
+    </section>
+  </div>;
+}

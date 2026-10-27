@@ -75,6 +75,10 @@ describe('panel MCP for Hermes', () => {
     expect((await call('panel_time', {})).content[0].text).toMatch(/Europe\/Warsaw/);
     const bank = await call('panel_bank', {});
     expect(bank.content[0].text).not.toMatch(/\d{9,}/); // no full account or phone numbers
+    const cezarTasks = await call('panel_cezar', {});
+    expect(cezarTasks.content[0].text).toContain('Cezar');
+    const cezarDetail = await call('panel_cezar', { id: 'desk-panel/cb2f59e7-55fa-41fc-8e3a-d7d7f1e9d0a3' });
+    expect(cezarDetail.isError).toBeUndefined();
   });
 
   it('checks arguments before anything runs', async () => {

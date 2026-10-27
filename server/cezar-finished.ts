@@ -175,3 +175,21 @@ export async function createCezarRun(base: string, input: CezarCreateRunInput, r
     model,
   };
 }
+
+/** Reads raw details of a single run from Cezar: status, error, steps, worktreePath, outputs. Returns null when not found. */
+export async function readCezarRun(base: string, id: string, request: typeof fetch = fetch): Promise<Record<string, any> | null> {
+  const parts = id.trim().split('/');
+  const project = parts.length > 1 ? parts[0] : 'desk-panel';
+  const runId = parts.length > 1 ? parts.slice(1).join('/') : parts[0];
+  try {
+    const response = await request(new URL(runPath(project, runId), base), {
+      signal: AbortSignal.timeout(6000),
+      redirect: 'error',
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+

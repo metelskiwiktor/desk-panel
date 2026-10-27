@@ -78,5 +78,23 @@ if ($text -match '(?m)^\s+desk-panel:\s*$') {
     Write-Warning "config.yaml already has mcp_servers: add 'desk-panel' under it by hand (url http://127.0.0.1:$PanelPort/api/mcp, header Authorization: Bearer <contents of $tokenFile>)."
 }
 
+# 5. Lock directory and hermes.env for Servy / Windows
+$lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }
+New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
+Set-EnvValues $hermesEnvFile @{ HERMES_GATEWAY_LOCK_DIR=$lockDir }
+Set-EnvValues (Join-Path $panelHome 'hermes.env') @{
+    HERMES_GATEWAY_LOCK_DIR=$lockDir
+    API_SERVER_ENABLED='true'
+    API_SERVER_HOST='127.0.0.1'
+    API_SERVER_PORT="$HermesPort"
+    TERMINAL_CWD=(Join-Path $HOME 'AndroidStudioProjects')
+}
+if ($env:LOCALAPPDATA) {
+    $localHermes=Join-Path $env:LOCALAPPDATA 'hermes'
+    New-Item -ItemType Directory -Force -Path $localHermes | Out-Null
+    Copy-Item $hermesEnvFile (Join-Path $localHermes '.env') -Force
+    if (Test-Path -LiteralPath $config) { Copy-Item $config (Join-Path $localHermes 'config.yaml') -Force }
+}
+
 Write-Host ''
 Write-Host 'Next (docs/hermes.md): just hermes RUN (foreground try), then just hermes-install (service), just hermes CHECK, and just service RESTART for the panel.'

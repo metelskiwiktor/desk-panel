@@ -1,30 +1,43 @@
 # Czat z agentem
 
-Okno rozmowy z agentem otwierane przyciskiem w pasku u góry pulpitu. Rozmowa działa na jednym z dwóch silników: **Hermes**
-(domyślny dla nowych rozmów, zob. [hermes.md](hermes.md)) albo **AGY** (Antigravity CLI, `agy`, opisany niżej). Wybór jest
-przełącznikiem w oknie i serwer go pamięta; rozmowa zostaje przy swoim silniku, a stare rozmowy (bez pola `engine`) są rozmowami agy. Agent wie, kim jest, czym jest
+Okno rozmowy z agentem (**Wektor**) otwierane przyciskiem w pasku u góry pulpitu. Okno pisze **tylko do Hermesa** (zob.
+[hermes.md](hermes.md)): nie ma przełącznika silników, nowe rozmowy startują na Hermesie niezależnie od zapamiętanego wyboru, a
+na liście są tylko rozmowy Hermesa. Silnik **AGY** (Antigravity CLI, `agy`, opisany niżej) zostaje na serwerze; jego stare
+rozmowy (bez pola `engine`) dalej tam są, tylko okno ich nie pokazuje. Agent wie, kim jest, czym jest
 panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje razem z wiadomością (to podpowiedź, o co pyta); resztę
 (kalendarz, poczta, Cezar, trening, limity, komputer) **czyta sam** z lokalnego API panelu, tylko przez GET.
 
 ## Jak się tego używa
 
-- **Okno**: domyślnie małe, **pływające** przy prawej krawędzi, pod górnym paskiem. Zasłania część pulpitu, ale go nie
-  blokuje i nie przyciemnia: można dalej klikać. Ikona rozmów w nagłówku wysuwa listę rozmów (grupy Dziś / Wczoraj / Ostatnie
-  7 dni / Starsze, wyszukiwarka, „Nowy czat”). Ikona ze strzałkami **powiększa** okno do dużego, modalnego, z listą rozmów
-  po lewej (i z powrotem); wybór jest pamiętany w przeglądarce (`desk-panel.chat-wide`). Przycisk czatu w górnym pasku
-  otwiera i zamyka okno. `Esc` zamyka pływające okno tylko, gdy fokus jest w nim.
-  Wybranie rozmowy z listy ją **kontynuuje**; agent pamięta wcześniejsze wiadomości, także po restarcie panelu.
-- **Wskaż element**: okno przykleja się do prawej krawędzi na całą wysokość, a pulpit **zsuwa się w lewo** obok niego (tylko
+- **Okno (kokpit)**: duże, modalne, w dwóch kolumnach (`src/ChatWindow.tsx`, `src/cockpit/`). Po lewej (60%) rozmowa
+  zbudowana na `@assistant-ui/react`; po prawej (40%) **kokpit taska**: czy Wektor monitoruje task, aktywny task Cezara (ID,
+  status RUNNING/REVIEW/DONE, repo, worktree, tokeny, „Otwórz w Cezarze”), pull request z checkami CI, subtaski z list
+  zadań (do odhaczania) i pusta strefa na przyszłe widoki (diff, zrzuty). Tytuł w nagłówku rozwija listę rozmów i „Nowy
+  czat”; wybranie rozmowy ją **kontynuuje** (agent pamięta wcześniejsze wiadomości, także po restarcie panelu). `Esc`
+  kończy wskazywanie, potem zamyka okno. Na wąskim ekranie kolumny są zakładkami „Czat” / „Kokpit”.
+- **Karty w rozmowie**: narzędzia o znanych nazwach mają własne karty (`src/cockpit/cards.tsx`): rekonesans
+  `@Zaimplementuj zadanie` (kroki, przeszukane pliki, typ UI/non-UI, prompt dla executora), **zgoda przed zleceniem na
+  Cezarze** („Zleć na Cezarze”, „Edytuj prompt”, „Odrzuć”), nasłuchiwanie Cezara (pasek postępu i kroki worktree) i prośba
+  Hermesa o zgodę na narzędzie. Inne narzędzia to zwijany wiersz.
+- **Hermes niedostępny**: nad polem wiadomości karta „Hermes nie odpowiada” z przyciskiem „Ponów próbę” (pyta serwer
+  jeszcze raz); szkic i wskazane elementy zostają, nic nie jest wysyłane.
+- **Kokpit dziś działa na makiecie**: nasłuchiwanie Cezara, PR i subtaski nie są jeszcze podłączone do prawdziwych danych,
+  więc z prawdziwym Hermesem prawa kolumna mówi, że nic nie jest monitorowane. Cały przebieg (rekonesans → zgoda → task
+  Cezara → PR → review) gra skryptowa makieta: `?cockpit=mock` w adresie (`&hermes=down` bez Hermesa, `&cockpitSpeed=0.3`
+  szybciej), nic nie idzie do serwera. Zrzuty: `just screenshots standard --pages pulpit --open cockpit-approval`
+  (także `cockpit`, `cockpit-recon`, `cockpit-watch`, `cockpit-review`; z `--hermes down`).
+- **Style**: tylko okno czatu używa Tailwind CSS v4 (`src/cockpit/cockpit.css`): klasy z prefiksem `tw:`, bez preflight,
+  utilities jako `!important`, skanowane tylko `src/cockpit` i `src/ChatWindow.tsx`; reszta panelu ma swoje style bez zmian.
+- **Wskaż element**: okno zwija się do samej rozmowy przyklejonej do prawej krawędzi, a pulpit **zsuwa się w lewo** obok niego (tylko
   w tym trybie; górny pasek zawija się pod zegar). Każdy kliknięty element (mail, zadanie Cezara, spotkanie, trening albo cały
   kafelek: Poczta, Cezar, limity, pasek dnia, cała strefa „Najbliższe dni” i pojedynczy dzień w niej) trafia do wiadomości
   jako chip. Kliknięcie jeszcze raz zdejmuje go z kontekstu. W tym trybie kliknięcia **nie uruchamiają** niczego na pulpicie,
   z wyjątkiem elementów oznaczonych `data-pick-through` (menu pulpitów wirtualnych): można przełączyć pulpit i wskazać kafelek
-  z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i wracają do okna sprzed niego.
+  z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i wracają do pełnego okna.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
-- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (np. `@Zaimplementuj zadanie`). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` działa jako dyspozytor: robi szybki rekonesans tylko do odczytu w repozytorium, wypisuje krótki plan po polsku + gotowy blok `Executor Prompt` po angielsku, pyta „Zlecić na Cezarze?”, a po potwierdzeniu wysyła `POST /api/cezar/runs` i zwraca link do zadania w Cezarze.
-- Rozmowę można zmienić nazwę (ołówek) i usunąć (kosz, wymaga drugiego dotknięcia).
-- Wąski ekran (telefon przez Tailscale): lista rozmów jest szufladą, okno zajmuje cały ekran (bez przycisku powiększania), a
-  panel wskazywania jest u dołu.
+- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` działa jako dyspozytor: robi szybki rekonesans tylko do odczytu w repozytorium, wypisuje krótki plan po polsku + gotowy blok `Executor Prompt` po angielsku, pyta „Zlecić na Cezarze?”, a po potwierdzeniu wysyła `POST /api/cezar/runs` i zwraca link do zadania w Cezarze.
+- Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia); zmiany nazwy w tym oknie nie ma.
+- Wąski ekran (telefon przez Tailscale): okno zajmuje cały ekran, a panel wskazywania jest u dołu.
 
 ## Co widzi agent
 

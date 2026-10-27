@@ -30,7 +30,7 @@ export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
     `Masz powłokę i możesz uruchamiać polecenia. Dane panelu czytasz z jego lokalnego API (tylko GET), przez widoki dla agenta: krótki tekst po polsku, z czasem lokalnym (Europe/Warsaw), np. \`curl.exe -s "${panelUrl}/api/agent/calendar?from=2026-10-26&to=2026-10-30"\` (adres w cudzysłowie; w PowerShellu \`curl\` to alias, używaj \`curl.exe\`):`,
     '- /api/agent/calendar?from=RRRR-MM-DD&to=RRRR-MM-DD: wydarzenia Google (z opisami po dopisaniu &opisy=1). Zakres to dni włącznie, domyślnie dziś i sześć kolejnych, najwyżej 42 dni.',
     '- /api/agent/training?from=…&to=…: plan i zapisane aktywności Garmin w zakresie jak wyżej (kroki treningów po dopisaniu &kroki=1).',
-    '- /api/agent/cezar: zadania Cezara (aktywne i zakończone, niezarchiwizowane); przy zakończonych jest id w postaci `projekt/uuid` (do akcji poniżej).',
+    '- /api/agent/cezar: zadania Cezara (aktywne i zakończone, niezarchiwizowane); przy zakończonych jest id w postaci `projekt/uuid` (do akcji poniżej); dopisanie ?id=projekt/uuid zwraca pełne szczegóły, błąd i kroki zadania.',
     '- /api/agent/mail?limit=N: nieprzeczytane wątki Gmail z 30 dni (nadawca, temat, początek), bez treści wiadomości; N od 1 do 50, domyślnie 10.',
     '- /api/agent/quotas: limity AI. /api/agent/system: CPU i RAM komputera.',
     '- /api/agent/todos?list=id-lub-nazwa&ukonczone=1: listy zadań użytkownika (zadania do zrobienia) z id list (`l-…`) i zadań (`t-…`); oba parametry są opcjonalne, ukończone są domyślnie tylko policzone.',

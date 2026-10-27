@@ -18,6 +18,8 @@ import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } fr
  */
 export interface PanelSources {
   cezar(): Promise<CezarSnapshot>;
+  /** Raw details of a single run from Cezar (steps, error, worktreePath) for agent views. */
+  cezarRun?(id: string): Promise<Record<string, any> | null>;
   /** Archive or restore a finished task, or mark it read or unread, in Cezar itself. */
   cezarAction(id: string, action: CezarAction): Promise<void>;
   /** Start a new task run in Cezar (used by the chat dispatcher after user confirmation). */

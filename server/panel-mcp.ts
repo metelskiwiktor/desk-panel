@@ -55,8 +55,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     run: view('training', a => ({ from: a.from, to: a.to, kroki: a.kroki ? '1' : undefined })),
   },
   panel_cezar: {
-    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane); zakończone mają id projekt/uuid do panel_cezar_action.',
-    input: z.object({}).strict(), schema: schema(), run: view('cezar', () => ({})),
+    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane). Opcjonalny parametr id (projekt/uuid) zwraca pełne szczegóły i błędy wskazanego zadania.',
+    input: z.object({ id: text(200).optional() }).strict(),
+    schema: schema({ id: { type: 'string', description: 'Id zadania projekt/uuid (np. desk-panel/cb2f59e7-...)' } }),
+    run: view('cezar', a => ({ id: a.id })),
   },
   panel_mail: {
     description: 'Nieprzeczytane wątki Gmail z 30 dni: nadawca, temat, początek (bez treści).',

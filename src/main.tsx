@@ -6,6 +6,7 @@ import './styles.css';
 import './pulpit.css';
 import './chat.css';
 import './pulpits.css';
+import './cockpit/cockpit.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -48,6 +48,18 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '- After user confirms ("zleć", "ok", "tak"), POST to /api/cezar/runs with Origin header and JSON {"title":"<short title>","task":"<full Executor Prompt>"} (if a task from the to-do list was provided in context, include its id as "todoId":"t-…"; in PowerShell ALWAYS use a single-quoted here-string `$taskText = @\'...\'@` so backticks are not interpreted as escape sequences) and return the Cezar task URL.',
     ].join('\n'),
   },
+  {
+    id: 'nasluchuj-cezara',
+    title: 'Nasłuchuj Cezara',
+    description: 'Status taska Cezara i jego kroków, bez dotykania taska',
+    prompt: [
+      'Watch a Cezar task for the user, read-only.',
+      '- Read the cezar view of the panel. The task is the one the user points at or names; otherwise the most recent running one.',
+      '- Report in Polish, briefly: its status, the step it is on, what is done, and its PR and CI checks if it has them.',
+      '- When it is still running, say what you will look for next time the user asks.',
+      '- NEVER start, resume, answer, archive or otherwise change a Cezar task here.',
+    ].join('\n'),
+  },
 ];
 
 export function skillItem(skill: ChatSkill): ContextItem {
