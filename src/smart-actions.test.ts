@@ -3,12 +3,24 @@ import type { MailThread } from './mail-contract';
 import type { Task } from './model';
 import {
   clearDismissedActionIds,
+  defaultRuleRegistry,
+  extractAppointmentUrl,
   extractUrl,
+  getRegisteredSmartActionRules,
+  isRuleEnabled,
   loadDismissedActionIds,
+  loadRulesConfig,
+  matchThreadCriteria,
   parseEmailAction,
   parseSmartActions,
   parseTaskAction,
+  registerSmartActionRule,
   saveDismissedActionId,
+  saveRulesConfig,
+  SmartActionRegistry,
+  unregisterSmartActionRule,
+  ZNANY_LEKARZ_RULE,
+  type SmartActionRule,
 } from './smart-actions';
 
 describe('extractUrl', () => {
@@ -20,7 +32,19 @@ describe('extractUrl', () => {
   });
 });
 
-describe('parseEmailAction', () => {
+describe('extractAppointmentUrl', () => {
+  it('extracts direct confirmation links matching appointment patterns', () => {
+    const text = 'Potwierdź lub przełóż wizytę: (https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi)';
+    expect(extractAppointmentUrl(text)).toBe('https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi');
+  });
+
+  it('falls back to generic URL extraction if specific pattern is not found', () => {
+    const text = 'Link: https://znanylekarz.pl/wizyta/123';
+    expect(extractAppointmentUrl(text)).toBe('https://znanylekarz.pl/wizyta/123');
+  });
+});
+
+describe('ZnanyLekarz Rule & matchThreadCriteria', () => {
   const baseThread: MailThread = {
     id: 'test@gmail.com:1',
     account: 'test@gmail.com',
@@ -33,96 +57,152 @@ describe('parseEmailAction', () => {
     sourceUrl: 'https://mail.google.com/1',
   };
 
-  it('detects appointment confirmations and extracts direct link', () => {
+  it('matches ZnanyLekarz sender and extracts confirmation link', () => {
     const thread: MailThread = {
+      ...baseThread,
+      from: 'ZnanyLekarz <kontakt@znanylekarz.pl>',
+      subject: '❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?',
+      snippet: 'Wizyta umówiona przez ZnanyLekarz. Potwierdź swoją obecność na wizycie.',
+      body: 'Wizyta dla Wiktor\nśroda 28 października 2026\n17:30\n\nPotwierdź lub przełóż wizytę: https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi\n\nkontakt@znanylekarz.pl',
+      sourceUrl: 'https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi',
+    };
+
+    expect(matchThreadCriteria(thread, ZNANY_LEKARZ_RULE.matchCriteria)).toBe(true);
+
+    const action = parseEmailAction(thread);
+    expect(action).not.toBeNull();
+    expect(action?.category).toBe('appointment');
+    expect(action?.priority).toBe('high');
+    expect(action?.actionLabel).toBe('Potwierdź wizytę');
+    expect(action?.actionUrl).toBe('https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi');
+    expect(action?.sourceBadge).toBe('ZnanyLekarz');
+  });
+
+  it('matches doctor sender when email body originates from znanylekarz.pl', () => {
+    const thread: MailThread = {
+      ...baseThread,
+      from: 'mgr Artur Wierusz',
+      subject: '❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?',
+      snippet: 'Wizyta umówiona przez ZnanyLekarz Platforma dla lekarzy i pacjentów Potwierdź swoją obecność na wizycie',
+      body: 'Wizyta dla Wiktor\nśroda 28 października 2026\n17:30 (GMT+1)\nFabryczna 15, Leszno\n\nPotwierdź lub przełóż (https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi)\n\nkontakt@znanylekarz.pl',
+      sourceUrl: 'https://mail.google.com/mail/u/metelski.wiktor%40gmail.com/#inbox/1a1790d1e9092fca',
+    };
+
+    const action = parseEmailAction(thread);
+    expect(action).not.toBeNull();
+    expect(action?.category).toBe('appointment');
+    expect(action?.actionLabel).toBe('Potwierdź wizytę');
+    expect(action?.actionUrl).toBe('https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi');
+    expect(action?.sourceBadge).toBe('ZnanyLekarz');
+  });
+
+  it('returns null for non-ZnanyLekarz emails when only ZnanyLekarz rule is enabled', () => {
+    const genericThread: MailThread = {
       ...baseThread,
       from: 'Centrum Medyczne <kontakt@med.local>',
       subject: 'Potwierdzenie wizyty: Dr Jan Kowalski',
       snippet: 'Prosimy o potwierdzenie terminu wizyty w czwartek o 11:30.',
       body: 'Kliknij aby potwierdzić: https://przychodnia.local/potwierdz/98124.',
     };
-    const action = parseEmailAction(thread);
-    expect(action).not.toBeNull();
-    expect(action?.category).toBe('appointment');
-    expect(action?.priority).toBe('high');
-    expect(action?.actionLabel).toBe('Potwierdź wizytę');
-    expect(action?.actionUrl).toBe('https://przychodnia.local/potwierdz/98124');
-    expect(action?.sourceBadge).toContain('Centrum Medyczne');
-  });
 
-  it('extracts ZnanyLekarz confirmation link when asking "Czy pojawisz się na wizycie"', () => {
-    const thread: MailThread = {
-      ...baseThread,
-      from: 'mgr Artur Wierusz',
-      subject: '️❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?',
-      snippet: 'Wizyta umówiona przez ZnanyLekarz Platforma dla lekarzy i pacjentów Potwierdź swoją obecność na wizycie',
-      body: 'Wizyta dla Wiktor\nśroda 28 października 2026\n17:30 (GMT+1)\nFabryczna 15, Leszno\n\nPotwierdź lub przełóż (https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi)\n\nkontakt@znanylekarz.pl',
-      sourceUrl: 'https://mail.google.com/mail/u/metelski.wiktor%40gmail.com/#inbox/1a1790d1e9092fca',
-    };
-    const action = parseEmailAction(thread);
-    expect(action).not.toBeNull();
-    expect(action?.category).toBe('appointment');
-    expect(action?.actionLabel).toBe('Potwierdź wizytę');
-    expect(action?.actionUrl).toBe('https://d.znanylekarz.pl/xm2m3gr5wmz1m01c0e7evblyv4v6akfi');
-  });
-
-  it('detects PR review requests', () => {
-    const thread: MailThread = {
-      ...baseThread,
-      from: 'GitHub <notifications@github.com>',
-      subject: '[desk-panel] PR #3: Gmail w panelu',
-      snippet: 'metelskiwiktor requested your review on this pull request.',
-      body: 'Review: https://github.com/org/repo/pull/3',
-    };
-    const action = parseEmailAction(thread);
-    expect(action).not.toBeNull();
-    expect(action?.category).toBe('pr_review');
-    expect(action?.priority).toBe('high');
-    expect(action?.actionLabel).toBe('Zobacz PR');
-    expect(action?.actionUrl).toBe('https://github.com/org/repo/pull/3');
-    expect(action?.sourceBadge).toBe('GitHub');
-  });
-
-  it('detects payment notifications and invoices to pay', () => {
-    const thread: MailThread = {
-      ...baseThread,
-      from: 'Bank Millennium',
-      subject: 'Faktura do opłacenia: F/2026/10/8812',
-      snippet: 'Nowa faktura na kwotę 120,00 zł oczekuje na opłacenie do 30.10.2026.',
-      body: 'Opłać online: https://bank.local/pay/8812',
-    };
-    const action = parseEmailAction(thread);
-    expect(action).not.toBeNull();
-    expect(action?.category).toBe('payment');
-    expect(action?.priority).toBe('high');
-    expect(action?.actionLabel).toBe('Opłać rachunek');
-    expect(action?.actionUrl).toBe('https://bank.local/pay/8812');
-  });
-
-  it('detects task alerts and Jira assignment notifications', () => {
-    const thread: MailThread = {
-      ...baseThread,
-      from: 'Jira Notifications',
-      subject: 'Nowe zadanie przypisane do Ciebie: DESK-42',
-      snippet: 'DESK-42 Przegląd układu na ekranie pionowym.',
-      body: 'Link do zadania: https://jira.local/browse/DESK-42',
-    };
-    const action = parseEmailAction(thread);
-    expect(action).not.toBeNull();
-    expect(action?.category).toBe('task_alert');
-    expect(action?.priority).toBe('high');
-    expect(action?.actionLabel).toBe('Otwórz zadanie');
-    expect(action?.actionUrl).toBe('https://jira.local/browse/DESK-42');
-  });
-
-  it('returns null for non-actionable emails', () => {
-    const thread: MailThread = {
+    const normalThread: MailThread = {
       ...baseThread,
       from: 'Znajomy',
       subject: 'Weekendowe plany',
       snippet: 'Hej, czy idziemy w sobotę na kawę?',
     };
+
+    expect(parseEmailAction(genericThread)).toBeNull();
+    expect(parseEmailAction(normalThread)).toBeNull();
+  });
+});
+
+describe('SmartActionRegistry & Extensibility', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('allows registering and unregistering custom rules cleanly', () => {
+    const customRule: SmartActionRule = {
+      id: 'custom-pr-rule',
+      name: 'GitHub PR Review',
+      description: 'Wykrywa review w pull requestach',
+      category: 'pr_review',
+      priority: 'high',
+      enabled: true,
+      matchCriteria: {
+        senderDomains: ['github.com'],
+        subjectKeywords: ['pr #', 'pull request'],
+      },
+      extract: (thread) => ({
+        id: `mail:${thread.id}`,
+        source: 'mail',
+        sourceId: thread.id,
+        sourceBadge: 'GitHub',
+        title: thread.subject,
+        snippet: thread.snippet,
+        category: 'pr_review',
+        priority: 'high',
+        timestamp: thread.receivedAt,
+        actionUrl: thread.sourceUrl,
+        actionLabel: 'Zobacz PR',
+        mailThread: thread,
+      }),
+    };
+
+    const thread: MailThread = {
+      id: 'gh-1',
+      account: 'test@gmail.com',
+      threadId: 'gh-1',
+      from: 'GitHub <notifications@github.com>',
+      subject: '[desk-panel] PR #3: Smart Actions',
+      snippet: 'Review requested',
+      receivedAt: 1700000000000,
+      messages: 1,
+      sourceUrl: 'https://github.com/org/repo/pull/3',
+    };
+
+    // Before registering custom rule, it does not match
     expect(parseEmailAction(thread)).toBeNull();
+
+    // Register custom rule
+    registerSmartActionRule(customRule);
+    expect(getRegisteredSmartActionRules().some((r) => r.id === 'custom-pr-rule')).toBe(true);
+
+    const action = parseEmailAction(thread);
+    expect(action).not.toBeNull();
+    expect(action?.category).toBe('pr_review');
+    expect(action?.actionLabel).toBe('Zobacz PR');
+
+    // Clean up
+    unregisterSmartActionRule('custom-pr-rule');
+    expect(getRegisteredSmartActionRules().some((r) => r.id === 'custom-pr-rule')).toBe(false);
+    expect(parseEmailAction(thread)).toBeNull();
+  });
+
+  it('respects rule enabled/disabled state and rulesConfig', () => {
+    const registry = new SmartActionRegistry([ZNANY_LEKARZ_RULE]);
+    expect(isRuleEnabled(ZNANY_LEKARZ_RULE, { [ZNANY_LEKARZ_RULE.id]: false })).toBe(false);
+    expect(isRuleEnabled(ZNANY_LEKARZ_RULE, { [ZNANY_LEKARZ_RULE.id]: true })).toBe(true);
+
+    saveRulesConfig({ [ZNANY_LEKARZ_RULE.id]: false });
+    expect(loadRulesConfig()).toEqual({ [ZNANY_LEKARZ_RULE.id]: false });
+
+    const thread: MailThread = {
+      id: 'doc-1',
+      account: 'test@gmail.com',
+      threadId: 'doc-1',
+      from: 'ZnanyLekarz <kontakt@znanylekarz.pl>',
+      subject: '❓ Czy pojawisz się na wizycie u mgr Artur Wierusz w dniu 28 października o 17:30?',
+      snippet: 'Wizyta umówiona przez ZnanyLekarz. Potwierdź swoją obecność.',
+      body: 'Wizyta: https://d.znanylekarz.pl/test',
+      receivedAt: 1700000000000,
+      messages: 1,
+      sourceUrl: 'https://d.znanylekarz.pl/test',
+    };
+
+    // When rule is disabled in config, parseEmailAction returns null
+    expect(parseEmailAction(thread, registry.getRules(), { [ZNANY_LEKARZ_RULE.id]: false })).toBeNull();
   });
 });
 
@@ -180,23 +260,13 @@ describe('parseSmartActions and dismissed storage', () => {
         id: 'mail-1',
         account: 'a@b.c',
         threadId: 't1',
-        from: 'GitHub',
-        subject: 'PR review',
-        snippet: 'requested your review',
-        receivedAt: 1000,
-        messages: 1,
-        sourceUrl: 'https://mail/1',
-      },
-      {
-        id: 'mail-2',
-        account: 'a@b.c',
-        threadId: 't2',
-        from: 'Lekarz',
-        subject: 'Potwierdzenie wizyty',
-        snippet: 'potwierdź wizytę',
+        from: 'ZnanyLekarz <kontakt@znanylekarz.pl>',
+        subject: 'Wizyta kontrolna',
+        snippet: 'Potwierdź obecność',
+        body: 'Wizyta u lekarza: https://d.znanylekarz.pl/w1',
         receivedAt: 2000,
         messages: 1,
-        sourceUrl: 'https://mail/2',
+        sourceUrl: 'https://d.znanylekarz.pl/w1',
       },
     ];
 
@@ -213,20 +283,18 @@ describe('parseSmartActions and dismissed storage', () => {
     ];
 
     const all = parseSmartActions({ threads, tasks });
-    expect(all).toHaveLength(3);
-    // Both mail actions have 'high' priority; mail-2 (ts 2000) should be before mail-1 (ts 1000)
-    // cezar-1 has 'medium' priority, so it should be last despite higher timestamp
-    expect(all[0].id).toBe('mail:mail-2');
-    expect(all[1].id).toBe('mail:mail-1');
-    expect(all[2].id).toBe('cezar:cezar-1');
+    expect(all).toHaveLength(2);
+    // mail-1 has high priority, cezar-1 has medium priority
+    expect(all[0].id).toBe('mail:mail-1');
+    expect(all[1].id).toBe('cezar:cezar-1');
 
     // Test dismissal
-    saveDismissedActionId('mail:mail-2');
-    expect(loadDismissedActionIds().has('mail:mail-2')).toBe(true);
+    saveDismissedActionId('mail:mail-1');
+    expect(loadDismissedActionIds().has('mail:mail-1')).toBe(true);
 
     const filtered = parseSmartActions({ threads, tasks, dismissedIds: loadDismissedActionIds() });
-    expect(filtered).toHaveLength(2);
-    expect(filtered.map(a => a.id)).toEqual(['mail:mail-1', 'cezar:cezar-1']);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].id).toBe('cezar:cezar-1');
 
     clearDismissedActionIds();
     expect(loadDismissedActionIds().size).toBe(0);
