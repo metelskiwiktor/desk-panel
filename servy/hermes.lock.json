@@ -1,16 +1,20 @@
 {
   "hermes": "0.21.7",
+  "hermesRef": "71d34bad1045610252eda02ee79549436896e784",
   "provider": {
     "name": "antigravity-oauth",
     "source": "community",
-    "ref": null,
-    "note": "Pin the exact release or commit of the provider that was verified with this Hermes version; `just hermes CHECK` warns while ref is null."
+    "ref": "f18fbcbdc69fc0610348f9b373662d61804c5c81",
+    "note": "Verified with AGY gemini-3.8-flash-medium. The installed plugin must be a clean checkout of this commit."
   },
   "streamingPatch": {
     "required": true,
-    "file": null,
-    "sha256": null,
-    "note": "Without the local patch that emits text deltas the provider streams 0 deltas; the panel still shows the answer from the run's final output (no live text). Record the patched provider file (path relative to the Hermes install) and its SHA-256 here; CHECK then verifies it."
+    "file": "servy/patches/hermes-antigravity-stream.patch",
+    "sha256": "60defc77b30a583121270b512d0e020bb7ff11f500eec120be8f5639ccf4b9ec",
+    "target": "agent/turn_api_call.py",
+    "baseSha256": "2897575995d8dcbe94bba666ef66043a64c52a6c99e72c45e7da64a5fbdf576b",
+    "resultSha256": "f4a3f530df565d12a0ad7623f82f73f063fcafd19e48aebf07e72ffc45b89bd1",
+    "note": "Patch the Hermes host streaming gate only for API runs using the pinned Antigravity provider. Target hashes use LF line endings."
   },
   "api": {
     "url": "http://127.0.0.1:8642",

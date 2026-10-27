@@ -87,14 +87,17 @@ pokazuje pytania, a przy odpowiedziach „Nie można teraz wczytać odpowiedzi z
 Panel i Hermes to **dwie osobne usługi Servy**; żadna nie czeka na drugą przy starcie, więc kolejność po restarcie komputera jest
 dowolna (panel pokazuje „Hermes niedostępny”, dopóki Hermes nie wstanie; narzędzia MCP odpowiadają, gdy wstanie panel).
 
-1. **Zainstaluj Hermes Agent w wersji z `servy/hermes.lock.json`** (dziś `0.21.7`) wg oficjalnej instrukcji Hermesa, razem z
-   providerem społeczności `antigravity-oauth` i lokalną łatką, która wypuszcza delty tekstu (bez niej SSE daje 0 delt). Wpisz w
-   `servy/hermes.lock.json` dokładny `provider.ref` oraz plik i SHA-256 łatki (`streamingPatch`); `just hermes CHECK` od tej pory
-   pilnuje zgodności. Nie używaj tymczasowych katalogów prób (PoC): docelowa instalacja to zwykły `hermes` użytkownika.
+1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`.** Oba katalogi muszą być
+   checkoutami Git: domyślnie `~/.hermes/hermes-agent` i `~/.hermes/plugins/antigravity-oauth`. Inne lokalizacje można wskazać
+   zmiennymi `DESK_HERMES_SOURCE` i `DESK_HERMES_PROVIDER_SOURCE` w środowisku uruchamiającym skrypty. Provider musi być czysty.
+   Nie używaj tymczasowych katalogów prób (PoC) jako docelowej instalacji.
 2. `just hermes-setup` — idempotentne, niczego nie uruchamia i nie drukuje kluczy: włącza API server na `127.0.0.1:8642` z kluczem w
    `~/.hermes/.env` (nowy tylko, gdy go brak), wpisuje `DESK_HERMES_URL` i `DESK_HERMES_KEY` do `~/.desk-panel/panel.env`, tworzy
    `~/.desk-panel/mcp-token` i dopisuje `mcp_servers.desk-panel` do `~/.hermes/config.yaml` (gdy jest już inne `mcp_servers`, mówi,
-   co dopisać ręcznie). Sprawdza, czy `hermes` leży tam, gdzie oczekuje `servy/hermes.json` (`executable`).
+   co dopisać ręcznie). Najpierw sprawdza commity i skrót łatki, a następnie stosuje ją do przypiętego źródła Hermesa (ponowienie
+   jest bezpieczne); przy niezgodności kończy się błędem przed zmianą konfiguracji. Sprawdza, czy `hermes` leży tam, gdzie oczekuje
+   `servy/hermes.json` (`executable`). Zainstalowany program musi korzystać z tego checkoutu; skrypt nie sprawdza ścieżki importu
+   uruchomionego procesu.
 3. Próba na pierwszym planie: `just hermes RUN` (Ctrl+C kończy), w drugim terminalu `just hermes CHECK` (wersja, łatka, `/health`).
 4. Usługa: `just hermes-install` (Servy, start automatyczny opóźniony, odzyskiwanie po awarii, logi w `servy/logs/Desk-Panel-Hermes`;
    okno poświadczeń Windows jak przy `just install`; to samo konto co panel). Potem `just hermes STATUS|START|STOP|RESTART`.
@@ -138,7 +141,8 @@ Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]
 
 ## Ograniczenia
 
-- Kształt API (ścieżki, nazwy zdarzeń i pól) jest napisany wg Hermesa v0.21 i wyników prób, a nie sprawdzony w tej zmianie na żywej
-  instalacji; gdy coś się nie zgadza, poprawka to `HERMES_ROUTES` / `hermesEventOf` / `historyOf` w `server/hermes-api.ts` i atrapa.
+- Podstawowe `/health`, `/v1/runs`, delty i zakończenie sprawdzono na izolowanym Hermesie z przypiętym providerem i AGY. Nie jest to
+  dowód dla każdej ścieżki narzędzi i zgód; gdy kształt API się zmieni, poprawka to `HERMES_ROUTES` / `hermesEventOf` / `historyOf`
+  w `server/hermes-api.ts` i atrapa.
 - Historia z sesji nie zawiera próśb o zgodę ani czasów narzędzi: po restarcie panelu widać tekst i narzędzia, bez kart zgody.
 - Gdy Hermes skompresuje albo rozdzieli sesję (nowe id), panel przyjmuje id sesji podane przez Hermesa w odpowiedzi przebiegu.

@@ -31,6 +31,10 @@ function Set-EnvValues([string]$Path,[hashtable]$Values) {
     Set-Content -LiteralPath $Path -Value $lines -Encoding ASCII
 }
 
+# Fail before changing configuration if the pinned sources or patch do not match.
+& (Join-Path $PSScriptRoot 'hermes-stream-patch.ps1') -Action APPLY
+if ($LASTEXITCODE -ne 0) { throw 'Hermes streaming patch setup failed. See the warning above.' }
+
 $hermesHome=Join-Path $env:USERPROFILE '.hermes'
 $panelHome=Join-Path $env:USERPROFILE '.desk-panel'
 New-Item -ItemType Directory -Force -Path $hermesHome,$panelHome,(Join-Path $panelHome 'agent') | Out-Null

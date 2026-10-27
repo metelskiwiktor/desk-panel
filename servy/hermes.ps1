@@ -18,17 +18,8 @@ if ($Action -eq 'CHECK') {
         if ($version -match [regex]::Escape($lock.hermes)) { Write-Host "Hermes: $version (pinned $($lock.hermes))" }
         else { Write-Warning "Hermes version '$version' differs from the pinned $($lock.hermes) (servy/hermes.lock.json)."; $problems++ }
     } else { Write-Warning "Hermes not found at $exe. Install it or change 'executable' in servy/hermes.json."; $problems++ }
-    if (!$lock.provider.ref) { Write-Warning "Provider $($lock.provider.name) is not pinned yet (provider.ref in servy/hermes.lock.json)." }
-    if ($lock.streamingPatch.required) {
-        if (!$lock.streamingPatch.file -or !$lock.streamingPatch.sha256) {
-            Write-Warning 'Streaming patch is not recorded (streamingPatch in servy/hermes.lock.json): answers may arrive without live text.'
-        } else {
-            $patched=Join-Path (Join-Path $env:USERPROFILE '.hermes') $lock.streamingPatch.file
-            if (!(Test-Path -LiteralPath $patched)) { Write-Warning "Patched provider file missing: $patched"; $problems++ }
-            elseif ((Get-FileHash -LiteralPath $patched -Algorithm SHA256).Hash -ne $lock.streamingPatch.sha256.ToUpper()) { Write-Warning "Provider file differs from the pinned patch: $patched"; $problems++ }
-            else { Write-Host 'Streaming patch: present and matches the pin.' }
-        }
-    }
+    & (Join-Path $PSScriptRoot '..\scripts\hermes-stream-patch.ps1') -Action CHECK
+    if ($LASTEXITCODE -ne 0) { $problems++ }
     try {
         $health=Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 3
         Write-Host "API server: http://127.0.0.1:$port answers ($($health | ConvertTo-Json -Compress))"
