@@ -81,9 +81,10 @@ describe('pointing at the panel', () => {
     await user.click(within(zone).getByRole('heading', { name: 'Najbliższe dni' }));
     expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Najbliższe dni' })).toBeTruthy();
     const days = within(zone).getAllByRole('button', { name: /^Pokaż dzień:/ });
-    const label = days[1].getAttribute('aria-label')!.replace('Pokaż dzień: ', '');
+    const dayTitle = days[1].closest<HTMLElement>('[data-ctx-title]')?.dataset.ctxTitle
+      ?? `Dzień: ${days[1].getAttribute('aria-label')!.replace('Pokaż dzień: ', '').replace(/, \d+ pozycj.*$/, '')}`;
     await user.click(days[1]);
-    expect(screen.getByRole('button', { name: `Usuń z kontekstu: Dzień: ${label}` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `Usuń z kontekstu: ${dayTitle}` })).toBeTruthy();
     expect(days[1].getAttribute('aria-pressed')).toBe('false'); // pointing is not selecting
     expect(days[0].getAttribute('aria-pressed')).toBe('true');
   });

@@ -18,7 +18,7 @@ export function monthTitle(days: WeekDay[]): string {
 }
 
 /**
- * The bottom zone: the days ahead. Short is a chip per day, medium (the default) is a card per day, and the month takes
+ * The bottom zone: the days ahead. Short (the default) is a chip per day, medium is a card per day, and the month takes
  * the whole screen below today (the zone grows and the work area folds away, both eased). A tap on a day selects it; the top zone then shows that day.
  */
 export function DaysZone({ week, month, size, known, selected, select, open, cycle, resize, preview, showCalendar }: {
