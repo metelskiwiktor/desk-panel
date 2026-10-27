@@ -1,16 +1,26 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
-  AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAui, useAuiState, useExternalStoreRuntime,
-  type AppendMessage, type TextMessagePartProps, type ThreadMessageLike,
+  AssistantRuntimeProvider, makeAssistantToolUI, useAui, useAuiState, useExternalStoreRuntime,
+  type AppendMessage, type ThreadMessageLike,
 } from '@assistant-ui/react';
 import {
-  Activity, ArrowUp, Bot, CalendarDays, Crosshair, LayoutGrid, ListChecks, Mail, RefreshCw, Sparkles, Square, SquareCheck, Wrench, X, type LucideIcon,
+  Activity, Bot, CalendarDays, Crosshair, LayoutGrid, ListChecks, Mail, RefreshCw, SquareCheck, Wrench, X, type LucideIcon,
 } from 'lucide-react';
+import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.aui';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
-import { Markdown } from '../markdown-lite';
-import { CardActions, DispatchCard, HermesApprovalCard, ReconCard, ToolCard, WatchCard } from './cards';
-import { DISPATCH, HERMES_APPROVAL, RECON, WATCH, type CockpitMessage, type CockpitSource } from './types';
+import { CardActions, DispatchCard, HermesApprovalCard, ReconCard, WatchCard } from './cards';
+import {
+  DISPATCH, HERMES_APPROVAL, RECON, WATCH,
+  type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type WatchArgs,
+} from './types';
+
+/*
+ * The conversation is assistant-ui's own Thread (src/components/thread.aui.tsx, from their shadcn registry): messages,
+ * markdown, tool rows, the composer. What is the panel's goes into its slots: the skill cards as tool UIs by name, the
+ * `@` skill picker, the picked dashboard elements as chips, the "Hermes nie odpowiada" card and the run's notices.
+ */
 
 const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   mail: { label: 'Mail', icon: Mail },
@@ -52,43 +62,20 @@ export function toThreadMessage(m: CockpitMessage): ThreadMessageLike {
     content: m.parts.map(p => p.type === 'text'
       ? { type: 'text' as const, text: p.text }
       : { type: 'tool-call' as const, toolCallId: p.id, toolName: p.name, args: p.args as never, argsText: JSON.stringify(p.args), ...(p.result !== undefined ? { result: p.result } : {}), ...(p.error ? { isError: true } : {}) }),
-    ...(m.role === 'assistant' ? { status: m.status === 'error' ? { type: 'incomplete', reason: 'error', error: m.error } : STATUS[m.status] } : {}),
-    metadata: { custom: { context: m.context ?? [], notice: m.notice, error: m.error, status: m.status } },
+    ...(m.role === 'assistant' ? { status: m.status === 'error' ? { type: 'incomplete', reason: 'error', error: m.error || 'Agent nie odpowiedział.' } : STATUS[m.status] } : {}),
+    metadata: { custom: { context: m.context ?? [], notice: m.notice, status: m.status } },
   };
 }
 
-const Text = ({ text }: TextMessagePartProps) => <Markdown text={text} />;
-const PARTS = {
-  Text,
-  tools: { by_name: { [RECON]: ReconCard, [DISPATCH]: DispatchCard, [WATCH]: WatchCard, [HERMES_APPROVAL]: HermesApprovalCard }, Fallback: ToolCard },
-};
+// The panel's cards, as assistant-ui tool UIs: they win over its generic tool row for these names, and stand on their own
+// (`standalone`) instead of folding into the group of tool calls.
+const ReconUI = makeAssistantToolUI<ReconArgs, unknown>({ toolName: RECON, display: 'standalone', render: ReconCard });
+const DispatchUI = makeAssistantToolUI<DispatchArgs, DispatchResult>({ toolName: DISPATCH, display: 'standalone', render: DispatchCard });
+const WatchUI = makeAssistantToolUI<WatchArgs, unknown>({ toolName: WATCH, display: 'standalone', render: WatchCard });
+const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: HermesApprovalCard });
 
-type Custom = { context: ContextItem[]; notice?: string; error?: string; status: CockpitMessage['status'] };
+type Custom = { context: ContextItem[]; notice?: string; status: CockpitMessage['status'] };
 const useCustom = () => useAuiState(s => s.message.metadata.custom) as Custom;
-
-function UserMessage() {
-  const { context } = useCustom();
-  return <MessagePrimitive.Root className="tw:flex tw:flex-col tw:items-end tw:gap-2">
-    {!!context?.length && <div className="tw:flex tw:max-w-[85%] tw:flex-wrap tw:justify-end tw:gap-1.5">{context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}</div>}
-    <div className="tw:max-w-[85%] tw:whitespace-pre-wrap tw:rounded-2xl tw:rounded-br-md tw:bg-ck-cal/15 tw:px-4 tw:py-2.5 tw:text-[15px] tw:text-ck-text tw:[overflow-wrap:anywhere]">
-      <MessagePrimitive.Parts components={{ Text: ({ text }: TextMessagePartProps) => <>{text}</> }} />
-    </div>
-  </MessagePrimitive.Root>;
-}
-
-function AssistantMessage() {
-  const { notice, error, status } = useCustom();
-  const empty = useAuiState(s => s.message.content.length === 0);
-  return <MessagePrimitive.Root className="tw:flex tw:gap-3">
-    <div className="tw:grid tw:size-8 tw:flex-none tw:place-items-center tw:rounded-full tw:bg-ck-agent/20 tw:text-ck-agent" aria-hidden="true"><Sparkles size={16} /></div>
-    <div className="md-scope tw:flex tw:min-w-0 tw:flex-1 tw:flex-col tw:gap-3 tw:text-[15px] tw:leading-relaxed tw:[overflow-wrap:anywhere]">
-      <MessagePrimitive.Parts components={PARTS} />
-      {status === 'running' && (notice || empty) && <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-sm tw:text-ck-muted" role="status"><i className="tw:size-2 tw:rounded-full tw:bg-ck-agent tw:animate-ck-pulse" aria-hidden="true" />{notice || 'Wektor pracuje…'}</p>}
-      {status === 'error' && <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3.5 tw:py-2.5 tw:text-sm tw:text-[#ffd3d4]" role="alert">{error || 'Agent nie odpowiedział.'}</p>}
-      {status === 'stopped' && <p className="tw:m-0 tw:text-[13px] tw:text-ck-faint">Zatrzymano.</p>}
-    </div>
-  </MessagePrimitive.Root>;
-}
 
 /** Detects a trailing `@query` token so typing `@` opens the skill picker. */
 export function detectAtSkill(draft: string): { start: number; query: string; token: string } | null {
@@ -100,10 +87,94 @@ export function detectAtSkill(draft: string): { start: number; query: string; to
 }
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l');
 
-/** The composer: `@` opens the skills, picked dashboard elements sit above the field as chips. */
-function Composer({ source, context, setContext, picking, setPicking }: {
-  source: CockpitSource; context: ContextItem[]; setContext: (fn: (list: ContextItem[]) => ContextItem[]) => void; picking: boolean; setPicking: (on: boolean) => void;
-}) {
+interface Shared {
+  source: CockpitSource;
+  context: ContextItem[];
+  setContext: (fn: (list: ContextItem[]) => ContextItem[]) => void;
+  picking: boolean;
+  setPicking: (on: boolean) => void;
+  empty: ReactNode;
+  matching: readonly ChatSkill[];
+  active: number;
+  pick(skill: ChatSkill): void;
+}
+const Panel = createContext<Shared | null>(null);
+const usePanel = () => useContext(Panel)!;
+
+// ── the slots ──
+
+function Welcome() { return <>{usePanel().empty}</>; }
+
+/** Above the field: the skill picker, the panel's error and the card when Hermes is down. */
+function ComposerHeader() {
+  const { source, matching, active, pick } = usePanel();
+  const down = !source.hermes.up;
+  return <>
+    {matching.length > 0 && <div role="listbox" aria-label="Wybór skillów" className="tw:absolute tw:inset-x-0 tw:bottom-full tw:z-10 tw:mb-2 tw:grid tw:gap-1 tw:rounded-2xl tw:border tw:border-ck-line-2 tw:bg-ck-surface tw:p-1.5 tw:shadow-2xl">
+      {matching.map((s, i) => <button key={s.id} type="button" role="option" aria-selected={i === active}
+        className={`tw:flex tw:min-h-12 tw:items-center tw:gap-3 tw:rounded-xl tw:px-3 tw:py-2 ${i === active ? 'tw:bg-ck-agent/15' : 'tw:hover:bg-ck-surface-2'}`}
+        onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}>
+        <Wrench size={15} className="tw:text-ck-agent" aria-hidden="true" />
+        <span className="tw:font-semibold tw:text-ck-text">@{s.title}</span>
+        <span className="tw:truncate tw:text-xs tw:text-ck-muted">{s.description}</span>
+      </button>)}
+    </div>}
+    {source.error && <p className="tw:mb-2 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4]" role="alert">
+      {source.error}<button type="button" className="tw:grid tw:size-7 tw:place-items-center tw:rounded-lg tw:hover:bg-ck-red/20" aria-label="Zamknij komunikat" onClick={source.clearError}><X size={14} aria-hidden="true" /></button>
+    </p>}
+    {down && <div className="tw:mb-3 tw:rounded-2xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:p-4" role="alert">
+      <p className="tw:m-0 tw:text-sm tw:text-[#ffd3d4]"><b>Hermes nie odpowiada.</b> {source.hermes.error ?? ''} Wiadomość nie zostanie wysłana, szkic zostaje.</p>
+      <button type="button" className="tw:mt-3 tw:inline-flex tw:min-h-10 tw:items-center tw:gap-2 tw:rounded-xl tw:bg-ck-surface-2 tw:px-4 tw:text-sm tw:font-medium tw:hover:bg-ck-line tw:disabled:opacity-50" disabled={source.hermes.checking} onClick={source.retry}>
+        <RefreshCw size={15} className={source.hermes.checking ? 'tw:animate-spin' : ''} aria-hidden="true" />{source.hermes.checking ? 'Sprawdzam…' : 'Ponów próbę'}
+      </button>
+    </div>}
+  </>;
+}
+
+/** Inside the composer, above the field: the picked elements. */
+function ComposerTop() {
+  const { context, setContext, picking } = usePanel();
+  if (!context.length && !picking) return null;
+  return <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5 tw:px-1" aria-label="Wskazane elementy">
+    {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
+    {picking && <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-ck-cal"><Crosshair size={14} aria-hidden="true" />{context.length ? 'Kliknij kolejny element na pulpicie' : 'Kliknij element na pulpicie'}</span>}
+  </div>;
+}
+
+/** Beside the send button: pointing at the dashboard, and the engine the chat runs on. */
+function ComposerExtra() {
+  const { source, picking, setPicking } = usePanel();
+  const running = useAuiState(s => s.thread.isRunning);
+  const down = !source.hermes.up;
+  return <>
+    {picking
+      ? <button type="button" className="tw:min-h-9 tw:rounded-xl tw:bg-ck-cal tw:px-4 tw:text-sm tw:font-semibold tw:text-ck-bg tw:hover:bg-[#9cc0ff]" onClick={() => setPicking(false)}>Gotowe</button>
+      : <button type="button" className="tw:inline-flex tw:min-h-9 tw:items-center tw:gap-2 tw:rounded-xl tw:px-3 tw:text-sm tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" onClick={() => setPicking(true)}><Crosshair size={16} aria-hidden="true" />Wskaż element</button>}
+    <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:rounded-full tw:border tw:border-border tw:px-2.5 tw:py-1 tw:text-xs tw:text-muted-foreground" title="Czat działa na Hermesie">
+      <i className={`tw:size-2 tw:rounded-full ${down ? 'tw:bg-ck-red' : running ? 'tw:bg-ck-agent tw:animate-ck-pulse' : 'tw:bg-ck-green'}`} aria-hidden="true" />Hermes
+    </span>
+  </>;
+}
+
+function UserMessageHeader() {
+  const { context } = useCustom();
+  if (!context?.length) return null;
+  return <div className="tw:flex tw:max-w-full tw:flex-wrap tw:justify-end tw:gap-1.5">{context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}</div>;
+}
+
+/** What the panel says about a run (reconnecting, an approval sent), or that the answer was stopped. */
+function AssistantMessageFooter() {
+  const { notice, status } = useCustom();
+  if (status === 'running' && notice) return <p className="tw:m-0 tw:mt-2 tw:flex tw:items-center tw:gap-2 tw:text-sm tw:text-muted-foreground" role="status"><i className="tw:size-2 tw:rounded-full tw:bg-ck-agent tw:animate-ck-pulse" aria-hidden="true" />{notice}</p>;
+  if (status === 'stopped') return <p className="tw:m-0 tw:mt-2 tw:text-[13px] tw:text-muted-foreground">Zatrzymano.</p>;
+  return null;
+}
+
+const SLOTS: ThreadComponents = { Welcome, ComposerHeader, ComposerTop, ComposerExtra, UserMessageHeader, AssistantMessageFooter };
+
+/** Inside the runtime: the `@` picker's state and keys, given to the slots and to the field. */
+function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
+  const { source, context, setContext, picking } = props;
   const aui = useAui();
   const draft = useAuiState(s => s.composer.text);
   const running = useAuiState(s => s.thread.isRunning);
@@ -132,58 +203,28 @@ function Composer({ source, context, setContext, picking, setPicking }: {
     // A picked skill is a message on its own: Enter sends it even with nothing typed.
     if (e.key === 'Enter' && !e.shiftKey && !draft.trim() && skill && !running && !down) { e.preventDefault(); aui.composer().setText(skill.title); queueMicrotask(() => aui.composer().send()); }
   };
-
-  return <div className="tw:flex-none tw:px-4 tw:pb-4 tw:pt-2 tw:md:px-6">
-    {down && <div className="tw:mb-3 tw:rounded-2xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:p-4" role="alert">
-      <p className="tw:m-0 tw:text-sm tw:text-[#ffd3d4]"><b>Hermes nie odpowiada.</b> {source.hermes.error ?? ''} Wiadomość nie zostanie wysłana, szkic zostaje.</p>
-      <button type="button" className="tw:mt-3 tw:inline-flex tw:min-h-10 tw:items-center tw:gap-2 tw:rounded-xl tw:bg-ck-surface-2 tw:px-4 tw:text-sm tw:font-medium tw:hover:bg-ck-line tw:disabled:opacity-50" disabled={source.hermes.checking} onClick={source.retry}>
-        <RefreshCw size={15} className={source.hermes.checking ? 'tw:animate-spin' : ''} aria-hidden="true" />{source.hermes.checking ? 'Sprawdzam…' : 'Ponów próbę'}
-      </button>
-    </div>}
-    <ComposerPrimitive.Root className="tw:relative tw:rounded-2xl tw:border tw:border-ck-line-2 tw:bg-ck-surface-2 tw:p-2 tw:focus-within:border-ck-cal tw:focus-within:shadow-[0_0_0_1px_#7ca9ff]">
-      {matching.length > 0 && <div role="listbox" aria-label="Wybór skillów" className="tw:absolute tw:inset-x-2 tw:bottom-full tw:mb-2 tw:grid tw:gap-1 tw:rounded-2xl tw:border tw:border-ck-line-2 tw:bg-ck-surface tw:p-1.5 tw:shadow-2xl">
-        {matching.map((s, i) => <button key={s.id} type="button" role="option" aria-selected={i === active}
-          className={`tw:flex tw:min-h-12 tw:items-center tw:gap-3 tw:rounded-xl tw:px-3 tw:py-2 ${i === active ? 'tw:bg-ck-agent/15' : 'tw:hover:bg-ck-surface-2'}`}
-          onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}>
-          <Wrench size={15} className="tw:text-ck-agent" aria-hidden="true" />
-          <span className="tw:font-semibold tw:text-ck-text">@{s.title}</span>
-          <span className="tw:truncate tw:text-xs tw:text-ck-muted">{s.description}</span>
-        </button>)}
-      </div>}
-      {(context.length > 0 || picking) && <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5 tw:px-1 tw:pb-2" aria-label="Wskazane elementy">
-        {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
-        {picking && <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-ck-cal"><Crosshair size={14} aria-hidden="true" />{context.length ? 'Kliknij kolejny element na pulpicie' : 'Kliknij element na pulpicie'}</span>}
-      </div>}
-      <ComposerPrimitive.Input autoFocus cancelOnEscape={false} onKeyDown={onKeyDown} rows={1} maxRows={7}
-        onChange={() => { setDismissed(null); setIndex(0); }}
-        aria-label="Wiadomość do agenta" placeholder={picking ? 'Co z tym zrobić?' : 'Napisz do Wektora lub wpisz @ aby wybrać skill…'}
-        className="tw:block tw:w-full tw:resize-none tw:border-0 tw:bg-transparent tw:font-ck tw:px-2 tw:py-1.5 tw:text-[15px] tw:leading-relaxed tw:text-ck-text tw:placeholder:text-ck-faint" />
-      <div className="tw:flex tw:items-center tw:gap-2 tw:pt-1">
-        {picking
-          ? <button type="button" className="tw:min-h-10 tw:rounded-xl tw:bg-ck-cal tw:px-4 tw:text-sm tw:font-semibold tw:text-ck-bg tw:hover:bg-[#9cc0ff]" onClick={() => setPicking(false)}>Gotowe</button>
-          : <button type="button" className="tw:inline-flex tw:min-h-10 tw:items-center tw:gap-2 tw:rounded-xl tw:px-3 tw:text-sm tw:text-ck-muted tw:hover:bg-ck-line tw:hover:text-ck-text" onClick={() => setPicking(true)}><Crosshair size={16} aria-hidden="true" />Wskaż element</button>}
-        <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:rounded-full tw:border tw:border-ck-line tw:px-2.5 tw:py-1 tw:text-xs tw:text-ck-muted" title="Czat działa na Hermesie">
-          <i className={`tw:size-2 tw:rounded-full ${down ? 'tw:bg-ck-red' : running ? 'tw:bg-ck-agent tw:animate-ck-pulse' : 'tw:bg-ck-green'}`} aria-hidden="true" />Hermes
-        </span>
-        <div className="tw:ml-auto">
-          {running
-            ? <ComposerPrimitive.Cancel className="tw:grid tw:size-10 tw:place-items-center tw:rounded-full tw:bg-ck-text tw:text-ck-bg" aria-label="Zatrzymaj odpowiedź"><Square size={14} fill="currentColor" aria-hidden="true" /></ComposerPrimitive.Cancel>
-            : <ComposerPrimitive.Send className="tw:grid tw:size-10 tw:place-items-center tw:rounded-full tw:bg-ck-cal tw:text-ck-bg tw:disabled:bg-ck-line tw:disabled:text-ck-faint" aria-label="Wyślij"><ArrowUp size={19} aria-hidden="true" /></ComposerPrimitive.Send>}
-        </div>
-      </div>
-    </ComposerPrimitive.Root>
-  </div>;
+  const components: ThreadComponents = {
+    ...SLOTS,
+    composerInput: {
+      onKeyDown, cancelOnEscape: false, disabled: source.unavailable,
+      onChange: () => { setDismissed(null); setIndex(0); },
+      'aria-label': 'Wiadomość do agenta',
+      placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora lub wpisz @ aby wybrać skill…',
+    },
+  };
+  return <Panel.Provider value={{ ...props, matching, active, pick }}>
+    <AuiThread components={components} />
+  </Panel.Provider>;
 }
 
 /**
- * The left column: the conversation (assistant-ui over the cockpit's source) and the composer. The source keeps the
- * messages; assistant-ui only renders them and reports what the user sends or stops.
+ * The left column: the conversation (assistant-ui over the cockpit's source). The source keeps the messages;
+ * assistant-ui renders them and reports what the user sends or stops.
  */
-export function Thread({ source, context, setContext, picking, setPicking, empty }: {
-  source: CockpitSource; context: ContextItem[]; setContext: (fn: (list: ContextItem[]) => ContextItem[]) => void; picking: boolean; setPicking: (on: boolean) => void; empty: ReactNode;
-}) {
-  const contextRef = useRef(context);
-  contextRef.current = context;
+export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
+  const { source, setContext } = props;
+  const contextRef = useRef(props.context);
+  contextRef.current = props.context;
   const runtimeRef = useRef<ReturnType<typeof useExternalStoreRuntime> | null>(null);
   const onNew = async (message: AppendMessage) => {
     const text = message.content.map(p => p.type === 'text' ? p.text : '').join('').trim();
@@ -205,19 +246,13 @@ export function Thread({ source, context, setContext, picking, setPicking, empty
   const actions = useMemo(() => ({ respond: source.respond, running: source.running, watched: source.cockpit.task }), [source.respond, source.running, source.cockpit.task]);
 
   return <AssistantRuntimeProvider runtime={runtime}>
-    <CardActions.Provider value={actions}>
-      <ThreadPrimitive.Root className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">
-        <ThreadPrimitive.Viewport className="tw:min-h-0 tw:flex-1 tw:overflow-y-auto" role="log" aria-live="polite" aria-label="Rozmowa">
-          <div className="tw:mx-auto tw:flex tw:max-w-[820px] tw:flex-col tw:gap-6 tw:px-4 tw:py-6 tw:md:px-6">
-            <ThreadPrimitive.Empty>{empty}</ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
-          </div>
-        </ThreadPrimitive.Viewport>
-        {source.error && <p className="tw:mx-4 tw:mb-2 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4] tw:md:mx-6" role="alert">
-          {source.error}<button type="button" className="tw:grid tw:size-7 tw:place-items-center tw:rounded-lg tw:hover:bg-ck-red/20" aria-label="Zamknij komunikat" onClick={source.clearError}><X size={14} aria-hidden="true" /></button>
-        </p>}
-        <Composer source={source} context={context} setContext={setContext} picking={picking} setPicking={setPicking} />
-      </ThreadPrimitive.Root>
-    </CardActions.Provider>
+    <TooltipProvider>
+      <CardActions.Provider value={actions}>
+        <ReconUI /><DispatchUI /><WatchUI /><ApprovalUI />
+        <div className="tw:relative tw:min-h-0 tw:flex-1">
+          <Conversation {...props} />
+        </div>
+      </CardActions.Provider>
+    </TooltipProvider>
   </AssistantRuntimeProvider>;
 }

@@ -9,12 +9,20 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
 
 ## Jak się tego używa
 
-- **Okno (kokpit)**: duże, modalne, w dwóch kolumnach (`src/ChatWindow.tsx`, `src/cockpit/`). Po lewej (60%) rozmowa
-  zbudowana na `@assistant-ui/react`; po prawej (40%) **kokpit taska**: czy Wektor monitoruje task, aktywny task Cezara (ID,
-  status RUNNING/REVIEW/DONE, repo, worktree, tokeny, „Otwórz w Cezarze”), pull request z checkami CI, subtaski z list
-  zadań (do odhaczania) i pusta strefa na przyszłe widoki (diff, zrzuty). Tytuł w nagłówku rozwija listę rozmów i „Nowy
+- **Okno (kokpit)**: duże, modalne, w dwóch kolumnach (`src/ChatWindow.tsx`, `src/cockpit/`). Po lewej (60%) rozmowa;
+  po prawej (40%) **kokpit taska**: czy Wektor monitoruje task, aktywny task Cezara (ID, status RUNNING/REVIEW/DONE, repo,
+  worktree, tokeny, „Otwórz w Cezarze”) i pull request z checkami CI. Tytuł w nagłówku rozwija listę rozmów i „Nowy
   czat”; wybranie rozmowy ją **kontynuuje** (agent pamięta wcześniejsze wiadomości, także po restarcie panelu). `Esc`
   kończy wskazywanie, potem zamyka okno. Na wąskim ekranie kolumny są zakładkami „Czat” / „Kokpit”.
+- **Rozmowa to gotowe komponenty assistant-ui**: `Thread` z ich rejestru shadcn (`src/components/thread.aui.tsx` i to, czego
+  używa: markdown, wiersz narzędzia, grupa narzędzi, `src/components/ui/*`), skopiowany do repo i dopasowany: polskie
+  etykiety, bez załączników, edycji, ponawiania i gałęzi (runtime panelu ich nie ma) i ze slotami na rzeczy panelu
+  (`ComposerHeader`, `ComposerTop`, `ComposerExtra`, `UserMessageHeader`, `AssistantMessageFooter`, `composerInput`).
+  Panel wpina w nie (`src/cockpit/Thread.tsx`): picker skillów `@`, chipy wskazanych elementów, kartę „Hermes nie odpowiada”,
+  komunikaty o przebiegu, a karty skilli rejestruje jako „tool UI” po nazwie narzędzia (`display: 'standalone'`, więc nie
+  chowają się w zwiniętej grupie). Zwykłe kroki narzędzi zwijają się w wiersz „N narzędzi”. Komponenty dodaje się przez
+  `npx shadcn add https://r.assistant-ui.com/<nazwa>.json` (`components.json`: prefiks `tw`, alias `@/` → `src/`); po
+  aktualizacji z rejestru trzeba ponownie nanieść zmiany opisane na górze `thread.aui.tsx`.
 - **Karty w rozmowie**: narzędzia o znanych nazwach mają własne karty (`src/cockpit/cards.tsx`): rekonesans
   `@Zaimplementuj zadanie` (kroki, przeszukane pliki, typ UI/non-UI, prompt dla executora), **zgoda przed zleceniem na
   Cezarze** („Zleć na Cezarze”, „Edytuj prompt”, „Odrzuć”), nasłuchiwanie Cezara (pasek postępu i kroki worktree) i prośba
@@ -34,17 +42,16 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   co 5 s, gdy task albo check trwa, inaczej co 30 s.
 - **Zlecenie z karty** (`POST /api/chats/:id/dispatch`, Origin-checked): Hermes tylko proponuje (`panel_cezar_propose`);
   „Zleć na Cezarze” albo „Zleć z poprawkami” to panel wywołujący `cezarCreateRun` z promptem w wersji użytkownika, raz na
-  kartę (drugie kliknięcie zwraca to samo). Odpowiedź (też „Odrzuć”) i powiązania (rozmowa → runy, run → lista) panel trzyma
+  kartę (drugie kliknięcie zwraca to samo). Odpowiedź (też „Odrzuć”) i powiązania (rozmowa → runy) panel trzyma
   w `~/.desk-panel/cockpit.json` (poza Gitem, same id i prompty), więc karta pokazuje decyzję także po restarcie.
-- **Subtaski**: kryteria akceptacji promptu (`- [ ] …`) stają się listą „Wektor · <tytuł>” w listach zadań (`by: agent`),
-  a gdy task realizuje zadanie z list (`todoId`), subtaskami jest lista tego zadania. Odhaczenie w kokpicie to
-  `updateTask` w `todos.json`, jak na kafelku.
 - **Makieta i zrzuty**: `?cockpit=mock` w adresie gra cały przebieg bez serwera (`&hermes=down` bez Hermesa,
   `&cockpitSpeed=0.3` szybciej); `just screenshots standard --pages pulpit --open cockpit-approval` (także `cockpit`,
   `cockpit-recon`, `cockpit-watch`, `cockpit-review`). Prawdziwy przebieg na zastępczym Hermesie scenariusza, z runem
   i PR-em zmyślonymi przez scenariusz: `--open chat-dispatch`, `chat-dispatched`, `chat-review`.
 - **Style**: tylko okno czatu używa Tailwind CSS v4 (`src/cockpit/cockpit.css`): klasy z prefiksem `tw:`, bez preflight,
-  utilities jako `!important`, skanowane tylko `src/cockpit` i `src/ChatWindow.tsx`; reszta panelu ma swoje style bez zmian.
+  utilities jako `!important`, skanowane tylko `src/cockpit`, `src/ChatWindow.tsx`, `src/components` i `src/lib`. Kolory
+  shadcn (`background`, `muted`, `primary`…) są paletą panelu jako zmienne `--ck-…` (panel ma własne `--muted`), a wariant
+  `dark:` działa w czacie zawsze; reszta panelu ma swoje style bez zmian.
 - **Wskaż element**: okno zwija się do samej rozmowy przyklejonej do prawej krawędzi, a pulpit **zsuwa się w lewo** obok niego (tylko
   w tym trybie; górny pasek zawija się pod zegar). Każdy kliknięty element (mail, zadanie Cezara, spotkanie, trening albo cały
   kafelek: Poczta, Cezar, limity, pasek dnia, cała strefa „Najbliższe dni” i pojedynczy dzień w niej) trafia do wiadomości

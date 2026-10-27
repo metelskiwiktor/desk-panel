@@ -1,4 +1,4 @@
-import { Check, CircleDashed, CircleX, ExternalLink, GitBranch, GitPullRequest, LayoutPanelTop, LoaderCircle, Radar, Square, SquareCheck } from 'lucide-react';
+import { Check, CircleDashed, CircleX, ExternalLink, GitBranch, GitPullRequest, LoaderCircle, Radar } from 'lucide-react';
 import type { CezarStatus, CheckState, CockpitSource } from './types';
 
 const section = 'tw:rounded-2xl tw:border tw:border-ck-line tw:bg-ck-surface tw:p-4';
@@ -24,13 +24,11 @@ function CheckIcon({ state }: { state: CheckState }) {
 }
 
 /**
- * The right column: what Wektor is watching. The task in Cezar, its pull request and CI, the subtasks from the panel's
- * to-do lists, and room for later views (a diff, screenshots).
+ * The right column: what Wektor is watching. The task in Cezar and its pull request with CI checks.
  */
 export function Cockpit({ source }: { source: CockpitSource }) {
   const { cockpit } = source;
   const { task, pr } = cockpit;
-  const done = cockpit.subtasks.filter(s => s.done).length;
   return <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-3 tw:overflow-y-auto tw:p-4">
     <div className={`tw:flex tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:px-4 tw:py-3 ${cockpit.watching ? 'tw:border-ck-amber/40 tw:bg-ck-amber/10' : 'tw:border-ck-line tw:bg-ck-surface'}`} role="status">
       <Radar size={18} className={cockpit.watching ? 'tw:text-ck-amber tw:animate-ck-pulse' : 'tw:text-ck-faint'} aria-hidden="true" />
@@ -77,26 +75,5 @@ export function Cockpit({ source }: { source: CockpitSource }) {
       </> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">PR pojawi się, gdy Cezar go otworzy.</p>}
     </section>
 
-    <section className={section} aria-label="Subtaski">
-      <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><span className={eyebrow}>Subtaski</span>
-        {cockpit.list && <span className="tw:truncate tw:text-xs tw:text-ck-faint">{cockpit.list.name}</span>}
-        {!!cockpit.subtasks.length && <span className="tw:ml-auto tw:text-xs tw:tabular-nums tw:text-ck-muted">{done}/{cockpit.subtasks.length}</span>}
-      </div>
-      {cockpit.subtasks.length ? <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:p-0">
-        {cockpit.subtasks.map(s => <li key={s.id}>
-          <button type="button" role="checkbox" aria-checked={s.done} onClick={() => source.toggleSubtask(s.id)}
-            className="tw:flex tw:min-h-10 tw:w-full tw:items-center tw:gap-3 tw:rounded-xl tw:px-2 tw:text-sm tw:hover:bg-ck-surface-2">
-            {s.done ? <SquareCheck size={18} className="tw:text-ck-green" aria-hidden="true" /> : <Square size={18} className="tw:text-ck-faint" aria-hidden="true" />}
-            <span className={s.done ? 'tw:text-ck-faint tw:line-through' : 'tw:text-ck-text'}>{s.title}</span>
-          </button>
-        </li>)}
-      </ul> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">Subtaski z list zadań pojawią się przy aktywnym tasku.</p>}
-    </section>
-
-    {/* Room for the next views of a task: its diff, before/after screenshots. */}
-    <section className="tw:flex tw:min-h-32 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:rounded-2xl tw:border tw:border-dashed tw:border-ck-line-2 tw:p-4 tw:text-center" aria-label="Strefa rozszerzeń" data-cockpit-slot="">
-      <LayoutPanelTop size={20} className="tw:text-ck-faint" aria-hidden="true" />
-      <span className="tw:text-sm tw:text-ck-muted">Miejsce na diff kodu i podgląd zrzutów ekranu</span>
-    </section>
   </div>;
 }

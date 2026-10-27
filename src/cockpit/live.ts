@@ -4,7 +4,7 @@ import { COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, t
 import { engineOf, useChat } from '../useChat';
 import { DISPATCH, HERMES_APPROVAL, RECON, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
-const IDLE: CockpitState = { watching: false, subtasks: [] };
+const IDLE: CockpitState = { watching: false };
 /** While the task runs (or a check does) the cockpit is read often; otherwise now and then. */
 const ACTIVE_MS = 5_000, IDLE_MS = 30_000;
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
@@ -94,14 +94,12 @@ export function useLiveCockpit(): CockpitSource {
 
   const cockpit: CockpitState = useMemo(() => {
     if (!view) return IDLE;
-    const { task, pr, list } = view;
+    const { task, pr } = view;
     return {
       watching: !!task && ACTIVE.has(task.status),
       since: task?.startedAt,
       task: task ?? undefined,
       pr: pr ?? undefined,
-      list: list ? { id: list.id, name: list.name } : undefined,
-      subtasks: list?.tasks ?? [],
     };
   }, [view]);
 
@@ -137,9 +135,5 @@ export function useLiveCockpit(): CockpitSource {
     remove: () => void chat.remove(),
     cockpit,
     cockpitError: cockpitError || undefined,
-    toggleSubtask: (taskId: string) => {
-      const done = !cockpit.subtasks.find(s => s.id === taskId)?.done;
-      void call('/api/todos/action', 'POST', { action: 'updateTask', task: taskId, done }).then(refresh, () => refresh());
-    },
   };
 }

@@ -3,12 +3,18 @@
  * - No preflight: the rest of the panel keeps its own reset (styles.css).
  * - Every utility is prefixed (`tw:flex`), so nothing collides with the panel's class names.
  * - `important`: the panel's global element rules (button, h2, button:hover…) are unlayered and would beat utilities.
- * - Only src/cockpit and src/ChatWindow.tsx are scanned for classes.
+ * - Only src/cockpit, src/ChatWindow.tsx and assistant-ui's components (src/components, src/lib) are scanned.
  */
 @import 'tailwindcss/theme.css' prefix(tw);
 @import 'tailwindcss/utilities.css' prefix(tw) important source(none);
+@import "tw-shimmer";
+/* The panel is always dark: shadcn's dark: variants apply in the chat (and its popovers) whatever the system says. */
+@custom-variant dark (&:where(.ck-root, .ck-root *, [data-radix-popper-content-wrapper], [data-radix-popper-content-wrapper] *));
 @source './';
 @source '../ChatWindow.tsx';
+/* assistant-ui's components (shadcn registry, copied into the repo and adapted): */
+@source '../components';
+@source '../lib';
 
 /* The panel's dark palette (chat.css), as Tailwind colors: tw:bg-ck-surface, tw:text-ck-muted… */
 @theme {
@@ -41,13 +47,94 @@
   }
 }
 
+/*
+ * shadcn's colour tokens (the assistant-ui components use them), as the panel's palette. They live on the chat only
+ * (.ck-root), so nothing else of the panel sees them.
+ */
+@theme inline {
+  --color-background: var(--ck-background);
+  --color-foreground: var(--ck-foreground);
+  --color-muted: var(--ck-muted);
+  --color-muted-foreground: var(--ck-muted-foreground);
+  --color-primary: var(--ck-primary);
+  --color-primary-foreground: var(--ck-primary-foreground);
+  --color-secondary: var(--ck-secondary);
+  --color-secondary-foreground: var(--ck-secondary-foreground);
+  --color-accent: var(--ck-accent);
+  --color-accent-foreground: var(--ck-accent-foreground);
+  --color-destructive: var(--ck-destructive);
+  --color-border: var(--ck-border);
+  --color-input: var(--ck-input);
+  --color-ring: var(--ck-ring);
+  --color-popover: var(--ck-popover);
+  --color-popover-foreground: var(--ck-popover-foreground);
+  --color-card: var(--ck-card);
+  --color-card-foreground: var(--ck-card-foreground);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+/* Namespaced: the panel has its own --muted (a text colour). On :root, so popovers outside the chat get them too. */
+:root {
+  --ck-background: #141922;
+  --ck-foreground: #eaeff6;
+  --ck-muted: #1b2230;
+  --ck-muted-foreground: #93a0b4;
+  --ck-primary: #7ca9ff;
+  --ck-primary-foreground: #0d121b;
+  --ck-secondary: #1b2230;
+  --ck-secondary-foreground: #eaeff6;
+  --ck-accent: #222b3b;
+  --ck-accent-foreground: #eaeff6;
+  --ck-destructive: #f2888b;
+  --ck-border: #273044;
+  --ck-input: #2f3a52;
+  --ck-ring: #7ca9ff;
+  --ck-popover: #10151d;
+  --ck-popover-foreground: #eaeff6;
+  --ck-card: #10151d;
+  --ck-card-foreground: #eaeff6;
+}
+
 /* What utilities cannot say: the panel's global button reset and hover colour must not leak in. */
 :where(.ck-root) button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; text-align: left; }
 :where(.ck-root) button:focus-visible, :where(.ck-root) summary:focus-visible { outline: 3px solid #9ec9ff; outline-offset: 2px; }
+:where(.ck-root) textarea { font: inherit; color: inherit; border: 0; background: none; padding: 0; margin: 0; }
 :where(.ck-root) textarea:focus { outline: none; }
+:where(.ck-root) :is(p, h1, h2, h3, ol, ul, pre, blockquote) { margin: 0; }
 :where(.ck-root) svg { flex: none; }
 :where(.ck-root) summary { list-style: none; }
 :where(.ck-root) summary::-webkit-details-marker { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .ck-root * { animation: none !important; transition: none !important; }
+}
+/*
+ ---break---
+ */
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+/*
+ ---break---
+ */
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+/*
+ ---break---
+ */
+@theme inline {
+  @keyframes collapsible-down {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  to {
+    height: 0;
+    }
+  }
 }

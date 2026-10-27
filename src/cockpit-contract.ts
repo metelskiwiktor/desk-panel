@@ -3,7 +3,7 @@ import { todoTaskId } from './todo-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
- * with its CI checks, the to-do list of its subtasks, and the user's answers on the dispatch cards. Read-only; the only
+ * with its CI checks, and the user's answers on the dispatch cards. Read-only; the only
  * write is the answer on a card (`POST /api/chats/:id/dispatch`), which is what dispatches a task to Cezar.
  */
 
@@ -45,7 +45,6 @@ export interface CockpitView {
   observedAt: number;
   task: CockpitTaskView | null;
   pr: CockpitPrView | null;
-  list: { id: string; name: string; tasks: { id: string; title: string; done: boolean }[] } | null;
   /** The user's answer on each dispatch card of the conversation, by its tool call id. */
   dispatches: Record<string, DispatchOutcome>;
 }
@@ -58,15 +57,10 @@ export const cockpitDispatchSchema = z.object({
   title: z.string().trim().min(1).max(120),
   /** What goes to the executor: the agent's prompt, or the user's correction of it. */
   prompt: z.string().trim().min(1).max(32_000),
-  /** A to-do item the task implements: its list becomes the subtask list. */
+  /** A to-do item the task implements (Cezar gets it with the run). */
   todoId: todoTaskId.optional(),
 }).strict();
 export type CockpitDispatch = z.infer<typeof cockpitDispatchSchema>;
-
-/** The acceptance criteria of an executor prompt (`- [ ] …`), which become the subtasks of the task. */
-export function criteriaOf(prompt: string): string[] {
-  return [...prompt.matchAll(/^\s*[-*]\s*\[[ xX]?\]\s+(.+?)\s*$/gm)].map(m => m[1].slice(0, 200)).filter(Boolean).slice(0, 20);
-}
 
 // ── The contract between the cockpit and Hermes ──
 //

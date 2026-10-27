@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, Wrench, X } from 'lucide-react';
+import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
 import {
   type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
 } from './types';
@@ -86,7 +86,9 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const decided = result as DispatchResult | undefined;
-  const busy = running || sending;
+  // Hermes streams a tool without its arguments: the prompt arrives when the answer ends (from the session).
+  const waiting = !args.prompt?.trim();
+  const busy = running || sending || waiting;
   const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
     setSending(true); setError('');
     try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, todoId: args.todoId }); setEditing(null); }
@@ -100,6 +102,7 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
       <span className="tw:ml-auto tw:rounded-md tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:font-ck-mono tw:text-xs tw:text-ck-muted">{args.repo ?? 'desk-panel'}</span>
     </div>
     <div className="tw:grid tw:gap-3 tw:p-4">
+      {waiting && !decided && <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted" role="status"><LoaderCircle size={13} className="tw:animate-spin" aria-hidden="true" />Czekam na prompt od Hermesa…</p>}
       <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
       {editing !== null
         ? <textarea value={editing} onChange={e => setEditing(e.target.value)} aria-label="Prompt dla executora" rows={9}
@@ -185,31 +188,4 @@ export function HermesApprovalCard({ toolCallId, args }: ToolCallMessagePartProp
       </>}
     </div>
   </section>;
-}
-
-/** The one line a tool step shows: its first string argument (a command, a path, a query). */
-function toolSummary(args: Record<string, unknown>): string {
-  const first = Object.values(args ?? {}).find(v => typeof v === 'string' && v.trim()) as string | undefined;
-  return (first ?? '').replace(/\s+/g, ' ').slice(0, 120);
-}
-const clip = (text: string) => text.length > 4000 ? `${text.slice(0, 4000)}\n… (skrócone)` : text;
-
-/** Any other tool: one line, details on demand. */
-export function ToolCard({ toolName, args, result, status, isError }: ToolCallMessagePartProps) {
-  const running = status.type === 'running';
-  const output = typeof result === 'string' ? result : result === undefined ? '' : JSON.stringify(result, null, 2);
-  return <details className="tw:rounded-xl tw:border tw:border-ck-line tw:bg-ck-side tw:text-[13px]" data-state={running ? 'running' : 'done'}>
-    <summary className="tw:flex tw:items-center tw:gap-2 tw:min-h-10 tw:px-3.5 tw:cursor-pointer tw:font-ck-mono tw:text-xs tw:text-ck-muted">
-      <Wrench size={14} aria-hidden="true" />
-      <b className="tw:font-medium tw:text-ck-text">{toolName}</b>
-      <span className="tw:min-w-0 tw:flex-1 tw:truncate">{toolSummary(args as Record<string, unknown>)}</span>
-      <span className={`tw:flex tw:items-center tw:gap-1.5 tw:font-ck tw:font-medium ${running ? 'tw:text-ck-amber' : isError ? 'tw:text-ck-red' : 'tw:text-ck-green'}`}>
-        {running ? <><LoaderCircle size={13} className="tw:animate-spin" aria-hidden="true" />Działa</> : <><Check size={13} aria-hidden="true" />{isError ? 'Błąd' : 'Gotowe'}</>}
-      </span>
-    </summary>
-    <div className="tw:grid tw:gap-2 tw:px-3.5 tw:pb-3">
-      <pre className="tw:m-0 tw:overflow-auto tw:whitespace-pre-wrap tw:font-ck-mono tw:text-[12px] tw:text-ck-muted">{JSON.stringify(args, null, 2)}</pre>
-      {output && <pre className="tw:m-0 tw:max-h-64 tw:overflow-auto tw:whitespace-pre-wrap tw:font-ck-mono tw:text-[12px] tw:text-ck-text">{clip(output)}</pre>}
-    </div>
-  </details>;
 }

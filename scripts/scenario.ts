@@ -131,6 +131,9 @@ if (!values.shot) {
           await input.fill('Dodaj chip statusu taska w nagłówku kokpitu');
           await input.press('Enter');
           await page.getByRole('button', { name: 'Zleć na Cezarze' }).waitFor({ timeout: 20_000 });
+          // The card is complete when the answer ends (Hermes streams tools without arguments).
+          await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
+          await page.getByRole('region', { name: 'Zgoda na zlecenie taska' }).getByText('Task: Show the Cezar task status chip', { exact: false }).waitFor({ timeout: 10_000 });
           if (values.open !== 'chat-dispatch') {
             await page.getByRole('button', { name: 'Zleć na Cezarze' }).click();
             await page.getByText('poszedł do Cezara').waitFor();

@@ -38,7 +38,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '     Relevant files (from recon):',
       '     - src/...',
       '     Acceptance criteria:',
-      '     - [ ] ... (each criterion becomes a subtask the user ticks off)',
+      '     - [ ] ...',
       '     Notes for executor:',
       '     - Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
       '- Then, in this order: (1) call the panel tool panel_recon_report with files (path + short note), kind, scenario and the Executor Prompt; (2) write a short plan for the user in Polish (3-6 bullets); (3) call panel_cezar_propose with a short Polish title, the same prompt and the todoId of a to-do item from the context if there is one; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',

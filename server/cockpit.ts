@@ -3,13 +3,13 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
-  criteriaOf, watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
+  watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { SourceError, type PanelSources } from './sources';
 
 /**
  * The chat cockpit on the server: which Cezar task a conversation watches, how that task is doing (read from Cezar), its
- * pull request and CI checks (read with the GitHub CLI, gently), and its subtasks (a to-do list of the panel).
+ * pull request and CI checks (read with the GitHub CLI, gently).
  *
  * The one write is the user's answer on a dispatch card. Hermes only proposes a task; the panel dispatches it to Cezar
  * when the user clicks "Zleć na Cezarze", with the prompt as the user left it, and keeps the answer so the card shows it
@@ -25,8 +25,6 @@ const storeSchema = z.object({
   chats: z.record(z.string(), z.object({
     /** Tasks dispatched from the conversation, oldest first: the last one is watched. */
     runs: z.array(z.string()).default([]),
-    /** The subtask list of each task. */
-    lists: z.record(z.string(), z.string()).default({}),
     dispatches: z.record(z.string(), outcomeSchema).default({}),
     updatedAt: z.number().default(0),
   })),
@@ -146,7 +144,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     writeFileSync(`${file}.tmp`, JSON.stringify(store, null, 2), 'utf8');
     renameSync(`${file}.tmp`, file);
   };
-  const chatOf = (id: string) => store.chats[id] ??= { runs: [], lists: {}, dispatches: {}, updatedAt: now() };
+  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, updatedAt: now() };
 
   const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
   async function prOf(url: string, fallback: { title: string; branch?: string }): Promise<CockpitPrView> {
@@ -181,13 +179,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           }
         }
       }
-      let list: CockpitView['list'] = null;
-      const listId = id ? chat?.lists[id] : undefined;
-      if (listId) {
-        const found = (await sources.todos().catch(() => null))?.data?.lists.find(l => l.id === listId);
-        if (found) list = { id: found.id, name: found.name, tasks: found.tasks.map(t => ({ id: t.id, title: t.title, done: t.done })) };
-      }
-      return { observedAt: now(), task, pr, list, dispatches: { ...chat?.dispatches } };
+      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches } };
     },
 
     async dispatch(chatId, input) {
@@ -209,20 +201,6 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();
       save();
-      // Subtasks: the list of the to-do item the task implements, or a new list of its acceptance criteria.
-      try {
-        const lists = (await sources.todos()).data?.lists ?? [];
-        const own = input.todoId ? lists.find(l => l.tasks.some(t => t.id === input.todoId)) : undefined;
-        let listId = own?.id;
-        const criteria = criteriaOf(input.prompt);
-        if (!listId && criteria.length) {
-          const made = await sources.todoAction({ action: 'createList', name: `Wektor · ${input.title}`.slice(0, 80) });
-          listId = made.list?.id;
-          // An existing list of that name is reused as it is: its tasks are not added twice.
-          if (listId && made.list?.created !== false) for (const title of criteria) await sources.todoAction({ action: 'addTask', list: listId, title, by: 'agent' });
-        }
-        if (listId) { chat.lists[created.id] = listId; save(); }
-      } catch { /* the task is dispatched; only its subtasks are missing */ }
       return outcome;
     },
   };

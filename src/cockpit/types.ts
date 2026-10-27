@@ -54,17 +54,12 @@ export interface HermesApprovalArgs { tool: string; detail: string; state: 'pend
 
 export type CockpitTask = Omit<CockpitTaskView, 'steps' | 'progress'> & Partial<Pick<CockpitTaskView, 'steps' | 'progress'>>;
 export type CockpitPr = Omit<CockpitPrView, 'state'> & { state?: CockpitPrView['state'] };
-/** A to-do item of the panel's lists (todos.json), shown as a subtask of the task in flight. */
-export interface CockpitSubtask { id: string; title: string; done: boolean }
 export interface CockpitState {
   /** Whether Wektor is watching a task now, and since when. */
   watching: boolean;
   since?: number;
   task?: CockpitTask;
   pr?: CockpitPr;
-  /** The list the subtasks come from. */
-  list?: { id: string; name: string };
-  subtasks: CockpitSubtask[];
 }
 
 export interface CockpitChat { id: string; title: string; running: boolean; updatedAt: number }
@@ -94,7 +89,6 @@ export interface CockpitSource {
   open(id: string | null): void;
   remove(): void;
   cockpit: CockpitState;
-  toggleSubtask(id: string): void;
   /** The cockpit could not be read (live only), in Polish. */
   cockpitError?: string;
 }

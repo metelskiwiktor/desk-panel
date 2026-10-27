@@ -7,7 +7,7 @@ import {
 
 /**
  * A scripted Wektor for trying and photographing the cockpit without Hermes or Cezar (`?cockpit=mock`). Nothing here
- * talks to the server: every message, task, PR and subtask is made up and lives only in this window.
+ * talks to the server: every message, task and PR is made up and lives only in this window.
  *
  * - `@Zaimplementuj zadanie` (or a message about implementing) → recon card, plan, and the approval card.
  * - "Zleć na Cezarze" on it → a made-up Cezar task the agent watches step by step, then its PR and CI checks.
@@ -36,12 +36,7 @@ const PROMPT = [
   '- [ ] Screenshots before/after on the standard scenario',
 ].join('\n');
 
-const IDLE: CockpitState = { watching: false, subtasks: [] };
-const SUBTASKS = [
-  { id: 't-0000a001', title: 'Chip statusu w nagłówku kokpitu', done: false },
-  { id: 't-0000a002', title: 'Kolory RUNNING / REVIEW / DONE', done: false },
-  { id: 't-0000a003', title: 'Zrzuty przed i po (standard)', done: false },
-];
+const IDLE: CockpitState = { watching: false };
 
 const wantsImplement = (text: string, context: ContextItem[]) => context.some(c => c.kind === 'skill' && c.id === 'zaimplementuj-zadanie') || /zaimplementuj|zleć|zlec/i.test(text);
 const wantsWatch = (text: string, context: ContextItem[]) => context.some(c => c.kind === 'skill' && c.id === 'nasluchuj-cezara') || /nasłuchuj|nasluchuj|obserwuj/i.test(text);
@@ -107,14 +102,11 @@ export function useMockCockpit({ hermesDown = false, speed = 1 }: { hermesDown?:
     const set = (i: number, state: 'running' | 'done') => tool<WatchArgs>(a, w, args => ({
       args: { ...args, progress: state === 'done' ? (i + 1) / n : (i + 0.4) / n, steps: args.steps!.map((s, j) => j === i ? { ...s, state } : s) },
     }));
-    setCockpit(c => ({
+    setCockpit(() => ({
       watching: true, since: Date.now(),
       task: { id: taskId, title: 'Chip statusu taska w kokpicie', status: 'QUEUED', repo: 'desk-panel', worktree: `.ai/${taskId}`, tokens: 0, url: `#cezar/${taskId}` },
-      list: { id: 'l-0000a000', name: 'Wektor · chip statusu' },
-      subtasks: c.subtasks.length ? c.subtasks : SUBTASKS,
     }));
     const task = (patchTask: Partial<NonNullable<CockpitState['task']>>) => setCockpit(c => c.task ? { ...c, task: { ...c.task, ...patchTask } } : c);
-    const tick = (i: number) => (done: boolean) => setCockpit(c => ({ ...c, subtasks: c.subtasks.map((s, j) => j === i ? { ...s, done } : s) }));
     play([
       [200, () => {
         say(a, `Nasłuchuję Cezara: **${taskId}**. Dam znać, gdy będzie co przejrzeć.`);
@@ -124,9 +116,6 @@ export function useMockCockpit({ hermesDown = false, speed = 1 }: { hermesDown?:
         [500, () => { set(i, 'running'); task({ status: 'RUNNING', tokens: 4_200 + i * 18_500 }); }],
         [900, () => {
           set(i, 'done');
-          if (i === 2) tick(0)(true);
-          if (i === 3) tick(1)(true);
-          if (i === 4) tick(2)(true);
           if (i === n - 1) setCockpit(c => ({ ...c, pr: { number: 42, title: 'Chip statusu taska w kokpicie', branch: `cez/${taskId}`, url: '#pr/42', checks: [{ name: 'test', state: 'running' }, { name: 'typecheck', state: 'running' }, { name: 'build', state: 'pending' }] } }));
         }],
       ]),
@@ -190,6 +179,5 @@ export function useMockCockpit({ hermesDown = false, speed = 1 }: { hermesDown?:
     open: () => { stop(); setMessages([]); setCockpit(IDLE); },
     remove: () => {},
     cockpit,
-    toggleSubtask: (subtaskId: string) => setCockpit(c => ({ ...c, subtasks: c.subtasks.map(s => s.id === subtaskId ? { ...s, done: !s.done } : s) })),
   };
 }

@@ -4,37 +4,10 @@ import userEvent from '@testing-library/user-event';
 import type { ChatDetail, ChatEvent, ChatMessage, ChatPart, ChatSummary } from './chat-contract';
 import { ChatWindow, groupOf, messageCount } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
-import { Markdown } from './markdown-lite';
 import { withMessage } from './useChat';
 
 const ID = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11';
 const NOW = new Date('2026-10-25T12:00:00').getTime();
-
-describe('Markdown', () => {
-  it('renders the parts an answer uses, as elements', () => {
-    const { container } = render(<Markdown text={'## Plan\n\nTo jest **ważne** i `kod`.\n\n- jeden\n- dwa\n\n1. pierwszy\n\n```\nnpm test\n```\n\n[strona](https://example.com/a)'} />);
-    expect(container.querySelector('.md-h')?.textContent).toBe('Plan');
-    expect(container.querySelector('strong')?.textContent).toBe('ważne');
-    expect(container.querySelector('p code')?.textContent).toBe('kod');
-    expect([...container.querySelectorAll('ul li')].map(li => li.textContent)).toEqual(['jeden', 'dwa']);
-    expect(container.querySelector('ol li')?.textContent).toBe('pierwszy');
-    expect(container.querySelector('pre code')?.textContent).toBe('npm test');
-    const link = container.querySelector('a')!;
-    expect(link.getAttribute('href')).toBe('https://example.com/a');
-    expect(link.getAttribute('rel')).toContain('noopener');
-  });
-
-  it('never turns text into markup or a script link', () => {
-    const { container } = render(<Markdown text={'<img src=x onerror=alert(1)> <script>alert(2)</script> [zły](javascript:alert(3))'} />);
-    expect(container.querySelector('img, script, a')).toBeNull();
-    expect(container.textContent).toContain('<script>alert(2)</script>');
-  });
-
-  it('shows a code block that is still being written', () => {
-    const { container } = render(<Markdown text={'```ts\nconst a = 1;'} />);
-    expect(container.querySelector('pre code')?.textContent).toBe('const a = 1;');
-  });
-});
 
 describe('pointing at the dashboard', () => {
   const tile = () => {
@@ -158,7 +131,9 @@ describe('ChatWindow', () => {
     const log = await screen.findByRole('log', { name: 'Rozmowa' });
     expect(within(log).getByText('Anna Nowak')).toBeTruthy(); // the chip of the picked mail
     expect(within(log).getByText('Zrób z tego zadanie na jutro.')).toBeTruthy();
-    expect(within(log).getByText('add_todo')).toBeTruthy();
+    // Plain tool steps fold into one row of assistant-ui's thread, opened on demand.
+    await user.click(within(log).getByRole('button', { name: /1 narzędzie/ }));
+    expect(await within(log).findByText('add_todo')).toBeTruthy();
     expect(within(log).getByText('zadanie').tagName).toBe('STRONG');
   });
 
@@ -404,7 +379,8 @@ describe('Hermes only', () => {
     const card = await screen.findByRole('group', { name: 'Prośba o zgodę: terminal' });
     expect(within(card).getByText('Get-Process')).toBeTruthy();
     expect(within(card).getByText(/czeka na Twoją decyzję · 0:4\d/)).toBeTruthy();
-    expect(screen.getByText('panel_calendar')).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: /1 narzędzie/ }).at(-1)!);
+    expect(await screen.findByText('panel_calendar')).toBeTruthy();
     await user.click(within(card).getByRole('button', { name: 'Zezwól' }));
     await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/approval`)?.body).toEqual({ approvalId: 'ap_1', decision: 'approve' }));
     FakeSource.instances.at(-1)!.emit({ type: 'update', chat: summary({ id: H, running: true }), message: { ...asking, notice: 'Zgoda wysłana: Hermes uruchamia narzędzie…', parts: [tool, { ...ask, state: 'approved' }] } });
@@ -452,7 +428,7 @@ describe('the cockpit on its mock (?cockpit=mock)', () => {
     expect(screen.getByRole('progressbar', { name: 'Postęp taska' }).getAttribute('aria-valuenow')).toBe('100');
   });
 
-  it('rejecting sends nothing to Cezar; subtasks can be ticked by hand', async () => {
+  it('rejecting sends nothing to Cezar; a watched task goes through to review', async () => {
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Zaimplementuj chip statusu{Enter}');
@@ -462,12 +438,8 @@ describe('the cockpit on its mock (?cockpit=mock)', () => {
     expect(screen.queryByRole('region', { name: 'Nasłuchiwanie Cezara' })).toBeNull();
 
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'nasłuchuj cezara{Enter}');
-    const subtasks = await screen.findByRole('region', { name: 'Subtaski' });
-    const first = await within(subtasks).findByRole('checkbox', { name: /Chip statusu w nagłówku/ });
     await waitFor(() => expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('REVIEW'), { timeout: 5000 });
-    const was = first.getAttribute('aria-checked');
-    await user.click(first);
-    expect(first.getAttribute('aria-checked')).toBe(was === 'true' ? 'false' : 'true');
+    expect(screen.queryByRole('region', { name: 'Subtaski' })).toBeNull();
   });
 
   it('without Hermes shows the card, keeps the draft, and Ponów próbę brings it back', async () => {
@@ -493,7 +465,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     { type: 'text', text: 'Plan gotowy.' },
     { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt }), output: 'Karta jest u użytkownika.', state: 'done' },
   ] };
-  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, list: null, dispatches: {}, ...over });
+  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, ...over });
   const running = {
     id: RUN, title: 'Paski stref', status: 'RUNNING', repo: 'desk-panel', worktree: '.ai/cezar/worktrees/f2c9501e', tokens: 12_345,
     url: 'http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e', steps: [{ label: 'Implement', state: 'running' }, { label: 'Open PR', state: 'pending' }], progress: 0.5,
@@ -509,8 +481,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
       if (url === `/api/chats/${H}/dispatch`) {
-        cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } },
-          list: { id: 'l-1a2b3c4d', name: 'Wektor · Paski stref', tasks: [{ id: 't-0000a001', title: 'Jedno', done: false }] } });
+        cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } } });
         return reply(cockpit.dispatches.p1);
       }
       return reply({ ok: true });
@@ -539,9 +510,26 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(task).getByText('12 345')).toBeTruthy();
     expect(screen.getByText('Wektor monitoruje task')).toBeTruthy();
 
-    // A subtask ticked here is ticked on the to-do list.
-    await user.click(within(screen.getByRole('region', { name: 'Subtaski' })).getByRole('checkbox', { name: /Jedno/ }));
-    await waitFor(() => expect(calls.find(c => c.url === '/api/todos/action')?.body).toEqual({ action: 'updateTask', task: 't-0000a001', done: true }));
+  });
+
+  it('fills a card when Hermes streamed its tool without arguments and the panel completes them after the answer', async () => {
+    liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const streamed: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'streaming', parts: [
+      { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: '{"title":"Pas', state: 'done' },
+    ] };
+    const source = FakeSource.instances.at(-1)!;
+    source.emit({ type: 'state', chat: detail([...history, streamed], { id: H, running: true }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
+    expect(within(card).getByText('Czekam na prompt od Hermesa…')).toBeTruthy();
+    expect((within(card).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(true);
+    // The answer ends; the panel sends the step again, whole, from the session.
+    source.emit({ type: 'update', chat: summary({ id: H }), message: { ...streamed, status: 'done', parts: [{ ...streamed.parts![0], input: JSON.stringify({ title: 'Paski stref', prompt }) } as ChatPart] } });
+    expect(await within(card).findByText('Paski stref')).toBeTruthy();
+    expect(within(card).queryByText('Czekam na prompt od Hermesa…')).toBeNull();
+    expect((within(card).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('watches the task the conversation names, and shows the watch card live', async () => {

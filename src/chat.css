@@ -1,23 +1,5 @@
 /* Chat with the agent. The window itself is the cockpit (src/cockpit, Tailwind); what stays here is plain CSS shared
-   with the rest of the panel: the markdown of answers, pointing at the dashboard, and the dashboard making room. */
-.chat-root {
-  --c-bg: #0d121b; --c-surface: #141922; --c-side: #10151d; --c-line: #273044; --c-line-2: #2f3a52;
-  --c-text: #eaeff6; --c-cal: #7ca9ff;
-}
-
-/* markdown-lite */
-.md > :first-child { margin-top: 0; }
-.md > :last-child { margin-bottom: 0; }
-.md p { margin: 0 0 10px; }
-.md .md-h { margin: 14px 0 6px; font-weight: 600; font-size: 1.05em; }
-.md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
-.md li { margin: 2px 0; }
-.md code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; padding: 1px 6px; border-radius: 6px; background: var(--c-side); border: 1px solid var(--c-line); }
-.md pre { margin: 0 0 10px; padding: 12px 14px; border-radius: 12px; overflow-x: auto; background: var(--c-side); border: 1px solid var(--c-line); }
-.md pre code { padding: 0; border: 0; background: none; font-size: 13px; line-height: 1.5; }
-.md blockquote { margin: 0 0 10px; padding: 2px 0 2px 14px; border-left: 3px solid var(--c-line-2); color: #c4cddc; }
-.md a { color: var(--c-cal); }
-
+   with the rest of the panel: pointing at the dashboard, and the dashboard making room. */
 /* ── pointing ── */
 body[data-picking] * { cursor: crosshair; }
 /* Inside the outline, so a tile or list that clips what overflows it still shows it. */

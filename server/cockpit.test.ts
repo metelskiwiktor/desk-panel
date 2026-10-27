@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { COCKPIT_TOOLS, cockpitToolDescription, criteriaOf, watchedTask } from '../src/cockpit-contract';
+import { COCKPIT_TOOLS, cockpitToolDescription, watchedTask } from '../src/cockpit-contract';
 import { cezarTaskView, createCockpit, prFromGh } from './cockpit';
 import type { PanelSources } from './sources';
 import { createTodoStore } from './todos';
@@ -69,10 +69,6 @@ describe('a Cezar run in the cockpit', () => {
       { name: 'GitGuardian', state: 'running' }, { name: 'lint', state: 'fail' },
     ]);
   });
-
-  it('finds the acceptance criteria of a prompt', () => {
-    expect(criteriaOf(PROMPT)).toEqual(['Pierwsze kryterium', 'Drugie', 'Trzecie']);
-  });
 });
 
 describe('the cockpit contract', () => {
@@ -133,13 +129,13 @@ describe('the cockpit of a conversation', () => {
 
   it('watches nothing until the conversation dispatches a task or Hermes watches one', async () => {
     const { cockpit } = setup();
-    expect(await cockpit.view(CHAT, [said(`Task ${RUN} był w pliku.`)])).toMatchObject({ task: null, pr: null, list: null, dispatches: {} });
+    expect(await cockpit.view(CHAT, [said(`Task ${RUN} był w pliku.`)])).toMatchObject({ task: null, pr: null, dispatches: {} });
     const view = await cockpit.view(CHAT, [tool('panel_cezar_watch', 'w1', { id: RUN })]);
     expect(view.task).toMatchObject({ id: RUN, status: 'REVIEW' });
     expect(view.pr).toMatchObject({ number: 32, checks: [{ name: 'check', state: 'pass' }] });
   });
 
-  it('dispatches only on the user\'s answer, once, with the prompt as the user left it, and makes the subtask list', async () => {
+  it('dispatches only on the user\'s answer, once, with the prompt as the user left it, and touches no to-do list', async () => {
     const { cockpit, created, file, todos, gh } = setup();
     const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT };
     const outcome = await cockpit.dispatch(CHAT, answer);
@@ -147,13 +143,10 @@ describe('the cockpit of a conversation', () => {
     expect(await cockpit.dispatch(CHAT, answer)).toEqual(outcome); // a double click
     expect(created).toHaveBeenCalledTimes(1);
     expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski stref' });
-    const list = (await todos.read()).data!.lists[0];
-    expect(list.name).toBe('Wektor · Paski stref');
-    expect(list.tasks.map(t => [t.title, t.by])).toEqual([['Pierwsze kryterium', 'agent'], ['Drugie', 'agent'], ['Trzecie', 'agent']]);
+    expect((await todos.read()).data!.lists).toEqual([]);
 
     const view = await cockpit.view(CHAT, [said('other/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11'), tool('panel_cezar_propose', 'call_1')]);
     expect(view.task?.id).toBe(RUN);
-    expect(view.list).toMatchObject({ id: list.id, tasks: [{ title: 'Pierwsze kryterium', done: false }, {}, {}] });
     expect(view.dispatches.call_1).toMatchObject({ decision: 'dispatched' });
     await cockpit.view(CHAT, [tool('panel_cezar_propose', 'call_1')]);
     expect(gh).toHaveBeenCalledTimes(1); // the PR is read gently
@@ -171,13 +164,10 @@ describe('the cockpit of a conversation', () => {
     expect(view.task).toBeNull();
   });
 
-  it('a to-do item the task implements gives its own list as the subtasks', async () => {
-    const { cockpit, todos } = setup();
-    const made = await todos.apply({ action: 'createList', name: 'Moje' });
-    const item = await todos.apply({ action: 'addTask', list: made.list!.id, title: 'Zrobić paski' });
-    await cockpit.dispatch(CHAT, { toolCallId: 'call_3', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId: item.task!.id as `t-${string}` });
-    expect((await todos.read()).data!.lists).toHaveLength(1);
-    expect((await cockpit.view(CHAT, [tool('panel_cezar_propose', 'call_3')])).list).toMatchObject({ name: 'Moje', tasks: [{ title: 'Zrobić paski' }] });
+  it('passes the to-do item a task implements on to Cezar', async () => {
+    const { cockpit, created } = setup();
+    await cockpit.dispatch(CHAT, { toolCallId: 'call_3', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId: 't-0000a001' });
+    expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski', todoId: 't-0000a001' });
   });
 
   it('without the GitHub CLI says the checks are not known, and keeps the PR', async () => {
@@ -211,7 +201,7 @@ describe('cockpit routes', () => {
       expect(await ok.json()).toMatchObject({ decision: 'dispatched', taskId: expect.stringMatching(/^desk-panel\//) });
       const view = await (await fetch(`${base}/api/chats/${CHAT}/cockpit`)).json();
       expect(view.task).toMatchObject({ status: 'RUNNING', steps: expect.arrayContaining([{ label: 'Implement', state: 'pending' }]) });
-      expect(view.list.tasks).toEqual([expect.objectContaining({ title: 'Jedno', done: false })]);
+      expect(view.list).toBeUndefined();
     } finally {
       server.closeAllConnections();
       await new Promise(done => server.close(done));
