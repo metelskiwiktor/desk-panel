@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
-import { chatRenameSchema, chatSendSchema } from '../src/chat-contract';
+import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema } from '../src/chat-contract';
 import { ChatError, type ChatService } from './agent-chat';
 
 const MAX_BODY = 64 * 1024;
@@ -31,15 +31,24 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
 export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36})(?:\/(messages|stop|events))?)?\/?$/.exec(url.pathname);
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
   const write = req.method !== 'GET';
   if (write && req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return true; }
   try {
+    if (id === 'engine') {
+      // The engine new conversations start on, remembered for every screen of the panel.
+      if (action || req.method !== 'PUT' || !chat.prefer) { res.writeHead(405).end(); return true; }
+      await chat.prefer(parse(chatEngineSchema, await readBody(req)).engine);
+      return json(res, 200, { ok: true }), true;
+    }
     if (!id) {
-      if (req.method === 'GET') return json(res, 200, { chats: await chat.list() }), true;
+      if (req.method === 'GET') {
+        const [chats, engines, engine] = await Promise.all([chat.list(), chat.engines?.(), chat.preferred?.()]);
+        return json(res, 200, { chats, ...(engines ? { engines } : {}), ...(engine ? { engine } : {}) }), true;
+      }
       if (req.method === 'POST') return json(res, 201, await chat.create(parse(chatSendSchema, await readBody(req)))), true;
     } else if (!action) {
       if (req.method === 'GET') return json(res, 200, await chat.get(id)), true;
@@ -48,6 +57,10 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     } else if (action === 'messages' && req.method === 'POST') {
       await chat.send(id, parse(chatSendSchema, await readBody(req)));
       return json(res, 202, { ok: true }), true;
+    } else if (action === 'approval' && req.method === 'POST') {
+      if (!chat.approve) throw new ChatError(409, 'Ten silnik nie pyta o zgodę.');
+      await chat.approve(id, parse(chatApprovalSchema, await readBody(req)));
+      return json(res, 200, { ok: true }), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;
@@ -74,7 +87,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     if (res.headersSent) res.end();
     else json(res, status, {
       error: status === 409
-        ? 'Agent jeszcze odpowiada.'
+        ? (msg && msg !== 'Agent jeszcze odpowiada.' ? msg : 'Agent jeszcze odpowiada.')
         : status === 404
         ? 'Nie ma takiej rozmowy.'
         : msg

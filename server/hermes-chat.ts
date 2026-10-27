@@ -1,0 +1,573 @@
+import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { ChatError, type ChatService } from './agent-chat';
+import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
+import { HermesError, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
+import {
+  titleFrom, withContext,
+  type ChatApproval, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
+} from '../src/chat-contract';
+
+/**
+ * What Hermes is told once, at the start of a session. It reads the panel through the `desk-panel` MCP tools (narrow,
+ * read-only adapters over `/api/agent/*`, plus the two writes the agy chat has), not through a shell and `curl`: no
+ * command approval, no raw JSON, and nothing it can reach that the UI does not show.
+ */
+export function hermesPreamble(): string {
+  return [
+    'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
+    'Odpowiadasz po polsku, zwięźle i konkretnie.',
+    'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to podpowiedź, o co pyta, a nie wszystko, co możesz wiedzieć. Gdy pytanie wymaga danych, których tam nie ma, pobierz je sam i nie proś użytkownika o ich podanie.',
+    'Dane panelu czytasz wyłącznie narzędziami serwera MCP `desk-panel` (nazwy kończą się na `panel_…`, w Hermesie z przedrostkiem serwera, np. mcp_desk-panel_panel_calendar): panel_calendar, panel_training, panel_cezar, panel_mail, panel_quotas, panel_system, panel_todos, panel_bank, panel_time. Zwracają krótki tekst po polsku z czasem lokalnym (Europe/Warsaw); nie przeliczaj czasów. Nie używaj do tego powłoki, curl ani przeglądarki: narzędzia panelu są szybsze i nie wymagają zgody.',
+    'Nagłówek widoku mówi, jaki jest dziś i z kiedy są dane; wiersz „brak danych” znaczy, że źródło milczy: powiedz to wprost. Pobieraj tylko źródła potrzebne do pytania, z zakresem dat dopasowanym do pytania, i nie pobieraj ponownie tego, co już jest w rozmowie.',
+    'Słowo „zadanie” bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara. Zadania Cezara to tylko te, o których użytkownik mówi „Cezar” albo „task Cezara”, albo które wskazał na kafelku Cezara.',
+    'Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.',
+    'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara.',
+    'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
+  ].join('\n');
+}
+
+/**
+ * One Hermes conversation as the panel keeps it: only the mapping to the Hermes session and what the window needs
+ * around it. The answers and tool steps live in the Hermes session (canonical) and are read back from it; the panel
+ * keeps per turn what the user typed and pointed at (the chips), the run id, and how the turn ended.
+ */
+interface Turn {
+  id: string;
+  /** Id of the agent message of this turn in the window. */
+  agent: string;
+  at: number;
+  text: string;
+  context?: ContextItem[];
+  nonce?: string;
+  run: string | null;
+  status: MessageStatus;
+  error?: string;
+}
+interface Stored { schema: 1; id: string; engine: 'hermes'; title: string; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+
+interface Live {
+  record: Stored;
+  turn: Turn;
+  message: ChatMessage;
+  abort: AbortController;
+  lastEventId: string | null;
+  seen: Set<string>;
+  lastEventAt: number;
+  stopping: boolean;
+  done: boolean;
+  /** Hermes's own id of each approval part (null when it gave none: the run has one pending approval at a time). */
+  approvals: Map<string, string | null>;
+  watchdog?: ReturnType<typeof setInterval>;
+  polling: boolean;
+  deltas: number;
+  endedBy: 'result' | 'exit' | 'stop';
+}
+
+interface History { at: number; groups?: { user: string; parts: ChatPart[] }[]; error?: string }
+
+export interface HermesChatOptions {
+  client: HermesClient;
+  /** Where the mapping lives (`<dir>/hermes-chats`); `~/.desk-panel` by default. */
+  dir?: string;
+  log?: ChatLog;
+  now?: () => number;
+  /** Silence on the event stream after which the run's status is read instead (missing deltas, a dead stream). */
+  stallMs?: number;
+  /** A turn that has not ended after this long is cancelled and reported. */
+  turnTimeoutMs?: number;
+  /** First wait before reconnecting to the event stream; doubles up to 10 s. */
+  retryMs?: number;
+  /** After a stop, how long to wait for Hermes to confirm before the panel ends the turn by itself. */
+  cancelGraceMs?: number;
+}
+
+const ID = /^[0-9a-f-]{36}$/;
+const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+const CONTEXT_BLOCK = /^[\s\S]*?\[Wiadomość\]\n/;
+
+/** A history of Hermes messages as the window's turns: each user message and what the agent did after it. */
+export function groupsOf(messages: HistoryMessage[]): { user: string; parts: ChatPart[] }[] {
+  const groups: { user: string; parts: ChatPart[] }[] = [];
+  for (const m of messages) {
+    if (m.role === 'user') { groups.push({ user: m.content.replace(CONTEXT_BLOCK, ''), parts: [] }); continue; }
+    const group = groups.at(-1);
+    if (!group) continue;
+    if (m.role === 'assistant') {
+      if (m.content.trim()) group.parts.push({ type: 'text', text: m.content });
+      for (const call of m.toolCalls ?? []) group.parts.push({ type: 'tool', id: call.id || `h${group.parts.length}`, name: call.name, input: call.arguments, state: 'done' });
+    } else if (m.role === 'tool') {
+      const tool = group.parts.find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.id === m.toolCallId)
+        ?? [...group.parts].reverse().find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.output === undefined);
+      if (tool) tool.output = m.content.slice(0, 4000);
+    }
+  }
+  return groups;
+}
+
+export function createHermesChat(options: HermesChatOptions): ChatService & { status(): Promise<{ available: boolean; error?: string }> } {
+  const client = options.client;
+  const dir = options.dir ?? path.join(homedir(), '.desk-panel');
+  const now = options.now ?? Date.now;
+  const log = options.log ?? createChatLog(dir, now);
+  const stallMs = options.stallMs ?? 25_000;
+  const turnTimeoutMs = options.turnTimeoutMs ?? 15 * 60_000;
+  const retryMs = options.retryMs ?? 1000;
+  const cancelGraceMs = options.cancelGraceMs ?? 10_000;
+  const intro = hermesPreamble();
+  const chatsDir = path.join(dir, 'hermes-chats');
+  const records = new Map<string, Stored>();
+  const lives = new Map<string, Live>();
+  /** Answers of turns that ended while the panel ran: shown until the session's history is read (and if it cannot be). */
+  const finished = new Map<string, ChatMessage>();
+  const histories = new Map<string, History>();
+  const listeners = new Map<string, Set<(event: ChatEvent) => void>>();
+  const flushes = new Map<string, { timer: ReturnType<typeof setTimeout>; messages: Set<ChatMessage> }>();
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  let closed = false;
+  let loading: Promise<void> | undefined;
+  let health: { at: number; value: { available: boolean; error?: string } } | undefined;
+
+  const later = (ms: number, work: () => void) => { const t = setTimeout(() => { timers.delete(t); if (!closed) work(); }, ms); t.unref?.(); timers.add(t); return t; };
+  const sleep = (ms: number) => new Promise<void>(resolve => later(ms, resolve));
+
+  // ── storage ──
+  const file = (id: string) => path.join(chatsDir, `${id}.json`);
+  const writes = new Map<string, Promise<void>>();
+  const save = (record: Stored) => {
+    const turn = (writes.get(record.id) ?? Promise.resolve())
+      .then(async () => {
+        if (records.get(record.id) !== record || !record.turns.length) return;
+        await mkdir(chatsDir, { recursive: true });
+        const temp = `${file(record.id)}.tmp`;
+        await writeFile(temp, JSON.stringify(record), 'utf8');
+        await rename(temp, file(record.id));
+      })
+      .catch(() => { /* kept in memory; the next save tries again */ });
+    writes.set(record.id, turn);
+    void turn.then(() => { if (writes.get(record.id) === turn) writes.delete(record.id); });
+  };
+  const load = () => loading ??= (async () => {
+    await mkdir(chatsDir, { recursive: true });
+    for (const name of await readdir(chatsDir)) {
+      if (!name.endsWith('.json')) continue;
+      try {
+        const value = JSON.parse(await readFile(path.join(chatsDir, name), 'utf8')) as Stored;
+        if (value.engine !== 'hermes' || typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.turns) || typeof value.session !== 'string') continue;
+        records.set(value.id, value);
+      } catch { /* a damaged file is not a chat */ }
+    }
+    // A turn that was running when the panel stopped goes on in Hermes: follow it again (or say it never got there).
+    for (const record of records.values()) {
+      const turn = record.turns.at(-1);
+      if (!turn || turn.status !== 'streaming') continue;
+      if (!turn.run) { turn.status = 'error'; turn.error = 'Przerwano przed wysłaniem do Hermesa: panel został uruchomiony ponownie.'; save(record); continue; }
+      const live = begin(record, turn);
+      live.message.notice = 'Panel uruchomiono ponownie: wznawiam odczyt odpowiedzi z Hermesa…';
+      log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'resume', run: turn.run });
+      void follow(live);
+    }
+  })();
+  const need = async (id: string) => {
+    await load();
+    const record = ID.test(id) ? records.get(id) : undefined;
+    if (!record) throw new ChatError(404);
+    return record;
+  };
+
+  // ── what the window sees ──
+  const summary = (record: Stored): ChatSummary => ({
+    id: record.id, title: record.title, createdAt: record.createdAt, updatedAt: record.updatedAt,
+    messages: record.turns.length * 2, running: lives.has(record.id), engine: 'hermes',
+  });
+  const items = (record: Stored): ChatMessage[] => {
+    const history = histories.get(record.id);
+    const groups = history?.groups ?? [];
+    const out: ChatMessage[] = [];
+    let g = 0;
+    for (const turn of record.turns) {
+      out.push({ id: turn.id, role: 'user', at: turn.at, text: turn.text, ...(turn.context?.length ? { context: turn.context } : {}) });
+      const group = turn.run ? groups[g++] : undefined;
+      const live = lives.get(record.id);
+      if (live?.turn === turn) { out.push(live.message); continue; }
+      // What this panel saw live (approvals and timings included, text checked against Hermes's final output) is
+      // shown as it was; after a restart the session's history is the answer.
+      const kept = finished.get(turn.agent);
+      if (kept) out.push(kept);
+      else if (group && group.parts.length) {
+        const answered = group.parts.some(p => p.type === 'text');
+        const status = answered && turn.status === 'error' ? 'done' : turn.status;
+        out.push({ id: turn.agent, role: 'agent', at: turn.at, parts: group.parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
+      } else {
+        const missing = turn.run && turn.status !== 'error' && history?.error;
+        out.push({
+          id: turn.agent, role: 'agent', at: turn.at, parts: [],
+          status: missing ? 'error' : turn.status,
+          error: missing ? `Nie można teraz wczytać odpowiedzi z sesji Hermesa (${history!.error}). Zostaje w Hermesie i wróci, gdy będzie dostępny.` : turn.error,
+        });
+      }
+    }
+    // Turns of the same session written outside the panel (e.g. the Hermes CLI) are shown too: the session is the history.
+    for (const group of groups.slice(g)) {
+      out.push({ id: `${record.id}:h${g}:u`, role: 'user', at: record.updatedAt, text: group.user });
+      out.push({ id: `${record.id}:h${g++}:a`, role: 'agent', at: record.updatedAt, parts: group.parts, status: 'done' });
+    }
+    return out;
+  };
+  const detail = (record: Stored): ChatDetail => ({ ...summary(record), items: items(record) });
+  /** The session's history, read once per finished turn; a failed read is retried after 10 s. */
+  const ensureHistory = async (record: Stored) => {
+    // Also while a turn runs (e.g. one resumed after a restart): the earlier turns come from the history.
+    if (!record.turns.some(t => t.run)) return;
+    const known = histories.get(record.id);
+    if (known && (known.groups || now() - known.at < 10_000)) return;
+    try { histories.set(record.id, { at: now(), groups: groupsOf(await client.history(record.session)) }); }
+    catch (error) { histories.set(record.id, { at: now(), error: error instanceof Error ? error.message : 'błąd' }); }
+  };
+
+  const emit = (id: string, event: ChatEvent) => { for (const listener of listeners.get(id) ?? []) listener(event); };
+  const touch = (record: Stored, message: ChatMessage, immediate = false) => {
+    let pending = flushes.get(record.id);
+    if (!pending) { pending = { messages: new Set(), timer: setTimeout(() => flush(record), 40) }; flushes.set(record.id, pending); }
+    pending.messages.add(message);
+    if (immediate) flush(record);
+  };
+  const flush = (record: Stored) => {
+    const pending = flushes.get(record.id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    flushes.delete(record.id);
+    for (const message of pending.messages) emit(record.id, { type: 'update', chat: summary(record), message: { ...message, parts: message.parts?.map(p => ({ ...p })) } });
+  };
+  const sendState = (record: Stored) => { for (const listener of listeners.get(record.id) ?? []) listener({ type: 'state', chat: detail(record) }); };
+
+  // ── one run ──
+  const begin = (record: Stored, turn: Turn): Live => {
+    const live: Live = {
+      record, turn, message: { id: turn.agent, role: 'agent', at: turn.at, parts: [], status: 'streaming' },
+      abort: new AbortController(), lastEventId: null, seen: new Set(), lastEventAt: now(), stopping: false, done: false,
+      approvals: new Map(), polling: false, deltas: 0, endedBy: 'result',
+    };
+    lives.set(record.id, live);
+    return live;
+  };
+  const tools = (live: Live) => (live.message.parts ?? []).filter((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool');
+
+  const apply = (live: Live, event: HermesEvent, id: string | null) => {
+    if (live.done) return;
+    // A stream resumed with Last-Event-ID (or replayed from the start) must not add a step twice.
+    if (id) { if (live.seen.has(id)) return; live.seen.add(id); live.lastEventId = id; }
+    live.lastEventAt = now();
+    const parts = (live.message.parts ??= []);
+    const record = live.record;
+    log.trace(record.id, { turn: record.turns.length, src: 'hermes', kind: event.kind, id, ...(event.kind === 'delta' ? { chars: event.text.length } : { event }) });
+    switch (event.kind) {
+      case 'delta': {
+        if (!event.text) return;
+        live.deltas++;
+        const last = parts.at(-1);
+        if (last?.type === 'text') last.text += event.text; else parts.push({ type: 'text', text: event.text });
+        if (live.message.notice) live.message.notice = undefined;
+        break;
+      }
+      case 'tool-start': {
+        // A tool with this id is already there: the same event again (a replayed stream).
+        if (tools(live).some(t => t.id === event.id)) return;
+        parts.push({ type: 'tool', id: event.id, name: event.name, input: event.input, state: 'running', startedAt: now() });
+        live.message.notice = undefined;
+        break;
+      }
+      case 'tool-end': {
+        const running = tools(live).filter(t => t.state === 'running');
+        const tool = running.find(t => t.id === event.id) ?? [...running].reverse().find(t => t.name === event.name) ?? running.at(-1);
+        if (!tool) return;
+        tool.state = 'done';
+        tool.endedAt = now();
+        if (event.error) { tool.error = true; tool.output = `Błąd: ${event.error}`.slice(0, 600); }
+        else if (event.output) tool.output = event.output.slice(0, 4000);
+        break;
+      }
+      case 'progress':
+        if (!event.text || live.message.notice === event.text) return;
+        live.message.notice = event.text;
+        break;
+      case 'approval': {
+        const local = event.id || `approval-${live.approvals.size + 1}`;
+        if (live.approvals.has(local)) return;
+        live.approvals.set(local, event.id || null);
+        parts.push({ type: 'approval', id: local, tool: event.tool, detail: event.detail, state: 'pending', at: now() });
+        live.message.notice = undefined;
+        break;
+      }
+      case 'approval-resolved': {
+        const pending = parts.filter((p): p is Extract<ChatPart, { type: 'approval' }> => p.type === 'approval' && p.state === 'pending');
+        const part = pending.find(p => p.id === event.id || live.approvals.get(p.id) === event.id) ?? pending.at(-1);
+        if (!part) return;
+        part.state = event.approved === true ? 'approved' : event.approved === false ? 'denied' : 'expired';
+        break;
+      }
+      case 'completed': void finalize(live, { state: 'completed', output: event.output, session: event.session }, 'result', event.usage); return;
+      case 'failed': void finalize(live, { state: 'failed', error: event.error }, 'result'); return;
+      case 'cancelled': void finalize(live, { state: 'cancelled' }, live.stopping ? 'stop' : 'result'); return;
+      default: return;
+    }
+    touch(record, live.message);
+  };
+
+  /** Reads the run's status when the stream says nothing; ends the turn when Hermes says the run is over. */
+  const reconcile = async (live: Live, reason: string): Promise<boolean> => {
+    if (live.done || live.polling || !live.turn.run) return live.done;
+    live.polling = true;
+    try {
+      const status = await client.status(live.turn.run);
+      log.trace(live.record.id, { turn: live.record.turns.length, src: 'panel', kind: 'status', reason, state: status.state });
+      if (status.state === 'completed' || status.state === 'failed' || status.state === 'cancelled') {
+        await finalize(live, status, live.stopping ? 'stop' : 'result');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      if (error instanceof HermesError && error.status === 404) {
+        // Hermes no longer knows the run (it was restarted): whatever it wrote is in the session.
+        await finalize(live, { state: 'failed', error: 'Hermes nie zna już tego przebiegu (został uruchomiony ponownie?). Zapisana część odpowiedzi jest w historii sesji.' }, 'exit');
+        return true;
+      }
+      return false;
+    } finally { live.polling = false; }
+  };
+
+  const follow = async (live: Live) => {
+    const run = live.turn.run!;
+    const deadline = live.turn.at + turnTimeoutMs;
+    live.watchdog = setInterval(() => {
+      if (live.done) return;
+      if (now() > deadline) { void timeout(live); return; }
+      if (now() - live.lastEventAt >= stallMs) {
+        // A pending approval or a running tool already says what is going on (with its time).
+        const busy = (live.message.parts ?? []).some(p => (p.type === 'approval' && p.state === 'pending') || (p.type === 'tool' && p.state === 'running'));
+        if (!busy && !live.message.notice) { live.message.notice = 'Hermes milczy: sprawdzam stan przebiegu…'; touch(live.record, live.message); }
+        void reconcile(live, 'stall');
+      }
+    }, Math.max(50, Math.min(stallMs, 5000)));
+    live.watchdog.unref?.();
+    let wait = retryMs;
+    while (!live.done && !closed) {
+      let failure: string | null = null;
+      try { await client.events(run, (event, id) => apply(live, event, id), { signal: live.abort.signal, lastEventId: live.lastEventId }); }
+      catch (error) { failure = error instanceof Error ? error.message : 'błąd strumienia'; }
+      if (live.done || closed) return;
+      log.trace(live.record.id, { turn: live.record.turns.length, src: 'panel', kind: 'stream-ended', error: failure });
+      // The stream ended without the end of the run (Hermes restarted, the connection dropped, or it gave no events):
+      // the run's status decides.
+      if (await reconcile(live, failure ? 'stream-error' : 'stream-ended')) return;
+      if (live.done) return;
+      // Without event ids the stream cannot resume where it was: it starts again from the run's beginning, so what was
+      // shown is cleared instead of shown twice (a pending approval stays; its replay is recognised by id).
+      if (!live.lastEventId) live.message.parts = (live.message.parts ?? []).filter(p => p.type === 'approval' && p.state === 'pending');
+      live.message.notice = failure ? `Połączenie z Hermesem przerwane, łączę ponownie… (${failure})` : 'Łączę ponownie ze strumieniem Hermesa…';
+      touch(live.record, live.message);
+      if (now() > deadline) { await timeout(live); return; }
+      await sleep(wait);
+      wait = Math.min(wait * 2, 10_000);
+    }
+  };
+
+  const timeout = async (live: Live) => {
+    if (live.done) return;
+    // Ended first, so the cancelled event the cancel brings does not turn a timeout into a stop.
+    const run = live.turn.run;
+    const ended = finalize(live, { state: 'failed', error: `Przekroczono limit czasu tury (${Math.round(turnTimeoutMs / 60_000)} min). Przebieg w Hermesie został przerwany.` }, 'exit');
+    if (run) await client.cancel(run).catch(() => {});
+    await ended;
+  };
+
+  const finalize = async (live: Live, status: RunStatus, endedBy: Live['endedBy'], usage?: Record<string, unknown>) => {
+    if (live.done) return;
+    live.done = true;
+    live.endedBy = endedBy;
+    clearInterval(live.watchdog);
+    live.abort.abort();
+    const { record, turn, message } = live;
+    if (status.session && status.session !== record.session) record.session = status.session;
+    let parts = message.parts ?? [];
+    const streamed = parts.filter((p): p is Extract<ChatPart, { type: 'text' }> => p.type === 'text').map(p => p.text).join('');
+    let answer: MessageStatus = 'done', error: string | undefined;
+    if (status.state === 'completed') {
+      const output = status.output ?? '';
+      // Hermes's final output is the answer: it fills a stream that gave no deltas and replaces one that did not add up.
+      if (output.trim() && !streamed.trim()) parts.push({ type: 'text', text: output });
+      else if (output.trim() && norm(streamed) !== norm(output)) parts = [...parts.filter(p => p.type !== 'text'), { type: 'text', text: output }];
+      if (!parts.some(p => p.type === 'text' && p.text.trim())) {
+        // No output in the event either: the session has the answer, if anything does.
+        try {
+          const groups = groupsOf(await client.history(record.session));
+          const group = groups[record.turns.filter(t => t.run).indexOf(turn)];
+          if (group?.parts.some(p => p.type === 'text')) parts = group.parts;
+        } catch { /* the error below says it */ }
+      }
+      if (!parts.some(p => p.type === 'text' && p.text.trim())) { answer = 'error'; error = 'Hermes zakończył bez odpowiedzi.'; }
+    } else if (status.state === 'cancelled') answer = 'stopped';
+    else { answer = 'error'; error = status.error || 'Hermes nie dokończył odpowiedzi.'; }
+    for (const part of parts) {
+      if (part.type === 'tool' && part.state === 'running') { part.state = 'done'; part.endedAt = now(); }
+      if (part.type === 'approval' && part.state === 'pending') part.state = 'expired';
+    }
+    message.parts = parts.filter(p => p.type !== 'text' || p.text.trim());
+    message.status = answer;
+    message.notice = undefined;
+    if (error) message.error = error; else delete message.error;
+    if (usage) {
+      const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+      message.usage = { input: n(usage.input_tokens ?? usage.prompt_tokens), output: n(usage.output_tokens ?? usage.completion_tokens), thinking: n(usage.reasoning_tokens), cached: n(usage.cache_read_tokens ?? usage.cached_tokens), calls: n(usage.api_calls), tools: tools(live).length };
+    }
+    turn.status = answer;
+    if (error) turn.error = error; else delete turn.error;
+    record.updatedAt = now();
+    if (lives.get(record.id) === live) lives.delete(record.id);
+    finished.set(turn.agent, message);
+    histories.delete(record.id);
+    save(record);
+    touch(record, message, true);
+    const answerChars = message.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
+    const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: t.input.slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));
+    log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'finish', status: answer, error: error ?? null, endedBy, deltas: live.deltas });
+    log.turn({
+      at: now(), chat: record.id, title: record.title, turn: record.turns.length, model: 'hermes', engine: 'hermes', ask: turn.text.replace(/\s+/g, ' ').slice(0, 200),
+      context: (turn.context ?? []).map(c => c.kind), status: answer as 'done' | 'error' | 'stopped', error: error ?? null, endedBy,
+      emptyAnswer: answer === 'error' && !answerChars && status.state === 'completed', answerChars, seconds: Math.round((now() - turn.at) / 100) / 10,
+      lastStep: null, denied: [], result: { status: status.state, responseChars: status.output?.length ?? 0 },
+      usage: message.usage ?? null, tools: toolList,
+    });
+  };
+
+  const unavailable = (error: unknown) => {
+    const reason = error instanceof Error ? error.message : 'Hermes nie odpowiada.';
+    health = { at: now(), value: { available: false, error: reason } };
+    return new ChatError(error instanceof HermesError && !error.unreachable && error.status !== 401 && error.status !== 403 ? 502 : 503,
+      `Nie udało się: Hermes jest niedostępny (${reason}). Wiadomość nie została wysłana; możesz spróbować ponownie albo wybrać AGY.`);
+  };
+
+  const service: ChatService & { status(): Promise<{ available: boolean; error?: string }> } = {
+    async status() {
+      if (health && now() - health.at < 5000) return health.value;
+      try { await client.health(); health = { at: now(), value: { available: true } }; }
+      catch (error) { health = { at: now(), value: { available: false, error: error instanceof Error ? error.message : 'Hermes nie odpowiada.' } }; }
+      return health.value;
+    },
+    async list() { await load(); return [...records.values()].filter(r => r.turns.length).map(summary).sort((a, b) => b.updatedAt - a.updatedAt); },
+    async get(id) { const record = await need(id); await ensureHistory(record); return detail(record); },
+    async create(input) {
+      await load();
+      const at = now();
+      const id = randomUUID();
+      // The session is named after the chat, so a run that reached Hermes before the panel saved the mapping is still found.
+      const record: Stored = { schema: 1, id, engine: 'hermes', title: titleFrom(input.text), createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
+      records.set(id, record);
+      try { await service.send(id, input); }
+      catch (error) { records.delete(id); throw error; }
+      return { id };
+    },
+    async send(id, input) {
+      const record = await need(id);
+      if (input.nonce && record.turns.some(t => t.nonce === input.nonce)) return;
+      if (lives.has(id)) throw new ChatError(409, 'Agent jeszcze odpowiada.');
+      const at = now();
+      const context = input.context ?? [];
+      const turn: Turn = { id: randomUUID(), agent: randomUUID(), at, text: input.text, ...(context.length ? { context } : {}), ...(input.nonce ? { nonce: input.nonce } : {}), run: null, status: 'streaming' };
+      const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
+      const first = !record.turns.some(t => t.run);
+      const prompt = withContext(input.text, context);
+      let started: { run: string; session?: string };
+      try { started = await client.startRun({ input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session }); }
+      catch (error) {
+        lives.delete(id);
+        log.trace(id, { turn: record.turns.length + 1, src: 'panel', kind: 'start-failed', error: error instanceof Error ? error.message : null });
+        throw unavailable(error);
+      }
+      health = { at: now(), value: { available: true } };
+      turn.run = started.run;
+      if (started.session && started.session !== record.session) record.session = started.session;
+      record.turns.push(turn);
+      record.updatedAt = at;
+      save(record);
+      log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'sent', run: started.run, preamble: first, contextItems: context.length, chars: prompt.length });
+      sendState(record);
+      if (live.stopping) void client.cancel(started.run).catch(() => {});
+      void follow(live);
+    },
+    async stop(id) {
+      await need(id);
+      const live = lives.get(id);
+      if (!live || live.stopping) return;
+      live.stopping = true;
+      live.message.notice = 'Zatrzymuję…';
+      touch(live.record, live.message, true);
+      log.trace(id, { turn: live.record.turns.length, src: 'panel', kind: 'stop' });
+      if (live.turn.run) await client.cancel(live.turn.run).catch(() => {});
+      // Hermes confirms with a cancelled event or status; without it the panel ends the turn itself.
+      later(cancelGraceMs, () => { void reconcile(live, 'stop').then(over => { if (!over) void finalize(live, { state: 'cancelled' }, 'stop'); }); });
+    },
+    async approve(id, { approvalId, decision }) {
+      await need(id);
+      const live = lives.get(id);
+      const part = live?.message.parts?.find((p): p is Extract<ChatPart, { type: 'approval' }> => p.type === 'approval' && p.id === approvalId);
+      if (!live || !part || !live.turn.run) throw new ChatError(409, 'Ta prośba o zgodę nie jest już aktualna.');
+      if (part.state !== 'pending') throw new ChatError(409, 'Ta prośba o zgodę jest już rozstrzygnięta.');
+      try { await client.approve(live.turn.run, live.approvals.get(approvalId) ?? approvalId, decision === 'approve'); }
+      catch (error) {
+        if (error instanceof HermesError && (error.status === 404 || error.status === 409)) { part.state = 'expired'; touch(live.record, live.message, true); throw new ChatError(409, 'Hermes nie czeka już na tę zgodę.'); }
+        throw unavailable(error);
+      }
+      part.state = decision === 'approve' ? 'approved' : 'denied';
+      live.lastEventAt = now();
+      live.message.notice = decision === 'approve' ? 'Zgoda wysłana: Hermes uruchamia narzędzie (to bywa wolne, nawet ponad minutę)…' : 'Odmowa wysłana: Hermes kontynuuje bez tego narzędzia…';
+      log.trace(id, { turn: live.record.turns.length, src: 'panel', kind: 'approval', decision });
+      touch(live.record, live.message, true);
+    },
+    async rename(id, title) {
+      const record = await need(id);
+      record.title = title;
+      save(record);
+      sendState(record);
+    },
+    async remove(id) {
+      const record = await need(id);
+      const live = lives.get(id);
+      if (live) {
+        live.done = true;
+        clearInterval(live.watchdog);
+        live.abort.abort();
+        lives.delete(id);
+        if (live.turn.run) void client.cancel(live.turn.run).catch(() => {});
+      }
+      log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'chat-deleted' });
+      records.delete(id);
+      histories.delete(id);
+      for (const turn of record.turns) finished.delete(turn.agent);
+      await writes.get(id);
+      await rm(file(id), { force: true });
+    },
+    async subscribe(id, listener) {
+      const record = await need(id);
+      await ensureHistory(record);
+      let set = listeners.get(id);
+      if (!set) listeners.set(id, set = new Set());
+      set.add(listener);
+      listener({ type: 'state', chat: detail(record) });
+      return () => { set.delete(listener); if (!set.size) listeners.delete(id); };
+    },
+    async drain() { while (writes.size) await Promise.all([...writes.values()]); await log.drain(); },
+    close() {
+      closed = true;
+      for (const t of timers) clearTimeout(t);
+      timers.clear();
+      for (const pending of flushes.values()) clearTimeout(pending.timer);
+      flushes.clear();
+      // Runs go on in Hermes; the next start of the panel follows them again (the mapping says they were streaming).
+      for (const live of lives.values()) { clearInterval(live.watchdog); live.abort.abort(); }
+    },
+  };
+  return service;
+}

@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAgentChat, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
+import { createChatHub } from './chat-hub';
+import { createHermesClient } from './hermes-api';
+import { createHermesChat } from './hermes-chat';
+import { startMockHermes } from './hermes-mock';
 
 /**
  * An agent that answers from a script instead of `agy`, with the same events `agy` prints (a tool step, then the answer
@@ -48,9 +52,22 @@ export function scriptedAgent(): Launcher {
   };
 }
 
-/** The chat service of the scenario mode: the real service and storage, a scripted agent, a throwaway directory. */
-export function createScenarioChat(): ChatService & { dispose(): void } {
+/**
+ * The chat service of the scenario mode: the real services and storage of both engines, a throwaway directory, agy
+ * answering from a script and Hermes from a stand-in API server on a free loopback port. `hermes: 'down'` shows the
+ * window as it is when Hermes is not running.
+ */
+export async function createScenarioChat(options: { hermes?: 'up' | 'down' } = {}): Promise<ChatService & { dispose(): void }> {
   const dir = mkdtempSync(join(tmpdir(), 'desk-panel-scenario-chat-'));
-  const chat = createAgentChat({ dir, launch: scriptedAgent() });
-  return Object.assign(chat, { dispose() { chat.close(); void chat.drain().finally(() => rmSync(dir, { recursive: true, force: true })); } });
+  const mock = await startMockHermes({ stepMs: 60 });
+  if (options.hermes === 'down') mock.setDown(true);
+  const agy = createAgentChat({ dir, launch: scriptedAgent() });
+  const hermes = createHermesChat({ dir, client: createHermesClient({ url: mock.url }) });
+  const chat = createChatHub({ dir, engines: { hermes, agy } });
+  return Object.assign(chat, {
+    dispose() {
+      chat.close();
+      void chat.drain().finally(() => { void mock.close(); rmSync(dir, { recursive: true, force: true }); });
+    },
+  });
 }

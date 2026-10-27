@@ -1,0 +1,150 @@
+# Hermes Agent jako silnik czatu
+
+Czat panelu ma dwa silniki: **Hermes** (Hermes Agent, domyślny dla nowych rozmów) i **AGY** (Antigravity CLI, jak dotąd,
+zob. [czat.md](czat.md)). Wybór jest w oknie czatu (przełącznik „Hermes / AGY” obok przycisku wysyłania) i serwer go pamięta
+(`~/.desk-panel/chat-settings.json`, wspólny dla komputera i telefonu). Rozmowa należy do jednego silnika na zawsze: wybór
+drugiego przy otwartej rozmowie przechodzi do nowego czatu tego silnika (szkic i wskazane elementy zostają, poprzednia rozmowa
+jest dalej na liście). Lista rozmów pokazuje silnik przy każdej; wpisanie „hermes” albo „agy” w wyszukiwarkę je filtruje.
+
+## Jak to działa
+
+```
+ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.ts)
+                                         ├─ hermes: HermesChat (server/hermes-chat.ts) ── HermesClient (server/hermes-api.ts) ── Hermes API server (127.0.0.1:8642)
+                                         │                                                                                        │ MCP (Streamable HTTP)
+                                         │                                       /api/mcp (server/panel-mcp.ts) ◄────────────────┘
+                                         └─ agy: ChatService (server/agent-chat.ts) ── agy (proces na rozmowę)
+```
+
+- **Tylko oficjalne, stale działające API.** Panel nie uruchamia CLI Hermesa na turę. Tura to `POST /v1/runs`
+  (`{input, session_id}`), potem strumień SSE `GET /v1/runs/<run>/events`; zgoda `POST /v1/runs/<run>/approval`, stop
+  `POST /v1/runs/<run>/cancel` (starszy serwer: `/stop`), stan przebiegu `GET /v1/runs/<run>`, historia
+  `GET /v1/sessions/<sesja>/messages`, zdrowie `GET /health`. Ścieżki i nazwy pól są w jednym miejscu (`HERMES_ROUTES` i
+  `hermesEventOf` w `server/hermes-api.ts`); pola zdarzeń są czytane z kilku znanych wariantów nazw, bo rosły między wersjami.
+- **Sesje Hermesa są kanoniczne.** `~/.desk-panel/hermes-chats/<id>.json` trzyma tylko mapowanie: id sesji Hermesa
+  (`desk-panel-<id rozmowy>`, więc przebieg, który dotarł do Hermesa przed zapisem mapowania, i tak jest w tej sesji), id przebiegu
+  każdej tury, to, co użytkownik napisał i wskazał (chipy), oraz jak tura się skończyła. Odpowiedzi i kroki narzędzi są tylko w
+  Hermesie: po restarcie panelu okno czyta je z historii sesji. Pamięć, skills i narzędzia działają po stronie Hermesa tak, jak je
+  skonfigurujesz (panel nie wyłącza niczego). Tury tej samej sesji napisane poza panelem (np. w CLI) są pokazywane na końcu rozmowy.
+- **Pierwsza wiadomość sesji** zaczyna się od instrukcji `hermesPreamble()` (jak `preamble()` agy, ale z narzędziami panelu zamiast
+  `curl`), potem blok `[Kontekst]` ze wskazanymi elementami i pytanie (`withContext`, ten sam co dla agy).
+- **Strumień i odporność.** Delty tekstu, kroki narzędzi (z czasem trwania), prośby o zgodę, postęp (`notice` w wiadomości),
+  koniec przebiegu. Gdy strumień się urwie, panel czyta stan przebiegu i łączy się ponownie z `Last-Event-ID` (zdarzenie o znanym id
+  nie jest stosowane drugi raz; bez id strumień zaczyna od początku, więc pokazany fragment jest czyszczony zamiast dublowany). Po
+  25 s ciszy panel sam pyta o stan przebiegu (rekonsyliacja). Na koniec ostateczna odpowiedź przebiegu wypełnia albo poprawia tekst
+  ze strumienia (dostawca bez łatki strumieniowania daje 0 delt: odpowiedź i tak się pojawi, tylko bez pisania na żywo), a gdy
+  i jej brak, panel bierze ją z historii sesji.
+- **Restart panelu w trakcie odpowiedzi**: tura zapisana jako trwająca jest po starcie śledzona dalej (stan przebiegu, ponowny
+  strumień), bez wysyłania czegokolwiek ponownie. **Restart Hermesa**: przebieg, którego Hermes już nie zna (404), kończy się
+  komunikatem; to, co Hermes zdążył zapisać, jest w historii sesji.
+- **Idempotencja**: każdy szkic ma `nonce`; ta sama wiadomość wysłana ponownie (np. po przekroczeniu czasu żądania) nie zaczyna drugiej
+  tury (`ChatHub` pamięta wynik przez 10 min, a mapowanie Hermesa trzyma `nonce` tury na stałe).
+- **Limity czasu**: każde żądanie do Hermesa ma 15 s (zdrowie 3 s), połączenie strumienia 15 s; cała tura najwyżej 15 min
+  (`DESK_HERMES_TURN_TIMEOUT_MS`), potem przebieg jest anulowany, a tura kończy się błędem. Nic nie czeka bez końca: zatrzymanie,
+  na które Hermes nie odpowie w 10 s, kończy turę po stronie panelu.
+
+### Zgody i wolne narzędzia
+
+Hermes pyta o zgodę przed niebezpiecznymi poleceniami (np. powłoka). Okno pokazuje kartę „Agent prosi o zgodę” z narzędziem, poleceniem i
+czasem oczekiwania oraz przyciskami **Zezwól** / **Odmów** (`POST /api/chats/<id>/approval`, `{approvalId, decision}`; id jest
+sprawdzane, a prośba już rozstrzygnięta albo nieaktualna daje `409` bez wołania Hermesa). Panel wysyła zgodę jednorazową (`once`),
+nigdy „na sesję” ani „zawsze”. Narzędzie, które działa ponad 20 s, pokazuje czas i zdanie, że to bywa wolne i że można zatrzymać.
+
+W próbach takie wywołania trwały 53–68 s. Panel ogranicza to tak, że **dane panelu nie wymagają powłoki**: Hermes czyta je narzędziami
+MCP `panel_*` (bez zgody, krótka odpowiedź tekstowa, bez surowego JSON-a), a instrukcja każe nie używać do tego `curl`. Zgody
+zostają dla tego, co faktycznie ich wymaga.
+
+### Narzędzia panelu (MCP)
+
+`POST /api/mcp` (`server/panel-mcp.ts`): minimalny serwer MCP (Streamable HTTP, odpowiedzi JSON; `initialize`, `ping`,
+`tools/list`, `tools/call`). Narzędzia są wąskimi adapterami do widoków dla agenta z [czat.md](czat.md) — ten sam tekst, ten sam
+zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
+
+| Narzędzie | Odpowiada |
+| --- | --- |
+| `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
+| `panel_cezar`, `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
+| `panel_mail` | `limit` 1–50 |
+| `panel_todos` | `list`, `ukonczone` |
+| `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
+| `panel_todo_action` | jedna akcja list zadań (`todoActionSchema`) |
+| `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
+
+Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara. Dostęp: tylko adresy loopback (nazwa Tailscale
+dostaje `403`), żądanie z nagłówkiem `Origin` (przeglądarka) dostaje `403`, a bez tokenu `Authorization: Bearer <~/.desk-panel/mcp-token>`
+dostaje `401`. Token tworzy panel przy pierwszym starcie (albo `DESK_MCP_TOKEN`) i `just hermes-setup`; leży poza Gitem.
+
+### Hermes niedostępny
+
+`GET /api/chats` zwraca też `engines` (`[{engine, available, error?}]`, zdrowie Hermesa sprawdzane najwyżej co 5 s) i `engine`
+(preferowany). Gdy Hermes nie działa, okno pokazuje komunikat z powodem, **szkic i wskazane elementy zostają**, wysyłanie jest
+wyłączone, a przyciski to „Przełącz na AGY” i „Sprawdź ponownie” (okno samo sprawdza co 15 s). Nie ma cichego przełączenia na AGY.
+Wiadomość, której Hermes nie przyjął, nie trafia do rozmowy (`503` z powodem). Rozmowa Hermesa otwarta przy wyłączonym Hermesie
+pokazuje pytania, a przy odpowiedziach „Nie można teraz wczytać odpowiedzi z sesji Hermesa…” — wrócą, gdy Hermes wstanie.
+
+## Instalacja i uruchamianie (Windows)
+
+Panel i Hermes to **dwie osobne usługi Servy**; żadna nie czeka na drugą przy starcie, więc kolejność po restarcie komputera jest
+dowolna (panel pokazuje „Hermes niedostępny”, dopóki Hermes nie wstanie; narzędzia MCP odpowiadają, gdy wstanie panel).
+
+1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`.** Oba katalogi muszą być
+   checkoutami Git: domyślnie `~/.hermes/hermes-agent` i `~/.hermes/plugins/antigravity-oauth`. Inne lokalizacje można wskazać
+   zmiennymi `DESK_HERMES_SOURCE` i `DESK_HERMES_PROVIDER_SOURCE` w środowisku uruchamiającym skrypty. Provider musi być czysty.
+   Nie używaj tymczasowych katalogów prób (PoC) jako docelowej instalacji.
+2. `just hermes-setup` — idempotentne, niczego nie uruchamia i nie drukuje kluczy: włącza API server na `127.0.0.1:8642` z kluczem w
+   `~/.hermes/.env` (nowy tylko, gdy go brak), wpisuje `DESK_HERMES_URL` i `DESK_HERMES_KEY` do `~/.desk-panel/panel.env`, tworzy
+   `~/.desk-panel/mcp-token` i dopisuje `mcp_servers.desk-panel` do `~/.hermes/config.yaml` (gdy jest już inne `mcp_servers`, mówi,
+   co dopisać ręcznie). Najpierw sprawdza commity i skrót łatki, a następnie stosuje ją do przypiętego źródła Hermesa (ponowienie
+   jest bezpieczne); przy niezgodności kończy się błędem przed zmianą konfiguracji. Sprawdza, czy `hermes` leży tam, gdzie oczekuje
+   `servy/hermes.json` (`executable`). Zainstalowany program musi korzystać z tego checkoutu; skrypt nie sprawdza ścieżki importu
+   uruchomionego procesu.
+3. Próba na pierwszym planie: `just hermes RUN` (Ctrl+C kończy), w drugim terminalu `just hermes CHECK` (wersja, łatka, `/health`).
+4. Usługa: `just hermes-install` (Servy, start automatyczny opóźniony, odzyskiwanie po awarii, logi w `servy/logs/Desk-Panel-Hermes`;
+   okno poświadczeń Windows jak przy `just install`; to samo konto co panel). Potem `just hermes STATUS|START|STOP|RESTART`.
+5. Panel: `just service RESTART` (czyta nowe `panel.env`). W oknie czatu przełącznik pokazuje Hermesa z zieloną kropką.
+
+Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]` uruchamia gateway z API serverem; sprawdź
+`hermes gateway --help` w swojej wersji), prywatne zmienne w `~/.desk-panel/hermes.env` (opcjonalny), klucze w `~/.hermes/.env`.
+
+| Zmienna (panel.env) | Domyślnie | Znaczenie |
+| --- | --- | --- |
+| `DESK_HERMES_URL` | `http://127.0.0.1:8642` | adres API servera; tylko `http` na loopback, bez danych logowania |
+| `DESK_HERMES_KEY` | brak | `API_SERVER_KEY` Hermesa, wysyłany jako `Bearer`; tylko na backendzie |
+| `DESK_HERMES_TURN_TIMEOUT_MS` | `900000` | najdłuższa tura |
+| `DESK_MCP_TOKEN` | plik `mcp-token` | token narzędzi panelu dla Hermesa |
+
+## Bezpieczeństwo
+
+- Hermes i panel słuchają tylko na `127.0.0.1`. Klucz Hermesa nie trafia do przeglądarki, odpowiedzi API, dziennika czatu ani
+  komunikatów błędów (test sprawdza, że odrzucony klucz nie jest cytowany).
+- Telefon przez Tailscale widzi czat jak dotąd (te same trasy z kontrolą `Origin`), ale nie `/api/mcp`.
+- Wszystko, co Hermes przeczyta narzędziami, trafia do dostawcy modelu, z którego korzysta (jak w agy). Hermes ma własne narzędzia
+  (np. powłokę) — panel ich nie ogranicza; ogranicza je konfiguracja Hermesa i zgody.
+- Usunięcie rozmowy w panelu usuwa mapowanie; sesja zostaje w Hermesie (jego historia, jego pamięć).
+
+## Testy
+
+- `server/hermes-chat.test.ts` — z atrapą API Hermesa po prawdziwym HTTP/SSE (`server/hermes-mock.ts`): strumień, narzędzia, druga tura w tej
+  samej sesji, odtworzenie po restarcie panelu z historii sesji, zerwany strumień z `Last-Event-ID` i bez id, brak delt, cisza
+  (rekonsyliacja przez stan przebiegu), zgoda i odmowa, stop, Hermes niedostępny, restart panelu i Hermesa w trakcie tury, limit
+  czasu, `409`, preferencja i `nonce` w `ChatHub`, migracja starych rozmów agy.
+- `server/panel-mcp.test.ts` — dostęp (token, `Origin`, nazwa Tailscale), protokół MCP, narzędzia na danych scenariusza, walidacja
+  argumentów; trasy `/api/chats` z silnikami i zgodą.
+- `src/chat.test.tsx` — domyślny Hermes, plakietki silnika (stare rozmowy = AGY), zapamiętany wybór AGY, przełączenie w otwartej
+  rozmowie, Hermes niedostępny (szkic zostaje, ręczne AGY), ponowienie z tym samym `nonce`, karta zgody i czas wolnego narzędzia.
+- `just scenario NAME` i `just screenshots NAME --open chat` używają tej samej atrapy (Hermes odpowiada ze skryptu; wiadomość ze słowem
+  „zgoda” pokazuje prośbę o zgodę). `--open chat-answer` fotografuje skończoną turę z krokiem narzędzia, `--open chat-approval` kartę
+  zgody, a `--hermes down` okno przy wyłączonym Hermesie.
+- `server/hermes-lock.test.ts` — `servy/hermes.lock.json`: pełne commity Hermesa i providera, prawdziwy SHA-256 pliku łatki, łatka
+  zmienia tylko bramkę strumienia w pliku `target` i tylko dla `antigravity-oauth` na `api_server`.
+- Testów na prawdziwym Hermesie w repozytorium nie ma (wymagają działającej instalacji i klucza); po instalacji sprawdź ręcznie:
+  `just hermes CHECK`, jedna tura z narzędziem `panel_calendar`, prośba o zgodę (np. polecenie powłoki), stop, restart panelu w trakcie
+  odpowiedzi.
+
+## Ograniczenia
+
+- Podstawowe `/health`, `/v1/runs`, delty i zakończenie sprawdzono na izolowanym Hermesie z przypiętym providerem i AGY. Nie jest to
+  dowód dla każdej ścieżki narzędzi i zgód; gdy kształt API się zmieni, poprawka to `HERMES_ROUTES` / `hermesEventOf` / `historyOf`
+  w `server/hermes-api.ts` i atrapa.
+- Historia z sesji nie zawiera próśb o zgodę ani czasów narzędzi: po restarcie panelu widać tekst i narzędzia, bez kart zgody.
+- Gdy Hermes skompresuje albo rozdzieli sesję (nowe id), panel przyjmuje id sesji podane przez Hermesa w odpowiedzi przebiegu.

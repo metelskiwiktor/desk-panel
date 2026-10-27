@@ -1,0 +1,10 @@
+diff --git a/agent/turn_api_call.py b/agent/turn_api_call.py
+index ef08530..34a59cc 100644
+--- a/agent/turn_api_call.py
++++ b/agent/turn_api_call.py
+@@ -56 +56,4 @@ def _should_stream(agent: Any) -> bool:
+-    if _base.startswith(("acp://", "acp+tcp://")) or _is_external_process_provider(agent.provider):
++    # The verified Antigravity provider implements OpenAI-style token streaming.
++    # Limit the exception to API runs; other external-process paths stay unchanged.
++    antigravity_api = agent.provider == "antigravity-oauth" and agent.platform == "api_server"
++    if _base.startswith(("acp://", "acp+tcp://")) or (_is_external_process_provider(agent.provider) and not antigravity_api):

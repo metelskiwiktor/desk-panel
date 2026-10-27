@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, ListChecks, Mail, Maximize2, Minimize2, Pencil, Plus, Search, Sparkles, Square, SquareCheck, Trash2, Wrench, X,
+  Activity, ArrowUp, Bot, CalendarDays, Check, ChevronLeft, Crosshair, LayoutGrid, ListTree, ListChecks, Mail, Maximize2, Minimize2, Pencil, Plus, RefreshCw, Search, ShieldQuestion, Sparkles, Square, SquareCheck, Trash2, Wrench, X,
   type LucideIcon,
 } from 'lucide-react';
-import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatMessage, type ChatPart, type ChatSkill, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
+import { CHAT_SKILLS, chatEngines, ENGINE_LABEL, MAX_CONTEXT, skillItem, type ChatEngine, type ChatMessage, type ChatPart, type ChatSkill, type ChatSummary, type ContextItem, type ContextKind } from './chat-contract';
 import { contextFrom, markPicked, pickableAt, sameContext } from './chat-context';
 import { Markdown } from './markdown-lite';
-import { useChat, type ChatState } from './useChat';
+import { engineOf, useChat, type ChatState } from './useChat';
 
 const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   mail: { label: 'Mail', icon: Mail },
@@ -21,6 +21,7 @@ const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
 };
 
 const WIDE_KEY = 'desk-panel.chat-wide';
+const newNonce = () => crypto.randomUUID();
 const readWide = () => { try { return localStorage.getItem(WIDE_KEY) === '1'; } catch { return false; } };
 const saveWide = (wide: boolean) => { try { localStorage.setItem(WIDE_KEY, wide ? '1' : '0'); } catch { /* a per-viewer convenience, the chat works without it */ } };
 
@@ -51,15 +52,35 @@ function pretty(input: string): string {
 }
 const clipOutput = (text: string) => text.length > 4000 ? `${text.slice(0, 4000)}\n… (skrócone)` : text;
 
-function Tool({ part }: { part: Extract<ChatPart, { type: 'tool' }> }) {
+/** `0:53`, `2:05`: how long a step has been going. */
+export const elapsed = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+/** A tool that runs longer than this gets a word on why (Hermes's tools behind an approval take about a minute). */
+const SLOW_TOOL_MS = 20_000;
+
+/** The current time, every second while `on`: running steps show how long they take. */
+function useTick(on: boolean) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!on) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [on]);
+  return on ? Math.max(now, Date.now()) : now;
+}
+
+function Tool({ part, now }: { part: Extract<ChatPart, { type: 'tool' }>; now: number }) {
   const running = part.state === 'running';
-  return <details className="chat-tool" data-state={part.state}>
+  const took = part.startedAt ? (running ? now : part.endedAt ?? now) - part.startedAt : null;
+  return <details className="chat-tool" data-state={part.state} data-error={part.error ? '' : undefined}>
     <summary>
       <Wrench size={15} aria-hidden="true" />
       <b>{part.name}</b>
       <span className="sum">{toolSummary(part.input)}</span>
-      <span className="state">{running ? <><i aria-hidden="true" />Działa</> : <><Check size={14} aria-hidden="true" />Gotowe</>}</span>
+      <span className="state">{running
+        ? <><i aria-hidden="true" />Działa{took !== null && ` ${elapsed(took)}`}</>
+        : <><Check size={14} aria-hidden="true" />{part.error ? 'Błąd' : 'Gotowe'}{took !== null && took >= 1000 && ` · ${elapsed(took)}`}</>}</span>
     </summary>
+    {running && took !== null && took >= SLOW_TOOL_MS && <p className="chat-slow" role="status">Trwa dłużej niż zwykle: narzędzia w Hermesie potrafią działać ponad minutę. Możesz zaczekać albo zatrzymać odpowiedź.</p>}
     <div className="body">
       {part.input && <pre>{pretty(part.input)}</pre>}
       {part.output && <pre className="out">{clipOutput(part.output)}</pre>}
@@ -67,15 +88,38 @@ function Tool({ part }: { part: Extract<ChatPart, { type: 'tool' }> }) {
   </details>;
 }
 
-function AgentMessage({ message }: { message: ChatMessage }) {
+type ApprovalPart = Extract<ChatPart, { type: 'approval' }>;
+const DECIDED: Record<Exclude<ApprovalPart['state'], 'pending'>, string> = { approved: 'Zezwolono', denied: 'Odmówiono', expired: 'Prośba o zgodę wygasła' };
+
+/** The agent asks before running a tool: what it wants to run, and the user's answer (the run waits for it). */
+function Approval({ part, now, decide, busy }: { part: ApprovalPart; now: number; decide?: (id: string, decision: 'approve' | 'deny') => void; busy: boolean }) {
+  const pending = part.state === 'pending';
+  return <div className="chat-approval" data-state={part.state} role="group" aria-label={`Prośba o zgodę: ${part.tool}`}>
+    <div className="head"><ShieldQuestion size={16} aria-hidden="true" /><b>{part.state === 'pending' ? 'Agent prosi o zgodę' : DECIDED[part.state]}</b><span className="tool">{part.tool}</span></div>
+    {part.detail && <pre>{part.detail}</pre>}
+    {pending && <>
+      <p className="wait" role="status">Odpowiedź czeka na Twoją decyzję · {elapsed(now - part.at)}</p>
+      {decide && <div className="actions">
+        <button type="button" className="ok" disabled={busy} onClick={() => decide(part.id, 'approve')}>Zezwól</button>
+        <button type="button" className="no" disabled={busy} onClick={() => decide(part.id, 'deny')}>Odmów</button>
+      </div>}
+    </>}
+  </div>;
+}
+
+function AgentMessage({ message, decide, busy }: { message: ChatMessage; decide?: (id: string, decision: 'approve' | 'deny') => void; busy?: boolean }) {
   const parts = message.parts ?? [];
   const streaming = message.status === 'streaming';
+  const now = useTick(streaming);
   const last = parts.at(-1);
   return <div className="chat-agent">
     <div className="chat-avatar" aria-hidden="true"><Sparkles size={16} /></div>
     <div className="chat-agent-body">
-      {parts.map((part, i) => part.type === 'tool' ? <Tool key={`tool:${part.id}`} part={part} /> : <Markdown key={`text:${i}`} text={part.text} />)}
-      {streaming && (!last || last.type === 'tool' ? <p className="chat-wait" role="status">Pracuje<span aria-hidden="true">…</span></p> : <span className="chat-caret" aria-hidden="true" />)}
+      {parts.map((part, i) => part.type === 'tool' ? <Tool key={`tool:${part.id}`} part={part} now={now} />
+        : part.type === 'approval' ? <Approval key={`approval:${part.id}`} part={part} now={now} decide={streaming ? decide : undefined} busy={!!busy} />
+        : <Markdown key={`text:${i}`} text={part.text} />)}
+      {streaming && message.notice && <p className="chat-wait" role="status">{message.notice}</p>}
+      {streaming && !message.notice && (!last || last.type !== 'text' ? <p className="chat-wait" role="status">Pracuje<span aria-hidden="true">…</span></p> : <span className="chat-caret" aria-hidden="true" />)}
       {message.status === 'error' && <p className="chat-error" role="alert">{message.error || 'Agent nie odpowiedział.'}</p>}
       {message.status === 'stopped' && <p className="chat-stopped">Zatrzymano.</p>}
     </div>
@@ -107,7 +151,7 @@ export const messageCount = (n: number) => `${n} ${n === 1 ? 'wiadomość' : 'wi
 
 function Sidebar({ chat, now, query, setQuery, choose }: { chat: ChatState; now: number; query: string; setQuery: (q: string) => void; choose: (id: string | null) => void }) {
   const needle = query.trim().toLowerCase();
-  const shown = (chat.chats ?? []).filter(c => !needle || c.title.toLowerCase().includes(needle));
+  const shown = (chat.chats ?? []).filter(c => !needle || c.title.toLowerCase().includes(needle) || ENGINE_LABEL[engineOf(c)].toLowerCase() === needle);
   const groups: { name: string; items: ChatSummary[] }[] = [];
   for (const c of shown) {
     const name = groupOf(c.updatedAt, now);
@@ -130,7 +174,7 @@ function Sidebar({ chat, now, query, setQuery, choose }: { chat: ChatState; now:
         <div className="chat-group chat-eyebrow">{group.name}</div>
         {group.items.map(c => <button key={c.id} type="button" className={`chat-sess ${c.id === chat.activeId ? 'on' : ''}`} aria-current={c.id === chat.activeId ? 'true' : undefined} onClick={() => choose(c.id)}>
           <span className="t">{c.running && <i className="chat-pulse" aria-label="Agent odpowiada" />}{c.title}</span>
-          <span className="m">{whenOf(c.updatedAt, now)} · {messageCount(c.messages)}</span>
+          <span className="m">{whenOf(c.updatedAt, now)} · {messageCount(c.messages)}<span className="chat-eng" data-engine={engineOf(c)}>{ENGINE_LABEL[engineOf(c)]}</span></span>
         </button>)}
       </div>)}
     </div>
@@ -174,6 +218,10 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [now, setNow] = useState(Date.now);
+  /** Set when the user picked the other engine while a chat was open: says where the next message goes. */
+  const [switched, setSwitched] = useState<{ from: string; fromEngine: ChatEngine; to: ChatEngine } | null>(null);
+  /** One per draft: a message retried after an error is the same message to the server. */
+  const nonce = useRef<string | null>(null);
   const text = useRef<HTMLTextAreaElement>(null);
   const running = chat.active?.running ?? false;
   const items = chat.active?.items;
@@ -271,8 +319,15 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     const body = draft.trim() || (pickedSkill ? pickedSkill.title : '');
-    if (!body || running || chat.busy || chat.unavailable) return;
-    if (await chat.send(body, context)) { setDraft(''); setContext([]); setDismissedAt(null); }
+    if (!body || running || chat.busy || chat.unavailable || chat.engineDown) return;
+    nonce.current ??= newNonce();
+    // On failure the draft and the picked elements stay, so nothing is lost while an engine is down.
+    if (await chat.send(body, context, nonce.current)) { setDraft(''); setContext([]); setDismissedAt(null); setSwitched(null); nonce.current = null; }
+  };
+  /** A conversation keeps its engine: picking the other one while a chat is open starts a new chat on it, draft kept. */
+  const chooseEngine = (engine: ChatEngine) => {
+    if (chat.activeId && engine !== chat.engine) { setSwitched({ from: chat.active?.title ?? 'Ta rozmowa', fromEngine: chat.engine, to: engine }); chat.startNew(); }
+    if (engine !== chat.preferred || engine !== chat.engine) chat.chooseEngine(engine);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (matchingSkills.length > 0) {
@@ -292,7 +347,7 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
     }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); }
   };
-  const choose = (id: string | null) => { setListOpen(false); if (id) chat.open(id); else chat.startNew(); };
+  const choose = (id: string | null) => { setListOpen(false); setSwitched(null); if (id) chat.open(id); else chat.startNew(); };
   const title = chat.active?.title ?? 'Nowy czat';
   const commitRename = (value: string) => {
     setRenaming(null);
@@ -317,16 +372,32 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
         <span className="d">{skill.description}</span>
       </button>)}
     </div>}
+    {chat.engineDown && <div className="chat-engine-down" role="alert">
+      <p><b>{ENGINE_LABEL[chat.engine]} nie odpowiada.</b> {chat.engineDown.error ?? ''} Wiadomość nie zostanie wysłana, szkic zostaje.</p>
+      <div className="actions">
+        {chatEngines.filter(e => e !== chat.engine && !chat.engines?.some(s => s.engine === e && !s.available)).map(e =>
+          <button key={e} type="button" onClick={() => chooseEngine(e)}>Przełącz na {ENGINE_LABEL[e]}</button>)}
+        <button type="button" className="again" onClick={() => void chat.refresh()}><RefreshCw size={14} aria-hidden="true" />Sprawdź ponownie</button>
+      </div>
+    </div>}
     <textarea ref={text} rows={picking ? 2 : 1} value={draft} onChange={e => { setDraft(e.target.value); setDismissedAt(null); setSkillIndex(0); }} onKeyDown={onKey} disabled={chat.unavailable}
       aria-label="Wiadomość do agenta" placeholder={picking ? 'Co z tym zrobić?' : 'Napisz wiadomość lub wpisz @ aby wybrać skill…'} />
     <div className="chat-tools">
       {picking
         ? <><button type="button" className="chat-done" onClick={() => setPicking(false)}>Gotowe</button><span className="chat-tools-note">Kończy wskazywanie (Esc)</span></>
         : <button type="button" className="chat-pick" onClick={pickToggle}><Crosshair size={18} aria-hidden="true" />Wskaż element</button>}
-      <span className="chat-agy" title="Agent: agy"><i className={running ? 'run' : ''} aria-hidden="true" />agy</span>
+      <div className="chat-engine" role="radiogroup" aria-label="Silnik czatu">
+        {chatEngines.map(e => {
+          const down = chat.engines?.find(s => s.engine === e && !s.available);
+          return <button key={e} type="button" role="radio" aria-checked={chat.engine === e} className={chat.engine === e ? 'on' : ''}
+            title={down ? `${ENGINE_LABEL[e]}: niedostępny${down.error ? ` (${down.error})` : ''}` : `Silnik: ${ENGINE_LABEL[e]}`} onClick={() => chooseEngine(e)}>
+            <i className={chat.engine === e && running ? 'run' : down ? 'down' : ''} aria-hidden="true" />{ENGINE_LABEL[e]}
+          </button>;
+        })}
+      </div>
       {running
         ? <button type="button" className="chat-round stop" aria-label="Zatrzymaj odpowiedź" onClick={() => void chat.stop()}><Square size={16} fill="currentColor" aria-hidden="true" /></button>
-        : <button type="button" className="chat-round" aria-label="Wyślij" disabled={(!draft.trim() && !pickedSkill) || chat.busy || chat.unavailable} onClick={() => void submit()}><ArrowUp size={20} aria-hidden="true" /></button>}
+        : <button type="button" className="chat-round" aria-label="Wyślij" disabled={(!draft.trim() && !pickedSkill) || chat.busy || chat.unavailable || !!chat.engineDown} onClick={() => void submit()}><ArrowUp size={20} aria-hidden="true" /></button>}
     </div>
   </div>;
 
@@ -335,14 +406,15 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
     : !chat.activeId
       ? <div className="chat-empty">
         <Sparkles size={26} aria-hidden="true" />
-        <h2>Nowy czat</h2>
+        <h2>Nowy czat · {ENGINE_LABEL[chat.engine]}</h2>
+        {switched && <p className="chat-switched" role="status">Rozmowa „{switched.from}” zostaje w {ENGINE_LABEL[switched.fromEngine]} (jest na liście rozmów). Następna wiadomość zacznie nową rozmowę w {ENGINE_LABEL[switched.to]}.</p>}
         <p>Napisz do agenta, wpisz <code>@</code> aby wybrać skill albo wskaż na pulpicie mail, spotkanie, zadanie, trening lub cały kafelek.</p>
       </div>
       : !chat.active
         ? <p className="chat-empty">Wczytuję rozmowę…</p>
-        : chat.active.items.map(m => m.role === 'user' ? <UserMessage key={m.id} message={m} /> : <AgentMessage key={m.id} message={m} />);
+        : chat.active.items.map(m => m.role === 'user' ? <UserMessage key={m.id} message={m} /> : <AgentMessage key={m.id} message={m} decide={(id, decision) => void chat.approve(id, decision)} busy={chat.busy} />);
 
-  const meta = chat.active ? `${running ? 'agent odpowiada' : 'agy'} · ${messageCount(chat.active.messages)}` : 'agy';
+  const meta = chat.active ? `${running ? 'agent odpowiada' : ENGINE_LABEL[chat.engine]} · ${messageCount(chat.active.messages)}` : ENGINE_LABEL[chat.engine];
   return createPortal(
     <div className="chat-root" data-mode={mode} data-compact={wide && !picking ? undefined : ''} data-list={listOpen ? 'open' : undefined}>
       {mode === 'window' && <div className="chat-scrim" aria-hidden="true" />}

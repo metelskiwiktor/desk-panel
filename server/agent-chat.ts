@@ -7,7 +7,8 @@ import path from 'node:path';
 import { createChatLog, type ChatLog, type TurnSummary, type TurnTool } from './chat-log';
 import {
   titleFrom, withContext,
-  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
+  type ChatApproval, type ChatDetail, type ChatEngine, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
+  type EngineStatus,
 } from '../src/chat-contract';
 
 /** A failure the HTTP layer answers with this status. */
@@ -126,7 +127,11 @@ export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
   };
 }
 
-interface Stored { id: string; title: string; createdAt: number; updatedAt: number; agy: string | null; items: ChatMessage[] }
+/**
+ * One agy conversation on disk. `engine` came with Hermes (schema 2): a file without it is an agy chat from before, and
+ * is tagged on load, everything else in it kept as it was.
+ */
+interface Stored { id: string; engine?: 'agy'; title: string; createdAt: number; updatedAt: number; agy: string | null; items: ChatMessage[] }
 /** What the diagnostic log needs to know about the turn that is running. */
 interface TurnTrace {
   number: number; startedAt: number; ask: string; context: string[];
@@ -147,6 +152,12 @@ export interface ChatService {
   stop(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
+  /** The user's answer to a tool the agent asked about. Only engines that ask (Hermes) have it. */
+  approve?(id: string, approval: ChatApproval): Promise<void>;
+  /** Which engines can take a message, and the preferred one; only the router of both engines has them. */
+  engines?(): Promise<EngineStatus[]>;
+  preferred?(): Promise<ChatEngine>;
+  prefer?(engine: ChatEngine): Promise<void>;
   /** Sends the whole chat at once, then every message that changes. Returns the way to stop listening. */
   subscribe(id: string, listener: (event: ChatEvent) => void): Promise<() => void>;
   close(): void;
@@ -224,7 +235,10 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
         if (typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.items)) continue;
         // A turn that was running when the panel stopped cannot go on: say so instead of showing it as alive.
         for (const message of value.items) if (message.status === 'streaming') { message.status = 'error'; message.error = 'Przerwano: panel został uruchomiony ponownie.'; }
+        const legacy = value.engine !== 'agy';
+        if (legacy) value.engine = 'agy';
         chats.set(value.id, value);
+        if (legacy) save(value);
       } catch { /* a damaged file is not a chat */ }
     }
   })();
@@ -237,7 +251,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
 
   const summary = (chat: Stored): ChatSummary => ({
     id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.items.length,
-    running: !!sessions.get(chat.id)?.agent,
+    running: !!sessions.get(chat.id)?.agent, engine: 'agy',
   });
   const detail = (chat: Stored): ChatDetail => ({ ...summary(chat), items: chat.items });
   const emit = (id: string, event: ChatEvent) => { for (const listener of listeners.get(id) ?? []) listener(event); };
@@ -277,7 +291,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     }));
     log.trace(chat.id, { turn: trace.number, src: 'panel', kind: 'finish', status, error: error ?? null, emptyAnswer, endedBy });
     log.turn({
-      at: now(), chat: chat.id, title: chat.title, turn: trace.number, model: session.model, ask: trace.ask, context: trace.context,
+      at: now(), chat: chat.id, title: chat.title, turn: trace.number, model: session.model, engine: 'agy', ask: trace.ask, context: trace.context,
       status, error: error ?? null, endedBy, emptyAnswer, answerChars, seconds: Math.round((now() - trace.startedAt) / 100) / 10,
       lastStep: trace.lastStep, denied: trace.denied, result: trace.result,
       usage: agent.usage ? { ...agent.usage, calls: agent.usage.calls || calls } : null, tools,
@@ -392,7 +406,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     async create(input) {
       await load();
       const at = now();
-      const chat: Stored = { id: randomUUID(), title: titleFrom(input.text), createdAt: at, updatedAt: at, agy: null, items: [] };
+      const chat: Stored = { id: randomUUID(), engine: 'agy', title: titleFrom(input.text), createdAt: at, updatedAt: at, agy: null, items: [] };
       chats.set(chat.id, chat);
       await service.send(chat.id, input);
       return { id: chat.id };

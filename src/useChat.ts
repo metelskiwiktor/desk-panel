@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatDetail, ChatEvent, ChatMessage, ChatSummary, ContextItem } from './chat-contract';
+import { DEFAULT_ENGINE, type ChatDetail, type ChatEngine, type ChatEvent, type ChatList, type ChatMessage, type ChatSummary, type ContextItem, type EngineStatus } from './chat-contract';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const messageOf = (status: number) => status === 409 ? 'Agent jeszcze odpowiada.' : status === 404 ? 'Nie ma takiej rozmowy.' : status === 503 ? 'Czat jest niedostępny.' : 'Nie udało się wykonać operacji czatu.';
@@ -15,7 +15,9 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 }
 
 const byRecent = (a: ChatSummary, b: ChatSummary) => b.updatedAt - a.updatedAt;
-const summaryOf = (chat: ChatDetail): ChatSummary => ({ id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.messages, running: chat.running });
+const summaryOf = (chat: ChatDetail): ChatSummary => ({ id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.messages, running: chat.running, ...(chat.engine ? { engine: chat.engine } : {}) });
+/** A chat from a server that predates engines is agy's. */
+export const engineOf = (chat: Pick<ChatSummary, 'engine'>): ChatEngine => chat.engine ?? 'agy';
 
 /** One message changed: replace it in place (by id), or add it at the end. */
 export function withMessage(items: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -34,13 +36,20 @@ export function useChat() {
   const [active, setActive] = useState<ChatDetail | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Which engines can take a message (null: the server does not say), and the one new chats start on. */
+  const [engines, setEngines] = useState<EngineStatus[] | null>(null);
+  const [preferred, setPreferred] = useState<ChatEngine>(DEFAULT_ENGINE);
   const activeRef = useRef<string | null>(null);
   activeRef.current = activeId;
+  const preferredRef = useRef(preferred);
+  preferredRef.current = preferred;
 
   const refresh = useCallback(async () => {
     try {
-      const { chats: list } = await call('/api/chats') as { chats: ChatSummary[] };
+      const { chats: list, engines: status, engine } = await call('/api/chats') as ChatList;
       setChats([...list].sort(byRecent));
+      setEngines(status ?? null);
+      if (engine) setPreferred(engine);
       setUnavailable(false);
     } catch (e) {
       if ((e as { status?: number }).status === 503) setUnavailable(true);
@@ -48,6 +57,15 @@ export function useChat() {
     }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  const listed = activeId ? chats?.find(c => c.id === activeId) : undefined;
+  const engine: ChatEngine = active ? engineOf(active) : listed ? engineOf(listed) : preferred;
+  const engineDown = engines?.find(e => e.engine === engine && !e.available);
+  // While the engine in use is down, look again now and then: the window says when it is back.
+  useEffect(() => {
+    if (!engineDown) return;
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [engineDown, refresh]);
 
   // The stream of the open conversation.
   useEffect(() => {
@@ -80,17 +98,35 @@ export function useChat() {
     finally { setBusy(false); }
   }, []);
 
-  /** Writes in the open conversation, or starts one when none is open. Returns true once the agent has the message. */
-  const send = useCallback((text: string, context: ContextItem[]) => guard(async () => {
+  /**
+   * Writes in the open conversation, or starts one on the chosen engine when none is open. Returns true once the agent
+   * has the message; on failure the caller keeps the draft. `nonce` is one per draft, so a retry is not a second turn.
+   */
+  const send = useCallback((text: string, context: ContextItem[], nonce?: string) => guard(async () => {
     const id = activeRef.current;
-    if (id) await call(`/api/chats/${id}/messages`, 'POST', { text, context });
+    if (id) await call(`/api/chats/${id}/messages`, 'POST', { text, context, ...(nonce ? { nonce } : {}) });
     else {
-      const created = await call('/api/chats', 'POST', { text, context }) as { id: string };
+      const created = await call('/api/chats', 'POST', { text, context, engine: preferredRef.current, ...(nonce ? { nonce } : {}) }) as { id: string };
       setActiveId(created.id);
     }
     void refresh();
     return true;
-  }).then(Boolean), [guard, refresh]);
+  }).then(Boolean, () => false).then(async ok => { if (!ok) await refresh(); return ok; }), [guard, refresh]);
+
+  /**
+   * The engine of the next new chat, remembered by the server for every screen. A conversation keeps its own engine, so
+   * choosing the other one while a chat is open goes to a new chat of the chosen engine (the open one stays as it is).
+   */
+  const chooseEngine = useCallback((engine: ChatEngine) => {
+    setPreferred(engine);
+    preferredRef.current = engine;
+    setError('');
+    void call('/api/chats/engine', 'PUT', { engine }).catch(() => { /* chosen for this screen anyway */ });
+  }, []);
+
+  const approve = useCallback((approvalId: string, decision: 'approve' | 'deny') => guard(async () => {
+    if (activeRef.current) await call(`/api/chats/${activeRef.current}/approval`, 'POST', { approvalId, decision });
+  }), [guard]);
 
   const stop = useCallback(() => guard(async () => { if (activeRef.current) await call(`/api/chats/${activeRef.current}/stop`, 'POST', {}); }), [guard]);
   const rename = useCallback((title: string) => guard(async () => {
@@ -107,7 +143,10 @@ export function useChat() {
   }), [guard, refresh]);
 
   return {
-    chats, unavailable, active, activeId, error, busy,
+    chats, unavailable, active, activeId, error, busy, engines, preferred,
+    /** The engine the composer writes to: the open chat's, or the preferred one for a new chat; and why it cannot, if so. */
+    engine, engineDown,
+    chooseEngine, approve,
     open: useCallback((id: string) => { setError(''); setActiveId(id); }, []),
     startNew: useCallback(() => { setError(''); setActiveId(null); }, []),
     send, stop, rename, remove, refresh, clearError: useCallback(() => setError(''), []),

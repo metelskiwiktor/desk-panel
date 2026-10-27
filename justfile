@@ -66,6 +66,18 @@ update *args:
 service action="STATUS" *args:
     & ./servy/desk-panel.ps1 -Action '{{action}}' {{args}}
 
+# Hermes (default chat engine) as its own service: STATUS, START, STOP, RESTART, RUN (foreground), CHECK (pin + health).
+hermes action="STATUS":
+    & ./servy/hermes.ps1 -Action '{{action}}'
+
+# One-time Hermes setup outside Git: API server key on loopback, panel.env, MCP tools in ~/.hermes/config.yaml.
+hermes-setup:
+    & ./scripts/hermes-setup.ps1
+
+# Register Hermes as a Servy service with automatic (delayed) start; Windows credential dialog like `just install`.
+hermes-install:
+    & ./servy/register.ps1 -Manifest servy/hermes.json -Start
+
 # Build and register the service with automatic startup (Windows credential dialog).
 install: check
     & ./servy/register.ps1 -Start
