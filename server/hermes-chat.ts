@@ -100,6 +100,15 @@ const ID = /^[0-9a-f-]{36}$/;
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
 const CONTEXT_BLOCK = /^[\s\S]*?\[Wiadomość\]\n/;
 
+/** Hermes keeps an MCP tool's answer as `{"result": "<text>"}`: the text is the answer. */
+const unwrapResult = (content: string): string => {
+  if (!content.startsWith('{"result"')) return content;
+  try {
+    const value = JSON.parse(content) as { result?: unknown };
+    return typeof value.result === 'string' && Object.keys(value).length === 1 ? value.result : content;
+  } catch { return content; }
+};
+
 /** A history of Hermes messages as the window's turns: each user message and what the agent did after it. */
 export function groupsOf(messages: HistoryMessage[]): { user: string; parts: ChatPart[] }[] {
   const groups: { user: string; parts: ChatPart[] }[] = [];
@@ -113,10 +122,33 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
     } else if (m.role === 'tool') {
       const tool = group.parts.find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.id === m.toolCallId)
         ?? [...group.parts].reverse().find((p): p is Extract<ChatPart, { type: 'tool' }> => p.type === 'tool' && p.output === undefined);
-      if (tool) tool.output = m.content.slice(0, 4000);
+      if (tool) tool.output = unwrapResult(m.content).slice(0, 4000);
     }
   }
   return groups;
+}
+
+/**
+ * Hermes streams a run's tools trimmed (`/v1/runs`: no arguments, answers cut at 500 characters); its session keeps
+ * them whole. Fills a finished answer's tool steps from the session's group of that turn, matching them by name and
+ * order (the stream gives no call ids). True when something changed.
+ */
+export function fillFromHistory(message: ChatMessage, group: { parts: ChatPart[] } | undefined): boolean {
+  if (!group) return false;
+  const seen = new Map<string, number>();
+  const whole = new Map<string, Extract<ChatPart, { type: 'tool' }>[]>();
+  for (const p of group.parts) if (p.type === 'tool') whole.set(p.name, [...(whole.get(p.name) ?? []), p]);
+  let changed = false;
+  for (const p of message.parts ?? []) {
+    if (p.type !== 'tool') continue;
+    const n = seen.get(p.name) ?? 0;
+    seen.set(p.name, n + 1);
+    const full = whole.get(p.name)?.[n];
+    if (!full) continue;
+    if (full.input && full.input.length > p.input.length) { p.input = full.input; changed = true; }
+    if (full.output && full.output.length > (p.output?.length ?? 0)) { p.output = full.output; changed = true; }
+  }
+  return changed;
 }
 
 export function createHermesChat(options: HermesChatOptions): ChatService & { status(): Promise<{ available: boolean; error?: string }> } {
@@ -207,7 +239,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       // What this panel saw live (approvals and timings included, text checked against Hermes's final output) is
       // shown as it was; after a restart the session's history is the answer.
       const kept = finished.get(turn.agent);
-      if (kept) out.push(kept);
+      if (kept) { fillFromHistory(kept, group); out.push(kept); }
       else if (group && group.parts.length) {
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
@@ -442,6 +474,12 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     histories.delete(record.id);
     save(record);
     touch(record, message, true);
+    // The steps as the session has them, whole (cards need a tool's arguments): the window gets the answer once more.
+    void ensureHistory(record).then(() => {
+      const groups = histories.get(record.id)?.groups;
+      const index = record.turns.filter(t => t.run).indexOf(turn);
+      if (groups && index >= 0 && fillFromHistory(message, groups[index])) touch(record, message, true);
+    }).catch(() => { /* the live answer stays */ });
     const answerChars = message.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
     const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: t.input.slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));
     log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'finish', status: answer, error: error ?? null, endedBy, deltas: live.deltas });

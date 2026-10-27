@@ -210,7 +210,9 @@ export function historyOf(body: unknown): HistoryMessage[] {
       : Array.isArray(m.content) ? m.content.map(c => str(rec(c).text) ?? '').join('') : '';
     const calls = Array.isArray(m.tool_calls) ? m.tool_calls.map(c => {
       const call = rec(c), fn = rec(call.function);
-      return { id: safeId(call.id) ?? '', name: String(fn.name ?? call.name ?? 'narzędzie').slice(0, 120), arguments: text(fn.arguments ?? call.arguments, 600) };
+      const name = String(fn.name ?? call.name ?? 'narzędzie').slice(0, 120);
+      // The panel's own tools keep their arguments whole: a dispatch card carries the executor prompt (up to 32 000).
+      return { id: safeId(call.id) ?? '', name, arguments: text(fn.arguments ?? call.arguments, /desk[-_]panel/i.test(name) ? 32_000 : 600) };
     }) : undefined;
     out.push({ role, content, ...(calls?.length ? { toolCalls: calls } : {}), ...(safeId(m.tool_call_id) ? { toolCallId: safeId(m.tool_call_id)! } : {}) });
   }

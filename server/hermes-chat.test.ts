@@ -6,8 +6,9 @@ import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract'
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
 import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
-import { createHermesChat, groupsOf, hermesPreamble } from './hermes-chat';
-import { startMockHermes, type MockHermes } from './hermes-mock';
+import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble } from './hermes-chat';
+import { watchedTask } from '../src/cockpit-contract';
+import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
 let dir: string;
 let mock: MockHermes;
@@ -138,6 +139,31 @@ describe('Hermes chat', () => {
     expect(after.items[0]).toMatchObject({ text: 'Co tu jest?', context: [tile] });
     expect(answerOf(after.items[1])).toBe(answerOf(before.items[1]));
     expect(after.items[1].parts?.[0]).toMatchObject({ type: 'tool', output: 'Lista „Zadania” (l-1): 2 do zrobienia.' });
+  });
+
+  it('fills tool steps Hermes streamed without arguments from the session, so the cockpit knows the watched task', async () => {
+    // Hermes 0.21 streams an MCP tool with an empty preview and its answer cut at 500 characters.
+    mock.configure({ streamToolArgs: false });
+    const service = hermes();
+    const { id } = await service.create({ text: 'Nasłuchuj tego taska' });
+    await finishedChat(service, id);
+    const chat = await until(() => service.get(id), c => (c.items[1].parts ?? []).some(p => p.type === 'tool' && p.input.includes(MOCK_DISPATCHED)));
+    const watch = chat.items[1].parts!.find(p => p.type === 'tool')!;
+    expect(watch).toMatchObject({ name: 'mcp_desk-panel_panel_cezar_watch', input: JSON.stringify({ id: MOCK_DISPATCHED }) });
+    expect(watchedTask(chat.items, {})).toBe(MOCK_DISPATCHED);
+  });
+
+  it('a filled step keeps what the stream had when the session has nothing longer', () => {
+    const message: ChatMessage = { id: 'a', role: 'agent', at: 0, parts: [
+      { type: 'tool', id: 'x1', name: 'search_files', input: '*', output: 'pełne', state: 'done' },
+      { type: 'tool', id: 'x2', name: 'mcp__desk_panel__panel_cezar_watch', input: '', output: '{"task":{"id":"a', state: 'done' },
+    ] };
+    const changed = fillFromHistory(message, { parts: [
+      { type: 'tool', id: 'h1', name: 'search_files', input: '', state: 'done' },
+      { type: 'tool', id: 'h2', name: 'mcp__desk_panel__panel_cezar_watch', input: '{"id":"desk-panel/x"}', output: '{"task":{"id":"desk-panel/x"}}', state: 'done' },
+    ] });
+    expect(changed).toBe(true);
+    expect(message.parts).toMatchObject([{ input: '*', output: 'pełne' }, { input: '{"id":"desk-panel/x"}', output: '{"task":{"id":"desk-panel/x"}}' }]);
   });
 
   it('reads the history where Hermes 0.21 keeps it (/api/sessions, in pages), and where older ones did', async () => {

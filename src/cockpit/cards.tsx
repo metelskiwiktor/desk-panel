@@ -4,6 +4,7 @@ import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, P
 import {
   type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
 } from './types';
+import { watchAnswerTask } from '../cockpit-contract';
 
 /**
  * What a card can do and see: answer on behalf of the user (a promise that fails says why), whether the thread is busy
@@ -129,9 +130,9 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
 /** `@nasłuchuj cezara`: the agent waits for a Cezar task, with the steps of its worktree. */
 export function WatchCard({ args, result, status }: ToolCallMessagePartProps<WatchArgs>) {
   const { watched } = useContext(CardActions);
-  const id = args.taskId ?? args.id ?? '';
   // Hermes: its tool answers with the task as it was; the cockpit's reading of the same task is newer.
   const reported = parseTask(result);
+  const id = args.taskId ?? args.id ?? reported?.id ?? '';
   const live = watched && watched.id === id ? watched : reported;
   const steps = args.steps ?? live?.steps ?? [];
   const running = status.type === 'running' || (!!live && ACTIVE.has(live.status));
@@ -153,12 +154,7 @@ export function WatchCard({ args, result, status }: ToolCallMessagePartProps<Wat
   </section>;
 }
 /** The task in a watch tool's answer (`{"task":{…}}`), if it has one. */
-function parseTask(result: unknown): CockpitTask | undefined {
-  try {
-    const value = (typeof result === 'string' ? JSON.parse(result) : result) as { task?: CockpitTask } | undefined;
-    return value?.task && typeof value.task.id === 'string' ? value.task : undefined;
-  } catch { return undefined; }
-}
+const parseTask = (result: unknown) => watchAnswerTask<CockpitTask>(result);
 
 const DECIDED: Record<Exclude<HermesApprovalArgs['state'], 'pending'>, string> = { approved: 'Zezwolono', denied: 'Odmówiono', expired: 'Prośba o zgodę wygasła' };
 

@@ -98,6 +98,9 @@ describe('the cockpit contract', () => {
     // A failed call or arguments that are not a task id change nothing.
     expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: OTHER }), tool('panel_cezar_watch', 'w2', { id: RUN }, true)], {})).toBe(OTHER);
     expect(watchedTask([tool('panel_cezar_watch', 'w1', { id: '../etc' })], {})).toBeNull();
+    // Hermes streamed no arguments: the task the panel's tool answered with counts, also wrapped as {"result": …}.
+    const answered = { role: 'agent', parts: [{ type: 'tool', id: 'w', name: 'mcp__desk_panel__panel_cezar_watch', input: '', output: JSON.stringify({ result: JSON.stringify({ task: { id: OTHER } }) }) }] };
+    expect(watchedTask([answered], {})).toBe(OTHER);
     // Hermes names the server either way.
     expect(watchedTask([{ role: 'agent', parts: [{ type: 'tool', id: 'w', name: 'mcp_desk-panel_panel_cezar_watch', input: JSON.stringify({ id: OTHER }) }] }], {})).toBe(OTHER);
   });

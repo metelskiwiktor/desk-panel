@@ -20,6 +20,8 @@ export interface MockHermesOptions {
   eventIds?: boolean;
   /** True: the history is where Hermes kept it before 0.21 (`/v1/sessions/…/messages`, whole). */
   legacySessions?: boolean;
+  /** False: tool.started carries an empty preview (what Hermes sends for MCP tools). */
+  streamToolArgs?: boolean;
 }
 
 interface MockRun {
@@ -140,10 +142,12 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
     for (const tool of calls) {
       await later(run, step);
       if (over(run)) return;
-      push(run, 'tool.started', { tool_call_id: tool.id, tool_name: tool.name, arguments: tool.args });
+      // As Hermes 0.21 streams a run (`/v1/runs`): the tool and a short preview, no arguments and no call id…
+      push(run, 'tool.started', { tool: tool.name, preview: options.streamToolArgs === false ? '' : JSON.stringify(tool.args).slice(0, 80) });
       await later(run, step * 3);
       if (over(run)) return;
-      push(run, 'tool.completed', { tool_call_id: tool.id, tool_name: tool.name, output: tool.output });
+      // …and the answer cut at 500 characters. The session keeps both whole.
+      push(run, 'tool.completed', { tool: tool.name, preview: tool.output.length > 500 ? `${tool.output.slice(0, 497)}...` : tool.output, duration: 0.1, error: false });
     }
     const output = `${prefix}${script.answer ?? answerFor(run.input)}`;
     if (options.deltas) {
@@ -158,7 +162,8 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
     run.status = 'completed';
     run.output = output;
     history.push({ role: 'assistant', content: '', tool_calls: calls.map(t => ({ id: t.id, type: 'function', function: { name: t.name, arguments: JSON.stringify(t.args) } })) });
-    for (const t of calls) history.push({ role: 'tool', tool_call_id: t.id, content: t.output });
+    // An MCP tool's answer is wrapped in the session, as Hermes does.
+    for (const t of calls) history.push({ role: 'tool', tool_call_id: t.id, content: /desk[-_]panel/.test(t.name) ? JSON.stringify({ result: t.output }) : t.output });
     history.push({ role: 'assistant', content: output });
     push(run, 'run.completed', { output, session_id: run.session, usage: { input_tokens: 1200, output_tokens: 80 } });
   };

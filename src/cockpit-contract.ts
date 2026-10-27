@@ -125,6 +125,21 @@ export const cockpitToolDescription = (name: CockpitToolName) => {
 /** A panel tool as Hermes names it (`mcp__desk_panel__panel_cezar_watch`, `mcp_desk-panel_…`), without the server prefix. */
 export const panelToolName = (name: string) => name.replace(/^mcp_+desk[-_]panel_+/i, '');
 
+/** A tool's answer as the panel wrote it: Hermes wraps an MCP answer as `{"result": "<text>"}`. */
+export function toolAnswer(output: unknown): unknown {
+  let value: unknown = output;
+  for (let n = 0; n < 2 && typeof value === 'string'; n++) {
+    try { value = JSON.parse(value); } catch { return value; }
+    if (value && typeof value === 'object' && !Array.isArray(value) && typeof (value as { result?: unknown }).result === 'string' && Object.keys(value).length === 1) value = (value as { result: string }).result;
+  }
+  return value;
+}
+/** The task in a `panel_cezar_watch` answer (`{"task":{"id":…}}`), if the answer has one. */
+export function watchAnswerTask<T = { id: string }>(output: unknown): (T & { id: string }) | undefined {
+  const task = (toolAnswer(output) as { task?: { id?: unknown } } | undefined)?.task;
+  return task && typeof task.id === 'string' ? task as T & { id: string } : undefined;
+}
+
 /** What the cockpit needs of a conversation: its agent steps, in order. */
 type Step = { type: string; id?: string; name?: string; input?: string; output?: string; error?: boolean };
 type Turn = { role: string; parts?: Step[] };
@@ -142,8 +157,10 @@ export function watchedTask(items: readonly Turn[], dispatches: Record<string, D
       const outcome = p.id ? dispatches[p.id] : undefined;
       if (outcome?.decision === 'dispatched') watched = outcome.taskId;
     } else if (name === 'panel_cezar_watch') {
+      // The arguments when Hermes gives them; otherwise the task the tool answered with (the panel's own answer).
       let id: unknown;
       try { id = (JSON.parse(p.input ?? '') as { id?: unknown }).id; } catch { /* not this tool's arguments */ }
+      if (typeof id !== 'string') id = watchAnswerTask(p.output)?.id;
       if (typeof id === 'string' && cezarRunId.safeParse(id).success) watched = id;
     } else if (name === 'panel_cockpit_clear') watched = null;
   }
