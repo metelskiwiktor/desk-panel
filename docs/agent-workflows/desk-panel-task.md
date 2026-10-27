@@ -12,11 +12,12 @@ You are the executor. Follow the sequence in your workflow prompt exactly.
 If Type is `UI` (and Scenario is not `none`):
 1. First check `scenarios/<scenario>.json`: if the existing scenario item does not clearly expose the problem/case from the task (e.g. a short 1-sentence string when the task is about truncated long emails), update `scenarios/<scenario>.json` first using fields valid on `main` so the old UI clearly shows the "before" problem state.
 2. For any new or modified workspace tile (`smart-actions`, `bank`, `todo`, `system`, `mail`, `cezar`, or `<kind>`), pass `--open tile:<kind>` so `.ai/scenario.ts` showcases the tile at `2x2` on `after.png` without modifying `autoTiles` in `src/Workspace.tsx`.
-3. Capture `before.png` BEFORE editing any code in `src/` or `server/`, using `.ai/scenario.ts` (so relative imports load this worktree's `server/` and `src/`):
+3. Capture baseline screenshot BEFORE editing any code in `src/` or `server/`, using `.ai/scenario.ts` (so relative imports load this worktree's `server/` and `src/`):
 ```powershell
 Set-Location "<worktree-abs-path>"
 npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/before.png
 ```
+**Multiple views/pages/breakpoints**: When changes span across multiple views, pages, or breakpoints, capture a baseline before screenshot for EACH affected view/page/breakpoint using `--file .ai/screenshots/before-<view>.png` (e.g. `before-pulpit.png`, `before-zadania.png`, `before-mobile.png`). For single-view tasks, default `before.png` remains standard.
 
 ## Phase 2 — Implement & Targeted Check
 - Implement the required changes in `src/`, `server/`, `scenarios/`, or `docs/`.
@@ -25,10 +26,10 @@ npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 -
 - Add/update tests and run `npx vitest run <new-and-affected.test.ts>; npm run typecheck`.
 
 ## Phase 3 — After Screenshot & Visual Inspection (UI tasks ONLY)
-1. If Type is `UI`, run the exact same `.ai/scenario.ts` command outputting to `.ai/screenshots/after.png`.
-2. Call `read_file` on both `.ai/screenshots/before.png` and `.ai/screenshots/after.png` and verify all three:
+1. If Type is `UI`, run the matching `.ai/scenario.ts` command(s) outputting to `.ai/screenshots/after.png` (or `.ai/screenshots/after-<view>.png` for each affected view/page/breakpoint when changes span across multiple views).
+2. Call `read_file` on each captured screenshot pair in `.ai/screenshots/` (e.g. `before.png` + `after.png`, or `before-<view>.png` + `after-<view>.png`) and verify all three:
    - **Prominence**: the target modal or tile (`--open tile:<kind>`) is prominently visible.
-   - **Contrast**: `before.png` and `after.png` clearly show the before/after difference.
+   - **Contrast**: before and after screenshots clearly show the before/after difference.
    - **Legibility**: titles, labels, and values inside the changed UI are genuinely readable (not crushed into `...` ellipsis or cut off).
 
 ## Phase 4 — Commit
@@ -38,4 +39,4 @@ npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 -
 1. **`verify`**: Runs `npm test`, `npm run build`, checks `git status --porcelain`, and saves `.ai/diff.patch` (loops back to `fix` up to 2 times on failure).
 2. **`review`**: A fresh `agy` (`gemini-3.8-flash-medium`) reviewer session inspects `.ai/diff.patch` and changed files without re-running the test suite, and emits `CEZ:VERDICT approve` or `CEZ:VERDICT changes` (for real `P0`/`P1`/`P2` issues).
 3. **`address` (if `changes`)**: Re-opens the `implement` session (`max: 1` round) to fix the reported `P0`/`P1`/`P2` issues, re-capture `after.png` if UI changed, and re-run `verify`.
-4. **`pr` + `screenshots-comment` + `review-comment`**: Opens the PR ready for review, attaches `.ai/screenshots/{before,after}.png`, and posts the pre-PR review summary on the PR.
+4. **`pr` + `screenshots-comment` + `review-comment`**: Opens the PR ready for review, attaches all before/after screenshots in `.ai/screenshots/` (`scripts/pr-screenshots.mjs`), and posts the pre-PR review summary on the PR.

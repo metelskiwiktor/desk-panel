@@ -44,12 +44,13 @@ nodes:
       2. **Choose the right `--open` target so the feature is prominently showcased**:
          - For a new or modified workspace tile (`smart-actions`, `bank`, `todo`, `system`, `mail`, `cezar`, or any new tile `<kind>`), ALWAYS pass `--open tile:<kind>` (e.g. `--open tile:smart-actions`). This showcases the tile at `2x2` on `after.png` (and falls back cleanly to the default grid on `before.png` if the tile did not exist yet) WITHOUT needing to add optional tiles to `autoTiles` in `src/Workspace.tsx`!
          - For modals/drawers, pass `--open mail`, `--open chat`, `--open chat-wide`, `--open task`, `--open event`, `--open bank`, or a CSS selector.
-      3. **Capture `before.png` using `.ai/scenario.ts`** (which loads this worktree's own `server/` and `src/`):
+      3. **Capture baseline screenshot(s) using `.ai/scenario.ts`** (which loads this worktree's own `server/` and `src/`):
          ```powershell
          Set-Location "<worktree-abs-path>"
          npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/before.png
          ```
          (Omit `--open <open-target>` only if `open` is `none` and the change is already prominent on the main page.)
+         **Multiple views/pages/breakpoints**: When changes span across multiple views, pages, or breakpoints, capture a baseline before screenshot for EACH affected view/page/breakpoint using `--file .ai/screenshots/before-<view>.png` (e.g. `before-pulpit.png`, `before-zadania.png`, `before-mobile.png`). For single-view tasks, default `before.png` remains standard.
 
       ## Phase 2 — Implement & Targeted Check
       1. Make the required code changes in `src/`, `server/`, `scenarios/`, or `docs/` inside this worktree (and add any new schema fields like `body` to `scenarios/<scenario>.json` now).
@@ -64,18 +65,18 @@ nodes:
 
       ## Phase 3 — Capture After Screenshot & Visually Inspect Both (UI tasks ONLY)
       If Type is `UI` (and Scenario is not `none`):
-      1. Run the exact same `.ai/scenario.ts` command from your worktree, outputting to `.ai/screenshots/after.png`:
+      1. Run the matching `.ai/scenario.ts` command(s) from your worktree, outputting to `.ai/screenshots/after.png` (or `.ai/screenshots/after-<view>.png` for each affected view/page/breakpoint when changes span multiple views):
          ```powershell
          Set-Location "<worktree-abs-path>"
          npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/after.png
          ```
       2. **Mandatory critical visual inspection with `read_file`**:
-         - Call `read_file` on `<worktree-abs-path>/.ai/screenshots/before.png` and `read_file` on `<worktree-abs-path>/.ai/screenshots/after.png` to view both images yourself.
+         - Call `read_file` on each captured screenshot pair in `<worktree-abs-path>/.ai/screenshots/` (e.g. `before.png` + `after.png`, or `before-<view>.png` + `after-<view>.png`) to view all images yourself.
          - Check ALL THREE visual quality criteria:
-           (a) **Prominence**: Is the target view, modal, or tile prominently visible and open in `after.png` (e.g. showcased at `2x2` via `--open tile:<kind>` for tile tasks, or modal open via `--open mail`)?
-           (b) **Clear Before/After contrast**: Does `before.png` show the old/problem state while `after.png` clearly demonstrates the new/fixed state?
-           (c) **Legibility & Layout quality**: Can a human actually read the titles, labels, and values inside the new/modified UI on `after.png`? If titles or text are squashed into `...` (ellipsis with zero/few readable words), clipped, overlapping, or barely visible in a tiny corner, you MUST fix the CSS/layout or `--open` flag and re-capture `after.png` before finishing!
-         - If the task turned out to be purely backend with zero visual UI difference, delete `.ai/screenshots/before.png` and `.ai/screenshots/after.png`.
+           (a) **Prominence**: Is the target view, modal, or tile prominently visible and open in after screenshot(s) (e.g. showcased at `2x2` via `--open tile:<kind>` for tile tasks, or modal open via `--open mail`)?
+           (b) **Clear Before/After contrast**: Does before show the old/problem state while after clearly demonstrates the new/fixed state?
+           (c) **Legibility & Layout quality**: Can a human actually read the titles, labels, and values inside the new/modified UI on after screenshot(s)? If titles or text are squashed into `...` (ellipsis with zero/few readable words), clipped, overlapping, or barely visible in a tiny corner, you MUST fix the CSS/layout or `--open` flag and re-capture before finishing!
+         - If the task turned out to be purely backend with zero visual UI difference, delete all `.ai/screenshots/*.png`.
 
       ## Phase 4 — Commit
       1. Stage only your code/test/scenario/doc changes (`git add <files>` — never stage `.ai/` or `output/`).
@@ -83,9 +84,9 @@ nodes:
       3. Confirm `git status --porcelain` is empty. Do NOT push or open a PR yourself — Cezar runs verification and pre-PR review next.
 
       Print this final checklist before finishing, and end with `CEZ:DONE` on the last line:
-      - [ ] before.png captured before code edits & shows the "before" problem state (UI) or skipped (non-UI)
+      - [ ] before screenshots captured before code edits & show the "before" problem state (UI) or skipped (non-UI)
       - [ ] targeted tests and typecheck passed
-      - [ ] after.png captured & visually verified via read_file to differ from before.png (UI) or skipped (non-UI)
+      - [ ] after screenshots captured & visually verified via read_file to differ from before (UI) or skipped (non-UI)
       - [ ] changes committed, git status --porcelain is empty
       CEZ:DONE
 
@@ -123,7 +124,7 @@ nodes:
 
       {{nodes.verify.output}}
 
-      Fix the cause (do not weaken or delete tests), re-capture `.ai/screenshots/after.png` using `npx tsx .ai/scenario.ts ...` if this is a UI task and you changed UI code (then remove `output/screenshots`), and commit all intentional changes so `git status --porcelain` is empty.
+      Fix the cause (do not weaken or delete tests), re-capture `.ai/screenshots/after*.png` using `npx tsx .ai/scenario.ts ...` if this is a UI task and you changed UI code (then remove `output/screenshots`), and commit all intentional changes so `git status --porcelain` is empty.
       End with `CEZ:DONE`.
 
   - id: changed
@@ -156,10 +157,10 @@ nodes:
       Review procedure:
       1. Read `<worktree-abs-path>/.ai/diff.patch` in full with `read_file` to see all changes on this branch.
       2. Read the modified files in `<worktree-abs-path>` with `read_file` where needed to verify context around the diff.
-      3. If Type is `UI`, call `read_file` on `<worktree-abs-path>/.ai/screenshots/before.png` and `<worktree-abs-path>/.ai/screenshots/after.png` and critically inspect both:
-         - Are the screenshots identical or showing the wrong view?
-         - In `after.png`, is the new/modified UI prominently showcased and **genuinely legible** (or are item titles/text squashed into `...` ellipsis, cramped in a tiny corner instead of using `--open tile:<kind>`, or cut off)?
-         - If `after.png` is identical to `before.png`, barely shows the feature, or has unreadable `...`-truncated titles, report it as a `P2` finding (`CEZ:VERDICT changes`) with concrete instructions on how to fix the CSS layout and/or re-capture with `--open tile:<kind>`.
+      3. If Type is `UI`, inspect all before/after screenshot pairs in `<worktree-abs-path>/.ai/screenshots/` with `read_file`:
+         - Are any screenshots identical or showing the wrong view?
+         - In after screenshot(s), is the new/modified UI prominently showcased and **genuinely legible** (or are item titles/text squashed into `...` ellipsis, cramped in a tiny corner instead of using `--open tile:<kind>`, or cut off)?
+         - If after screenshot(s) are identical to before, barely show the feature, or have unreadable `...`-truncated titles, report it as a `P2` finding (`CEZ:VERDICT changes`) with concrete instructions on how to fix the CSS layout and/or re-capture with `--open tile:<kind>`.
       4. Check for real issues only:
          - Correctness & edge cases (e.g. MIME/HTML handling, null/undefined states, broken UI rendering).
          - Security invariants (loopback-only server, `Origin` check on `POST` mutations, no leaked credentials/DPAPI/full account numbers).
@@ -191,7 +192,7 @@ nodes:
       Fix every P0, P1, and P2 finding above in your worktree:
       1. Edit the affected source, scenario, and test files using full absolute paths inside your worktree (`pwd`).
       2. Run targeted tests and typecheck (`npx vitest run <changed.test.ts>; npm run typecheck`).
-      3. If your fix changed visible UI or the reviewer flagged `.ai/screenshots/before.png` / `.ai/screenshots/after.png`, re-capture them using `npx tsx .ai/scenario.ts ...` inside your worktree and verify them with `read_file`.
+      3. If your fix changed visible UI or the reviewer flagged `.ai/screenshots/` images, re-capture them using `npx tsx .ai/scenario.ts ...` inside your worktree and verify them with `read_file`.
       4. Stage and commit all changes (`git add <files> && git commit -m "Address pre-PR review findings"`) and confirm `git status --porcelain` is empty.
       End with `CEZ:DONE`.
 
