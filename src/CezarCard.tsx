@@ -8,12 +8,6 @@ import { useSwipe } from './useSwipe';
 import { ctx } from './chat-context';
 import { MAX_AGE, fresh, orderedTasks, taskLabels, type DashboardData, type Detail, type Task } from './model';
 
-/**
- * What the card shows before it says "i N więcej" (less when mail shares the column); the rest is one tap away on the
- * tasks page. A task that waits for you is a line, a running one is a block with its terminal, so a block counts for more.
- */
-export const CEZAR_BUDGET = 8, CEZAR_BUDGET_BESIDE_MAIL = 4;
-const WAIT_COST = 2, RUN_COST = 4;
 const waits = (t: Task) => t.status === 'needs-input' || t.status === 'review';
 
 /** What the agent is told about a task the user pointed at. */
@@ -163,13 +157,6 @@ export function CezarPanel({ data, snapshot, now, open, showAll, beside = false,
 }) {
   const active = orderedTasks((data.tasks.data ?? []).filter(t => t.status !== 'done'));
   const rows = [...active.filter(waits), ...active.filter(t => t.status === 'running')];
-  // Finished tasks take half the room, so the first of them is in view without scrolling.
-  let budget = Math.ceil((beside ? CEZAR_BUDGET_BESIDE_MAIL : CEZAR_BUDGET) / (finished.length ? 2 : 1));
-  const shown = rows.filter((task, index) => {
-    if (index > 0 && budget <= 0) return false;
-    budget -= waits(task) ? WAIT_COST : RUN_COST;
-    return index === 0 || budget >= 0;
-  });
   const running = rows.filter(t => t.status === 'running').length;
   const alert = rows.some(waits);
   const done = finished.filter(t => t.status === 'done').length, failed = finished.length - done;
@@ -188,8 +175,7 @@ export function CezarPanel({ data, snapshot, now, open, showAll, beside = false,
     {/* The active tasks and the finished ones scroll together in what the card has left. */}
     <div className="p2-cbody">
       {!rows.length && !finished.length && <p className="p2-empty">{data.tasks.data === null ? (data.tasks.status === 'loading' ? 'Ładowanie zadań…' : 'Cezar jest niedostępny.') : 'Nic nie czeka ani nie trwa.'}</p>}
-      <ul className="p2-crows">{shown.map(task => <CezarRow key={task.id} task={task} now={now} open={open} />)}</ul>
-      {rows.length > shown.length && <button className="p2-more-link" onClick={showAll}>i {rows.length - shown.length} więcej</button>}
+      <ul className="p2-crows">{rows.map(task => <CezarRow key={task.id} task={task} now={now} open={open} />)}</ul>
       {finished.length > 0 && archive && markRead && <ul className="activity-list p2-fin" aria-label="Zakończone zadania">
         {finished.map(task => <FinishedRow key={task.id} task={task} now={now} open={open} archive={archive} markRead={markRead} />)}
       </ul>}
