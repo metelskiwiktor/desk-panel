@@ -67,9 +67,5 @@ Katalog `.ai/` (worktree zadań Cezara: inne gałęzie, starszy kod) jest wyłą
 checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
-`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI). Osobny
-job robi zrzuty wszystkich scenariuszy i stron na urządzeniach z `devices.json`
-(główne skalowanie, `standard` na wszystkich) i dołącza je do przebiegu jako
-artefakt `screenshots-<commit>` (30 dni, około 27 MB), więc wygląd panelu można porównać
-między commitami. W PR CI utrzymuje jeden komentarz z linkiem do
-zrzutów najnowszego commita.
+`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI).
+
