@@ -141,12 +141,12 @@ describe('the cockpit of a conversation', () => {
 
   it('dispatches only on the user\'s answer, once, with the prompt as the user left it, and makes the subtask list', async () => {
     const { cockpit, created, file, todos, gh } = setup();
-    const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT };
+    const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT, workflow: 'analysis' };
     const outcome = await cockpit.dispatch(CHAT, answer);
     expect(outcome).toMatchObject({ decision: 'dispatched', taskId: RUN, prompt: PROMPT });
     expect(await cockpit.dispatch(CHAT, answer)).toEqual(outcome); // a double click
     expect(created).toHaveBeenCalledTimes(1);
-    expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski stref' });
+    expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski stref', workflow: 'analysis' });
     const list = (await todos.read()).data!.lists[0];
     expect(list.name).toBe('Wektor · Paski stref');
     expect(list.tasks.map(t => [t.title, t.by])).toEqual([['Pierwsze kryterium', 'agent'], ['Drugie', 'agent'], ['Trzecie', 'agent']]);

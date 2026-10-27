@@ -203,7 +203,12 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         return outcome;
       }
       if (!sources.cezarCreateRun) throw new SourceError(503);
-      const created = await sources.cezarCreateRun({ task: input.prompt, title: input.title, ...(input.todoId ? { todoId: input.todoId } : {}) });
+      const created = await sources.cezarCreateRun({
+        task: input.prompt,
+        title: input.title,
+        ...(input.workflow ? { workflow: input.workflow } : {}),
+        ...(input.todoId ? { todoId: input.todoId } : {}),
+      });
       const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now() };
       chat.dispatches[input.toolCallId] = outcome;
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
