@@ -92,7 +92,7 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
-| `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wycinek wyniku kroku: linie błędów bez stosu i przechodzących testów albo podsumowanie agenta, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek) |
+| `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wynik kroku: dla sprawdzeń linie błędów bez stosu i przechodzących testów, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek); dla kroku agenta (np. `analysis`) cały jego raport z `.ai/cezar/runs/<id>.ndjson` (do 24 tys. znaków), bo `summary` przebiegu trzyma tylko ostatnie 4000 |
 | `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |
 | `panel_todos` | `list`, `ukonczone` |

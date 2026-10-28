@@ -70,7 +70,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     run: view('training', a => ({ from: a.from, to: a.to, kroki: a.kroki ? '1' : undefined })),
   },
   panel_cezar: {
-    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane). Z parametrem id (projekt/uuid): szczegóły, kroki i błędy wskazanego zadania. Z id i krok: wycinek wyniku tego kroku (błędy testów i typów, podsumowanie agenta); używaj tego zamiast czytania plików .ai/cezar/runs.',
+    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane). Z parametrem id (projekt/uuid): szczegóły, kroki i błędy wskazanego zadania. Z id i krok: wynik tego kroku (dla testów i typów linie błędów, dla kroku agenta, np. analysis, cały jego raport); używaj tego zamiast czytania plików .ai/cezar/runs.',
     input: z.object({ id: text(200).optional(), krok: z.string().trim().regex(/^[\w-]{1,60}$/).optional() }).strict()
       .refine(a => !a.krok || a.id, { message: 'krok wymaga id' }),
     schema: schema({

@@ -37,6 +37,9 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
    - Determine whether the task is `UI` or `non-UI`, and identify target scenario fixtures in `scenarios/*.json`.
    - Ensure all files in `Relevant files` are tracked by git; a file the executor creates is marked new.
    - A feature that shows data reads it for real in `server/`; no production stub unless the user asked for a mock.
+   - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
+     sequential calls read 2.77M input tokens, 28.10.2026). Tool descriptions are the contract: no reading the panel's or
+     Cezar's source to learn how the tools work, and a Cezar step is read with `panel_cezar` `krok`, not from its log.
 2. **Evaluate Complexity**:
    - **Complex task** (architectural redesign, multi-module coordination, schema/contract changes, migrations, or explicitly requested by user):
      Propose an **analysis run** on Cezar (`workflow: "analysis"`). The goal is read-only exploration of edge cases, architectural trade-offs, and test strategies.

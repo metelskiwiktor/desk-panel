@@ -1,6 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import path from 'node:path';
+import path, { join } from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CalendarSource } from '../src/calendar-contract';
@@ -167,6 +168,34 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     expect(step).toContain('Nie dopowiadaj ich');
     expect(await views.cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r1&krok=implement'), now)).toContain('Dodano kafelek PR.');
     expect(await views.cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r1&krok=fix'), now)).toContain('Kroki z wynikiem: verify, implement.');
+  });
+
+  it('cezar: krok kroku agenta podaje cały raport z dziennika przebiegu, nie tylko ostatnie znaki z summary', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'agent-step-'));
+    try {
+      const worktree = join(root, '.ai', 'cezar', 'worktrees', 'r2');
+      mkdirSync(join(root, '.ai', 'cezar', 'runs'), { recursive: true });
+      const report = `# Analiza\n## 1. Wspólny klient gh dla widgetu i kokpitu\n${'szczegóły '.repeat(1500)}\n## 6. Plan`;
+      writeFileSync(join(root, '.ai', 'cezar', 'runs', 'r2.ndjson'), [
+        JSON.stringify({ type: 'step-start', stepId: 'analysis' }),
+        JSON.stringify({ type: 'text', text: 'wcześniejszy szkic', stepId: 'analysis' }),
+        JSON.stringify({ type: 'text', text: report, stepId: 'analysis' }),
+        '{"type":"text","stepId":"analysis","text":"ucięta linia',
+      ].join('\n'));
+      const sources = { cezarRun: async () => ({ id: 'r2', project: 'desk-panel', title: 'A', status: 'done', worktreePath: worktree,
+        graphState: { outputs: { analysis: { summary: report.slice(-4000) } } } }) } as unknown as PanelSources;
+      const text = await agentViews(sources).cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r2&krok=analysis'), now);
+      expect(text).toContain('## 1. Wspólny klient gh dla widgetu i kokpitu');
+      expect(text).toContain('## 6. Plan');
+      expect(text).not.toContain('wcześniejszy szkic');
+      // Without the log only the summary is there, and the view says it is the report's end.
+      const bare = { cezarRun: async () => ({ id: 'r3', project: 'desk-panel', title: 'A', status: 'done', graphState: { outputs: { analysis: { summary: 'ostatnie zdania' } } } }) } as unknown as PanelSources;
+      const end = await agentViews(bare).cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r3&krok=analysis'), now);
+      expect(end).toContain('koniec raportu');
+      expect(end).toContain('ostatnie zdania');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('trening: kroki dopiero na prośbę', async () => {

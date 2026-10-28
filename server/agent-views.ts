@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SourceError, type PanelSources } from './sources';
 import type { TrainingStep } from '../src/training-contract';
@@ -64,6 +65,30 @@ function rangeOf(url: URL, now: number, zone: string): Range {
 
 const clip = (text: string, max: number) => { const flat = text.replace(/\s+/g, ' ').trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 const minutes = (seconds: number) => { const m = Math.round(seconds / 60); return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`; };
+
+/** A Cezar run's own file next to its worktree: `<repo>/.ai/cezar/worktrees/<id>` → `<repo>/.ai/cezar/runs/<id><suffix>`. */
+function runFile(worktreePath: unknown, suffix: string): string | null {
+  if (typeof worktreePath !== 'string') return null;
+  const file = worktreePath.replace(/[\\/]worktrees[\\/]([^\\/]+)[\\/]?$/, (_, id) => `${path.sep}runs${path.sep}${id}${suffix}`);
+  return file === worktreePath ? null : file;
+}
+/** An agent step's report, whole: an analysis runs to ~19k characters, while the run's `summary` keeps only its last 4000. */
+const AGENT_TEXT_MAX = 24_000;
+/**
+ * The last text an agent step wrote, from the run's log (one `{"type":"text","stepId":…}` event per step). Without it
+ * the chat agent pieced an analysis together with five `node -e` reads of the log (28.10.2026). Null when unreadable.
+ */
+async function agentStepText(log: string | null, step: string): Promise<string | null> {
+  if (!log) return null;
+  let raw: string;
+  try { raw = await readFile(log, 'utf8'); } catch { return null; }
+  let text: string | null = null;
+  for (const line of raw.split('\n')) {
+    if (!line.includes('"type":"text"') || !line.includes(`"stepId":"${step}"`)) continue;
+    try { const event = JSON.parse(line); if (event.type === 'text' && event.stepId === step && typeof event.text === 'string' && event.text.trim()) text = event.text.trim(); } catch { /* a cut line */ }
+  }
+  return text;
+}
 
 /** Cezar keeps only the head of a check's output (`CHECK_OUTPUT_CAP`); a test runner prints its failures at the end. */
 const CHECK_TRUNCATED = '… (output truncated)';
@@ -163,15 +188,17 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
           const result = outputs[step];
           if (!result) return [...out, `Krok „${clip(step, 40)}”: brak zapisanego wyniku. Kroki z wynikiem: ${Object.keys(outputs).join(', ') || 'brak'}.`].join('\n');
           out.push(`Krok ${step}${typeof result.exitCode === 'number' ? `, kod wyjścia ${result.exitCode}` : ''}${result.verdict ? `, werdykt ${clip(String(result.verdict), 40)}` : ''}:`);
-          if (typeof result.output === 'string' && result.output.trim()) out.push(...checkExcerpt(result.output, 40));
-          else if (result.summary) out.push(`  ${clip(String(result.summary), 1500)}`);
+          if (typeof result.output === 'string' && result.output.trim()) { out.push(...checkExcerpt(result.output, 40)); return out.join('\n'); }
+          const full = await agentStepText(runFile(run.worktreePath, '.ndjson'), step);
+          if (full) out.push(full.length > AGENT_TEXT_MAX ? `${full.slice(0, AGENT_TEXT_MAX)}\n… (ucięto ${full.length - AGENT_TEXT_MAX} znaków z końca)` : full);
+          else if (result.summary) out.push(`  (koniec raportu, ostatnie ${String(result.summary).length} znaków, jak zapisał je Cezar)`, String(result.summary));
           else out.push('  (krok nie zapisał wyjścia ani podsumowania)');
           return out.join('\n');
         }
         if (run.worktreePath) {
           out.push(`Worktree: ${run.worktreePath}`);
-          const handoff = String(run.worktreePath).replace(/[\\/]worktrees[\\/]([^\\/]+)[\\/]?$/, (_, id) => `${path.sep}runs${path.sep}${id}.handoff.md`);
-          if (handoff !== run.worktreePath && existsSync(handoff)) out.push(`Notatka przekazania: ${handoff}`);
+          const handoff = runFile(run.worktreePath, '.handoff.md');
+          if (handoff && existsSync(handoff)) out.push(`Notatka przekazania: ${handoff}`);
         }
         if (run.branch) out.push(`Gałąź: ${run.branch}`);
         if (Array.isArray(run.steps) && run.steps.length) {
