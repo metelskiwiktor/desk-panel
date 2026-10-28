@@ -101,6 +101,13 @@ poprzedni start pozostawił `stale`, najpierw uruchom `stop` z poprzednią warto
 (lub bez niej, gdy użyto domyślnego TEMP). Krótsza ścieżka nie gwarantuje obsługi każdego
 PR: bardzo głębokie nazwy w samym PR albo zależnościach nadal mogą przekroczyć limity narzędzi.
 
+Na Windows `stop` może zakończyć nieodpowiadający worker po sprawdzeniu czasu utworzenia
+procesu na tym samym uchwycie systemowym, więc nie kończy procesu o ponownie użytym PID.
+Gdy przygotowanie checkoutu lub instalacja zależności jeszcze trwają, poczekaj na ich koniec
+przed `stop`. Jeśli nie można potwierdzić tożsamości procesu, polecenie odmówi automatycznego
+czyszczenia; sprawdź proces ręcznie. Wymuszone odzyskiwanie zawieszonego workera poza Windows
+nie jest obsługiwane.
+
 Frontend i moduły API pochodzą z pobranego commitu; API używa syntetycznego pliku `scripts/preview-scenario.json`,
 scenariuszowych akcji w pamięci i lokalnej makiety Hermes. Linki symulowanych zleceń Cezara
 kierują do lokalnej atrapy, a nie do prawdziwego Cezara. Czat i kokpit zapisują do katalogów

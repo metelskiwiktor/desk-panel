@@ -78,4 +78,23 @@ describe('isolated preview worker', () => {
     for (let i = 0; i < 80; i++) { const c = await (await fetch(`${state.url}/api/chats/${id}`)).json(); if (!c.running) { expect(JSON.stringify(c)).toMatch(/scenariusz|makiet|testow/i); return; } await pause(100); }
     throw new Error('Mock chat did not finish');
   }, 15000);
+  it('keeps the watched synthetic PR link inside the loopback stand-in', async () => {
+    const post = (path, body) => fetch(`${state.url}${path}`, { method: 'POST', headers: { origin: state.url, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    // The previous test dispatched the mock's first run. Ask the Hermes stand-in to watch it.
+    const created = await post('/api/chats', { text: 'Nasłuchuj Cezara', engine: 'hermes' });
+    const { id } = await created.json();
+    for (let i = 0; i < 170; i++) {
+      const view = await (await fetch(`${state.url}/api/chats/${id}/cockpit`)).json();
+      if (view.pr) {
+        expect(view.pr.number).toBe(42);
+        expect(view.pr.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
+        expect(view.task.prUrl).toBe(view.pr.url);
+        expect((await fetch(view.pr.url)).status).toBe(404);
+        return;
+      }
+      await pause(100);
+    }
+    throw new Error('Synthetic watched PR did not appear');
+  }, 25000);
+
 });

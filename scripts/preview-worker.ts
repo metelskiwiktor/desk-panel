@@ -27,8 +27,17 @@ const sources = createScenarioSources(file);
 const createRun = sources.cezarCreateRun;
 if (createRun) sources.cezarCreateRun = async input => ({ ...await createRun(input), url: dummyUrl });
 const chat = await createScenarioChat();
-const cockpit = createCockpit({ sources, file: join(mkdtempSync(join(tmpdir(), 'preview-cockpit-')), 'cockpit.json'), cezarUrl: dummyUrl,
+const scenarioCockpit = createCockpit({ sources, file: join(mkdtempSync(join(tmpdir(), 'preview-cockpit-')), 'cockpit.json'), cezarUrl: dummyUrl,
   gh: async () => JSON.stringify({ number: 42, title: 'Synthetic PR', state: 'OPEN', headRefName: 'scenario', url: SCENARIO_PR, statusCheckRollup: [] }) });
+// The scenario uses a GitHub-shaped URL internally to recognize its mock PR. Never expose it to the browser.
+const cockpit: typeof scenarioCockpit = {
+  ...scenarioCockpit,
+  async view(...args) {
+    const view = await scenarioCockpit.view(...args);
+    return { ...view, task: view.task?.prUrl ? { ...view.task, prUrl: dummyUrl } : view.task,
+      pr: view.pr ? { ...view.pr, url: dummyUrl } : view.pr };
+  },
+};
 const api = createPanelServer(sources, join(process.cwd(), 'dist'), undefined, chat, { cockpit }).listen(0, '127.0.0.1');
 await new Promise<void>((ok, fail) => { api.once('listening', ok); api.once('error', fail); });
 const address = api.address();
