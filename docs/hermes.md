@@ -58,6 +58,10 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
     API serwer Hermesa nie ma przełącznika `skip_context_files`, więc steruje tym tylko katalog roboczy.
   - `tool_output` w `config.yaml` (dopisuje `just hermes-setup`): wyjście terminala do 16 tys. znaków, z początkiem i końcem
     (wyniki testów są na końcu), `read_file` do 400 linii, linia do 600 znaków. Wartości domyślne Hermesa to 50 tys., 2000 i 2000.
+  - `skills.creation_nudge_interval: 0` (też `just hermes-setup`): bez tego co 10 wywołań narzędzi Hermes po turze przegląda
+    ją w tle (kilka kolejnych wywołań agy na tym samym limicie) i zapisuje lub łata skill. 28.10.2026 utworzył tak skill `cezar`,
+    kopię „Zaimplementuj zadanie”, która rozjechałaby się z panelem przy pierwszej zmianie. Instrukcje skilli są w panelu
+    (`src/chat-contract.ts`); co Hermes zmienił sam, zapisuje `%LOCALAPPDATA%\hermes\skills\.curator_ledger.jsonl`.
   - Kompresja historii Hermesa włącza się dopiero przy 50% okna modelu, czego przy oknie gemini-flash rozmowy panelu nie osiągają.
     Nie jest przestawiona, bo streszczenie to kolejne wywołanie agy.
   Zmiana katalogu lub limitów działa po restarcie usługi Hermesa (`just hermes RESTART`); Servy czyta manifest i `hermes.env`

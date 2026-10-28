@@ -86,6 +86,15 @@ if ($text -match '(?m)^tool_output:') {
     Add-Content -LiteralPath $config -Value "`ntool_output:`n  max_bytes: 16000`n  max_lines: 400`n  max_line_length: 600`n" -Encoding ASCII
     Write-Host 'config.yaml: added tool_output limits.'
 }
+# No skills written by Hermes itself: every 10 tool calls it would review the turn in the background (more model calls
+# on the same quota) and save a skill that copies the panel's own instructions and goes stale when they change.
+$text=Get-Content -LiteralPath $config -Raw
+if ($text -match '(?m)^skills:') {
+    Write-Host 'config.yaml: skills already present (left as it is).'
+} else {
+    Add-Content -LiteralPath $config -Value "`nskills:`n  creation_nudge_interval: 0`n" -Encoding ASCII
+    Write-Host 'config.yaml: turned off background skill creation.'
+}
 
 # 5. Lock directory and hermes.env for Servy / Windows
 $lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }
