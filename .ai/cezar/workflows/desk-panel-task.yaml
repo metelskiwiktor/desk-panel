@@ -55,6 +55,7 @@ nodes:
       ## Phase 2 — Implement & Targeted Check
       1. Make the required code changes in `src/`, `server/`, `scenarios/`, or `docs/` inside this worktree (and add any new schema fields like `body` to `scenarios/<scenario>.json` now).
          - Do NOT add new optional workspace tiles to `autoTiles(...)` in `src/Workspace.tsx` (default `autoTiles` is strictly for quota cards, `mail`, and `cezar`, and changing it breaks `src/Workspace.test.tsx` and `src/pulpits.test.tsx`). Use `--open tile:<kind>` in `.ai/scenario.ts` to showcase new tiles instead.
+         - A new tile kind must also be listed in `pickable()` in `src/workspace-kinds.ts`, or no empty cell offers it and the user can never place it. `--open tile:<kind>` checks this and fails with "no empty cell offers it" for a tile that renders but cannot be picked.
          - Design compact (`1x1`) tile layouts carefully: a `1x1` cell on `medialove-14` is only `~195px` wide. Never put a badge, a title, and multiple action buttons on a single `nowrap` flex row in a `1x1` tile (that crushes the title into `...`); use `flex-wrap: wrap` so the title gets its own full-width line in `1x1` tiles.
          - If the task explicitly asks for a capability that `AGENTS.md` or `docs/` previously restricted, implement the user's requested task and update the relevant line in `AGENTS.md` / `docs/` to match.
       2. Update or add unit/integration tests covering your changes. Prefer fixing code over weakening tests.

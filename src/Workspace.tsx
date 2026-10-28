@@ -68,7 +68,7 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
       <div className="wk-picks" role="group" aria-label="Wybierz kafelek" onPointerLeave={() => setCaption('')}>
         {kinds.map(kind => {
           const { title, icon: Icon } = describe(kind, cards);
-          return <button key={kind} className="wk-pick" aria-label={`Dodaj kafelek: ${title}`} title={title}
+          return <button key={kind} className="wk-pick" data-pick={kind} aria-label={`Dodaj kafelek: ${title}`} title={title}
             onPointerEnter={() => setCaption(title)} onFocus={() => setCaption(title)} onBlur={() => setCaption('')} onClick={() => pick(kind)}>
             <Icon size={20} aria-hidden="true" />
           </button>;

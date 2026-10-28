@@ -24,7 +24,13 @@ just screenshots high-ram --pages pulpit,system --device medialove-14 --scale al
 just screenshots standard --nav                        # keep the bottom navigation (hidden by default)
 npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
+just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
 ```
+
+`--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.
+Kafelek, który się renderuje, ale którego wybór nie proponuje (brak w `pickable()` w `src/workspace-kinds.ts`, jak `github-pr`
+w PR #36), kończy zrzut błędem; użytkownik nie mógłby go dodać. Rodzaj, którego jeszcze nie ma (zrzut „przed” nowym
+kafelkiem), daje domyślny układ jak dotąd.
 
 Ekrany pochodzą z `devices.json`: rozdzielczość fizyczna, przekątna, lista skalowań
 Windows (pierwsze to główne) i dotyk. Rozmiar CSS, PPI i wartości do Chrome DevTools

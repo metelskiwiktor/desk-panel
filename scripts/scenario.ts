@@ -157,19 +157,24 @@ if (!values.shot) {
           const tileId = tileKind === 'todo' ? 'todo#1' : tileKind;
           const rightTop = tileKind === 'mail' ? 'quota:Claude' : 'mail';
           const rightBottom = tileKind === 'cezar' ? 'quota:Codex' : 'cezar';
-          await page.evaluate(({ id, kind, top, bottom }) => {
-            localStorage.setItem('desk-panel.workspace', JSON.stringify({
-              version: 1,
-              tiles: [
-                { id, kind, c: 0, r: 0, w: 2, h: 2 },
-                { id: top, kind: top, c: 2, r: 0, w: 2, h: 1 },
-                { id: bottom, kind: bottom, c: 2, r: 1, w: 2, h: 1 },
-              ],
-            }));
-          }, { id: tileId, kind: tileKind, top: rightTop, bottom: rightBottom });
+          const layout = (tiles: { id: string; kind: string; c: number; r: number; w: number; h: number }[]) =>
+            page.evaluate(value => localStorage.setItem('desk-panel.workspace', JSON.stringify({ version: 1, tiles: value })), tiles);
+          const right = [
+            { id: rightTop, kind: rightTop, c: 2, r: 0, w: 2, h: 1 },
+            { id: rightBottom, kind: rightBottom, c: 2, r: 1, w: 2, h: 1 },
+          ];
+          // What the user can do first: the left half empty, its cells offer what can be placed.
+          await layout(right);
+          await page.reload();
+          await page.waitForTimeout(800);
+          const offered = await page.locator(`.wk-pick[data-pick="${tileKind}"]`).count() > 0;
+          await layout([{ id: tileId, kind: tileKind, c: 0, r: 0, w: 2, h: 2 }, ...right]);
           await page.reload();
           await page.waitForTimeout(800);
           const rendered = await page.locator(`.wk-cell[data-kind="${tileKind}"]`).count();
+          // A tile that shows but that no empty cell offers is one the user can never place (PR #36: github-pr was missing
+          // from pickable() in src/workspace-kinds.ts). A tile that does not exist yet (before.png) falls back below.
+          if (rendered > 0 && !offered) throw new Error(`--open tile:${tileKind}: the tile renders, but no empty cell offers it. Add "${tileKind}" to pickable() in src/workspace-kinds.ts.`);
           if (rendered === 0) {
             await page.evaluate(() => localStorage.removeItem('desk-panel.workspace'));
             await page.reload();
