@@ -1447,3 +1447,231 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+/* — GitHub PR Tile — */
+.gh-pr-tile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.gh-pr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+}
+
+.gh-pr-title-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.gh-pr-icon {
+  color: #79c0ff;
+}
+
+.gh-pr-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gh-pr-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--p2-muted, var(--muted));
+}
+
+.gh-pr-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+}
+
+.gh-pr-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 80px;
+  gap: 6px;
+  color: var(--p2-muted, var(--muted));
+}
+
+.gh-pr-empty-icon {
+  color: #3fb950;
+  opacity: 0.8;
+}
+
+.gh-pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gh-pr-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.gh-pr-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.gh-pr-item-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gh-pr-repo {
+  font-size: 11px;
+  font-weight: 600;
+  color: #58a6ff;
+  background: rgba(56, 139, 253, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.gh-pr-number {
+  font-size: 11px;
+  color: var(--p2-muted, var(--muted));
+}
+
+.gh-pr-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.gh-pr-status-badge.tone-success {
+  background: rgba(46, 160, 67, 0.18);
+  color: #3fb950;
+}
+
+.gh-pr-status-badge.tone-danger {
+  background: rgba(248, 81, 73, 0.18);
+  color: #f85149;
+}
+
+.gh-pr-status-badge.tone-warning {
+  background: rgba(210, 153, 34, 0.18);
+  color: #d29922;
+}
+
+.gh-pr-status-badge.tone-neutral {
+  background: rgba(139, 148, 158, 0.18);
+  color: #8b949e;
+}
+
+.gh-pr-ci-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.gh-pr-ci-badge.ci-pass {
+  background: rgba(46, 160, 67, 0.15);
+  color: #3fb950;
+}
+
+.gh-pr-ci-badge.ci-fail {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.gh-pr-ci-badge.ci-running,
+.gh-pr-ci-badge.ci-pending {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
+.gh-pr-item-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--p2-text, #e6edf3);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.gh-pr-item-title:hover {
+  color: #58a6ff;
+}
+
+.gh-pr-ext-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.6;
+}
+
+.gh-pr-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--p2-muted, var(--muted));
+}
+
+.gh-pr-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gh-pr-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.gh-pr-label-chip {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #8b949e;
+}
+
+.gh-pr-tile.wide .gh-pr-item {
+  padding: 8px 10px;
+}
+
+.gh-pr-tile.tall .gh-pr-list {
+  gap: 8px;
+}
+

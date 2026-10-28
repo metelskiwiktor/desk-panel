@@ -125,9 +125,9 @@ describe('panel MCP for Hermes', () => {
     expect(blind.content[0].text).toContain('Najpierw wywołaj panel_recon_report');
     expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w' })).toMatchObject({ isError: true });
 
-    const guessed = await call('panel_recon_report', { files: [{ path: 'src/types.ts' }, { path: 'src/App.tsx' }], kind: 'UI', prompt: 'Task: w' });
+    const guessed = await call('panel_recon_report', { files: [{ path: 'src/nonexistent-types.ts' }, { path: 'src/App.tsx' }], kind: 'UI', prompt: 'Task: w' });
     expect(guessed).toMatchObject({ isError: true });
-    expect(guessed.content[0].text).toContain('src/types.ts');
+    expect(guessed.content[0].text).toContain('src/nonexistent-types.ts');
     expect(await call('panel_recon_report', { files: [{ path: '../secrets.txt', new: true }], kind: 'UI', prompt: 'Task: w' })).toMatchObject({ isError: true });
 
     const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx' }, { path: 'src/tiles/GitHubPrTile.tsx', new: true }], kind: 'UI', prompt: 'Task: w' });

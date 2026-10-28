@@ -11,6 +11,7 @@ import type { TrainingSource } from '../src/training-contract';
 import type { TodoAction, TodoResult, TodoSource } from '../src/todo-contract';
 import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } from '../src/warmup-contract';
+import type { GitHubPrSource } from '../src/types';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
@@ -47,6 +48,7 @@ export interface PanelSources {
   bankLabelAction(action: BankLabelAction): Promise<BankLabelResult>;
   /** Every kept operation with its mark, for the agent's text view; server-side only, no identifiers. */
   bankLedger(): Promise<BankLedger>;
+  githubPr?(): Promise<GitHubPrSource>;
   usageBreakdown?(): Promise<UsageBreakdown>;
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
@@ -74,6 +76,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/todos': () => sources.todos(),
     '/api/bank': () => sources.bank(),
     '/api/bank/labels': () => sources.bankLabels(),
+    '/api/github/prs': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };
