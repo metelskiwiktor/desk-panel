@@ -13,6 +13,7 @@ export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, 
   if (kind === 'todo') return visible('todo');
   if (kind === 'bank') return visible('bank');
   if (kind === 'smart-actions') return visible('smart-actions');
+  if (kind === 'github-pr') return true;
   if (!kind.startsWith('quota:') || !visible('quotas')) return false;
   const id = kind.slice('quota:'.length);
   if (id === 'Claude' || id === 'Codex') return !hidden.hiddenProviders.includes(id);

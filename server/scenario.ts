@@ -14,6 +14,7 @@ import { todoSourceSchema } from '../src/todo-contract';
 import { createTodoStore, type TodoStore } from './todos';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
+import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
 import { SourceError, type PanelSources } from './sources';
 
 /**
@@ -49,9 +50,26 @@ export const scenarioSchema = z.object({
   warmup: endpoint(warmupStatusSchema),
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
+  githubPr: endpoint(gitHubPrSourceSchema).default({ pullRequests: [] }),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
+
+export type EndpointResult<K extends ScenarioEndpoint> =
+  K extends 'cezar' ? z.infer<typeof cezarSchema> :
+  K extends 'calendar' ? z.infer<typeof calendarSourceSchema> :
+  K extends 'training' ? z.infer<typeof trainingSourceSchema> :
+  K extends 'googleAccounts' ? z.infer<typeof googleAccountsSchema> :
+  K extends 'mail' ? z.infer<typeof mailSourceSchema> :
+  K extends 'system' ? z.infer<typeof systemSourceSchema> :
+  K extends 'quotas' ? z.infer<typeof quotaSourceSchema> :
+  K extends 'todos' ? z.infer<typeof todoSourceSchema> :
+  K extends 'bank' ? z.infer<typeof bankSourceSchema> :
+  K extends 'warmup' ? z.infer<typeof warmupStatusSchema> :
+  K extends 'warmupRun' ? { Claude: z.infer<typeof warmupRunResultSchema>; Codex: z.infer<typeof warmupRunResultSchema>; Gemini: z.infer<typeof warmupRunResultSchema> } :
+  K extends 'usageBreakdown' ? z.infer<typeof usageBreakdownSchema> :
+  K extends 'githubPr' ? GitHubPrSource :
+  never;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
 const AMOUNT = '\\d+(?:ms|s|m|h|d)';
@@ -134,11 +152,11 @@ export function createScenarioSources(file: string): PanelSources {
     todoStore ??= createTodoStore({ initial: source.data ?? { lists: [] } });
     return todoStore;
   };
-  async function serve<K extends ScenarioEndpoint>(key: K) {
+  async function serve<K extends ScenarioEndpoint>(key: K): Promise<EndpointResult<K>> {
     const value = loadScenario(file)[key];
-    if ('$error' in value) throw new SourceError(value.$error);
-    if ('$pending' in value) return new Promise<never>(() => {});
-    return value as Exclude<Scenario[K], z.infer<typeof special>>;
+    if (value && typeof value === 'object' && '$error' in value) throw new SourceError((value as any).$error);
+    if (value && typeof value === 'object' && '$pending' in value) return new Promise<never>(() => {});
+    return value as unknown as EndpointResult<K>;
   }
   return {
     async cezar() {
@@ -206,6 +224,7 @@ export function createScenarioSources(file: string): PanelSources {
     async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
+    githubPr: async () => serve('githubPr') as Promise<GitHubPrSource>,
     async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },
     bankLabels: () => labels().read(),
     bankLabelAction: action => labels().apply(action),

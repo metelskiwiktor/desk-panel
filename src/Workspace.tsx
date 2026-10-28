@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Bot, Cpu, Gem, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
+import { Bot, Cpu, Gem, GitPullRequest, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
 import { BankTile } from './BankTile';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
@@ -10,6 +10,7 @@ import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SmartActionsTile } from './SmartActionsTile';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
+import { GitHubPrTile } from './tiles/GitHubPrTile';
 import type { TodosState } from './useTodos';
 import type { BankHook } from './useBank';
 import {
@@ -33,6 +34,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   todo: { title: 'Zadania', icon: ListChecks },
   bank: { title: 'Konto', icon: Landmark },
   'smart-actions': { title: 'Smart Actions', icon: Zap },
+  'github-pr': { title: 'GitHub PR', icon: GitPullRequest },
 };
 /** Name and icon of a kind. Claude and Codex are known before the first reading; an Antigravity group is named by its card. */
 function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: LucideIcon } {
@@ -85,16 +87,23 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
  * and only stops where they have nowhere to go. The arrangement is kept in the browser.
  */
 export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
-  data: DashboardData; now: number; open: (d: Detail) => void; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; bank: BankHook;
+  data: DashboardData; now: number; open?: ((d: Detail) => void) | string; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; bank: BankHook;
   showTasks: () => void; showBreakdown?: () => void; available: (kind: string) => boolean; systemThreshold: number;
   /** The virtual desktop whose arrangement this is (pulpits.ts); each one is kept under its own key. */
   pulpit?: string;
 }) {
+  const openDetail = typeof open === 'function' ? open : () => {};
   const [stored, setStored] = useState(() => readWorkspace(workspaceKey(pulpit)));
   const cards = getQuotaCards(data.quotas.data);
+  const openedKind = typeof open === 'string' && open.startsWith('tile:') ? open.slice('tile:'.length).trim() : null;
+  const forcedTiles: Tile[] | null = openedKind ? [
+    { id: openedKind, kind: openedKind, c: 0, r: 0, w: 2, h: 2 },
+    { id: openedKind === 'mail' ? 'quota:Claude' : 'mail', kind: openedKind === 'mail' ? 'quota:Claude' : 'mail', c: 2, r: 0, w: 2, h: 1 },
+    { id: openedKind === 'cezar' ? 'quota:Codex' : 'cezar', kind: openedKind === 'cezar' ? 'quota:Codex' : 'cezar', c: 2, r: 1, w: 2, h: 1 },
+  ] : null;
   // Until the panel is arranged by hand the layout follows what there is to show; then the saved one is kept as it is.
   // A tile of a kind the settings switched off is not drawn, and the next change drops it from the saved layout for good.
-  const tiles = (stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar'].filter(available))).filter(t => available(t.kind));
+  const tiles = (forcedTiles ?? stored ?? autoTiles([...limitKinds(cards), 'mail', 'cezar'].filter(available))).filter(t => available(t.kind));
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
   const commit = (next: Tile[]) => { tilesRef.current = next; setStored(next); saveWorkspace(next, workspaceKey(pulpit)); };
@@ -162,16 +171,17 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
 
   const content = (tile: Tile): ReactNode => {
     const roomy = tile.w > 1 || tile.h > 1;
-    if (tile.kind === 'cezar') return <CezarPanel data={data} snapshot={snapshot} now={now} open={open} showAll={showTasks} beside={tile.h < 2}
+    if (tile.kind === 'cezar') return <CezarPanel data={data} snapshot={snapshot} now={now} open={openDetail} showAll={showTasks} beside={tile.h < 2}
       finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />;
-    if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={open} compact={!roomy} />;
-    if (tile.kind === 'system') return <SystemTile data={data} now={now} open={open} roomy={roomy} threshold={systemThreshold} />;
+    if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={openDetail} compact={!roomy} />;
+    if (tile.kind === 'system') return <SystemTile data={data} now={now} open={openDetail} roomy={roomy} threshold={systemThreshold} />;
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'smart-actions') return <SmartActionsTile mail={mail} tasks={data.tasks} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
+    if (tile.kind === 'github-pr') return <GitHubPrTile wide={tile.w > 1} tall={tile.h > 1} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);
-    return card ? <QuotaTile card={card} data={data} now={now} open={open} showBreakdown={showBreakdown} roomy={roomy} />
+    return card ? <QuotaTile card={card} data={data} now={now} open={openDetail} showBreakdown={showBreakdown} roomy={roomy} />
       : <MissingLimit title={describe(tile.kind, cards).title} loading={data.quotas.status === 'loading'} />;
   };
 
