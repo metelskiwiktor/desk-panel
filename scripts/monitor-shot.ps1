@@ -1,7 +1,9 @@
 # Screenshot of one physical monitor at full resolution into output/screenshots (git-ignored).
-# Usage: scripts/monitor-shot.ps1 [-Display 1|2|...]  - default: the first non-primary monitor.
-param([int]$Display = 0)
+# Usage: scripts/monitor-shot.ps1 [-Display P16|1|2|0]  - default: 0 (the first non-primary monitor).
+param([string]$Display = '0')
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+. (Join-Path $PSScriptRoot 'display-helper.ps1')
+
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -10,11 +12,18 @@ public static class Dpi { [DllImport("user32.dll")] public static extern bool Se
 # Per-monitor aware, otherwise a scaled monitor is captured as a cropped corner.
 [Dpi]::SetProcessDpiAwarenessContext([IntPtr]-4) | Out-Null
 
-$screens = [System.Windows.Forms.Screen]::AllScreens
-$screen = if ($Display -gt 0) { $screens | Where-Object { $_.DeviceName -match "DISPLAY$Display$" } | Select-Object -First 1 }
-          else { $screens | Where-Object { -not $_.Primary } | Select-Object -First 1 }
+$screen = if ($Display -ne '0' -and $Display -ne '') {
+  $target = Resolve-DeskPanelScreen $Display
+  if ($target) { $target.Screen } else { $null }
+} else {
+  $screens = [System.Windows.Forms.Screen]::AllScreens
+  $screens | Where-Object { -not $_.Primary } | Select-Object -First 1
+}
+
 if (-not $screen) {
-  Write-Error ("Brak monitora. Dostepne: " + (($screens | ForEach-Object { "$($_.DeviceName) $($_.Bounds.Width)x$($_.Bounds.Height)$(if ($_.Primary) { ' (glowny)' })" }) -join '; '))
+  $displays = Get-DeskPanelDisplays
+  $avail = ($displays | ForEach-Object { "$($_.DeviceName) ($($_.FriendlyName)) $($_.Bounds.Width)x$($_.Bounds.Height)$(if ($_.Primary) { ' (glowny)' })" }) -join '; '
+  Write-Error ("Brak monitora '$Display'. Dostepne: $avail")
   exit 1
 }
 $b = $screen.Bounds

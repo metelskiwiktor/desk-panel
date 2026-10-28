@@ -1,11 +1,12 @@
 # Hides or shows the Windows taskbar on a specific monitor (ASCII only for PS 5.1).
-# Usage: scripts/kiosk-taskbar.ps1 [-Action HIDE|SHOW|STATUS] [-Display 1]
+# Usage: scripts/kiosk-taskbar.ps1 [-Action HIDE|SHOW|STATUS] [-Display P16|1|2]
 param(
   [ValidateSet('HIDE', 'SHOW', 'STATUS')][string]$Action = 'HIDE',
-  [int]$Display = 1
+  [string]$Display = 'P16'
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
+. (Join-Path $PSScriptRoot 'display-helper.ps1')
 
 $code = @"
 using System;
@@ -106,17 +107,20 @@ if (-not ([System.Management.Automation.PSTypeName]'DeskPanel.TaskbarManager').T
   Add-Type -TypeDefinition $code -ErrorAction Stop
 }
 
-$screens = [System.Windows.Forms.Screen]::AllScreens
-$screen = $screens | Where-Object { $_.DeviceName -match "DISPLAY$Display$" } | Select-Object -First 1
-if (-not $screen) {
-  throw ("Brak monitora $Display. Dostepne: " + (($screens | ForEach-Object { "$($_.DeviceName) $($_.Bounds.Width)x$($_.Bounds.Height)" }) -join '; '))
+$target = Resolve-DeskPanelScreen $Display
+if (-not $target) {
+  $displays = Get-DeskPanelDisplays
+  $avail = ($displays | ForEach-Object { "$($_.DeviceName) ($($_.FriendlyName)) $($_.Bounds.Width)x$($_.Bounds.Height)" }) -join '; '
+  throw ("Brak monitora '$Display'. Dostepne: $avail")
 }
 
-$b = $screen.Bounds
+$screen = $target.Screen
+$b = $target.Bounds
+$dispName = if ($target.FriendlyName) { "$($target.FriendlyName) ($($target.DeviceName))" } else { $target.DeviceName }
 $res = [DeskPanel.TaskbarManager]::ApplyAction($Action, $b.X, $b.Y, $b.Width, $b.Height, [bool]$screen.Primary)
 
 if ($res.Count -eq 0 -or $res[0] -eq 'NOT_FOUND') {
-  Write-Host "Nie znaleziono paska zadan na monitorze $Display ($($b.Width)x$($b.Height))."
+  Write-Host "Nie znaleziono paska zadan na monitorze $dispName ($($b.Width)x$($b.Height))."
 } else {
-  foreach ($msg in $res) { Write-Host $msg }
+  foreach ($msg in $res) { Write-Host "${dispName}: $msg" }
 }
