@@ -45,7 +45,7 @@ function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: 
   const card = cards.find(c => kindOfCard(c) === kind);
   const group = id.startsWith('agy:') ? id.slice('agy:'.length) : id;
   const title = card?.title ?? (group === 'Gemini Models' ? 'Gemini' : group);
-  const icon = id === 'Claude' ? Sparkles : id === 'Codex' ? Terminal : /Claude (&|and) GPT/i.test(title) ? Layers : card?.badge === 'frontier' ? Rocket : Gem;
+  const icon = id === 'Claude' ? Sparkles : id === 'Codex' ? Terminal : /Claude\s*(&|and)\s*GPT/i.test(title) ? Layers : card?.badge === 'frontier' ? Rocket : Gem;
   return { title: card?.badge ? `${title} · ${card.badge}` : title, icon };
 }
 

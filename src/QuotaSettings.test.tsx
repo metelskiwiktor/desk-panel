@@ -5,6 +5,7 @@ import { App } from './App';
 import { WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
 import { scenarioFetch,createFixture } from './test-fixtures';
 import { filterQuotas,useQuotaVisibility } from './quota-visibility';
+import { getQuotaCards } from './quota-cards';
 
 beforeEach(()=>{localStorage.clear();vi.spyOn(window,'scrollTo').mockImplementation(()=>{});});
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
@@ -14,7 +15,7 @@ it('hides only the selected AGY group on dashboard and details, survives reload,
   vi.stubGlobal('fetch',vi.fn(scenarioFetch('quota-settings')));const user=userEvent.setup(),view=render(<App/>);
   await screen.findByText(/^Gemini 4 Argon/);await navigate(user,'Ustawienia');
   await user.click(screen.getByRole('checkbox',{name:'Gemini 4 Argon'}));
-  await navigate(user,'Pulpit');expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();expect(screen.getByText(/^Agy: Claude & GPT/)).toBeTruthy();
+  await navigate(user,'Pulpit');expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();expect(screen.getByText(/^Gemini Claude&GPT/)).toBeTruthy();
   await user.click(screen.getByRole('button',{name:/^Gemini:/}));expect(screen.queryByText(/Gemini 4 Argon/)).toBeNull();
   view.unmount();render(<App/>);await screen.findAllByText(/^Gemini/);expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();
   await navigate(user,'Ustawienia');expect((screen.getByRole('checkbox',{name:'Gemini 4 Argon'}) as HTMLInputElement).checked).toBe(false);
@@ -26,6 +27,32 @@ it('does not mutate source readings and leaves previously unknown groups visible
   expect(filtered.some(a=>a.provider==='Claude')).toBe(false);
   expect(filtered.find(a=>a.provider==='AGY')!.snapshots.some(s=>s.model==='Claude and GPT models')).toBe(true);
   expect(accounts.find(a=>a.provider==='AGY')!.snapshots.some(s=>s.model==='Gemini 4 Argon')).toBe(true);
+});
+it('displays Gemini Claude&GPT card with both 5h and weekly windows and handles live AGY data identically to Gemini 4 Argon',()=>{
+  const now = Date.now();
+  const liveAgyAccount = {
+    provider: 'AGY' as const,
+    snapshots: [
+      { window: '3p-weekly', model: 'Claude and GPT models', usedPercent: 6, resetAt: now + 5 * 86400000, state: 'fresh' as const, stale: false, observedAt: now, source: 'synthetic' },
+      { window: '3p-5h', model: 'Claude and GPT models', usedPercent: 11, resetAt: now + 3 * 3600000, state: 'fresh' as const, stale: false, observedAt: now, source: 'synthetic' },
+      { window: 'gemini-argon-wtu-weekly', model: 'Gemini 4 Argon', usedPercent: 83, resetAt: now + 5 * 86400000, state: 'fresh' as const, stale: false, observedAt: now, source: 'synthetic' },
+    ],
+    history: [],
+  };
+  const cards = getQuotaCards([liveAgyAccount]);
+  const claudeGptCard = cards.find(c => c.id === 'agy:Claude and GPT models')!;
+  expect(claudeGptCard.title).toBe('Gemini Claude&GPT');
+  expect(claudeGptCard.snapshots.map(s => s.window)).toEqual(['3p-5h', '3p-weekly']);
+  const argonCard = cards.find(c => c.id === 'agy:Gemini 4 Argon')!;
+  expect(argonCard.title).toBe('Gemini 4 Argon');
+
+  const hiddenClaude = filterQuotas([liveAgyAccount], { hiddenProviders: [], hiddenAgyGroups: ['Claude and GPT models'] })!;
+  expect(hiddenClaude[0].snapshots.some(s => s.model === 'Claude and GPT models')).toBe(false);
+  expect(hiddenClaude[0].snapshots.some(s => s.model === 'Gemini 4 Argon')).toBe(true);
+
+  const hiddenArgon = filterQuotas([liveAgyAccount], { hiddenProviders: [], hiddenAgyGroups: ['Gemini 4 Argon'] })!;
+  expect(hiddenArgon[0].snapshots.some(s => s.model === 'Gemini 4 Argon')).toBe(false);
+  expect(hiddenArgon[0].snapshots.some(s => s.model === 'Claude and GPT models')).toBe(true);
 });
 it('reports browser storage failure while applying visibility in the current session',()=>{
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('denied');});

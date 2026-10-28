@@ -620,6 +620,19 @@
             "label": "Gemini 4 Argon Weekly Limit"
           },
           {
+            "window": "claude-gpt-5h",
+            "usedPercent": 0,
+            "state": "fresh",
+            "reason": null,
+            "model": "Claude and GPT models",
+            "observedAt": "now-20s",
+            "resetAt": "now+3h",
+            "attemptedAt": "now-10s",
+            "source": "synthetic-fixture",
+            "stale": false,
+            "freshForMs": 120000
+          },
+          {
             "window": "claude-gpt-weekly",
             "usedPercent": 0,
             "state": "fresh",

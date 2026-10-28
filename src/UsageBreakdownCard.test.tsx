@@ -91,7 +91,7 @@ it('splits the Antigravity 5h quota bar too, whatever the adapter calls its wind
   const card = (title: string) => ({ provider: 'AGY', title }) as never;
   expect(splitFor(snap('gemini-5h'), card('Gemini'), state)?.length).toBe(1);
   expect(splitFor(snap('gemini-weekly'), card('Gemini'), state)).toBeUndefined();
-  expect(splitFor(snap('3p-5h'), card('Agy: Claude & GPT'), state)).toBeUndefined();
+  expect(splitFor(snap('3p-5h'), card('Gemini Claude&GPT'), state)).toBeUndefined();
   expect(splitFor(snap('gemini-5h'), card('Gemini'), usage({ status: 'offline', providers: [agy] }))).toBeUndefined();
   expect(splitFor({ window: 'gemini-5h', usedPercent: 10, resetAt: reset + 3 * 3600000 } as never, card('Gemini'), state)).toBeUndefined();
 });

@@ -25,6 +25,8 @@ describe('which kinds the settings allow', () => {
     expect(kindAvailable('quota:agy:Gemini 4 Argon', allOn, hidden)).toBe(false);
     expect(kindAvailable('quota:agy:Claude and GPT models', allOn, hidden)).toBe(true);
     expect(kindAvailable('quota:agy:Gemini Models', allOn, hidden)).toBe(true);
+    const hiddenClaudeGpt = { hiddenProviders: ['Codex' as const], hiddenAgyGroups: ['Claude and GPT models'] };
+    expect(kindAvailable('quota:agy:Claude and GPT models', allOn, hiddenClaudeGpt)).toBe(false);
   });
   it('does not know a kind it was not made for', () => {
     expect(kindAvailable('github', allOn, defaultQuotaVisibility())).toBe(false);
