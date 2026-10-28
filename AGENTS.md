@@ -1,7 +1,7 @@
 # Desk Panel
 
 Local React/TypeScript dashboard with a Node HTTP server. Read README.md, then the matching file in docs/
-(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel, czat, hermes) for integration details. Keep the server bound to loopback; credentials stay on the
+(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel, czat, hermes, github) for integration details. Keep the server bound to loopback; credentials stay on the
 backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 
 - `just setup`: install locked dependencies and Playwright Chromium.
@@ -49,7 +49,8 @@ or start agent turns. Gmail uses `gmail.modify` only: thread reads, read/unread
 and Trash/untrash — never sending or permanent deletion. Garmin Connect
 (unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and
 recordings' basics reach the UI (no body, sleep, places or ids); what else the account returns is catalogued in
-docs/garmin-data.md. Do not commit .env, OAuth clients, tokens, logs, screenshots,
+docs/garmin-data.md. GitHub (docs/github.md) is read-only through the user's own `gh` (`pr list`/`pr view`, one module
+`server/github.ts` for the PR tile and the cockpit), cached 30–90 s; the panel never merges, comments or reviews. Do not commit .env, OAuth clients, tokens, logs, screenshots,
 node_modules or dist. Do not print credentials in tool output.
 
 Bank (docs/bank.md): kafelek Konto czyta PKO BP przez Enable Banking (restricted production, własne konto), tylko odczyt (saldo i

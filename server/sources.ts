@@ -77,8 +77,6 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/bank': () => sources.bank(),
     '/api/bank/labels': () => sources.bankLabels(),
     '/api/github/prs': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
-    '/api/github-prs': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
-    '/api/github': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },
     '/api/quotas/warmup': () => {if(!sources.warmup)throw new SourceError(503);return sources.warmup();},
   };

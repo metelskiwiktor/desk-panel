@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { GitHubPrTile } from './GitHubPrTile';
+import { PollingContext } from '../polling';
 import type { GitHubPullRequest } from '../types';
 
 describe('GitHubPrTile', () => {
@@ -91,6 +92,29 @@ describe('GitHubPrTile', () => {
     });
     expect(screen.getByText('Wymaga przeglądu')).toBeTruthy();
     expect(screen.getByText('alice')).toBeTruthy();
+  });
+
+  it('reads the PRs again every minute while the dashboard is shown, and not while it is hidden', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const pr = (title: string) => ({ pullRequests: [{ id: title, number: 1, title, repository: 'desk-panel', author: 'a', url: 'https://github.com/metelskiwiktor/desk-panel/pull/1', reviewStatus: 'APPROVED' }] });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => pr('Pierwszy odczyt') })
+        .mockResolvedValue({ ok: true, json: async () => pr('Po minucie') });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<GitHubPrTile />);
+      await waitFor(() => expect(screen.getByText('Pierwszy odczyt')).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(60_000);
+      await waitFor(() => expect(screen.getByText('Po minucie')).toBeTruthy());
+      cleanup();
+
+      fetchMock.mockClear();
+      render(<PollingContext.Provider value={false}><GitHubPrTile /></PollingContext.Provider>);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('handles fetch error gracefully', async () => {

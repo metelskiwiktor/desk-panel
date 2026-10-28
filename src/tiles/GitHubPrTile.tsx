@@ -17,6 +17,9 @@ import {
   type GitHubPrSource,
   type ReviewStatus,
 } from '../types';
+import { usePollingEnabled } from '../polling';
+
+const REFRESH_MS = 60_000;
 
 export interface GitHubPrTileProps {
   prs?: GitHubPullRequest[];
@@ -51,6 +54,7 @@ export function GitHubPrTile({
   const [prs, setPrs] = useState<GitHubPullRequest[]>(initialPrs ?? []);
   const [loading, setLoading] = useState<boolean>(!initialPrs && initialLoading);
   const [error, setError] = useState<string | null>(null);
+  const pollingEnabled = usePollingEnabled();
 
   useEffect(() => {
     if (initialPrs) {
@@ -59,10 +63,13 @@ export function GitHubPrTile({
       return;
     }
 
+    // Read again every minute while the dashboard is shown (the server asks GitHub at most every 30-90 s).
+    if (!pollingEnabled) return;
     let active = true;
-    setLoading(true);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setLoading(prs.length === 0);
 
-    fetch('/api/github/prs')
+    const read = () => fetch('/api/github/prs')
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<GitHubPrSource | GitHubPullRequest[]>;
@@ -85,13 +92,17 @@ export function GitHubPrTile({
         setError(err instanceof Error ? err.message : 'Błąd pobierania');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (!active) return;
+        setLoading(false);
+        timer = setTimeout(() => { void read(); }, REFRESH_MS);
       });
+    void read();
 
     return () => {
       active = false;
+      if (timer) clearTimeout(timer);
     };
-  }, [initialPrs]);
+  }, [initialPrs, pollingEnabled]);
 
   return (
     <section
