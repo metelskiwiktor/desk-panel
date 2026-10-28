@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MODEL_COLORS, OpenRouterUsageTile, modelColors } from './OpenRouterUsageTile';
 import type { OpenRouterUsage } from '../openrouter-contract';
+import { forgetOpenRouterUsage } from '../useOpenRouterUsage';
 
 describe('OpenRouterUsageTile', () => {
   beforeEach(() => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    forgetOpenRouterUsage();
   });
 
   afterEach(() => {
@@ -98,6 +100,24 @@ describe('OpenRouterUsageTile', () => {
       expect(screen.getByText('$14.85')).toBeTruthy();
     });
     expect(screen.getByText('$42.50')).toBeTruthy();
+  });
+
+  it('shows the last answer at once when the tile mounts again (a switch of desktop) and refreshes it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => sampleUsage }));
+    render(<OpenRouterUsageTile wide tall />);
+    await waitFor(() => expect(screen.getByText('$14.85')).toBeTruthy());
+    cleanup();
+
+    // The next answer has not come yet: the tile does not fall back to "loading".
+    let answer!: (value: unknown) => void;
+    const fetchAgain = vi.fn().mockReturnValue(new Promise(resolve => { answer = resolve; }));
+    vi.stubGlobal('fetch', fetchAgain);
+    render(<OpenRouterUsageTile wide tall />);
+    expect(screen.getByText('$14.85')).toBeTruthy();
+    expect(screen.queryByText(/Ładowanie zużycia OpenRouter/i)).toBeNull();
+    expect(fetchAgain).toHaveBeenCalledWith('/api/openrouter', expect.anything());
+    answer({ ok: true, json: async () => ({ ...sampleUsage, totals: { ...sampleUsage.totals, windowUsd: 15.1 } }) });
+    await waitFor(() => expect(screen.getByText('$15.10')).toBeTruthy());
   });
 
   it('gives every model of the window its own colour, the same in both tile sizes', () => {

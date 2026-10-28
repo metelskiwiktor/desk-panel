@@ -17,8 +17,15 @@ export type OpenRouterUsageState =
   | OpenRouterUsageLoading
   | OpenRouterUsageError;
 
+/**
+ * The last answer, kept across mounts: a switch of desktop remounts the tile, which showed "loading" until the next
+ * answer came. Now it shows the last one at once and refreshes it; a failed refresh keeps it on screen.
+ */
+let last: (OpenRouterUsage & { status: 'connected' }) | null = null;
+export function forgetOpenRouterUsage() { last = null; }
+
 export function useOpenRouterUsage(): OpenRouterUsageState {
-  const [state, setState] = useState<OpenRouterUsageState>({ status: 'loading' });
+  const [state, setState] = useState<OpenRouterUsageState>(() => last ?? { status: 'loading' });
   const pollingEnabled = usePollingEnabled();
 
   useEffect(() => {
@@ -39,17 +46,18 @@ export function useOpenRouterUsage(): OpenRouterUsageState {
               ? 'Błąd połączenia z OpenRouter'
               : `Błąd OpenRouter (${response.status})`;
           if (!stopped) {
-            setState({ status: 'error', httpStatus: response.status, message: msg });
+            setState(last ?? { status: 'error', httpStatus: response.status, message: msg });
           }
           return;
         }
         const data = openrouterUsageSchema.parse(await response.json());
+        last = { ...data, status: 'connected' };
         if (!stopped) {
-          setState({ ...data, status: 'connected' });
+          setState(last);
         }
       } catch {
         if (!stopped) {
-          setState({
+          setState(last ?? {
             status: 'error',
             httpStatus: null,
             message: 'Błąd połączenia z serwerem',

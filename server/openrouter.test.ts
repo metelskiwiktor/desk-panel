@@ -116,6 +116,7 @@ describe('openrouter cache and lookups', () => {
       cacheFile,
       fetchFn: generationFetchSpy as any,
       now: () => new Date('2026-10-28T12:00:00Z').getTime(),
+      waitForLookups: true,
     });
 
     const result1 = await client.read();
@@ -179,6 +180,7 @@ describe('openrouter cache and lookups', () => {
       cacheFile,
       fetchFn: fetchSpy as any,
       now: () => new Date('2026-10-28T12:00:00Z').getTime(),
+      waitForLookups: true,
     });
 
     // First read: fails to resolve generation
@@ -216,7 +218,7 @@ describe('openrouter cache and lookups', () => {
       if (id.startsWith('gen-broken')) return Promise.resolve(new Response('error', { status: 500 }));
       return Promise.resolve(new Response(JSON.stringify({ data: { model: 'deepseek/chat', total_cost: 0.02 } }), { status: 200 }));
     });
-    const client = createOpenRouterClient({ apiKey: 'test-key', logPath: logFile, cacheFile, fetchFn: fetchSpy as any, maxLookupsPerRead: 3, now: () => new Date('2026-10-28T12:00:00Z').getTime() });
+    const client = createOpenRouterClient({ apiKey: 'test-key', logPath: logFile, cacheFile, fetchFn: fetchSpy as any, maxLookupsPerRead: 3, waitForLookups: true, now: () => new Date('2026-10-28T12:00:00Z').getTime() });
 
     await client.read();
     // Read 1 took the first three: the 404s are set aside at once, the 500 goes to the back.
@@ -233,6 +235,33 @@ describe('openrouter cache and lookups', () => {
     await client.read();
     expect(lookups.length).toBe(before);
     expect(lookups.filter(id => id === 'gen-broken1')).toHaveLength(MAX_LOOKUP_ATTEMPTS);
+  });
+
+  it('answers at once and looks the costs up in the background, batch after batch', async () => {
+    // Each read once waited for 25 lookups (about 6 s), on every switch of desktop.
+    const ids = ['gen-a', 'gen-b', 'gen-c'];
+    writeFileSync(logFile, ids.map(id => `2026-10-28 12:00:00,000 INFO agent: API call #1: model=deepseek/chat provider=openrouter id=${id}\n`).join(''), 'utf8');
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const lookups: string[] = [];
+    const fetchSpy = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('/api/v1/key')) return new Response(JSON.stringify({ data: { usage: 1 } }), { status: 200 });
+      if (url.includes('/api/v1/credits')) return new Response(JSON.stringify({ data: { total_credits: 10, total_usage: 1 } }), { status: 200 });
+      lookups.push(new URL(url).searchParams.get('id')!);
+      await gate;
+      return new Response(JSON.stringify({ data: { model: 'deepseek/chat', total_cost: 0.01 } }), { status: 200 });
+    });
+    const client = createOpenRouterClient({ apiKey: 'test-key', logPath: logFile, cacheFile, fetchFn: fetchSpy as any, maxLookupsPerRead: 2, now: () => new Date('2026-10-28T12:00:00Z').getTime() });
+
+    const first = await client.read();
+    expect(first.totals.windowUsd).toBe(0); // answered while the first lookup still waits
+    expect(lookups).toEqual(['gen-a']);
+    await client.read(); // a second read does not start a second round of lookups
+    release();
+    await client.settled();
+    expect(lookups).toEqual(['gen-a', 'gen-b', 'gen-c']); // two batches, without another read
+    expect((await client.read()).totals.windowUsd).toBe(0.03);
+    expect(readCache(cacheFile)).toMatchObject({ pending: [] });
   });
 
   it('puts a line without its own date on the local day, as the chart counts days', () => {
