@@ -3,7 +3,7 @@ import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgentChat } from './agent-chat';
 import { createPanelServer } from './app';
 import { createChatHub } from './chat-hub';
@@ -33,7 +33,8 @@ afterEach(async () => {
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
   await mock.close();
-  await rm(dir, { recursive: true, force: true });
+  // A chat log may still be flushing a line after the hub closes: retry instead of failing on ENOTEMPTY under load.
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 const rpc = (body: unknown, headers: Record<string, string> = { Authorization: `Bearer ${TOKEN}` }) =>
@@ -178,6 +179,8 @@ describe('chat API with engines', () => {
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as any).error).toMatch(/zgod/);
     expect(mock.requests.some(r => r.path.endsWith('/approval'))).toBe(false);
+    // The turn is still answering: let it end, or its chat log writes into the directory the teardown removes.
+    await vi.waitFor(async () => expect(((await (await fetch(`${base}/api/chats/${created.id}`)).json()) as any).running).toBe(false), { timeout: 5000, interval: 20 });
   });
 
   it('says why a message did not go when Hermes is down', async () => {
