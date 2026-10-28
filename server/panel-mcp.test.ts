@@ -16,7 +16,8 @@ import { createScenarioSources } from './scenario';
 const TOKEN = 'a'.repeat(64);
 /** An Executor Prompt in the skill's shape, every section present. */
 const shaped = (task: string, criteria = '- [ ] x') => [
-  `Task: ${task}`, 'Type: UI', 'Scenario for screenshots: standard', 'Relevant files (from recon):', '- src/App.tsx',
+  `Task: ${task}`, 'Type: UI', 'Scenario for screenshots: standard', 'User asks (each thing the user asked for, in their words):', '- "zrób to" → criterion 1',
+  'Relevant files (from recon):', '- src/App.tsx',
   'Live data (from panel tools):', '- none: the task shows no panel data', 'Acceptance criteria:', criteria, 'Notes for executor:', '- strictly',
 ].join('\n');
 let server: Server, base: string, dir: string, mock: MockHermes;
@@ -157,6 +158,11 @@ describe('panel MCP for Hermes', () => {
     const bare = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w').replace(/Live data[^]*?(?=Acceptance criteria:)/, '') });
     expect(bare).toMatchObject({ isError: true });
     expect(bare.content[0].text).toContain('brakuje sekcji: Live data');
+    // Every ask of the user says where it went (the fifth try dropped the tile's new name without a word).
+    const dropped = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w').replace('- "zrób to" → criterion 1', '- "zrób to" → criterion 1\n- "nazwij go Gemini Claude&GPT"') });
+    expect(dropped).toMatchObject({ isError: true });
+    expect(dropped.content[0].text).toContain('Bez tego: - "nazwij go Gemini Claude&GPT"');
+    expect((await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w').replace('- "zrób to" → criterion 1\n', '') })).content[0].text).toContain('(sekcja jest pusta)');
     // A criterion that passes whatever is done; saying what to show without data is a requirement.
     const escape = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w', '- [ ] The 5h split for the group when breakdown segments are available.\n- [ ] Update the fixture if needed.') });
     expect(escape).toMatchObject({ isError: true });

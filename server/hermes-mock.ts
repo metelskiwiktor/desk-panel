@@ -69,6 +69,8 @@ const MOCK_PROMPT = [
   'Task: Show the Cezar task status chip in the chat cockpit header.',
   'Type: UI',
   'Scenario for screenshots: standard (page: pulpit, open: cockpit)',
+  'User asks (each thing the user asked for, in their words):',
+  '- "chip statusu taska w nagłówku kokpitu" → criterion 1',
   'Relevant files (from recon):',
   '- src/ChatWindow.tsx',
   '- src/cockpit/Cockpit.tsx',

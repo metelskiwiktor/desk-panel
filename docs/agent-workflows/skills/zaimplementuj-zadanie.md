@@ -50,6 +50,9 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
      moved the split into `server/usageBreakdown.ts`, still "when segments are available": the split is computed by
      cezar-adapter, another repository, which `panel_quotas` now says. A lack only another repository can build goes to
      the plan as separate work there, not into this task's criteria. Criteria name behaviour, not today's readings.
+   - The prompt's `User asks` section quotes each thing the user asked for and says where it went (`→ criterion n`,
+     `→ plan: separate work in <repository>`, `→ not done: <why>`); `panel_recon_report` refuses an ask without `→`.
+     The fifth retry got everything else right and silently dropped the tile's new name the user had asked for.
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
      sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
      and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at
@@ -103,6 +106,9 @@ Task: <clear analytical objective, e.g. "Analyze multi-account sync architecture
 Type: non-UI
 Scenario for screenshots: none
 
+User asks (each thing the user asked for, in their words):
+- "<ask>" → criterion <n> | → plan: separate work in <repository> | → not done: <why>
+
 Relevant files (from recon):
 - src/...
 - server/...
@@ -130,13 +136,17 @@ Task: <one-sentence clear goal>
 Type: UI | non-UI
 Scenario for screenshots: <scenario name, e.g. standard> --pages <page> [--open tile:<kind>|mail|chat|task|event|bank] (or "none" if non-UI)
 
+User asks (each thing the user asked for, in their words):
+- "nazwa jak Gemini 4 Argon: Gemini Claude&GPT" → criterion 1
+- "podział zużycia też" → plan: separate work in cezar-adapter (it computes the split)
+
 Relevant files (from recon):
 - src/...
 - server/...
 
 Live data (from panel tools):
 - has: 3p-5h and 3p-weekly under AGY / Claude and GPT models (panel_quotas)
-- lacks: a 5h split for that group (panel_quotas: only Claude, Codex, AGY / Gemini Models have it)
+- lacks: a 5h split for that group (panel_quotas: only Claude, Codex, AGY / Gemini Models have it; cezar-adapter computes it)
 
 Acceptance criteria:
 - [ ] ...
@@ -168,7 +178,7 @@ Notes for executor:
    {
      "title": "Analiza: obsługa wielu kont bankowych w kafelku Konto",
      "workflow": "analysis",
-     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
+     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nUser asks (each thing the user asked for, in their words):\n- \"wiele kont bankowych w kafelku Konto\" → criteria 1-4\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
    }
    ```
 
@@ -193,7 +203,7 @@ Notes for executor:
    {
      "title": "Wdrożenie: obsługa wielu kont bankowych",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nUser asks (each thing the user asked for, in their words):\n- \"przełączanie kont\" → criterion 3\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```
 
@@ -210,6 +220,6 @@ Notes for executor:
    {
      "title": "Szary badge minionych spotkań w kalendarzu",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nUser asks (each thing the user asked for, in their words):\n- \"szary badge gdy spotkanie minęło\" → criterion 1\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```

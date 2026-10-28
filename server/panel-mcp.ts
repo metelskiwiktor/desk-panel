@@ -73,22 +73,34 @@ export function unknownNames(prompt: string, repoText: string, declared: string[
 /**
  * The sections of the Executor Prompt the skill gives. "Live data" says what the panel's sources have and lack: without
  * it a split the source does not have became "when breakdown data is available" (28.10.2026), a criterion nothing fails.
+ * "User asks" lists each thing the user asked for and where it went: the fifth try of that day dropped the tile's new
+ * name, asked in so many words, from its criteria.
  */
-export const PROMPT_SECTIONS = ['Task:', 'Type:', 'Scenario for screenshots:', 'Relevant files', 'Live data', 'Acceptance criteria:', 'Notes for executor:'] as const;
+export const PROMPT_SECTIONS = ['Task:', 'Type:', 'Scenario for screenshots:', 'User asks', 'Relevant files', 'Live data', 'Acceptance criteria:', 'Notes for executor:'] as const;
+const isHeader = (line: string) => PROMPT_SECTIONS.some(section => line.trimStart().startsWith(section));
 export const missingSections = (prompt: string) => PROMPT_SECTIONS.filter(section => !prompt.split('\n').some(line => line.trimStart().startsWith(section)));
+/** The bullet lines of one section, up to the next section's header. */
+function bullets(prompt: string, section: string): string[] {
+  const lines = prompt.split('\n');
+  const start = lines.findIndex(line => line.trimStart().startsWith(section));
+  if (start < 0) return [];
+  const end = lines.findIndex((line, i) => i > start && isHeader(line));
+  return lines.slice(start + 1, end < 0 ? undefined : end).filter(line => /^\s*[-*]\s*\S/.test(line)).map(line => line.trim());
+}
+/** Asks with no destination: each one names the criterion it became, or the plan's separate work, or why not. */
+export const unplacedAsks = (prompt: string) => {
+  const asks = bullets(prompt, 'User asks');
+  return asks.length ? asks.filter(line => !/→|->/.test(line)) : ['(sekcja jest pusta)'];
+};
 /**
  * Criteria that pass whatever the executor does: "…when breakdown segments are available" was written twice
  * (28.10.2026) for a split the source does not have. A lack is built, named as follow-up, or analysed instead.
  */
 const SOFT = /\b(?:when|if|where|once|as long as)\b[^.;\n]{0,40}\b(?:available|possible|present|exists?|supported|provided)\b|\bif (?:needed|applicable|any)\b/i;
 export function softCriteria(prompt: string): string[] {
-  const lines = prompt.split('\n');
-  const start = lines.findIndex(line => line.trimStart().startsWith('Acceptance criteria:'));
-  if (start < 0) return [];
-  const end = lines.findIndex((line, i) => i > start && /^\s*[A-Z][\w ()]*:\s*$/.test(line) && !/^\s*[-*]/.test(line));
   // "…an empty state when no data is available" says what to show without it: a requirement, not an escape.
   const soft = (line: string) => SOFT.test(line) && !/\b(?:no|not|none|without|unavailable|missing)\b/i.test(SOFT.exec(line)![0]);
-  return lines.slice(start + 1, end < 0 ? undefined : end).filter(line => /^\s*[-*]/.test(line) && soft(line)).map(line => line.trim());
+  return bullets(prompt, 'Acceptance criteria:').filter(soft);
 }
 /** The text of the repository's tracked files (no binaries, none over 1 MB), read again after a minute; null without git. */
 let tracked: { at: number; text: string } | undefined;
@@ -208,6 +220,8 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       if (missing.length) throw new AgentViewError(400, `Tych plików nie ma w repozytorium: ${missing.join(', ')}. Wymień tylko pliki z wyników wyszukiwania; plik, który executor utworzy, oznacz "new": true.`);
       const sections = missingSections(String(args.prompt));
       if (sections.length) throw new AgentViewError(400, `W prompcie brakuje sekcji: ${sections.join(', ')}. Użyj dokładnie kształtu Executor Prompt ze skilla, każda sekcja od nowej linii.`);
+      const unplaced = unplacedAsks(String(args.prompt));
+      if (unplaced.length) throw new AgentViewError(400, `W "User asks" każda prośba użytkownika (jego słowami) mówi, dokąd trafiła: "→ criterion N", "→ plan: osobna praca w <repo>" albo "→ not done: <powód>". Bez tego: ${unplaced.join(' | ')}.`);
       const soft = softCriteria(String(args.prompt));
       if (soft.length) throw new AgentViewError(400, `Te kryteria przejdą, cokolwiek executor zrobi: ${soft.join(' | ')}. Kryterium mówi, co ma działać; brak z "Live data" executor buduje (plik w server/), a gdy trzeba go zbudować poza tym repozytorium, usuń go z kryteriów i nazwij w planie dla użytkownika jako osobną pracę.`);
       const repoText = trackedText(now);
