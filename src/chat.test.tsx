@@ -584,7 +584,9 @@ describe('CHAT_SKILLS', () => {
     expect(skill!.prompt).toContain('Two-stage analytical workflow:');
     expect(skill!.prompt).toContain('Phase 1 (Recon and Mode Decision)');
     expect(skill!.prompt).toContain('workflow: "analysis"');
-    expect(skill!.prompt).toContain('Phase 2 (Synthesis and Implementation)');
+    expect(skill!.prompt).toContain('Phase 2 (after an analysis run)');
+    // It travels as a context item (at most 8000 characters) with every message that picks it.
+    expect(skill!.prompt.length).toBeLessThan(8000);
     expect(skill!.prompt).toContain('panel_cezar');
     expect(skill!.prompt).toContain('panel_cezar_propose');
   });
