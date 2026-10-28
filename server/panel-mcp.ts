@@ -1,11 +1,12 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
-import { CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
+import { CARD_SHOWN, CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
 import { todoActionSchema } from '../src/todo-contract';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
@@ -40,6 +41,18 @@ const view = (name: string, params: (args: Record<string, any>) => Record<string
     for (const [key, value] of Object.entries(params(args))) if (value !== undefined) url.searchParams.set(key, value);
     return ctx.views[name](url, ctx.now);
   };
+/** The repository the skill's recon names files in (the panel's own checkout; the service runs in it, so does vitest). */
+const REPO_ROOT = (() => { try { return fileURLToPath(new URL('..', import.meta.url)); } catch { return process.cwd(); } })();
+const repoPath = z.string().trim().min(1).max(300).refine(p => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('..'), 'ścieżka względem repo, bez ..');
+/**
+ * Recons the user has seen, by the id their answer gave. A proposal must name one and carry its prompt: a model that
+ * sends the proposal in the same answer as its searches (gemini flash did, 28.10.2026: 21 calls at once, the card among
+ * them) cannot know the id yet, so it waits for its recon. In memory: after a panel restart the recon is simply redone.
+ */
+const RECON_TTL_MS = 6 * 60 * 60_000, RECONS_KEPT = 100;
+const recons = new Map<string, { prompt: string; at: number }>();
+export function forgetRecons() { recons.clear(); }
+
 const range = { from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie dziś)' }, to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie (domyślnie from + 6 dni, najwyżej 42 dni)' } };
 const schema = (properties: Record<string, unknown> = {}, required: string[] = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 
@@ -118,34 +131,52 @@ export const PANEL_TOOLS: Record<string, Tool> = {
   panel_recon_report: {
     description: cockpitToolDescription('panel_recon_report'),
     input: z.object({
-      files: z.array(z.object({ path: text(300), note: z.string().max(200).optional() }).strict()).max(30),
+      files: z.array(z.object({ path: repoPath, note: z.string().max(200).optional(), new: z.boolean().optional() }).strict()).max(30),
       kind: z.enum(['UI', 'non-UI']),
       scenario: text(80).optional(),
       prompt: text(32_000),
     }).strict(),
     schema: schema({
-      files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string', description: 'Ścieżka względem repo, np. src/App.tsx' }, note: { type: 'string', description: 'Po co ten plik' } }, required: ['path'], additionalProperties: false } },
+      files: { type: 'array', items: { type: 'object', properties: {
+        path: { type: 'string', description: 'Ścieżka względem repo z wyników wyszukiwania, np. src/App.tsx' },
+        note: { type: 'string', description: 'Po co ten plik' },
+        new: { type: 'boolean', description: 'true: plik, który executor dopiero utworzy' },
+      }, required: ['path'], additionalProperties: false } },
       kind: { type: 'string', enum: ['UI', 'non-UI'] },
       scenario: { type: 'string', description: 'Scenariusz zrzutów, np. standard (dla UI)' },
       prompt: { type: 'string', description: 'Pełny Executor Prompt po angielsku' },
     }, ['files', 'kind', 'prompt']),
-    async run() { return 'Karta rekonesansu jest u użytkownika. Teraz wywołaj panel_cezar_propose z tytułem i tym samym promptem.'; },
+    async run(args, { now }) {
+      const missing = (args.files as { path: string; new?: boolean }[]).filter(f => !f.new && !existsSync(path.join(REPO_ROOT, f.path))).map(f => f.path);
+      if (missing.length) throw new AgentViewError(400, `Tych plików nie ma w repozytorium: ${missing.join(', ')}. Wymień tylko pliki z wyników wyszukiwania; plik, który executor utworzy, oznacz "new": true.`);
+      for (const [id, recon] of recons) if (now - recon.at > RECON_TTL_MS || recons.size >= RECONS_KEPT) recons.delete(id);
+      const id = `r-${randomBytes(6).toString('hex')}`;
+      recons.set(id, { prompt: String(args.prompt).trim(), at: now });
+      return `${CARD_SHOWN.recon}. recon: ${id}. Teraz napisz użytkownikowi krótki plan po polsku, a potem wywołaj panel_cezar_propose z tym samym promptem i "recon":"${id}".`;
+    },
   },
   panel_cezar_propose: {
     description: cockpitToolDescription('panel_cezar_propose'),
     input: z.object({
       title: text(120),
       prompt: text(32_000),
+      recon: z.string().regex(/^r-[0-9a-f]{12}$/),
       workflow: z.enum(CEZAR_WORKFLOWS).optional(),
       todoId: z.string().regex(/^t-[0-9a-f]{8}$/).optional(),
     }).strict(),
     schema: schema({
       title: { type: 'string', description: 'Krótki tytuł taska po polsku' },
       prompt: { type: 'string', description: 'Pełny Executor Prompt (ten sam co w panel_recon_report)' },
+      recon: { type: 'string', description: 'Identyfikator z wyniku panel_recon_report (r-…)' },
       workflow: { type: 'string', enum: [...CEZAR_WORKFLOWS], description: 'Workflow na Cezarze: "analysis" (analiza) lub "desk-panel-task" (implementacja, domyślnie)' },
       todoId: { type: 'string', description: 'Id zadania z list (t-…), gdy task je realizuje' },
-    }, ['title', 'prompt']),
-    async run() { return 'Karta „Zlecić na Cezarze?” jest u użytkownika: decyzja należy do niego, a zleca panel. Nie wysyłaj niczego do Cezara. Zakończ odpowiedź jednym zdaniem.'; },
+    }, ['title', 'prompt', 'recon']),
+    async run(args) {
+      const recon = recons.get(args.recon);
+      if (!recon) throw new AgentViewError(409, 'Panel nie zna tego recon. Najpierw wywołaj panel_recon_report i poczekaj na jego wynik: podaje recon, którego tu potrzeba. Propozycji nie wysyłaj w tej samej odpowiedzi co rekonesans.');
+      if (recon.prompt !== String(args.prompt).trim()) throw new AgentViewError(409, 'Prompt różni się od tego z panel_recon_report. Wyślij ten sam prompt albo zrób rekonesans od nowa.');
+      return `${CARD_SHOWN.dispatch}: decyzja należy do niego, a zleca panel. Nie wysyłaj niczego do Cezara. Zakończ odpowiedź jednym zdaniem.`;
+    },
   },
   panel_cezar_watch: {
     description: cockpitToolDescription('panel_cezar_watch'),

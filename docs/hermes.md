@@ -99,8 +99,13 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
 | `panel_todo_action` | jedna akcja list zadań (`todoActionSchema`) |
 | `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
-| `panel_recon_report` | `files`, `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu w czacie, niczego nie zmienia |
-| `panel_cezar_propose` | `title`, `prompt`, `todoId`: karta „Zlecić na Cezarze?”; zleca panel po kliknięciu użytkownika, nie narzędzie |
+| `panel_recon_report` | `files` (ścieżka, notatka, `new` dla pliku do utworzenia), `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu; plików, których nie ma w repo (bez `new`), nie przyjmuje; wynik podaje `recon` (r-…, pamiętany 6 h, do restartu panelu) |
+| `panel_cezar_propose` | `title`, `prompt`, `recon`, `workflow`, `todoId`: karta „Zlecić na Cezarze?”, tylko z `recon` znanym panelowi i tym samym promptem co rekonesans; zleca panel po kliknięciu użytkownika, nie narzędzie |
+
+Karta odrzuconego wywołania mówi, dlaczego panel go nie przyjął, i nie ma „Zleć”; `POST /api/chats/:id/dispatch` też jej
+odmawia (409). O przyjęciu decyduje tekst odpowiedzi (`CARD_SHOWN`, `cardRefusal` w `src/cockpit-contract.ts`), bo część
+odczytana z historii sesji ma tekst, a nie flagę błędu. Po co: model flash wysłał rekonesans i propozycję w jednej paczce z
+wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
 

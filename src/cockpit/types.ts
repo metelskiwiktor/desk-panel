@@ -34,11 +34,14 @@ export interface ReconArgs {
   kind?: 'UI' | 'non-UI';
   scenario?: string;
   prompt?: string;
+  /** Why the panel refused the recon (files the repository does not have); the card says so. */
+  refused?: string;
 }
 
 /** Human in the loop: the agent asks before it hands a task to Cezar. */
 export const DISPATCH = 'cezar_dispatch';
-export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string; legacyUnresolved?: boolean }
+/** `refused`: why the panel refused the proposal (sent before its recon's answer); the card offers no „Zleć” then. */
+export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string; legacyUnresolved?: boolean; refused?: string }
 export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string } | { decision: 'rejected' };
 
 /** `@nasłuchuj cezara`: the agent watches a running Cezar task (watchdog). */

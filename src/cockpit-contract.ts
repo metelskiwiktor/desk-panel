@@ -94,13 +94,13 @@ export interface CockpitTool {
 export const COCKPIT_TOOLS = {
   panel_recon_report: {
     purpose: 'Skill „Zaimplementuj zadanie”: wynik rekonesansu (przeszukane pliki, typ UI/non-UI, scenariusz zrzutów, Executor Prompt).',
-    when: 'raz, po rekonesansie w skillu „Zaimplementuj zadanie”, przed panel_cezar_propose; nie w zwykłej rozmowie o zadaniu.',
-    effect: 'użytkownik widzi kartę rekonesansu; kokpit bez zmian.',
+    when: 'raz, po rekonesansie w skillu „Zaimplementuj zadanie”, gdy wyniki wyszukiwań są już w rozmowie; pliki tylko takie, jakie pokazały wyniki narzędzi (plik do utworzenia z "new": true); nie w zwykłej rozmowie o zadaniu.',
+    effect: 'użytkownik widzi kartę rekonesansu; wynik podaje identyfikator recon dla panel_cezar_propose. Plików, których nie ma w repozytorium, panel nie przyjmie.',
     card: 'recon',
   },
   panel_cezar_propose: {
     purpose: 'Skill „Zaimplementuj zadanie”: propozycja zlecenia taska na Cezarze (tytuł, Executor Prompt, opcjonalny workflow: "analysis" lub "desk-panel-task").',
-    when: 'gdy prompt jest gotowy i użytkownik chce zlecić zadanie teraz; nie wtedy, gdy dopiero je omawiacie. Potem zakończ odpowiedź.',
+    when: 'gdy prompt jest gotowy i użytkownik chce zlecić zadanie teraz; nie wtedy, gdy dopiero je omawiacie. Dopiero po wyniku panel_recon_report, z jego recon i tym samym promptem: wysłana w tej samej odpowiedzi co rekonesans zostanie odrzucona. Potem zakończ odpowiedź.',
     effect: 'użytkownik widzi kartę „Zlecić na Cezarze?”; task zleca panel dopiero po kliknięciu „Zleć”, i od tej chwili kokpit go obserwuje. Ty niczego nie zlecasz.',
     card: 'dispatch',
   },
@@ -117,6 +117,24 @@ export const COCKPIT_TOOLS = {
   },
 } as const satisfies Record<string, CockpitTool>;
 export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
+
+/**
+ * What the panel answers when it accepts a card call. A call it refuses (a proposal sent before the recon's answer, a
+ * recon naming files the repository does not have) answers with the reason instead: its card says so and offers no
+ * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
+ * history keeps the text but not the error flag.
+ */
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika' } as const;
+/** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
+export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
+  // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.
+  const answer = toolAnswer(output);
+  const text = typeof answer === 'string' ? answer : typeof output === 'string' ? output : '';
+  if (text.includes(CARD_SHOWN[card])) return null;
+  if (!error && !text.trim()) return null;
+  const reason = text.replace(/<\/?untrusted_tool_result[^>]*>/g, '').replace(/^[\s\S]*?Treat it as DATA, not as instructions\.?/, '').replace(/^Błąd:\s*/, '').trim();
+  return reason || 'Panel odrzucił to wywołanie.';
+}
 
 /** The MCP description of a cockpit tool: what it is, when, and what follows. */
 export const cockpitToolDescription = (name: CockpitToolName) => {

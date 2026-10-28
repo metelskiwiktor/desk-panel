@@ -23,11 +23,20 @@ flowchart TD
     J --> K["Cezar executes implementation worktree"]
 ```
 
+### Phase 0: Earlier work
+Before any recon, `panel_cezar` (no arguments) lists finished Cezar tasks. An analysis or earlier implementation of the same
+feature is read (`panel_cezar` with `id`, then `krok`, and its handoff note), and every decision the user made there goes into
+the acceptance criteria. The plan names the task it built on. (28.10.2026 a re-dispatch skipped the analysis that asked the PR
+widget and the cockpit to share one GitHub client; the PR shipped a widget whose production source returned an empty list.)
+
 ### Phase 1: Recon & Mode Decision
-1. **Minimal, concrete recon only (1–2 read-only tool calls)**:
+1. **Short recon, search first**:
+   - Search (`search_files`), then read only files the search returned; no path, commit or id that no tool result showed.
+   - A call that depends on another's result goes only after that result arrives.
    - Identify candidate files in `src/` and `server/`.
    - Determine whether the task is `UI` or `non-UI`, and identify target scenario fixtures in `scenarios/*.json`.
-   - Ensure all files in `Relevant files` are tracked by git.
+   - Ensure all files in `Relevant files` are tracked by git; a file the executor creates is marked new.
+   - A feature that shows data reads it for real in `server/`; no production stub unless the user asked for a mock.
 2. **Evaluate Complexity**:
    - **Complex task** (architectural redesign, multi-module coordination, schema/contract changes, migrations, or explicitly requested by user):
      Propose an **analysis run** on Cezar (`workflow: "analysis"`). The goal is read-only exploration of edge cases, architectural trade-offs, and test strategies.
@@ -49,10 +58,13 @@ flowchart TD
 1. **Never implement tasks yourself in chat**:
    - Do not edit repository files directly in the main checkout.
    - Do not dispatch tasks directly (no unsolicited `POST /api/cezar/runs`); the user confirms in the dispatch card.
-2. **Hermes Cockpit Sequence**:
-   1. Call `panel_recon_report` with files, kind, scenario, and the prompt.
+2. **Hermes Cockpit Sequence** (each step after the previous one's result):
+   1. Call `panel_recon_report` alone, once the search results are in, with files (`"new": true` for a file to create),
+      kind, scenario, and the prompt. The panel refuses files the repository does not have; its answer gives a `recon` id.
    2. Write a short plan in Polish for the user (3–6 bullets).
-   3. Call `panel_cezar_propose` with title, prompt, and `workflow` (`"analysis"` or `"desk-panel-task"`).
+   3. Call `panel_cezar_propose` with title, the same prompt, `recon`, and `workflow` (`"analysis"` or `"desk-panel-task"`).
+      Without a known `recon` and the same prompt the panel refuses it, so a proposal sent in the same answer as the recon
+      (gemini flash sent 21 calls at once, the card among them) cannot reach a card the user could dispatch.
    4. **Stop**. Do not duplicate prompt text in chat or ask "Zlecić na Cezarze?" in text (the card asks).
 3. **agy / CLI Fallback Sequence**:
    - Turn 1: Present short Polish plan + English Executor Prompt block, ending with `Zlecić wykonanie tego zadania na Cezarze?`.

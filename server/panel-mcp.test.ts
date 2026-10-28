@@ -96,14 +96,16 @@ describe('panel MCP for Hermes', () => {
   it('has card tools that show things to the user and dispatch nothing themselves', async () => {
     const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx', note: 'okno' }], kind: 'UI', scenario: 'standard', prompt: 'Task: x' });
     expect(recon.isError).toBeUndefined();
+    const id = /recon: (r-[0-9a-f]{12})/.exec(recon.content[0].text)![1];
     expect(await call('panel_recon_report', { files: [], kind: 'maybe', prompt: 'x' })).toMatchObject({ isError: true });
-    const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x' });
+    const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id });
     expect(propose.content[0].text).toContain('zleca panel');
-    const proposeAnalysis = await call('panel_cezar_propose', { title: 'Analiza pasków', prompt: 'Task: analiza', workflow: 'analysis' });
+    const analysisRecon = await call('panel_recon_report', { files: [], kind: 'non-UI', prompt: 'Task: analiza' });
+    const proposeAnalysis = await call('panel_cezar_propose', { title: 'Analiza pasków', prompt: 'Task: analiza', workflow: 'analysis', recon: /recon: (r-[0-9a-f]{12})/.exec(analysisRecon.content[0].text)![1] });
     expect(proposeAnalysis.isError).toBeUndefined();
     // Only the two workflows the skill knows; anything else never reaches a card, let alone Cezar.
-    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'x', workflow: 'rm-rf' })).toMatchObject({ isError: true });
-    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'x', todoId: 'zadanie' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id, workflow: 'rm-rf' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id, todoId: 'zadanie' })).toMatchObject({ isError: true });
     const watch = await call('panel_cezar_watch', { id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001' });
     expect(JSON.parse(watch.content[0].text).task).toMatchObject({ id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', status: expect.any(String) });
     expect(await call('panel_cezar_watch', { id: 'desk-panel/00000000-0000-0000-0000-00000000dead' })).toMatchObject({ isError: true });
@@ -114,6 +116,25 @@ describe('panel MCP for Hermes', () => {
     for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_cockpit_clear']) {
       expect(listed.result.tools.find((t: { name: string }) => t.name === name).description).toMatch(/Kiedy: .* Skutek: /);
     }
+  });
+
+  it('takes a proposal only after its recon answered, and a recon only of files the repository has', async () => {
+    // Sent in the same answer as the searches (gemini flash did, 21 calls at once): no recon id yet.
+    const blind = await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w', recon: 'r-000000000000' });
+    expect(blind).toMatchObject({ isError: true });
+    expect(blind.content[0].text).toContain('Najpierw wywołaj panel_recon_report');
+    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w' })).toMatchObject({ isError: true });
+
+    const guessed = await call('panel_recon_report', { files: [{ path: 'src/types.ts' }, { path: 'src/App.tsx' }], kind: 'UI', prompt: 'Task: w' });
+    expect(guessed).toMatchObject({ isError: true });
+    expect(guessed.content[0].text).toContain('src/types.ts');
+    expect(await call('panel_recon_report', { files: [{ path: '../secrets.txt', new: true }], kind: 'UI', prompt: 'Task: w' })).toMatchObject({ isError: true });
+
+    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx' }, { path: 'src/tiles/GitHubPrTile.tsx', new: true }], kind: 'UI', prompt: 'Task: w' });
+    expect(recon.isError).toBeUndefined();
+    const id = /recon: (r-[0-9a-f]{12})/.exec(recon.content[0].text)![1];
+    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: inny', recon: id })).toMatchObject({ isError: true });
+    expect((await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w', recon: id })).isError).toBeUndefined();
   });
 
   it('makes the to-do changes the chat agent may make', async () => {

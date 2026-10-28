@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
-import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail } from '../src/chat-contract';
-import { cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
+import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
+import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
@@ -103,6 +103,8 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
           ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
           : []);
         if (matches.length !== 1) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
+        if (cardRefusal('dispatch', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej zlecić. Poproś Wektora o nową.');
         const view = await cockpit.view(id, conversation.items);
         const legacy = resolveLegacyDecisions(conversation, view.dispatches);
         if (legacy.dispatches[input.toolCallId]) return json(res, 200, legacy.dispatches[input.toolCallId]), true;

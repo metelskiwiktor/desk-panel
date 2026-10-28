@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
+import { CARD_SHOWN } from './cockpit-contract';
 import { ChatWindow, groupOf, messageCount } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
@@ -463,9 +464,9 @@ describe('the live cockpit (Hermes and the panel)', () => {
   const RUN = 'desk-panel/f2c9501e-7121-4746-8fc8-19ee3ee9d968';
   const prompt = 'Task: Paski\nAcceptance criteria:\n- [ ] Jedno';
   const turn: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'done', parts: [
-    { type: 'tool', id: 'r1', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/zones.ts', note: 'rozmiary' }], kind: 'UI', scenario: 'standard', prompt }), output: 'ok', state: 'done' },
+    { type: 'tool', id: 'r1', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/zones.ts', note: 'rozmiary' }], kind: 'UI', scenario: 'standard', prompt }), output: JSON.stringify({ result: `${CARD_SHOWN.recon}. recon: r-0123456789ab.` }), state: 'done' },
     { type: 'text', text: 'Plan gotowy.' },
-    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt, workflow: 'analysis' }), output: 'Karta jest u użytkownika.', state: 'done' },
+    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt, workflow: 'analysis', recon: 'r-0123456789ab' }), output: JSON.stringify({ result: `${CARD_SHOWN.dispatch}: decyzja należy do niego.` }), state: 'done' },
   ] };
   const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, ...over });
   const running = {
@@ -536,6 +537,26 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(await within(card).findByText('Paski stref')).toBeTruthy();
     expect(within(card).queryByText('Czekam na prompt od Hermesa…')).toBeNull();
     expect((within(card).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shows a proposal the panel refused (sent before its recon answered) without a way to dispatch it', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const blind: ChatMessage = { id: 'a4', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'r9', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/types.ts' }], kind: 'UI', prompt }), output: JSON.stringify({ result: 'Tych plików nie ma w repozytorium: src/types.ts.' }), state: 'done', error: true },
+      { type: 'tool', id: 'p9', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Widget', prompt, recon: 'r-000000000000' }), output: JSON.stringify({ result: 'Panel nie zna tego recon. Najpierw wywołaj panel_recon_report i poczekaj na jego wynik.' }), state: 'done', error: true },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, blind], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
+    expect(within(card).getByText('Propozycja odrzucona przez panel')).toBeTruthy();
+    expect(within(card).getByRole('alert').textContent).toContain('Najpierw wywołaj panel_recon_report');
+    expect(within(card).queryByRole('button', { name: 'Zleć na Cezarze' })).toBeNull();
+    const recon = screen.getByRole('region', { name: 'Rekonesans zadania' });
+    expect(within(recon).getByText('Rekonesans odrzucony')).toBeTruthy();
+    expect(within(recon).getByRole('alert').textContent).toContain('src/types.ts');
+    expect(calls.some(c => c.url.endsWith('/dispatch'))).toBe(false);
   });
 
   it('watches the task the conversation names, and shows the watch card live', async () => {

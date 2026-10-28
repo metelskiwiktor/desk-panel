@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ContextItem } from '../chat-contract';
-import { COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
+import { cardRefusal, COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
 import { DISPATCH, HERMES_APPROVAL, RECON, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
@@ -40,7 +40,9 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
       const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : p.output;
-      return { type: 'tool', id: p.id, name, args: { ...parseArgs(p.input), ...(name === DISPATCH ? { legacyUnresolved } : {}) }, result, running: p.state === 'running', error: p.error };
+      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : null;
+      const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
+      return { type: 'tool', id: p.id, name, args: { ...parseArgs(p.input), ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
     }),
   };
 }

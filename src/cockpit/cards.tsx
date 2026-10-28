@@ -19,6 +19,7 @@ export const elapsed = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1
 const card = 'tw:rounded-2xl tw:border tw:border-ck-line tw:bg-ck-side tw:text-sm tw:overflow-hidden';
 const head = 'tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-3 tw:border-b tw:border-ck-line';
 const eyebrow = 'tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-[0.14em] tw:text-ck-muted';
+const refusedNote = 'tw:m-0 tw:rounded-xl tw:border tw:border-ck-amber/40 tw:bg-ck-amber/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-ck-text';
 const btn = 'tw:inline-flex tw:items-center tw:justify-center tw:gap-2 tw:min-h-10 tw:px-4 tw:rounded-xl tw:text-sm tw:font-medium tw:transition-colors tw:disabled:opacity-40';
 
 function StepIcon({ state }: { state: StepState }) {
@@ -52,9 +53,10 @@ export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>)
     <div className={head}>
       <Radar size={16} className="tw:text-ck-agent" aria-hidden="true" />
       <span className={eyebrow}>@Zaimplementuj zadanie</span>
-      <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{running ? 'Rekonesans…' : 'Rekonesans gotowy'}</span>
+      <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{running ? 'Rekonesans…' : args.refused ? 'Rekonesans odrzucony' : 'Rekonesans gotowy'}</span>
     </div>
     <div className="tw:grid tw:gap-4 tw:p-4">
+      {args.refused && <p className={refusedNote} role="alert">Panel nie przyjął rekonesansu: {args.refused}</p>}
       <Steps steps={steps.map((s, i) => ({ label: s.label, state: s.done ? 'done' : i === current ? 'running' : 'pending' }))} />
       {!!args.files?.length && <div>
         <div className={`${eyebrow} tw:mb-2`}>Przeszukane pliki</div>
@@ -96,6 +98,17 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
     return () => abort.abort();
   }, [args.workflow, runner]);
   const decided = result as DispatchResult | undefined;
+  if (args.refused && !decided) return <section className={card} aria-label="Zgoda na zlecenie taska">
+    <div className={head}>
+      <ShieldQuestion size={16} className="tw:text-ck-muted" aria-hidden="true" />
+      <b className="tw:font-semibold tw:text-ck-text">Propozycja odrzucona przez panel</b>
+    </div>
+    <div className="tw:grid tw:gap-2 tw:p-4">
+      <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
+      <p className={refusedNote} role="alert">{args.refused}</p>
+      <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Tej propozycji nie da się zlecić; Wektor powinien przysłać nową.</p>
+    </div>
+  </section>;
   // Hermes streams a tool without its arguments: the prompt arrives when the answer ends (from the session).
   const waiting = !args.prompt?.trim();
   const unidentified = toolCallId.startsWith('pending:') || toolCallId.includes('panel_cezar_propose');
