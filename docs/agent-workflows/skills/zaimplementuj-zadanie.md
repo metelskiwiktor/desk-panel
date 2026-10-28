@@ -33,6 +33,10 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
 1. **Short recon, search first**:
    - Search (`search_files`), then read only files the search returned; no path, commit or id that no tool result showed.
    - A call that depends on another's result goes only after that result arrives.
+   - Before proposing to change a function or component, search for its callers: code nothing in production calls is dead,
+     and the answer says so (removing or wiring it is new work), instead of "fixing" it. Asked whether renaming the quota tiles
+     breaks the usage split, DeepSeek V4.1 Flash found 2 times in 4, GLM 5.3 never, that `splitFor` (matching by title) has no
+     production caller; both otherwise proposed to repair a split the bars never draw (28.10.2026).
    - Identify candidate files in `src/` and `server/`.
    - Determine whether the task is `UI` or `non-UI`, and identify target scenario fixtures in `scenarios/*.json`.
    - Ensure all files in `Relevant files` are tracked by git; a file the executor creates is marked new.
