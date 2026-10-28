@@ -17,6 +17,7 @@ import { createQuotaReader } from './quotas';
 import { createUsageBreakdownReader } from './usageBreakdown';
 import { createWarmupClient } from './warmup';
 import { createGitHubClient } from './github';
+import { createOpenRouterClient } from './openrouter';
 import { SourceError, type PanelSources } from './sources';
 
 export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
@@ -57,6 +58,11 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const githubRepos = (env.DESK_GITHUB_REPOS || '').split(',').map(r => r.trim()).filter(Boolean);
   const gitHubClient = createGitHubClient({
     repos: githubRepos.length > 0 ? githubRepos : undefined,
+  });
+  const openRouterClient = createOpenRouterClient({
+    apiKey: env.OPENROUTER_API_KEY,
+    logPath: env.HERMES_LOG_PATH,
+    cacheFile: join(dir, 'openrouter-cache.json'),
   });
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
@@ -134,6 +140,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     },
     usageBreakdown: readUsageBreakdown,
     githubPr: () => gitHubClient.read(),
+    openrouterUsage: () => openRouterClient.read(),
     warmup:warmup.read,
     saveWarmup:warmup.save,
     runWarmup:warmup.run,

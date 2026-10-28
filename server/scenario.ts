@@ -15,6 +15,7 @@ import { createTodoStore, type TodoStore } from './todos';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
+import { openrouterUsageSchema } from '../src/openrouter-contract';
 import { SourceError, type PanelSources } from './sources';
 
 /**
@@ -51,6 +52,7 @@ export const scenarioSchema = z.object({
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
   githubPr: endpoint(gitHubPrSourceSchema).default({ pullRequests: [] }),
+  openrouterUsage: endpoint(openrouterUsageSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
@@ -69,6 +71,7 @@ export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'warmupRun' ? { Claude: z.infer<typeof warmupRunResultSchema>; Codex: z.infer<typeof warmupRunResultSchema>; Gemini: z.infer<typeof warmupRunResultSchema> } :
   K extends 'usageBreakdown' ? z.infer<typeof usageBreakdownSchema> :
   K extends 'githubPr' ? GitHubPrSource :
+  K extends 'openrouterUsage' ? z.infer<typeof openrouterUsageSchema> :
   never;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
@@ -225,6 +228,7 @@ export function createScenarioSources(file: string): PanelSources {
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
     githubPr: async () => serve('githubPr') as Promise<GitHubPrSource>,
+    openrouterUsage: () => serve('openrouterUsage'),
     async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },
     bankLabels: () => labels().read(),
     bankLabelAction: action => labels().apply(action),

@@ -1,0 +1,102 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { OpenRouterUsageTile } from './OpenRouterUsageTile';
+import type { OpenRouterUsage } from '../openrouter-contract';
+
+describe('OpenRouterUsageTile', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  const sampleUsage: OpenRouterUsage = {
+    observedAt: 1729000000000,
+    totals: {
+      windowUsd: 14.85,
+      allTimeUsd: 42.50,
+    },
+    credits: {
+      totalUsd: 100.0,
+      usedUsd: 42.5,
+      remainingUsd: 57.5,
+    },
+    days: [
+      {
+        day: '2026-10-27',
+        totalUsd: 2.50,
+        models: [
+          { id: 'anthropic/claude-3.5-sonnet', label: 'claude-3.5-sonnet', usd: 1.50 },
+          { id: 'deepseek/deepseek-chat', label: 'deepseek-chat', usd: 1.00 },
+        ],
+      },
+      {
+        day: '2026-10-28',
+        totalUsd: 3.20,
+        models: [
+          { id: 'openai/gpt-4o', label: 'gpt-4o', usd: 2.20 },
+          { id: 'deepseek/deepseek-chat', label: 'deepseek-chat', usd: 1.00 },
+        ],
+      },
+    ],
+  };
+
+  it('renders OpenRouter tile with metrics, stacked bars and legend', () => {
+    render(<OpenRouterUsageTile usage={sampleUsage} wide tall />);
+
+    expect(screen.getByRole('region', { name: 'OpenRouter' })).toBeTruthy();
+    expect(screen.getByText('W oknie')).toBeTruthy();
+    expect(screen.getByText('$14.85')).toBeTruthy();
+    expect(screen.getByText('Łącznie')).toBeTruthy();
+    expect(screen.getByText('$42.50')).toBeTruthy();
+    expect(screen.getByText('Budżet')).toBeTruthy();
+    expect(screen.getByText('$57.50')).toBeTruthy();
+
+    expect(screen.getByText('claude-3.5-sonnet')).toBeTruthy();
+    expect(screen.getByText('deepseek-chat')).toBeTruthy();
+    expect(screen.getByText('gpt-4o')).toBeTruthy();
+  });
+
+  it('updates preview text when hovering column or segment', () => {
+    render(<OpenRouterUsageTile usage={sampleUsage} wide tall />);
+
+    const cols = screen.getAllByRole('group', { name: /łączny koszt/i });
+    expect(cols.length).toBeGreaterThan(0);
+
+    // Hover a column
+    fireEvent.pointerEnter(cols[0]);
+    expect(screen.getByText('$2.50')).toBeTruthy();
+
+    // Hover a segment
+    const segs = screen.getAllByRole('img');
+    fireEvent.pointerEnter(segs[0]);
+    expect(screen.getByText('$1.50')).toBeTruthy();
+  });
+
+  it('renders loading state', () => {
+    render(<OpenRouterUsageTile loading />);
+    expect(screen.getByText(/Ładowanie zużycia OpenRouter/i)).toBeTruthy();
+  });
+
+  it('renders Polish error state when OpenRouter is unavailable', () => {
+    render(<OpenRouterUsageTile error="Brak klucza OPENROUTER_API_KEY w panel.env" />);
+    expect(screen.getByText('Brak klucza OPENROUTER_API_KEY w panel.env')).toBeTruthy();
+  });
+
+  it('fetches data from /api/openrouter when usage prop is omitted', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => sampleUsage,
+    }));
+
+    render(<OpenRouterUsageTile wide tall />);
+
+    await waitFor(() => {
+      expect(screen.getByText('$14.85')).toBeTruthy();
+    });
+    expect(screen.getByText('$42.50')).toBeTruthy();
+  });
+});

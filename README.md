@@ -43,6 +43,7 @@ wdraża do usługi Windows. Autostart, usługa i kiosk: [docs/system.md](docs/sy
 | [docs/hermes.md](docs/hermes.md) | Hermes Agent jako silnik czatu: instalacja na Windows, usługa, klucze, narzędzia MCP panelu, zgody, ograniczenia |
 | [docs/diagnostyka-czatu-wektora.md](docs/diagnostyka-czatu-wektora.md) | Jak znaleźć i przeanalizować problem w rozmowie Wektora |
 | [docs/bank.md](docs/bank.md) | Kafelek Konto: PKO BP przez Enable Banking, konfiguracja, zgoda, limity odczytów, własne kategorie, osoby i podpowiedzi |
+| [docs/openrouter.md](docs/openrouter.md) | Kafelek OpenRouter: dzienny koszt modeli z logu Hermesa, budżet i wydatki z API |
 | [docs/tailscale.md](docs/tailscale.md) | Dostęp z telefonu przez Tailscale |
 | [docs/testowanie.md](docs/testowanie.md) | Scenariusze, zrzuty ekranu, testy i CI |
 | [servy/README.md](servy/README.md) | Rejestracja usługi Servy i logi |
