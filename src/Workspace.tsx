@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { Bot, Cpu, Gem, GitPullRequest, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
+import { Bot, Coins, Cpu, Gem, GitPullRequest, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
 import { BankTile } from './BankTile';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
@@ -11,6 +11,7 @@ import { SmartActionsTile } from './SmartActionsTile';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
 import { GitHubPrTile } from './tiles/GitHubPrTile';
+import { OpenRouterUsageTile } from './tiles/OpenRouterUsageTile';
 import type { TodosState } from './useTodos';
 import type { BankHook } from './useBank';
 import {
@@ -35,6 +36,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   bank: { title: 'Konto', icon: Landmark },
   'smart-actions': { title: 'Smart Actions', icon: Zap },
   'github-pr': { title: 'GitHub PR', icon: GitPullRequest },
+  openrouter: { title: 'OpenRouter', icon: Coins },
 };
 /** Every widget kind the grid can show besides the limits; each must also be one an empty cell offers (`pickable`). */
 export const WIDGET_KINDS: readonly string[] = Object.keys(FIXED);
@@ -182,6 +184,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     if (tile.kind === 'github-pr') return <GitHubPrTile wide={tile.w > 1} tall={tile.h > 1} />;
+    if (tile.kind === 'openrouter') return <OpenRouterUsageTile wide={tile.w > 1} tall={tile.h > 1} />;
     const card = cards.find(c => kindOfCard(c) === tile.kind);
     return card ? <QuotaTile card={card} data={data} now={now} open={openDetail} showBreakdown={showBreakdown} roomy={roomy} />
       : <MissingLimit title={describe(tile.kind, cards).title} loading={data.quotas.status === 'loading'} />;
