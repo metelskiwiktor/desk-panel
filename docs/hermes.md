@@ -62,9 +62,12 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
     ją w tle (kilka kolejnych wywołań agy na tym samym limicie) i zapisuje lub łata skill. 28.10.2026 utworzył tak skill `cezar`,
     kopię „Zaimplementuj zadanie”, która rozjechałaby się z panelem przy pierwszej zmianie. Instrukcje skilli są w panelu
     (`src/chat-contract.ts`); co Hermes zmienił sam, zapisuje `%LOCALAPPDATA%\hermes\skills\.curator_ledger.jsonl`.
-  - `agent.max_turns: 30` (też `just hermes-setup`): tura kończy się po 30 wywołaniach modelu, potem Hermes prosi go jeszcze
-    raz, bez narzędzi, o podsumowanie. Domyślnie limitu praktycznie nie ma; 28.10.2026 dyspozytor zrobił 87 wywołań narzędzi
-    w 9 minut, w tym jedno wywołanie modelu na 277 s z 36 narzędziami naraz. Skille panelu mieszczą się w ok. 20.
+  - `agent.max_turns: 40` i `agent.budget_warning_ratio: 0.5` (też `just hermes-setup`): tura kończy się po 40 wywołaniach
+    modelu, potem Hermes prosi go jeszcze raz, bez narzędzi, o podsumowanie, a przebieg kończy jako `failed` z tym
+    podsumowaniem w `output`. Panel pokazuje je wtedy z wyjaśnieniem i podpowiedzią „dalej”. Przy 20. wywołaniu Hermes dokleja
+    do wyniku narzędzia „iteration budget checkpoint”, na co skill „Zaimplementuj zadanie” wysyła rekonesans. Domyślnie
+    limitu praktycznie nie ma; 28.10.2026 dyspozytor zrobił 87 wywołań narzędzi w 9 minut, w tym jedno wywołanie modelu na
+    277 s z 36 narzędziami naraz. Przy limicie 30 następna próba skończyła się bez karty.
   - Kompresja historii Hermesa włącza się dopiero przy 50% okna modelu, czego przy oknie gemini-flash rozmowy panelu nie osiągają.
     Nie jest przestawiona, bo streszczenie to kolejne wywołanie agy.
   Zmiana katalogu lub limitów działa po restarcie usługi Hermesa (`just hermes RESTART`); Servy czyta manifest i `hermes.env`

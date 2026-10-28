@@ -44,7 +44,11 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
    - Each thing the user explicitly asked for is its own criterion, in the sense they meant ("verified with agy": live
      data, not only a fixture); data that does not exist yet gets a source in `server/`, or an analysis run first.
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
-     sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 30 model calls (`agent.max_turns`). Tool descriptions are the contract: no reading the panel's or
+     sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
+     and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at
+     that notice, with what there is. (A retry of 28.10.2026 found the right live data and the missing 5h split, then
+     spent 12 of its 30 calls reading the panel's own MCP server, views, tests and this skill, and ended without a card.)
+     The files the dispatcher never reads unless the task changes them are named in the skill. Tool descriptions are the contract: no reading the panel's or
      Cezar's source to learn how the tools work, and a Cezar step is read with `panel_cezar` `krok`, not from its log.
 2. **Evaluate Complexity**:
    - **Complex task** (architectural redesign, multi-module coordination, schema/contract changes, migrations, or explicitly requested by user):

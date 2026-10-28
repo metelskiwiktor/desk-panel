@@ -306,6 +306,21 @@ describe('Hermes chat', () => {
     expect(mock.requests.some(r => r.method === 'GET' && /^\/v1\/runs\/[^/]+$/.test(r.path))).toBe(true);
   });
 
+  it('a run Hermes ended at its limit of model calls still shows its summary, with what happened', async () => {
+    expect(hermesEventOf('run.failed', { output: 'Ustalenia' })).toEqual({ kind: 'failed', error: 'Hermes nie dokończył odpowiedzi.', output: 'Ustalenia' });
+    const real = createHermesClient({ url: mock.url, key: KEY });
+    const silent: HermesClient = {
+      ...real,
+      events: (_run, _on, { signal }) => new Promise(resolve => signal.addEventListener('abort', () => resolve(), { once: true })),
+      status: async () => ({ state: 'failed', output: 'Podsumowanie ustaleń: okna 3p-5h i 3p-weekly.' }),
+    };
+    const service = hermes({ client: silent, stallMs: 150 });
+    const { id } = await service.create({ text: 'Cześć' });
+    const chat = await finishedChat(service, id);
+    expect(chat.items[1]).toMatchObject({ status: 'error', error: expect.stringMatching(/^Hermes przerwał turę przed końcem, zwykle po limicie wywołań modelu\..*„dalej”/) });
+    expect(answerOf(chat.items[1])).toBe('Podsumowanie ustaleń: okna 3p-5h i 3p-weekly.');
+  });
+
   it('asks for approval and goes on after the user approves', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'Potrzebuję zgody na polecenie' });

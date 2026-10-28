@@ -5,7 +5,7 @@ import path from 'node:path';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
-import { HermesError, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
+import { HermesError, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
 import {
   titleFrom, withContext,
   type ChatApproval, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
@@ -412,7 +412,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         break;
       }
       case 'completed': void finalize(live, { state: 'completed', output: event.output, session: event.session }, 'result', event.usage); return;
-      case 'failed': void finalize(live, { state: 'failed', error: event.error }, 'result'); return;
+      case 'failed': void finalize(live, { state: 'failed', error: event.error, output: event.output }, 'result'); return;
       case 'cancelled': void finalize(live, { state: 'cancelled' }, live.stopping ? 'stop' : 'result'); return;
       default: return;
     }
@@ -521,7 +521,14 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       }
       if (!parts.some(p => p.type === 'text' && p.text.trim())) { answer = 'error'; error = 'Hermes zakończył bez odpowiedzi.'; }
     } else if (status.state === 'cancelled') answer = 'stopped';
-    else { answer = 'error'; error = status.error || 'Hermes nie dokończył odpowiedzi.'; }
+    else {
+      answer = 'error';
+      // Ended early (Hermes's limit of model calls): what it found is still the answer, and the error says what happened.
+      const output = status.output?.trim() ? status.output : '';
+      if (output && !streamed.trim()) parts.push({ type: 'text', text: output });
+      error = !output ? status.error || UNFINISHED
+        : `Hermes przerwał turę przed końcem${status.error && status.error !== UNFINISHED ? ` (${status.error})` : ', zwykle po limicie wywołań modelu'}. Powyżej to, co zdążył napisać; napisz „dalej”, a dokończy.`;
+    }
     for (const part of parts) {
       if (part.type === 'tool' && part.state === 'running') { part.state = 'done'; part.endedAt = now(); }
       if (part.type === 'approval' && part.state === 'pending') part.state = 'expired';
