@@ -10,15 +10,22 @@ export interface ParsedLogCall {
   day: string;
 }
 
-export function parseLogLine(line: string): ParsedLogCall | null {
+/** The local calendar day (YYYY-MM-DD) of a moment: Hermes logs local time and the chart counts local days. */
+export function localDay(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function parseLogLine(line: string, now: number = Date.now()): ParsedLogCall | null {
   if (!/\bprovider=openrouter\b/.test(line)) return null;
   const idMatch = /\bid=(gen-[A-Za-z0-9_-]+)/.exec(line);
   if (!idMatch) return null;
   const modelMatch = /\bmodel=([^\s,]+)/.exec(line);
   if (!modelMatch) return null;
 
+  // A line without its own date (a continuation) belongs to today in local time, not in UTC: near midnight they differ.
   const dateMatch = /^(\d{4}-\d{2}-\d{2})/.exec(line);
-  const day = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
+  const day = dateMatch ? dateMatch[1] : localDay(now);
 
   return {
     id: idMatch[1],
@@ -30,6 +37,7 @@ export function parseLogLine(line: string): ParsedLogCall | null {
 export function scanLog(
   logPath: string,
   currentOffset: number,
+  now: number = Date.now(),
 ): { calls: ParsedLogCall[]; newOffset: number } {
   if (!existsSync(logPath)) {
     return { calls: [], newOffset: 0 };
@@ -60,7 +68,7 @@ export function scanLog(
       const lines = completeChunk.split(/\r?\n/);
       const calls: ParsedLogCall[] = [];
       for (const line of lines) {
-        const call = parseLogLine(line);
+        const call = parseLogLine(line, now);
         if (call) calls.push(call);
       }
 
@@ -74,11 +82,20 @@ export function scanLog(
   }
 }
 
+/**
+ * `pending`: generations whose cost is still to be read, oldest first; `attempts` counts failed lookups. `failed`:
+ * generations set aside for good (OpenRouter answered 404, or the lookup failed MAX_LOOKUP_ATTEMPTS times), so they
+ * can never hold up the ones behind them.
+ */
+export interface PendingCall extends ParsedLogCall { attempts?: number }
 export interface OpenRouterCache {
   logOffset: number;
   generations: Record<string, { day: string; model: string; costUsd: number }>;
-  pending: Array<{ id: string; model: string; day: string }>;
+  pending: PendingCall[];
+  failed: ParsedLogCall[];
 }
+export const MAX_LOOKUP_ATTEMPTS = 5;
+const FAILED_KEPT = 1000;
 
 export function readCache(file: string): OpenRouterCache {
   try {
@@ -88,12 +105,13 @@ export function readCache(file: string): OpenRouterCache {
         logOffset: typeof raw.logOffset === 'number' ? raw.logOffset : 0,
         generations: raw.generations && typeof raw.generations === 'object' ? raw.generations : {},
         pending: Array.isArray(raw.pending) ? raw.pending : [],
+        failed: Array.isArray(raw.failed) ? raw.failed : [],
       };
     }
   } catch {
     // corrupted or unreadable cache defaults cleanly
   }
-  return { logOffset: 0, generations: {}, pending: [] };
+  return { logOffset: 0, generations: {}, pending: [], failed: [] };
 }
 
 export function writeCache(file: string, cache: OpenRouterCache): void {
@@ -113,8 +131,7 @@ export function buildDailyAggregation(
   for (let i = 29; i >= 0; i--) {
     const d = new Date(date);
     d.setDate(d.getDate() - i);
-    const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    dayList.push(str);
+    dayList.push(localDay(d.getTime()));
   }
   const daySet = new Set(dayList);
 
@@ -259,45 +276,49 @@ export function createOpenRouterClient(options: OpenRouterClientOptions = {}): O
 
       // 2. Scan Hermes log
       const cache = readCache(cacheFile);
-      const { calls, newOffset } = scanLog(logPath, cache.logOffset);
+      const { calls, newOffset } = scanLog(logPath, cache.logOffset, now);
       cache.logOffset = newOffset;
 
+      const known = new Set([...Object.keys(cache.generations), ...cache.pending.map(p => p.id), ...cache.failed.map(f => f.id)]);
       for (const call of calls) {
-        if (!cache.generations[call.id] && !cache.pending.some(p => p.id === call.id)) {
-          cache.pending.push(call);
-        }
+        if (!known.has(call.id)) { cache.pending.push(call); known.add(call.id); }
       }
 
-      // 3. Resolve pending lookups (capped)
+      // 3. Resolve pending lookups (capped). A failed one goes to the back of the queue, so ids that keep failing
+      // cannot take the whole batch every read and stop the chart from growing; after a 404 or MAX_LOOKUP_ATTEMPTS
+      // failures it is set aside.
       if (cache.pending.length > 0) {
         const batch = cache.pending.slice(0, maxLookups);
-        const resolvedIds = new Set<string>();
+        const retry: PendingCall[] = [];
 
         for (const item of batch) {
+          let status = 0;
           try {
             const res = await fetchFn(`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(item.id)}`, {
               headers: { Authorization: `Bearer ${apiKey}` },
             });
+            status = res.status;
             if (res.ok) {
               const data = await res.json() as any;
               const costUsd = Number(data?.data?.total_cost ?? data?.data?.usage ?? 0);
               const model = String(data?.data?.model || item.model);
-              const day = item.day;
               cache.generations[item.id] = {
-                day,
+                day: item.day,
                 model,
                 costUsd: isNaN(costUsd) ? 0 : costUsd,
               };
-              resolvedIds.add(item.id);
+              continue;
             }
           } catch {
-            // keep pending for next read
+            // a network error counts as one failed attempt
           }
+          const attempts = (item.attempts ?? 0) + 1;
+          if (status === 404 || attempts >= MAX_LOOKUP_ATTEMPTS) cache.failed.push({ id: item.id, model: item.model, day: item.day });
+          else retry.push({ ...item, attempts });
         }
 
-        if (resolvedIds.size > 0) {
-          cache.pending = cache.pending.filter(p => !resolvedIds.has(p.id));
-        }
+        cache.pending = [...cache.pending.slice(batch.length), ...retry];
+        if (cache.failed.length > FAILED_KEPT) cache.failed = cache.failed.slice(-FAILED_KEPT);
       }
 
       writeCache(cacheFile, cache);

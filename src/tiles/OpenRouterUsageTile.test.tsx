@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { OpenRouterUsageTile, getModelColor } from './OpenRouterUsageTile';
+import { MODEL_COLORS, OpenRouterUsageTile, modelColors } from './OpenRouterUsageTile';
 import type { OpenRouterUsage } from '../openrouter-contract';
 
 describe('OpenRouterUsageTile', () => {
@@ -100,10 +100,12 @@ describe('OpenRouterUsageTile', () => {
     expect(screen.getByText('$42.50')).toBeTruthy();
   });
 
-  it('assigns stable colours based on model ID', () => {
-    const color1 = getModelColor('anthropic/claude-3.5-sonnet');
-    const color2 = getModelColor('anthropic/claude-3.5-sonnet');
-    expect(color1).toBe(color2);
+  it('gives every model of the window its own colour, the same in both tile sizes', () => {
+    // Eight models: a hash of the id put two of them on one colour; the palette in model order cannot.
+    const ids = ['anthropic/claude', 'deepseek/flash', 'deepseek/pro', 'google/gemini', 'moonshotai/kimi', 'openai/gpt', 'qwen/max', 'z-ai/glm'];
+    const colors = modelColors([{ day: '2026-10-28', totalUsd: 8, models: ids.map(id => ({ id, label: id, usd: 1 })) }]);
+    expect(new Set(colors.values()).size).toBe(MODEL_COLORS.length);
+    expect(colors.get('anthropic/claude')).toBe(MODEL_COLORS[0]);
 
     const { container: cWide } = render(<OpenRouterUsageTile usage={sampleUsage} wide tall />);
     const segWide = cWide.querySelector('[aria-label="claude-3.5-sonnet: $1.50"]') as HTMLElement;

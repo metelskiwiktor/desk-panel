@@ -11,26 +11,25 @@ export interface OpenRouterUsageTileProps {
   error?: string | null;
 }
 
-const MODEL_COLORS = [
+/** Colours far enough apart to tell stacked segments apart (no light twins of a hue). */
+export const MODEL_COLORS = [
   '#58a6ff', // blue
-  '#bc8cff', // purple
-  '#3fb950', // green
   '#f0883e', // orange
+  '#3fb950', // green
+  '#bc8cff', // purple
+  '#e3b341', // yellow
   '#f778ba', // pink
   '#56d4dd', // cyan
-  '#e3b341', // yellow
-  '#79c0ff', // light blue
-  '#d2a8ff', // violet
-  '#7ee787', // light green
+  '#ff7b72', // red
 ];
 
-/** Stable deterministic color assignment derived solely from the model id */
-export function getModelColor(modelId: string): string {
-  let hash = 5381;
-  for (let i = 0; i < modelId.length; i++) {
-    hash = ((hash << 5) + hash) ^ modelId.charCodeAt(i);
-  }
-  return MODEL_COLORS[Math.abs(hash) % MODEL_COLORS.length];
+/**
+ * One colour per model of the whole window, from the palette in model-id order: a hash of the id gave two models the
+ * same colour. Taken from all days, not the ones on screen, so a model keeps its colour when the tile shows fewer.
+ */
+export function modelColors(days: OpenRouterDayUsage[]): Map<string, string> {
+  const ids = [...new Set(days.flatMap(day => day.models.map(model => model.id)))].sort();
+  return new Map(ids.map((id, i) => [id, MODEL_COLORS[i % MODEL_COLORS.length]]));
 }
 
 function formatUsd(amount: number | null | undefined): string {
@@ -68,6 +67,7 @@ function OpenRouterUsageTileView({
   const [hovered, setHovered] = useState<HoverInfo | null>(null);
 
   const rawDays = data?.days ?? [];
+  const colors = useMemo(() => modelColors(rawDays), [rawDays]);
   const visibleDays: OpenRouterDayUsage[] = useMemo(() => {
     if (!wide && rawDays.length > 10) {
       return rawDays.slice(-10);
@@ -178,7 +178,7 @@ function OpenRouterUsageTileView({
                         >
                           {day.models.map(m => {
                             const segHeight = day.totalUsd > 0 ? (m.usd / day.totalUsd) * 100 : 0;
-                            const color = getModelColor(m.id);
+                            const color = colors.get(m.id);
                             return (
                               <div
                                 key={m.id}
@@ -247,7 +247,7 @@ function OpenRouterUsageTileView({
                     <div key={m.id} className="or-legend-item" title={`${m.label}: ${formatUsd(m.totalUsd)}`}>
                       <span
                         className="or-legend-dot"
-                        style={{ backgroundColor: getModelColor(m.id) }}
+                        style={{ backgroundColor: colors.get(m.id) }}
                         aria-hidden="true"
                       />
                       <span className="or-legend-name">{m.label}</span>

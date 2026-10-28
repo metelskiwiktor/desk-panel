@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDailyAggregation,
   createOpenRouterClient,
+  localDay,
+  MAX_LOOKUP_ATTEMPTS,
   parseLogLine,
   readCache,
   scanLog,
@@ -198,6 +200,45 @@ describe('openrouter cache and lookups', () => {
       model: 'deepseek/chat',
       costUsd: 0.08,
     });
+  });
+
+  it('never lets lookups that keep failing hold up the generations behind them', async () => {
+    // More dead ids than one read looks up (3), ahead of a good one: a 404 and a 500 that never recovers.
+    const ids = ['gen-gone1', 'gen-gone2', 'gen-broken1', 'gen-broken2', 'gen-ok'];
+    writeFileSync(logFile, ids.map(id => `2026-10-28 12:00:00,000 INFO agent: API call #1: model=deepseek/chat provider=openrouter id=${id}\n`).join(''), 'utf8');
+    const lookups: string[] = [];
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/key')) return Promise.resolve(new Response(JSON.stringify({ data: { usage: 1 } }), { status: 200 }));
+      if (url.includes('/api/v1/credits')) return Promise.resolve(new Response(JSON.stringify({ data: { total_credits: 10, total_usage: 1 } }), { status: 200 }));
+      const id = new URL(url).searchParams.get('id')!;
+      lookups.push(id);
+      if (id.startsWith('gen-gone')) return Promise.resolve(new Response('not found', { status: 404 }));
+      if (id.startsWith('gen-broken')) return Promise.resolve(new Response('error', { status: 500 }));
+      return Promise.resolve(new Response(JSON.stringify({ data: { model: 'deepseek/chat', total_cost: 0.02 } }), { status: 200 }));
+    });
+    const client = createOpenRouterClient({ apiKey: 'test-key', logPath: logFile, cacheFile, fetchFn: fetchSpy as any, maxLookupsPerRead: 3, now: () => new Date('2026-10-28T12:00:00Z').getTime() });
+
+    await client.read();
+    // Read 1 took the first three: the 404s are set aside at once, the 500 goes to the back.
+    expect(readCache(cacheFile).failed.map(f => f.id)).toEqual(['gen-gone1', 'gen-gone2']);
+    expect(readCache(cacheFile).pending.map(p => p.id)).toEqual(['gen-broken2', 'gen-ok', 'gen-broken1']);
+    const second = await client.read();
+    expect(second.totals.windowUsd).toBe(0.02);
+    expect(readCache(cacheFile).generations['gen-ok']).toMatchObject({ costUsd: 0.02 });
+    // The 500s are retried until MAX_LOOKUP_ATTEMPTS, then set aside too; nothing is looked up after that.
+    for (let i = 0; i < MAX_LOOKUP_ATTEMPTS; i++) await client.read();
+    expect(readCache(cacheFile)).toMatchObject({ pending: [] });
+    expect(readCache(cacheFile).failed.map(f => f.id).sort()).toEqual(['gen-broken1', 'gen-broken2', 'gen-gone1', 'gen-gone2']);
+    const before = lookups.length;
+    await client.read();
+    expect(lookups.length).toBe(before);
+    expect(lookups.filter(id => id === 'gen-broken1')).toHaveLength(MAX_LOOKUP_ATTEMPTS);
+  });
+
+  it('puts a line without its own date on the local day, as the chart counts days', () => {
+    const at = new Date(2026, 9, 29, 0, 30).getTime(); // 00:30 local: in Warsaw still the 28th in UTC
+    expect(parseLogLine('API call #1: model=deepseek/chat provider=openrouter id=gen-x', at)?.day).toBe('2026-10-29');
+    expect(localDay(at)).toBe('2026-10-29');
   });
 });
 

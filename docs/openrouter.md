@@ -35,7 +35,8 @@ Rozwiązanie kosztu każdej nowej generacji następuje poprzez odpytanie OpenRou
 - **Zapis**: zapis następuje atomowo (zapis do pliku tymczasowego `.tmp` i przemianowanie).
 - **Brak powtórnych zapytań**: raz zapisany koszt generacji jest trwale pamiętany w cache; serwer nigdy nie pyta OpenRoutera o ten sam identyfikator generacji po raz drugi.
 - **Backfill z limitem**: w jednym odczycie serwer rozwiązuje maksymalnie kilkadziesiąt oczekujących generacji (`cache.pending`), dzięki czemu nawet przy zimnym starcie lub długiej historii endpoint nie blokuje się i odpowiada natychmiast, a historia uzupełnia się sukcesywnie.
-- **Odporność na błędy**: nieudane zapytanie o generację (np. chwilowy błąd sieci lub 429) pozostawia identyfikator w kolejce `pending` do ponowienia przy kolejnym cyklu zamiast go porzucać.
+- **Odporność na błędy**: nieudane zapytanie o generację (np. chwilowy błąd sieci lub 429) przesuwa identyfikator na koniec kolejki `pending` z licznikiem prób, więc generacje, które ciągle zawodzą, nie zajmują całej partii przy każdym odczycie. Po odpowiedzi 404 (OpenRouter nie zna już generacji) albo po 5 nieudanych próbach identyfikator trafia do `failed` i nie jest już odpytywany; jego koszt nie wchodzi do wykresu (sumy z `/api/v1/key` go zawierają).
+- **Dzień generacji**: data z początku linii logu, czyli lokalny czas Hermesa; linia bez daty dostaje lokalny dzień odczytu, tak jak wykres liczy dni.
 
 ## Budżet i sumy
 
