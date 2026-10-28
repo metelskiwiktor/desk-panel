@@ -989,5 +989,60 @@
         "segments": []
       }
     ]
+  },
+  "githubPr": {
+    "pullRequests": [
+      {
+        "id": "pr-42",
+        "number": 42,
+        "title": "Widget GitHub PR na pulpicie ze statusem review",
+        "repository": "desk-panel",
+        "author": "wiktor",
+        "url": "https://github.com/metelskiwiktor/desk-panel/pull/42",
+        "status": "OPEN",
+        "reviewStatus": "REVIEW_REQUIRED",
+        "reviewers": [
+          { "name": "cezar-bot", "status": "PENDING" },
+          { "name": "tomek", "status": "PENDING" }
+        ],
+        "labels": ["ui", "enhancement"],
+        "updatedAt": "now-25m",
+        "commentsCount": 3
+      },
+      {
+        "id": "pr-108",
+        "number": 108,
+        "title": "Czyszczenie worktree po zakończeniu zadania",
+        "repository": "cezar",
+        "author": "johndoe",
+        "url": "https://github.com/open-mercato/cezar/pull/108",
+        "status": "OPEN",
+        "reviewStatus": "APPROVED",
+        "reviewers": [
+          { "name": "wiktor", "status": "APPROVED" }
+        ],
+        "labels": ["backend", "git"],
+        "updatedAt": "now-2h",
+        "commentsCount": 5
+      },
+      {
+        "id": "pr-15",
+        "number": 15,
+        "title": "Telemetria sensorów Zigbee i streamowanie MQTT",
+        "repository": "home-hub",
+        "author": "alice",
+        "url": "https://github.com/metelskiwiktor/home-hub/pull/15",
+        "status": "OPEN",
+        "reviewStatus": "CHANGES_REQUESTED",
+        "reviewers": [
+          { "name": "wiktor", "status": "CHANGES_REQUESTED" }
+        ],
+        "labels": ["iot", "sensors"],
+        "updatedAt": "now-1d",
+        "commentsCount": 8
+      }
+    ],
+    "repositories": ["desk-panel", "cezar", "home-hub"],
+    "totalCount": 3
   }
 }

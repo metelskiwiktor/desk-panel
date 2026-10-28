@@ -128,6 +128,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       }
     },
     usageBreakdown: readUsageBreakdown,
+    githubPr: async () => ({ pullRequests: [], repositories: [], totalCount: 0 }),
     warmup:warmup.read,
     saveWarmup:warmup.save,
     runWarmup:warmup.run,
