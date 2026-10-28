@@ -16,6 +16,7 @@ import { createTodoStore } from './todos';
 import { createQuotaReader } from './quotas';
 import { createUsageBreakdownReader } from './usageBreakdown';
 import { createWarmupClient } from './warmup';
+import { createGitHubClient } from './github';
 import { SourceError, type PanelSources } from './sources';
 
 export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
@@ -53,6 +54,10 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const readUsageBreakdown = createUsageBreakdownReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
+  const githubRepos = (env.DESK_GITHUB_REPOS || '').split(',').map(r => r.trim()).filter(Boolean);
+  const gitHubClient = createGitHubClient({
+    repos: githubRepos.length > 0 ? githubRepos : undefined,
+  });
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
   let fetchedAt = 0;
@@ -128,7 +133,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       }
     },
     usageBreakdown: readUsageBreakdown,
-    githubPr: async () => ({ pullRequests: [], repositories: [], totalCount: 0 }),
+    githubPr: () => gitHubClient.read(),
     warmup:warmup.read,
     saveWarmup:warmup.save,
     runWarmup:warmup.run,

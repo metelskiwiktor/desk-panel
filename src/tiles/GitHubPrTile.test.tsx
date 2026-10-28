@@ -23,6 +23,7 @@ describe('GitHubPrTile', () => {
       url: 'https://github.com/metelskiwiktor/desk-panel/pull/42',
       reviewStatus: 'APPROVED',
       labels: ['ui', 'feature'],
+      checks: [{ name: 'build', state: 'pass' }],
     },
     {
       id: 'pr-2',
@@ -33,6 +34,7 @@ describe('GitHubPrTile', () => {
       url: 'https://github.com/open-mercato/cezar/pull/108',
       reviewStatus: 'CHANGES_REQUESTED',
       labels: ['git'],
+      checks: [{ name: 'test', state: 'fail' }],
     },
   ];
 
@@ -50,6 +52,8 @@ describe('GitHubPrTile', () => {
     expect(screen.getByText('johndoe')).toBeTruthy();
     expect(screen.getByText('Zatwierdzony')).toBeTruthy();
     expect(screen.getByText('Wymaga zmian')).toBeTruthy();
+    expect(screen.getByText('CI: zaliczone')).toBeTruthy();
+    expect(screen.getByText('CI: błąd')).toBeTruthy();
     expect(screen.getByText('ui')).toBeTruthy();
     expect(screen.getByText('feature')).toBeTruthy();
 

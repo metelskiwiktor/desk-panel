@@ -1589,6 +1589,32 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   color: #8b949e;
 }
 
+.gh-pr-ci-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.gh-pr-ci-badge.ci-pass {
+  background: rgba(46, 160, 67, 0.15);
+  color: #3fb950;
+}
+
+.gh-pr-ci-badge.ci-fail {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.gh-pr-ci-badge.ci-running,
+.gh-pr-ci-badge.ci-pending {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
 .gh-pr-item-title {
   display: flex;
   align-items: flex-start;

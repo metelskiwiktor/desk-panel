@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import {
   formatReviewStatus,
+  type GitHubPrCheck,
   type GitHubPullRequest,
   type GitHubPrSource,
   type ReviewStatus,
@@ -22,6 +23,14 @@ export interface GitHubPrTileProps {
   wide?: boolean;
   tall?: boolean;
   loading?: boolean;
+}
+
+function overallCiState(checks?: GitHubPrCheck[]): { state: 'pass' | 'fail' | 'running' | 'pending'; label: string } | null {
+  if (!checks || checks.length === 0) return null;
+  if (checks.some(c => c.state === 'fail')) return { state: 'fail', label: 'CI: błąd' };
+  if (checks.some(c => c.state === 'running')) return { state: 'running', label: 'CI: w toku' };
+  if (checks.some(c => c.state === 'pending')) return { state: 'pending', label: 'CI: oczekuje' };
+  return { state: 'pass', label: 'CI: zaliczone' };
 }
 
 const REVIEW_ICONS: Record<ReviewStatus, LucideIcon> = {
@@ -120,6 +129,7 @@ export function GitHubPrTile({
             {prs.map((pr) => {
               const statusInfo = formatReviewStatus(pr.reviewStatus);
               const StatusIcon = REVIEW_ICONS[pr.reviewStatus] || GitPullRequest;
+              const ciState = overallCiState(pr.checks);
               const repoShort = pr.repository.includes('/')
                 ? pr.repository.split('/')[1]
                 : pr.repository;
@@ -131,6 +141,14 @@ export function GitHubPrTile({
                       {repoShort}
                     </span>
                     <span className="gh-pr-number">#{pr.number}</span>
+                    {ciState && (
+                      <span className={`gh-pr-ci-badge ci-${ciState.state}`} title={`${ciState.label} (${pr.checks?.length} checków)`}>
+                        {ciState.state === 'pass' && <CheckCircle2 size={11} aria-hidden="true" />}
+                        {ciState.state === 'fail' && <AlertCircle size={11} aria-hidden="true" />}
+                        {(ciState.state === 'running' || ciState.state === 'pending') && <Clock size={11} aria-hidden="true" />}
+                        <span>{ciState.label}</span>
+                      </span>
+                    )}
                     <span className={`gh-pr-status-badge tone-${statusInfo.tone}`} title={statusInfo.label}>
                       <StatusIcon size={12} aria-hidden="true" />
                       <span>{statusInfo.label}</span>

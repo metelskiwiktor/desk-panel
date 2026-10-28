@@ -1007,7 +1007,11 @@
         ],
         "labels": ["ui", "enhancement"],
         "updatedAt": "now-25m",
-        "commentsCount": 3
+        "commentsCount": 3,
+        "checks": [
+          { "name": "check (ubuntu-latest)", "state": "pass" },
+          { "name": "check (windows-latest)", "state": "running" }
+        ]
       },
       {
         "id": "pr-108",
@@ -1023,7 +1027,11 @@
         ],
         "labels": ["backend", "git"],
         "updatedAt": "now-2h",
-        "commentsCount": 5
+        "commentsCount": 5,
+        "checks": [
+          { "name": "test", "state": "pass" },
+          { "name": "typecheck", "state": "pass" }
+        ]
       },
       {
         "id": "pr-15",
@@ -1039,10 +1047,31 @@
         ],
         "labels": ["iot", "sensors"],
         "updatedAt": "now-1d",
-        "commentsCount": 8
+        "commentsCount": 8,
+        "checks": [
+          { "name": "ci/build", "state": "fail" },
+          { "name": "security", "state": "pass" }
+        ]
+      },
+      {
+        "id": "pr-44",
+        "number": 44,
+        "title": "Warsztat: polishing dużej mapy 2D",
+        "repository": "tabnote",
+        "author": "metelskiwiktor",
+        "url": "https://github.com/metelskiwiktor/tabnote/pull/44",
+        "status": "OPEN",
+        "reviewStatus": "APPROVED",
+        "labels": ["preview"],
+        "updatedAt": "now-3h",
+        "commentsCount": 2,
+        "checks": [
+          { "name": "Checks & Tests", "state": "pass" },
+          { "name": "PR Preview (OTA)", "state": "pass" }
+        ]
       }
     ],
-    "repositories": ["desk-panel", "cezar", "home-hub"],
-    "totalCount": 3
+    "repositories": ["desk-panel", "cezar", "home-hub", "tabnote"],
+    "totalCount": 4
   }
 }

@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
@@ -6,6 +5,9 @@ import {
   watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { SourceError, type PanelSources } from './sources';
+import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
+
+export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
 
 /**
  * The chat cockpit on the server: which Cezar task a conversation watches, how that task is doing (read from Cezar), its
@@ -86,39 +88,7 @@ export function cezarTaskView(id: string, raw: Record<string, any>, cezarUrl: st
   };
 }
 
-// ── The pull request and its CI checks, from the GitHub CLI ──
-
-export const PR_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
-export type GhRunner = (args: string[]) => Promise<string>;
-/** `gh` without a shell, a time limit and no window: read-only `gh pr view`. */
-export const runGh: GhRunner = args => new Promise((resolve, reject) => {
-  execFile('gh', args, { timeout: 10_000, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout));
-});
-
-function checkState(c: Record<string, any>): CheckState {
-  const conclusion = String(c.conclusion ?? c.state ?? '').toUpperCase();
-  const status = String(c.status ?? '').toUpperCase();
-  if (['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(conclusion)) return 'pass';
-  if (['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(conclusion)) return 'fail';
-  if (['IN_PROGRESS', 'PENDING'].includes(status) || conclusion === 'PENDING') return 'running';
-  return 'pending';
-}
-export function prFromGh(json: string, url: string): CockpitPrView {
-  const pr = JSON.parse(json) as Record<string, any>;
-  const rollup: Record<string, any>[] = Array.isArray(pr.statusCheckRollup) ? pr.statusCheckRollup : [];
-  // A check re-run appears twice: the last one counts.
-  const checks = new Map<string, CheckState>();
-  for (const c of rollup) checks.set(String(c.name || c.context || 'check').slice(0, 60), checkState(c));
-  const state = String(pr.state ?? '').toUpperCase();
-  return {
-    number: Number(pr.number) || Number(url.split('/').at(-1)),
-    title: String(pr.title ?? '').slice(0, 200),
-    branch: String(pr.headRefName ?? ''),
-    url,
-    state: state === 'OPEN' || state === 'MERGED' || state === 'CLOSED' ? state : 'UNKNOWN',
-    checks: [...checks].slice(0, 20).map(([name, s]) => ({ name, state: s })),
-  };
-}
+// ── The pull request and its CI checks, from the GitHub CLI (unified in server/github.ts) ──
 
 /** Kept as long as a check runs, longer once all are settled: GitHub is asked gently. */
 const PR_TTL_MS = 20_000, PR_SETTLED_TTL_MS = 5 * 60_000;

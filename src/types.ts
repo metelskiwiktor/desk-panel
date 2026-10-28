@@ -32,6 +32,16 @@ export const gitHubReviewerSchema = z.union([
   }),
 ]);
 
+export interface GitHubPrCheck {
+  name: string;
+  state: 'pass' | 'fail' | 'running' | 'pending';
+}
+
+export const gitHubPrCheckSchema = z.object({
+  name: z.string(),
+  state: z.enum(['pass', 'fail', 'running', 'pending']),
+});
+
 export interface GitHubPullRequest {
   id: string | number;
   number: number;
@@ -48,6 +58,7 @@ export interface GitHubPullRequest {
   createdAt?: string | number;
   commentsCount?: number;
   draft?: boolean;
+  checks?: GitHubPrCheck[];
 }
 
 export const gitHubPullRequestSchema = z.object({
@@ -66,6 +77,7 @@ export const gitHubPullRequestSchema = z.object({
   createdAt: z.union([z.string(), z.number()]).optional(),
   commentsCount: z.number().optional(),
   draft: z.boolean().optional(),
+  checks: z.array(gitHubPrCheckSchema).optional(),
 });
 
 export interface GitHubPrData {
