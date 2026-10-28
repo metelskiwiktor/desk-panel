@@ -84,7 +84,22 @@ numerem PR i pełnym SHA; pasek w podglądzie pokazuje tę samą tożsamość. `
 zwraca `running`, `stopped` albo `stale`; `just preview stop 123` zatrzymuje proces i usuwa jego
 checkout i dane tymczasowe. Po błędzie startu sprawdź wskazany `preview.log`, a następnie użyj
 `stop`. Aby pobrać nowy head po kolejnych commitach, zatrzymaj i uruchom podgląd ponownie.
-Katalog stanu znajduje się w systemowym katalogu tymczasowym `desk-panel-pr-previews`.
+Katalog stanu domyślnie znajduje się w systemowym katalogu tymczasowym `desk-panel-pr-previews`.
+Jeśli Git lub npm zgłosi `Filename too long`, użyj krótszego katalogu bez zmieniania
+ustawień systemu ani Gita. Ustaw go **przed** uruchomieniem i zachowaj tę samą wartość
+w poleceniach start, status i stop (również w kolejnej sesji PowerShell):
+
+```powershell
+$env:DESK_PREVIEW_ROOT = Join-Path $env:LOCALAPPDATA "dp-preview"
+just preview start 123
+just preview status 123
+just preview stop 123
+```
+
+Zmienna musi wskazywać ścieżkę bezwzględną; wybiera cały katalog stanu podglądów. Jeśli
+poprzedni start pozostawił `stale`, najpierw uruchom `stop` z poprzednią wartością zmiennej
+(lub bez niej, gdy użyto domyślnego TEMP). Krótsza ścieżka nie gwarantuje obsługi każdego
+PR: bardzo głębokie nazwy w samym PR albo zależnościach nadal mogą przekroczyć limity narzędzi.
 
 Frontend i moduły API pochodzą z pobranego commitu; API używa syntetycznego pliku `scripts/preview-scenario.json`,
 scenariuszowych akcji w pamięci i lokalnej makiety Hermes. Linki symulowanych zleceń Cezara

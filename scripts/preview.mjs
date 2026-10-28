@@ -3,10 +3,16 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, openSync, closeSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const base = join(tmpdir(), 'desk-panel-pr-previews');
+// Keep this selection stable for start, status and stop; do not silently move existing previews.
+const configuredRoot = process.env.DESK_PREVIEW_ROOT?.trim();
+if (configuredRoot && !isAbsolute(configuredRoot)) {
+  console.error('DESK_PREVIEW_ROOT must be an absolute directory path.');
+  process.exit(1);
+}
+const base = configuredRoot || join(tmpdir(), 'desk-panel-pr-previews');
 const [action, number] = process.argv.slice(2);
 const valid = /^[1-9]\d{0,8}$/.test(number || '');
 if (!['start', 'stop', 'status'].includes(action) || !valid) { console.error('Usage: node scripts/preview.mjs start|stop|status <PR number>'); process.exit(1); }
@@ -42,9 +48,9 @@ if (action === 'status') {
   console.log(`Preview PR #${number} stopped and cleaned up.`);
 } else {
   if (existsSync(dir)) throw new Error(`Preview state already exists. Run: node scripts/preview.mjs stop ${number}`);
-  mkdirSync(base, { recursive: true });
-  mkdirSync(dir);
   try {
+    mkdirSync(base, { recursive: true });
+    mkdirSync(dir);
     const cwd = process.cwd();
     const remote = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd, encoding: 'utf8' }).trim();
     if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/i.test(remote)) throw new Error('origin must be a GitHub HTTPS repository URL');
@@ -70,5 +76,9 @@ if (action === 'status') {
     child.unref(); closeSync(log);
     for (let i = 0; i < 120; i++) { await pause(250); if (!alive(child.pid)) break; const ready = readState(); if (await request(ready)) { console.log(JSON.stringify({ status: 'running', pr: ready.pr, sha: ready.sha, url: ready.url })); process.exit(0); } }
     throw new Error(`Preview did not become ready. Inspect ${join(dir, 'preview.log')}, then run stop ${number}.`);
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (error) {
+    console.error(error.message);
+    if (process.platform === 'win32') console.error('If Git or npm reports a path that is too long, set DESK_PREVIEW_ROOT to a short absolute directory and use that same setting for start, status and stop. See docs/testowanie.md.');
+    process.exitCode = 1;
+  }
 }

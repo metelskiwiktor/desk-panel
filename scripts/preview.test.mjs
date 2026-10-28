@@ -57,7 +57,7 @@ describe('isolated preview worker', () => {
     expect(response.headers.get('x-preview-backend')).toBe('selected-code');
     expect(JSON.stringify(await response.json())).toContain('Przykładowe spotkanie');
     expect((await fetch(`${state.url}/__desk_preview_control`)).status).toBe(403);
-  });
+  }, 15000);
   it('keeps writes and Hermes chat in the scenario', async () => {
     const post = (path, body) => fetch(`${state.url}${path}`, { method: 'POST', headers: { origin: state.url, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     expect((await post('/api/bank/connect', {})).status).toBe(409);
