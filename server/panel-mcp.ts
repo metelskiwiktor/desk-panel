@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -52,6 +53,38 @@ const repoPath = z.string().trim().min(1).max(300).refine(p => !path.isAbsolute(
 const RECON_TTL_MS = 6 * 60 * 60_000, RECONS_KEPT = 100;
 const recons = new Map<string, { prompt: string; at: number }>();
 export function forgetRecons() { recons.clear(); }
+
+/**
+ * Names the prompt puts in backticks (a window id, a function, a field) that no tracked file of the repository mentions
+ * and the dispatcher did not declare with their source: flash made up a 5h window id of the Claude and GPT group beside
+ * the real 3p-5h (28.10.2026), and the executor takes the prompt as fact.
+ */
+export function unknownNames(prompt: string, repoText: string, declared: string[] = []): string[] {
+  const names = new Set<string>();
+  for (const [, span] of prompt.matchAll(/`([^`\n]{1,160})`/g)) {
+    for (const word of span.split(/[^\w.-]+/)) {
+      const name = word.replace(/^[.-]+|[.-]+$/g, '');
+      if (name.length < 3 || !/[a-z]/i.test(name) || repoText.includes(name) || declared.some(d => d.includes(name))) continue;
+      names.add(name);
+    }
+  }
+  return [...names];
+}
+/** The text of the repository's tracked files (no binaries, none over 1 MB), read again after a minute; null without git. */
+let tracked: { at: number; text: string } | undefined;
+function trackedText(now: number): string | null {
+  if (tracked && now - tracked.at >= 0 && now - tracked.at < 60_000) return tracked.text;
+  let files: string[];
+  try { files = execFileSync('git', ['ls-files', '-z'], { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 << 20, windowsHide: true }).split('\0').filter(Boolean); }
+  catch { return null; }
+  const texts: string[] = [];
+  for (const file of files) {
+    try { const bytes = readFileSync(path.join(REPO_ROOT, file)); if (bytes.length < 1 << 20 && !bytes.includes(0)) texts.push(bytes.toString('utf8')); }
+    catch { /* deleted in the working tree */ }
+  }
+  tracked = { at: now, text: [files.join('\n'), ...texts].join('\n') };
+  return tracked.text;
+}
 
 const range = { from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie dziś)' }, to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie (domyślnie from + 6 dni, najwyżej 42 dni)' } };
 const schema = (properties: Record<string, unknown> = {}, required: string[] = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
@@ -135,8 +168,12 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       kind: z.enum(['UI', 'non-UI']),
       scenario: text(80).optional(),
       prompt: text(32_000),
+      outside: z.array(z.object({ name: text(120), source: text(160) }).strict()).max(30).optional(),
     }).strict(),
     schema: schema({
+      outside: { type: 'array', description: 'Nazwy z promptu (w `…`), których nie ma w plikach repo, z ich źródłem: dane panelu z wyniku narzędzia (np. "panel_quotas") albo "nowa" dla nazwy, którą wprowadzi executor', items: { type: 'object', properties: {
+        name: { type: 'string' }, source: { type: 'string' },
+      }, required: ['name', 'source'], additionalProperties: false } },
       files: { type: 'array', items: { type: 'object', properties: {
         path: { type: 'string', description: 'Ścieżka względem repo z wyników wyszukiwania, np. src/App.tsx' },
         note: { type: 'string', description: 'Po co ten plik' },
@@ -149,6 +186,9 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     async run(args, { now }) {
       const missing = (args.files as { path: string; new?: boolean }[]).filter(f => !f.new && !existsSync(path.join(REPO_ROOT, f.path))).map(f => f.path);
       if (missing.length) throw new AgentViewError(400, `Tych plików nie ma w repozytorium: ${missing.join(', ')}. Wymień tylko pliki z wyników wyszukiwania; plik, który executor utworzy, oznacz "new": true.`);
+      const repoText = trackedText(now);
+      const unknown = repoText === null ? [] : unknownNames(String(args.prompt), repoText, ((args.outside ?? []) as { name: string }[]).map(o => o.name));
+      if (unknown.length) throw new AgentViewError(400, `Tych nazw z promptu nie ma w żadnym pliku repozytorium: ${unknown.map(n => `\`${n}\``).join(', ')}. Nazwę, którą pokazał wynik narzędzia panelu (np. panel_quotas), albo nową, którą wprowadzi executor, podaj w "outside" z jej źródłem; nazwę, której nie pokazał żaden wynik narzędzia, usuń z promptu.`);
       for (const [id, recon] of recons) if (now - recon.at > RECON_TTL_MS || recons.size >= RECONS_KEPT) recons.delete(id);
       const id = `r-${randomBytes(6).toString('hex')}`;
       recons.set(id, { prompt: String(args.prompt).trim(), at: now });

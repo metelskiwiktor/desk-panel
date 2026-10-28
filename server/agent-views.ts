@@ -254,7 +254,12 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
         const label = [account.provider, s.model, s.window].filter(Boolean).join(' / ');
         return `${label}: ${s.usedPercent === null ? 'brak odczytu' : `${Math.round(s.usedPercent)}% zużyte`}${s.resetAt ? `, reset ${stamp(s.resetAt, zone)}` : ''}${s.stale ? ' (nieaktualne)' : ''}`;
       }));
-      return [header, ...(lines.length ? lines : ['Brak odczytów.'])].join('\n');
+      // The split of the 5h bars exists for a few providers only: without this line a task asking it for another group
+      // (Agy Claude & GPT, 28.10.2026) was dispatched as if the data were there.
+      const usage = await sources.usageBreakdown?.().catch(() => undefined);
+      const split = !usage ? null : usage.status !== 'connected' ? `Podział zużycia okna 5h na źródła: niedostępny (${usage.status}).`
+        : `Podział zużycia okna 5h na źródła (części paska): ${usage.providers.map(p => `${p.provider === 'Gemini' ? 'AGY / Gemini Models' : p.provider} (${p.segments.length} części)`).join(', ') || 'brak'}; inne limity go nie mają.`;
+      return [header, ...(lines.length ? lines : ['Brak odczytów.']), ...(split ? [split] : [])].join('\n');
     },
 
     async todos(url) {

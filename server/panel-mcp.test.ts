@@ -10,7 +10,7 @@ import { createChatHub } from './chat-hub';
 import { createHermesClient } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { startMockHermes, type MockHermes } from './hermes-mock';
-import { mcpToken, PANEL_TOOLS } from './panel-mcp';
+import { mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
 import { createScenarioSources } from './scenario';
 
 const TOKEN = 'a'.repeat(64);
@@ -136,6 +136,19 @@ describe('panel MCP for Hermes', () => {
     const id = /recon: (r-[0-9a-f]{12})/.exec(recon.content[0].text)![1];
     expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: inny', recon: id })).toMatchObject({ isError: true });
     expect((await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w', recon: id })).isError).toBeUndefined();
+  });
+
+  it('takes a recon only of names in backticks the repository has, or whose source the dispatcher gives', async () => {
+    // Built here, so that no file of the repository (this one included) holds the made-up names.
+    const madeUp = ['qz', 'nowhere', '5h'].join('-'), live = ['qz', 'live', 'weekly'].join('-');
+    const prompt = `Task: w\nAcceptance criteria:\n- [ ] \`splitFor()\` in \`src/quota-cards.ts\` reads \`${live}\` and \`${madeUp}\`.`;
+    const refused = await call('panel_recon_report', { files: [{ path: 'src/quota-cards.ts' }], kind: 'UI', prompt });
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.content[0].text).toContain(`\`${live}\`, \`${madeUp}\``);
+    expect(refused.content[0].text).not.toMatch(/splitFor|quota-cards/);
+    const declared = await call('panel_recon_report', { files: [{ path: 'src/quota-cards.ts' }], kind: 'UI', prompt, outside: [{ name: live, source: 'panel_quotas' }, { name: madeUp, source: 'nowa' }] });
+    expect(declared.isError).toBeUndefined();
+    expect(unknownNames('`a` `x1` `5h` `Gemini Claude&GPT` `open: tile:quota`', 'Gemini Claude GPT open tile quota')).toEqual([]);
   });
 
   it('makes the to-do changes the chat agent may make', async () => {

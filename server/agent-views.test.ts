@@ -93,6 +93,8 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     const quotas = await view('quotas');
     expect(quotas).toMatch(/Claude \/ 5h: \d+% zużyte, reset \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
     expect(quotas).not.toContain('Remaining');
+    // Which limits have the 5h split: a dispatcher must not ask it of one that has none.
+    expect(quotas).toMatch(/Podział zużycia okna 5h na źródła .*; inne limity go nie mają\./);
   });
 
   it('cezar: każde zakończone zadanie ma id w postaci projekt/uuid (do akcji archive), a nadmiar jest tylko policzony', async () => {

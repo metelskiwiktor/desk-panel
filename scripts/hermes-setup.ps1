@@ -95,6 +95,15 @@ if ($text -match '(?m)^skills:') {
     Add-Content -LiteralPath $config -Value "`nskills:`n  creation_nudge_interval: 0`n" -Encoding ASCII
     Write-Host 'config.yaml: turned off background skill creation.'
 }
+# A turn ends after 30 model calls (Hermes then asks once more for a summary, without tools): a dispatcher that kept
+# searching made 87 tool calls in nine minutes. The panel's skills fit in about 20.
+$text=Get-Content -LiteralPath $config -Raw
+if ($text -match '(?m)^agent:') {
+    Write-Host 'config.yaml: agent already present (left as it is; the panel expects max_turns: 30).'
+} else {
+    Add-Content -LiteralPath $config -Value "`nagent:`n  max_turns: 30`n" -Encoding ASCII
+    Write-Host 'config.yaml: agent.max_turns set to 30.'
+}
 
 # 5. Lock directory and hermes.env for Servy / Windows
 $lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }
