@@ -206,6 +206,8 @@ agenta (`FakeAgent`), który też trzeba utrzymać zgodnie z protokołem.
 
 ## Diagnostyka rozmów (dla analizy przez człowieka lub innego agenta)
 
+Praktyczna procedura, źródła Hermesa, ograniczenia i przykład rzeczywistej analizy: [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md).
+
 Rozmowy w `~/.desk-panel/chats` są lekkie: tylko to, co widać w oknie (plus `usage`). Diagnostyka leży **osobno** w
 `~/.desk-panel/chat-logs` (`server/chat-log.ts`), więc czytanie rozmów jej nie ciągnie, a analizujący agent nie zaśmieca sobie kontekstu:
 

@@ -1,5 +1,7 @@
 # Hermes Agent jako silnik czatu
 
+Analiza problemów konkretnej rozmowy: [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md).
+
 Czat panelu ma dwa silniki: **Hermes** (Hermes Agent, domyślny dla nowych rozmów) i **AGY** (Antigravity CLI, jak dotąd,
 zob. [czat.md](czat.md)). Wybór jest w oknie czatu (przełącznik „Hermes / AGY” obok przycisku wysyłania) i serwer go pamięta
 (`~/.desk-panel/chat-settings.json`, wspólny dla komputera i telefonu). Rozmowa należy do jednego silnika na zawsze: wybór
