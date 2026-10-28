@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const root = process.cwd(), dir = mkdtempSync(join(tmpdir(), 'desk-preview-test-'));
-const checkout = join(dir, 'checkout'), stateFile = join(dir, 'state.json'), token = 'a'.repeat(64);
+const checkout = join(dir, 'checkout'), alias = join(dir, 'RUNNER~1'), stateFile = join(dir, 'state.json'), token = 'a'.repeat(64);
 let child, state, sha, output = '';
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
@@ -25,8 +25,10 @@ describe('isolated preview worker', () => {
     symlinkSync(join(root, 'node_modules'), join(checkout, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     copyFileSync(join(root, 'scripts', 'preview-worker.ts'), join(checkout, '.desk-preview-worker.ts'));
     copyFileSync(join(root, 'scripts', 'preview-scenario.json'), join(dir, 'scenario.json'));
+    // Reproduce Windows runner's short-name spelling even on machines without 8.3 names.
+    symlinkSync(checkout, alias, process.platform === 'win32' ? 'junction' : 'dir');
     child = spawn(process.execPath, [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), '.desk-preview-worker.ts'], {
-      cwd: checkout, env: { ...process.env, HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, PREVIEW_PR: '123', PREVIEW_SHA: sha, PREVIEW_STATE: stateFile, PREVIEW_TOKEN: token }, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: alias, env: { ...process.env, HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, PREVIEW_PR: '123', PREVIEW_SHA: sha, PREVIEW_STATE: stateFile, PREVIEW_TOKEN: token }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', c => output += c); child.stderr.on('data', c => output += c);
     for (let i = 0; i < 120; i++) { try { state = JSON.parse(readFileSync(stateFile, 'utf8')); break; } catch { if (child.exitCode !== null) break; await pause(250); } }
@@ -39,8 +41,18 @@ describe('isolated preview worker', () => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   });
   it('serves selected frontend and backend and shows exact identity', async () => {
-    const page = await (await fetch(state.url)).text();
+    const responsePage = await fetch(state.url);
+    expect(responsePage.status).toBe(200);
+    const page = await responsePage.text();
     expect(page).toContain('selected-frontend'); expect(page).toContain(`PREVIEW PR #123 · ${sha}`);
+    const source = await fetch(`${state.url}/src/main.tsx`);
+    expect(source.status).toBe(200);
+    expect(await source.text()).toContain('createRoot');
+    // The canonical checkout must not relax Vite's access restriction.
+    const outside = join(dir, 'outside.txt');
+    writeFileSync(outside, 'outside checkout');
+    const denied = await fetch(`${state.url}/@fs/${outside.replaceAll('\\', '/')}`);
+    expect(denied.status).toBe(403);
     const response = await fetch(`${state.url}/api/calendar`);
     expect(response.headers.get('x-preview-backend')).toBe('selected-code');
     expect(JSON.stringify(await response.json())).toContain('Przykładowe spotkanie');
