@@ -1,0 +1,13 @@
+{
+  "description": "Synthetic local PR preview",
+  "calendar": {
+    "live": true, "name": "Google Calendar", "calendarId": "preview@example.invalid",
+    "status": "connected", "observedAt": "now", "data": [
+      { "id": "preview-meeting", "title": "Przykładowe spotkanie", "startAt": "now+1h", "endAt": "now+2h", "allDay": false, "description": "Dane testowe" }
+    ]
+  },
+  "todos": {
+    "live": true, "name": "Zadania", "status": "connected", "observedAt": "now",
+    "data": { "lists": [{ "id": "l-00000001", "name": "Przykładowa lista", "createdAt": "now-1h", "tasks": [] }] }
+  }
+}

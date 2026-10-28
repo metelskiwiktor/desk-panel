@@ -81,3 +81,7 @@ hermes-install:
 # Build and register the service with automatic startup (Windows credential dialog).
 install: check
     & ./servy/register.ps1 -Start
+
+# Local, synthetic preview of a trusted pull request (separate checkout and free ports).
+preview action pr:
+    node scripts/preview.mjs {{action}} {{pr}}

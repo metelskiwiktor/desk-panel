@@ -75,3 +75,26 @@ checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI).
 
+
+## Lokalny podgląd PR
+
+`just preview start 123` pobiera dokładny head PR z GitHub `origin`, tworzy osobny lokalny
+checkout i instaluje jego zależności (`npm ci --ignore-scripts`). Wypisuje JSON z adresem,
+numerem PR i pełnym SHA; pasek w podglądzie pokazuje tę samą tożsamość. `just preview status 123`
+zwraca `running`, `stopped` albo `stale`; `just preview stop 123` zatrzymuje proces i usuwa jego
+checkout i dane tymczasowe. Po błędzie startu sprawdź wskazany `preview.log`, a następnie użyj
+`stop`. Aby pobrać nowy head po kolejnych commitach, zatrzymaj i uruchom podgląd ponownie.
+Katalog stanu znajduje się w systemowym katalogu tymczasowym `desk-panel-pr-previews`.
+
+Frontend i moduły API pochodzą z pobranego commitu; API używa syntetycznego pliku `scripts/preview-scenario.json`,
+scenariuszowych akcji w pamięci i lokalnej makiety Hermes. Linki symulowanych zleceń Cezara
+kierują do lokalnej atrapy, a nie do prawdziwego Cezara. Czat i kokpit zapisują do katalogów
+tymczasowych. Porty API, makiety i Vite są przydzielane przez system i dostępne tylko na loopback.
+To osobne procesy, bez restartowania usługi i bez odczytu jej konfiguracji. Scenariusz i interfejsy
+serwera wybranego PR muszą być zgodne z kontrolerem; niezgodność jest zgłaszana w logu.
+
+Uruchamiaj tylko **zaufane PR-y**: kod PR i jego konfiguracja Vite wykonują się z uprawnieniami
+bieżącego użytkownika. Oddzielny katalog i ograniczone środowisko nie są piaskownicą systemową i
+nie powstrzymają złośliwego kodu przed dostępem do plików, sieci lub produkcji. `--ignore-scripts`
+wyłącza skrypty instalacyjne, ale nie stanowi izolacji uruchamianego kodu. Podgląd nie jest dostępem
+z telefonu ani mechanizmem wdrażania.
