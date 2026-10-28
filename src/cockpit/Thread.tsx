@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
   AssistantRuntimeProvider, makeAssistantToolUI, useAui, useAuiState, useExternalStoreRuntime,
   type AppendMessage, type ThreadMessageLike,
@@ -10,6 +10,7 @@ import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
+import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { CardActions, DispatchCard, HermesApprovalCard, ReconCard, WatchCard } from './cards';
 import {
   DISPATCH, HERMES_APPROVAL, RECON, WATCH,
@@ -180,6 +181,23 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
   const running = useAuiState(s => s.thread.isRunning);
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const initialDraft = useRef(getChatDraft().text);
+  const hasRestored = useRef(false);
+
+  useEffect(() => {
+    if (initialDraft.current && !hasRestored.current) {
+      hasRestored.current = true;
+      aui.composer().setText(initialDraft.current);
+    }
+  }, [aui]);
+
+  useEffect(() => {
+    if (initialDraft.current && draft === '') return;
+    initialDraft.current = '';
+    hasRestored.current = true;
+    setChatDraftText(draft);
+  }, [draft]);
+
   const at = detectAtSkill(draft);
   const matching = at && dismissed !== at.token ? CHAT_SKILLS.filter(s => !at.query || fold(s.title).includes(fold(at.query)) || s.id.includes(fold(at.query))) : [];
   const active = matching.length ? Math.min(index, matching.length - 1) : 0;
@@ -189,7 +207,12 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
   const pick = (s: ChatSkill) => {
     const item = skillItem(s);
     setContext(list => list.some(x => sameContext(x, item)) ? list : list.length < MAX_CONTEXT ? [...list, item] : list);
-    if (at) { const before = draft.slice(0, at.start).replace(/\s+$/, ''); aui.composer().setText(before ? `${before} ` : ''); }
+    if (at) {
+      const before = draft.slice(0, at.start).replace(/\s+$/, '');
+      const nextText = before ? `${before} ` : '';
+      aui.composer().setText(nextText);
+      setChatDraftText(nextText);
+    }
     setDismissed(null);
     setIndex(0);
   };
@@ -207,7 +230,12 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     ...SLOTS,
     composerInput: {
       onKeyDown, cancelOnEscape: false, disabled: source.unavailable,
-      onChange: () => { setDismissed(null); setIndex(0); },
+      onChange: (e) => {
+        hasRestored.current = true;
+        setDismissed(null);
+        setIndex(0);
+        setChatDraftText((e.target as HTMLTextAreaElement).value);
+      },
       'aria-label': 'Wiadomość do agenta',
       placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora lub wpisz @ aby wybrać skill…',
     },
@@ -230,8 +258,13 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     const text = message.content.map(p => p.type === 'text' ? p.text : '').join('').trim();
     if (!text) return;
     // On failure the draft and the picked elements stay, so nothing is lost while Hermes is down.
-    if (await source.send(text, contextRef.current)) setContext(() => []);
-    else runtimeRef.current?.thread.composer.setText(text);
+    if (await source.send(text, contextRef.current)) {
+      setContext(() => []);
+      clearChatDraft();
+    } else {
+      runtimeRef.current?.thread.composer.setText(text);
+      setChatDraftText(text);
+    }
   };
   const runtime = useExternalStoreRuntime<CockpitMessage>({
     messages: source.messages,
