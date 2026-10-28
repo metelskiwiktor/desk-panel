@@ -88,10 +88,14 @@ export const ENGINE_LABEL: Record<ChatEngine, string> = { hermes: 'Hermes', agy:
 export interface EngineStatus { engine: ChatEngine; available: boolean; error?: string }
 
 export const MAX_CONTEXT = 10;
-export const MAX_MESSAGE = 8000;
+/**
+ * A message the user sends (a pasted research answer, a log): 8000 refused a pasted Grok answer (28.10.2026). It goes to
+ * Hermes over HTTP and to agy on stdin (stream-json), so no command line limits it; 50 000 is about 12k tokens.
+ */
+export const MAX_MESSAGE = 50_000;
 /** A new message, with the dashboard elements it is about. */
 export const chatSendSchema = z.object({
-  text: z.string().trim().min(1).max(MAX_MESSAGE),
+  text: z.string().trim().min(1).max(MAX_MESSAGE, `Wiadomość jest dłuższa niż ${MAX_MESSAGE.toLocaleString('pl-PL')} znaków.`),
   context: z.array(contextItemSchema).max(MAX_CONTEXT).default([]),
   /** Only when a conversation starts: the engine it runs on (the saved preference otherwise). */
   engine: z.enum(chatEngines).optional(),

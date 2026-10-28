@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CHAT_SKILLS, skillItem, type ChatEvent, type ContextItem } from '../src/chat-contract';
+import { CHAT_SKILLS, chatSendSchema, skillItem, type ChatEvent, type ContextItem } from '../src/chat-contract';
 import { agyExecutable, agyModelArgs, agyPermissionArgs, createAgentChat, DEFAULT_AGY_MODEL, preamble, DEFAULT_PANEL_URL, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
 import { handleChatRoute } from './chat-routes';
 
@@ -423,6 +423,12 @@ describe('trasy /api/chats', () => {
     const emptyText = await post('/api/chats', { text: '   ' });
     expect(emptyText.status).toBe(400);
     expect(((await emptyText.json()) as { error: string }).error).toContain('Nieprawidłowe dane (text:');
+
+    // A pasted research answer of 9000 characters is a message (8000 refused one, 28.10.2026); past the limit it says why in Polish.
+    expect(chatSendSchema.safeParse({ text: 'ą'.repeat(9000) }).success).toBe(true);
+    const huge = await post('/api/chats', { text: 'a'.repeat(50_001) });
+    expect(huge.status).toBe(400);
+    expect(((await huge.json()) as { error: string }).error).toContain('dłuższa niż 50');
 
     const extraField = await post('/api/chats', { text: 'a', extra: 1 });
     expect(extraField.status).toBe(400);

@@ -6,7 +6,8 @@ import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
 
-const MAX_BODY = 64 * 1024;
+/** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
+const MAX_BODY = 512 * 1024;
 /** Old decisions used unstable stream ids. Resolve only a unique exact prompt; otherwise block new decisions. */
 export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Record<string, DispatchOutcome>) {
   const resolved = { ...dispatches };
@@ -25,7 +26,7 @@ export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Rec
 }
 async function readBody(req: IncomingMessage): Promise<unknown> {
   let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>64 KB)'); }
+  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>512 KB)'); }
   return JSON.parse(body || 'null');
 }
 const parse = <T>(schema: ZodType<T>, value: unknown): T => {
