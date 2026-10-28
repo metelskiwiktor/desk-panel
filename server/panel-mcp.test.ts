@@ -10,7 +10,7 @@ import { createChatHub } from './chat-hub';
 import { createHermesClient } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { startMockHermes, type MockHermes } from './hermes-mock';
-import { mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
+import { foreignPaths, mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
 import { createScenarioSources } from './scenario';
 
 const TOKEN = 'a'.repeat(64);
@@ -169,6 +169,18 @@ describe('panel MCP for Hermes', () => {
     expect(escape.content[0].text).toContain('when breakdown segments are available. | - [ ] Update the fixture if needed.');
     expect((await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w', '- [ ] Shows "Brak danych" when no data is available.') })).isError).toBeUndefined();
     expect(unknownNames('`a` `x1` `5h` `Gemini Claude&GPT` `open: tile:quota`', 'Gemini Claude GPT open tile quota')).toEqual([]);
+  });
+
+  it('refuses paths of another repository or the home directory: the executor cannot read them', async () => {
+    // Built here, so that no file of the repository holds them.
+    const other = ['packages', 'contract', 'src', 'qz-health.ts'].join('/'), home = ['~', '.config', 'qz-tool', 'qz.jsonc'].join('/');
+    const created = ['server', 'qz-new.ts'].join('/');
+    const prompt = shaped('w', `- [ ] Read ${other} and ${home}; add ${created}; keep src/App.tsx and the model deepseek/deepseek-v4.1-flash-1017.`);
+    const refused = await call('panel_recon_report', { files: [{ path: created, new: true }], kind: 'non-UI', prompt, outside: [{ name: other, source: 'repozytorium cezar' }] });
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.content[0].text).toContain(`${other}, ${home}.`);
+    expect(refused.content[0].text).toContain('osobna praca');
+    expect(foreignPaths(`add ${created}, keep src\\App.tsx, model deepseek/deepseek-v4.1-flash-1017, url openrouter.ai/api/v1/key.`, 'src/App.tsx', [created])).toEqual([]);
   });
 
   it('says which fields a to-do action takes when the agent sends others', async () => {

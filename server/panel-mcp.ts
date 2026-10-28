@@ -71,6 +71,18 @@ export function unknownNames(prompt: string, repoText: string, declared: string[
   return [...names];
 }
 /**
+ * Paths in the prompt (a file with an extension, `~/…`, `C:\…`) that no tracked file of this repository mentions and the
+ * recon does not create. The executor works in a desk-panel worktree and cannot read another checkout: an analysis of
+ * Cezar's runners was to read six files of the cezar checkout (28.10.2026), declared in "outside" as from another
+ * repository; a path written here would pass, as this file is tracked text too. Work in another repository is the plan's separate work, not this prompt.
+ */
+const PATH = /(?<![\w.])(?:~|[A-Za-z]:)?[\\/]?(?:\.?[\w-]+[\\/])+[\w.-]*\.[A-Za-z]{1,6}\b/g;
+export function foreignPaths(prompt: string, repoText: string, created: string[] = []): string[] {
+  const norm = (p: string) => p.replace(/\\/g, '/');
+  return [...new Set([...prompt.matchAll(PATH)].map(([p]) => norm(p)))]
+    .filter(p => !repoText.includes(p) && !created.some(c => norm(c) === p));
+}
+/**
  * The sections of the Executor Prompt the skill gives. "Live data" says what the panel's sources have and lack: without
  * it a split the source does not have became "when breakdown data is available" (28.10.2026), a criterion nothing fails.
  * "User asks" lists each thing the user asked for and where it went: the fifth try of that day dropped the tile's new
@@ -247,6 +259,8 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       const soft = softCriteria(String(args.prompt));
       if (soft.length) throw new AgentViewError(400, `Te kryteria przejdą, cokolwiek executor zrobi: ${soft.join(' | ')}. Kryterium mówi, co ma działać; brak z "Live data" executor buduje (plik w server/), a gdy trzeba go zbudować poza tym repozytorium, usuń go z kryteriów i nazwij w planie dla użytkownika jako osobną pracę.`);
       const repoText = trackedText(now);
+      const foreign = repoText === null ? [] : foreignPaths(String(args.prompt), repoText, (args.files as { path: string; new?: boolean }[]).filter(f => f.new).map(f => f.path));
+      if (foreign.length) throw new AgentViewError(400, `Tych ścieżek nie ma w tym repozytorium: ${foreign.join(', ')}. Ścieżka z wyników wyszukiwania (z wielkością liter jak tam) przejdzie; plik, który executor utworzy, dodaj do files z "new": true. Executor pracuje w worktree desk-panelu i nie przeczyta innego repozytorium ani katalogu domowego: praca w kodzie innego repozytorium nie jest zadaniem tej karty, powiedz użytkownikowi, że to osobna praca tam (w "User asks": "→ plan: osobna praca w <repo>").`);
       const unknown = repoText === null ? [] : unknownNames(String(args.prompt), repoText, ((args.outside ?? []) as { name: string }[]).map(o => o.name));
       if (unknown.length) throw new AgentViewError(400, `Tych nazw z promptu nie ma w żadnym pliku repozytorium: ${unknown.map(n => `\`${n}\``).join(', ')}. Nazwę, którą pokazał wynik narzędzia panelu (np. panel_quotas), albo nową, którą wprowadzi executor, podaj w "outside" z jej źródłem; nazwę, której nie pokazał żaden wynik narzędzia, usuń z promptu.`);
       for (const [id, recon] of recons) if (now - recon.at > RECON_TTL_MS || recons.size >= RECONS_KEPT) recons.delete(id);

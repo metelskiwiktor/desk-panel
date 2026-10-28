@@ -95,7 +95,7 @@ export const COCKPIT_TOOLS = {
   panel_recon_report: {
     purpose: 'Skill „Zaimplementuj zadanie”: wynik rekonesansu (przeszukane pliki, typ UI/non-UI, scenariusz zrzutów, Executor Prompt).',
     when: 'raz, po rekonesansie w skillu „Zaimplementuj zadanie”, gdy wyniki wyszukiwań są już w rozmowie; pliki tylko takie, jakie pokazały wyniki narzędzi (plik do utworzenia z "new": true); nie w zwykłej rozmowie o zadaniu.',
-    effect: 'użytkownik widzi kartę rekonesansu; wynik podaje identyfikator recon dla panel_cezar_propose. Plików, których nie ma w repozytorium, panel nie przyjmie, ani nazw z promptu w `…`, których nie ma w żadnym pliku repo, chyba że podasz je w "outside" ze źródłem.',
+    effect: 'użytkownik widzi kartę rekonesansu; wynik podaje identyfikator recon dla panel_cezar_propose. Plików, których nie ma w repozytorium, panel nie przyjmie, ani nazw z promptu w `…`, których nie ma w żadnym pliku repo, chyba że podasz je w "outside" ze źródłem, ani ścieżek spoza tego repozytorium (executor ich nie przeczyta).',
     card: 'recon',
   },
   panel_cezar_propose: {

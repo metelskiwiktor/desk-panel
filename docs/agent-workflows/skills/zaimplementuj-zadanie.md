@@ -64,6 +64,9 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
      spent 12 of its 30 calls reading the panel's own MCP server, views, tests and this skill, and ended without a card.)
      The files the dispatcher never reads unless the task changes them are named in the skill. Tool descriptions are the contract: no reading the panel's or
      Cezar's source to learn how the tools work, and a Cezar step is read with `panel_cezar` `krok`, not from its log.
+     This skill's own doc (this file) is in the list: the skill already holds it, yet a recon of 28.10.2026 read it in its
+     second turn. Credential files (`auth.json`, `.env`, tokens) are never opened, not even to list providers: the same
+     recon read OpenCode's `auth.json` for that, when `opencode models` already said it.
 2. **Evaluate Complexity**:
    - **Complex task** (architectural redesign, multi-module coordination, schema/contract changes, migrations, or explicitly requested by user):
      Propose an **analysis run** on Cezar (`workflow: "analysis"`). The goal is read-only exploration of edge cases, architectural trade-offs, and test strategies.
@@ -89,6 +92,10 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
    1. Call `panel_recon_report` alone, once the search results are in, with files (`"new": true` for a file to create),
       kind, scenario, and the prompt. The panel refuses files the repository does not have, and names in backticks that
       no tracked file has unless `outside` gives their source (`panel_quotas`, or `new`); its answer gives a `recon` id.
+      It also refuses paths in the prompt that this repository does not have (another checkout, `~/…`, a misspelt or
+      wrongly cased file, a new file not marked `"new"`): the executor works in a desk-panel worktree and cannot read
+      another repository, so an analysis of Cezar's own code (28.10.2026, six files of the cezar checkout in the Notes)
+      is separate work there, not a card here.
    2. Write a short plan in Polish for the user (3–6 bullets).
    3. Call `panel_cezar_propose` with title, the same prompt, `recon`, and `workflow` (`"analysis"` or `"desk-panel-task"`).
       Without a known `recon` and the same prompt the panel refuses it, so a proposal sent in the same answer as the recon
