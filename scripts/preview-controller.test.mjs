@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, rmSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -73,5 +73,53 @@ describe('preview state directory', () => {
       rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 60000);
+
+  it.skipIf(process.platform !== 'win32')('stops workers when startup fails after spawn and when readiness times out', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'preview-start-failure-'));
+    const fixture = join(dir, 'fixture'); mkdirSync(fixture);
+    const helper = join(fixture, 'preview-process.ps1');
+    copyFileSync(resolve('scripts/preview-process.ps1'), helper);
+    const original = readFileSync(script, 'utf8');
+    const setupStart = original.indexOf('    const cwd = process.cwd();');
+    const setupEnd = original.indexOf('    const token = randomBytes(32)', setupStart);
+    expect(setupStart).toBeGreaterThan(0); expect(setupEnd).toBeGreaterThan(setupStart);
+    // Replace only external checkout/install and the worker entrypoint; preserve the controller's real catch/recovery.
+    let fixtureSource = original.slice(0, setupStart) + "    mkdirSync(checkout);\n    const env = { ...process.env }; const sha = 'b'.repeat(40);\n" + original.slice(setupEnd);
+    const workerArgs = "['--import', 'tsx', '.desk-preview-worker.ts', marker]";
+    expect(fixtureSource).toContain(workerArgs);
+    fixtureSource = fixtureSource.replace(workerArgs, "['-e', 'setInterval(() => {}, 1000)', marker]");
+    const controller = join(fixture, 'preview.mjs');
+    try {
+      for (const mode of ['post-spawn', 'identity-failure', 'timeout']) {
+        const root = join(dir, mode);
+        const source = mode === 'post-spawn'
+          ? fixtureSource.replace('    spawned = launch;', "    spawned = launch; throw new Error('injected identity failure');")
+          : mode === 'identity-failure'
+            ? fixtureSource.replace('    child.unref(); closeSync(log);', "    child.unref(); closeSync(log); throw new Error('injected identity failure');")
+            : fixtureSource.replace('i < 120; i++', 'i < 0; i++');
+        expect(source).not.toBe(fixtureSource);
+        writeFileSync(controller, source);
+        const env = { ...process.env, DESK_PREVIEW_ROOT: root };
+        const result = spawnSync(process.execPath, [controller, 'start', '123'], { env, encoding: 'utf8', timeout: 40000 });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('The preview worker has stopped');
+        expect(result.stderr).toContain('preview.log');
+        const record = JSON.parse(readFileSync(join(root, 'pr-123', 'launch.json'), 'utf8'));
+        const found = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Operation', 'find', '-Marker', record.marker], { encoding: 'utf8', timeout: 20000 });
+        expect(found.status, found.stderr).toBe(0);
+        expect(found.stdout.trim()).toBe('gone');
+        const stopped = spawnSync(process.execPath, [controller, 'stop', '123'], { env, encoding: 'utf8', timeout: 40000 });
+        expect(stopped.status, stopped.stderr).toBe(0);
+      }
+    } finally {
+      for (const mode of ['post-spawn', 'identity-failure', 'timeout']) {
+        const root = join(dir, mode);
+        if (!existsSync(join(root, 'pr-123'))) continue;
+        const stopped = spawnSync(process.execPath, [controller, 'stop', '123'], { env: { ...process.env, DESK_PREVIEW_ROOT: root }, encoding: 'utf8', timeout: 40000 });
+        if (stopped.status !== 0) throw new Error(`Fixture cleanup refused; inspect ${root}: ${stopped.stderr}`);
+      }
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    }
+  }, 90000);
 
 });

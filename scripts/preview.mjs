@@ -40,6 +40,33 @@ function processIdentity(operation, launch) {
   if (result.status !== 0) throw new Error(`Unable to verify preview process identity: ${(result.stderr || result.error?.message || 'unknown error').trim()}`);
   return result.stdout.trim();
 }
+// Shared by stop and failed start. A missing creation time is recovered only after checking
+// the random marker on the process; termination compares the creation time on one OS handle.
+async function recoverWorker(record) {
+  if (!record) return;
+  let launch = record;
+  if (launch.pending) {
+    if (!/^[a-f0-9]{64}$/.test(launch.marker || '')) throw new Error('Preview launch marker is invalid; inspect before cleanup.');
+    const found = processIdentity('find', launch);
+    if (found === 'gone') return;
+    if (!/^\d+$/.test(found)) throw new Error('Could not identify the pending preview process.');
+    launch = { pid: Number(found), marker: launch.marker };
+  }
+  if (!Number.isInteger(launch.pid) || launch.pid <= 0 || !/^[a-f0-9]{64}$/.test(launch.marker || '')) throw new Error('Preview process identity is incomplete; inspect before cleanup.');
+  if (!alive(launch.pid)) return;
+  if (!launch.creation) {
+    const creation = processIdentity('identify', launch);
+    if (creation === 'gone' && !alive(launch.pid)) return;
+    if (!/^\d+$/.test(creation)) throw new Error('Could not verify preview process creation time.');
+    launch = { ...launch, creation };
+  }
+  if (!/^\d+$/.test(launch.creation)) throw new Error('Invalid preview process creation time.');
+  const result = processIdentity('terminate', launch);
+  if (result === 'mismatch') throw new Error('Preview PID belongs to a different process; inspect it before cleanup.');
+  if (!['terminated', 'gone'].includes(result)) throw new Error('Could not stop verified preview process.');
+  for (let i = 0; i < 40 && alive(launch.pid); i++) await pause(250);
+  if (alive(launch.pid)) throw new Error('Preview process is still running or its PID was reused; inspect it before cleanup.');
+}
 const state = readState();
 if (action === 'status') {
   if (await request(state)) console.log(JSON.stringify({ status: 'running', pr: state.pr, sha: state.sha, url: state.url }));
@@ -49,41 +76,18 @@ if (action === 'status') {
     await request(state, 'POST');
     for (let i = 0; i < 40 && await request(state); i++) await pause(250);
   }
-  let launch = readLaunch();
+  const launch = readLaunch();
   const setup = readSetup();
   if (!launch && setup?.pid && alive(setup.pid)) throw new Error('Preview is still preparing the checkout or dependencies; wait for start to finish before stopping.');
-  if (launch?.pending) {
-    if (!/^[a-f0-9]{64}$/.test(launch.marker || '')) throw new Error('Preview launch marker is invalid; inspect before cleanup.');
-    const found = processIdentity('find', launch);
-    if (found === 'gone') {
-      if (setup?.pid && alive(setup.pid)) throw new Error('Preview launch is still in progress; retry stop shortly.');
-      launch = null;
-    } else {
-      if (!/^\d+$/.test(found)) throw new Error('Could not identify the pending preview process.');
-      launch = { pid: Number(found), marker: launch.marker };
-      const creation = processIdentity('identify', launch);
-      if (!/^\d+$/.test(creation)) throw new Error('Could not identify the pending preview process.');
-      launch.creation = creation;
-    }
-  }
-  if (!launch && existsSync(launchFile) && !readLaunch()?.pending) throw new Error('Preview process identity is unreadable; inspect it before cleanup.');
+  if (!launch && existsSync(launchFile)) throw new Error('Preview process identity is unreadable; inspect it before cleanup.');
   if (state && launch?.pid) for (let i = 0; i < 40 && alive(launch.pid); i++) await pause(250);
-  // The starter writes PID first, then the kernel creation identity. Never guess during that window.
-  for (let i = 0; i < 80 && launch?.pid && !launch.creation && alive(launch.pid); i++) { await pause(250); launch = readLaunch(); }
-  if (launch && Number.isInteger(launch.pid) && alive(launch.pid)) {
-    if (!/^\d+$/.test(launch.creation || '') || !/^[a-f0-9]{64}$/.test(launch.marker || '')) {
-      throw new Error('Preview PID has no verified creation identity; inspect the process before cleanup.');
-    }
-    const result = processIdentity('terminate', launch);
-    if (result === 'mismatch') throw new Error('Preview PID belongs to a different process; inspect it before cleanup.');
-    if (!['terminated', 'gone'].includes(result)) throw new Error('Could not stop verified preview process.');
-    for (let i = 0; i < 40 && alive(launch.pid); i++) await pause(250);
-    if (alive(launch.pid)) throw new Error('Preview process is still running or its PID was reused; inspect it before cleanup.');
-  }
+  if (launch?.pending && setup?.pid && alive(setup.pid)) throw new Error('Preview launch is still in progress; retry stop shortly.');
+  await recoverWorker(launch);
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
   console.log(`Preview PR #${number} stopped and cleaned up.`);
 } else {
   if (existsSync(dir)) throw new Error(`Preview state already exists. Run: node scripts/preview.mjs stop ${number}`);
+  let spawned;
   try {
     mkdirSync(base, { recursive: true });
     mkdirSync(dir);
@@ -113,9 +117,10 @@ if (action === 'status') {
     const child = spawn(process.execPath, ['--import', 'tsx', '.desk-preview-worker.ts', marker], { cwd: checkout, env, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
     if (!child.pid) throw new Error('Could not launch preview worker.');
     const launch = { pid: child.pid, marker };
+    spawned = launch;
+    child.unref(); closeSync(log);
     writeFileSync(`${launchFile}.next`, JSON.stringify(launch));
     renameSync(`${launchFile}.next`, launchFile);
-    child.unref(); closeSync(log);
     if (process.platform === 'win32') {
       const creation = processIdentity('identify', launch);
       if (!/^\d+$/.test(creation)) throw new Error('Could not identify preview process; see preview log.');
@@ -129,8 +134,17 @@ if (action === 'status') {
     for (let i = 0; i < 120; i++) { await pause(250); if (!alive(child.pid)) break; const ready = readState(); if (await request(ready)) { console.log(JSON.stringify({ status: 'running', pr: ready.pr, sha: ready.sha, url: ready.url })); process.exit(0); } }
     throw new Error(`Preview did not become ready. Inspect ${join(dir, 'preview.log')}, then run stop ${number}.`);
   } catch (error) {
-    console.error(error.message);
-    if (process.platform === 'win32') console.error('If Git or npm reports a path that is too long, set DESK_PREVIEW_ROOT to a short absolute directory and use that same setting for start, status and stop. See docs/testowanie.md.');
+    const failure = spawned && !alive(spawned.pid) ? 'The preview worker exited before it was ready.' : error.message;
+    if (spawned) {
+      try {
+        await recoverWorker(readLaunch() || spawned);
+        console.error('The preview worker has stopped.');
+      } catch (cleanupError) {
+        console.error(`Could not safely stop the preview worker: ${cleanupError.message}. Run stop after resolving the identity problem; do not kill an unverified PID.`);
+      }
+      console.error(`Preview startup failed: ${failure}\nInspect ${join(dir, 'preview.log')}. The selected PR may be incompatible with the preview scenario APIs. Run stop ${number} to remove retained files.`);
+    } else console.error(error.message);
+    if (process.platform === 'win32' && !spawned) console.error('If Git or npm reports a path that is too long, set DESK_PREVIEW_ROOT to a short absolute directory and use that same setting for start, status and stop. See docs/testowanie.md.');
     process.exitCode = 1;
   }
 }

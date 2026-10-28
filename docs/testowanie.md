@@ -82,8 +82,9 @@ CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 checkout i instaluje jego zależności (`npm ci --ignore-scripts`). Wypisuje JSON z adresem,
 numerem PR i pełnym SHA; pasek w podglądzie pokazuje tę samą tożsamość. `just preview status 123`
 zwraca `running`, `stopped` albo `stale`; `just preview stop 123` zatrzymuje proces i usuwa jego
-checkout i dane tymczasowe. Po błędzie startu sprawdź wskazany `preview.log`, a następnie użyj
-`stop`. Aby pobrać nowy head po kolejnych commitach, zatrzymaj i uruchom podgląd ponownie.
+checkout i dane tymczasowe. Po błędzie startu kontroler próbuje bezpiecznie zakończyć worker;
+sprawdź wskazany `preview.log`, a następnie użyj `stop`, aby usunąć zachowane pliki. Jeśli
+identyfikacji procesu nie da się potwierdzić, komunikat prosi o ręczną diagnostykę. Aby pobrać nowy head po kolejnych commitach, zatrzymaj i uruchom podgląd ponownie.
 Katalog stanu domyślnie znajduje się w systemowym katalogu tymczasowym `desk-panel-pr-previews`.
 Jeśli Git lub npm zgłosi `Filename too long`, użyj krótszego katalogu bez zmieniania
 ustawień systemu ani Gita. Ustaw go **przed** uruchomieniem i zachowaj tę samą wartość
