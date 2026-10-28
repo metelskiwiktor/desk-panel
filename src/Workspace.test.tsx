@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
 import { WORKSPACE_KEY, type Tile } from './tile-grid';
+import { WIDGET_KINDS } from './Workspace';
+import { pickable } from './workspace-kinds';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime();
 beforeEach(() => {
@@ -36,6 +38,13 @@ const measureGrid = () => {
   });
 };
 const cell = (kind: string) => grid().querySelector(`[data-kind="${kind}"]`) as HTMLElement;
+
+describe('widget kinds', () => {
+  it('offers in an empty cell every kind the grid can show (PR #36 shipped a GitHub PR tile nobody could pick)', () => {
+    const offered = pickable([], [], () => true);
+    expect(WIDGET_KINDS.filter(kind => !offered.includes(kind))).toEqual([]);
+  });
+});
 
 describe('the work area', () => {
   it('shows a tile per limit, Cezar and mail, each with its own grip, X and edges: nothing to switch on first', async () => {

@@ -20,7 +20,7 @@ nodes:
     name: Implement
     type: agent
     runner: agy
-    model: gemini-3.8-flash-medium
+    model: gemini-3.8-flash-high
     prompt: |
       {{task}}
 
@@ -117,7 +117,7 @@ nodes:
     name: Fix verification or commit
     type: agent
     runner: agy
-    model: gemini-3.8-flash-medium
+    model: gemini-3.8-flash-high
     session:
       continue: implement
     prompt: |
@@ -140,7 +140,9 @@ nodes:
     name: Pre-PR Code Review
     type: agent
     runner: agy
-    model: gemini-3.8-flash-medium
+    # Another model than the one that wrote the code, from agy's Claude/GPT quota (separate from Gemini's): the same
+    # flash model approved PR #36 with a tile nobody could pick, a tile that never refreshed and dead routes.
+    model: claude-opus-5-5-low
     verdicts:
       - approve
       - changes
@@ -167,9 +169,15 @@ nodes:
          - Security invariants (loopback-only server, `Origin` check on `POST` mutations, no leaked credentials/DPAPI/full account numbers).
          - Zod contract & scenario fixture parity.
          - Note: if the task prompt explicitly requested a capability that `AGENTS.md` previously restricted, implementing that capability is intentional, not a defect.
-      5. Format your response concisely:
+      5. The task's acceptance criteria are the minimum, not the whole review: a change that ticks them all can still not work for the user. Each of these is a `P2` finding (`CEZ:VERDICT changes`):
+         - The user cannot reach it: a new workspace tile missing from `pickable()` in `src/workspace-kinds.ts`, a route or component nothing calls, a setting nothing reads. Screenshots made with `--open tile:<kind>` do not prove a tile can be picked.
+         - Data on the dashboard that is read once and never again (the panel runs for days in a kiosk): it must refresh while the dashboard is shown (`usePollingEnabled` in `src/polling.ts`), gently enough for its source.
+         - Production that only returns a stub, a mock or empty data where the task asked for the real thing.
+         - Dead code or duplicates: an unused file or export, the same route or helper registered several times "just in case".
+         - A new integration, source or `DESK_*` variable without its `docs/*.md` and the matching line in `AGENTS.md`.
+      6. Format your response concisely:
          - List findings ordered by severity (`P0` blocker, `P1` bug/regression, `P2` edge-case/missing test/identical UI screenshots, `P3` minor nit) as `P<0-3> <repo-relative-path>:<line> — <problem and suggested fix>`, or write `Findings: none`.
-      6. End your message with the verdict marker on the final line:
+      7. End your message with the verdict marker on the final line:
          - Output `CEZ:VERDICT changes` ONLY if you found at least one real `P0`, `P1`, or `P2` issue that should be fixed before opening the PR.
          - Output `CEZ:VERDICT approve` if there are no issues or only `P3` minor nits.
 
@@ -182,7 +190,7 @@ nodes:
     name: Address review findings
     type: agent
     runner: agy
-    model: gemini-3.8-flash-medium
+    model: gemini-3.8-flash-high
     session:
       continue: implement
     prompt: |
