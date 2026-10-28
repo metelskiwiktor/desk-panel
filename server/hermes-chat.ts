@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { COCKPIT_TOOLS } from '../src/cockpit-contract';
+import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
 import { HermesError, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
@@ -181,19 +181,23 @@ export function fillFromHistory(message: ChatMessage, group: { parts: ChatPart[]
   const seen = new Map<string, number>();
   const whole = new Map<string, Extract<ChatPart, { type: 'tool' }>[]>();
   for (const p of group.parts) if (p.type === 'tool') whole.set(p.name, [...(whole.get(p.name) ?? []), p]);
+  // A proposal the panel refused (sent before its recon, say) shows no „Zleć” and needs no id: of the rest, only one
+  // card per side can be bound safely.
+  const accepted = (parts: ChatPart[], name: string) =>
+    parts.filter((s): s is Extract<ChatPart, { type: 'tool' }> => s.type === 'tool' && s.name === name && !cardRefusal('dispatch', s.output, s.error));
   let changed = false;
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool') continue;
     const n = seen.get(p.name) ?? 0;
     seen.set(p.name, n + 1);
-    const full = whole.get(p.name)?.[n];
+    let full = whole.get(p.name)?.[n];
     if (!full) continue;
     // Never bind a dispatch card to a name-only streaming id. Session history supplies the real call id.
     if (p.name.includes('panel_cezar_propose')) {
-      const streamedCount = (message.parts ?? []).filter(step => step.type === 'tool' && step.name === p.name).length;
-      const historyCalls = whole.get(p.name) ?? [];
+      const streamed = accepted(message.parts ?? [], p.name), recorded = accepted(group.parts, p.name);
       // The stream has no reliable call ids. Order alone cannot disambiguate multiple identical tools.
-      if (streamedCount !== 1 || historyCalls.length !== 1) continue;
+      if (streamed.length !== 1 || recorded.length !== 1 || streamed[0] !== p) continue;
+      full = recorded[0];
       const stableId = `${message.id}:${full.id}`;
       if (p.id !== stableId) { p.id = stableId; changed = true; }
     }
@@ -504,8 +508,9 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     if (status.state === 'completed') {
       const output = status.output ?? '';
       // Hermes's final output is the answer: it fills a stream that gave no deltas and replaces one that did not add up.
+      // It is only the last message, so text written between tools (the plan before a card) stays when the stream ends with it.
       if (output.trim() && !streamed.trim()) parts.push({ type: 'text', text: output });
-      else if (output.trim() && norm(streamed) !== norm(output)) parts = [...parts.filter(p => p.type !== 'text'), { type: 'text', text: output }];
+      else if (output.trim() && !norm(streamed).endsWith(norm(output))) parts = [...parts.filter(p => p.type !== 'text'), { type: 'text', text: output }];
       if (!parts.some(p => p.type === 'text' && p.text.trim())) {
         // No output in the event either: the session has the answer, if anything does.
         try {

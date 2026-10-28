@@ -211,6 +211,30 @@ describe('Hermes chat', () => {
     expect(single.parts?.[0]).toMatchObject({ id: 'answer:call_1' });
   });
 
+  it('binds the one proposal the panel accepted, past one it refused', () => {
+    const name = 'mcp__desk_panel__panel_cezar_propose';
+    const refused = '{"error": "Niepoprawne argumenty: recon"}';
+    const shown = JSON.stringify({ result: 'Karta „Zlecić na Cezarze?” jest u użytkownika.' });
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 0, parts: [
+      { type: 'tool', id: 'pending:1', name, input: '', output: `Błąd: ${refused}`, error: true, state: 'done' },
+      { type: 'tool', id: 'pending:2', name, input: '', output: shown, state: 'done' },
+    ] };
+    fillFromHistory(message, { parts: [
+      { type: 'tool', id: 'call_1', name, input: '{"prompt":"blind"}', output: refused, state: 'done' },
+      { type: 'tool', id: 'call_2', name, input: '{"prompt":"after recon"}', output: shown, state: 'done' },
+    ] });
+    expect(message.parts).toMatchObject([{ id: 'pending:1' }, { id: 'answer:call_2', input: '{"prompt":"after recon"}' }]);
+  });
+
+  it('keeps the plan written before the card when the final output is only the last sentence', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'Zaimplementuj chip statusu' });
+    await finishedChat(service, id);
+    const chat = await until(() => service.get(id), c => !!c.items[1].parts?.some(p => p.type === 'tool' && p.name.endsWith('panel_cezar_propose') && !p.id.startsWith('pending:')));
+    expect(answerOf(chat.items[1])).toMatch(/^\*\*Plan\*\*[\s\S]*Decyzja w karcie poniżej\.$/);
+    expect(chat.items[1].parts?.map(p => p.type)).toEqual(['tool', 'text', 'tool', 'text']);
+  });
+
   it('reads the history where Hermes 0.21 keeps it (/api/sessions, in pages), and where older ones did', async () => {
     const first = hermes();
     const { id } = await first.create({ text: 'Co tu jest?' });

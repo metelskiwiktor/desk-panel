@@ -77,7 +77,8 @@ const MOCK_PROMPT = [
   '- [ ] Colours from the panel palette',
   '- [ ] Screenshots before/after on the standard scenario',
 ].join('\n');
-type MockTool = { name: string; args: Record<string, unknown>; output: string };
+/** `before`: text the agent writes ahead of this call (its plan before the card); the run's output is only the last answer. */
+type MockTool = { name: string; args: Record<string, unknown>; output: string; before?: string };
 /** The panel tools a message makes the stand-in call, like Hermes with the two skills, and the answer after them. */
 function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
   // A skill picked with @ comes as a context item; the typed text counts too (the preamble names both skills, so not it).
@@ -89,9 +90,10 @@ function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
         files: [{ path: 'src/ChatWindow.tsx', note: 'nagłówek okna' }, { path: 'src/cockpit/Cockpit.tsx', note: 'kokpit taska' }, { path: 'scenarios/standard.json', note: 'dane do zrzutów' }],
         kind: 'UI', scenario: 'standard', prompt: MOCK_PROMPT,
       } },
-      { name: 'mcp_desk-panel_panel_cezar_propose', output: 'Karta „Zlecić na Cezarze?” jest u użytkownika.', args: { title: 'Chip statusu taska w kokpicie', prompt: MOCK_PROMPT } },
+      { name: 'mcp_desk-panel_panel_cezar_propose', output: 'Karta „Zlecić na Cezarze?” jest u użytkownika.', args: { title: 'Chip statusu taska w kokpicie', prompt: MOCK_PROMPT },
+        before: '**Plan**\n\n- chip statusu obok tytułu kokpitu,\n- kolory z palety panelu,\n- zrzuty przed i po na scenariuszu `standard`.\n\n' },
     ],
-    answer: '**Plan**\n\n- chip statusu obok tytułu kokpitu,\n- kolory z palety panelu,\n- zrzuty przed i po na scenariuszu `standard`.\n\nDecyzja w karcie poniżej.',
+    answer: 'Decyzja w karcie poniżej.',
   };
   if (skill('Nasłuchuj Cezara') || /nasłuchuj|nasluchuj/i.test(message)) return {
     tools: [{ name: 'mcp_desk-panel_panel_cezar_watch', args: { id: MOCK_DISPATCHED }, output: JSON.stringify({ task: { id: MOCK_DISPATCHED, title: 'Chip statusu taska w kokpicie', status: 'RUNNING', progress: 0.33, steps: [] } }) }],
@@ -139,7 +141,17 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
     }
     const script = scriptFor(run.input);
     const calls = script.tools.map((tool, i) => ({ ...tool, id: i ? `${call}_${i}` : call }));
+    const say = async (text: string) => {
+      if (!options.deltas) return true;
+      for (const word of text.match(/\S+\s*/g) ?? []) {
+        await later(run, step);
+        if (over(run)) return false;
+        push(run, 'message.delta', { delta: word });
+      }
+      return true;
+    };
     for (const tool of calls) {
+      if (tool.before && !await say(tool.before)) return;
       await later(run, step);
       if (over(run)) return;
       // As Hermes 0.21 streams a run (`/v1/runs`): the tool and a short preview, no arguments and no call id…
@@ -150,20 +162,14 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
       push(run, 'tool.completed', { tool: tool.name, preview: tool.output.length > 500 ? `${tool.output.slice(0, 497)}...` : tool.output, duration: 0.1, error: false });
     }
     const output = `${prefix}${script.answer ?? answerFor(run.input)}`;
-    if (options.deltas) {
-      for (const word of output.match(/\S+\s*/g) ?? []) {
-        await later(run, step);
-        if (over(run)) return;
-        push(run, 'message.delta', { delta: word });
-      }
-    }
+    if (!await say(output)) return;
     await later(run, step);
     if (over(run)) return;
     run.status = 'completed';
     run.output = output;
     // As Hermes keeps it: an MCP tool is called through its `tool_call` tool, and the answer comes in an envelope.
     const mcp = (t: MockTool) => /desk[-_]panel/.test(t.name);
-    history.push({ role: 'assistant', content: '', tool_calls: calls.map(t => ({ id: t.id, type: 'function', function: mcp(t)
+    history.push({ role: 'assistant', content: calls.map(t => t.before ?? '').join(''), tool_calls: calls.map(t => ({ id: t.id, type: 'function', function: mcp(t)
       ? { name: 'tool_call', arguments: JSON.stringify({ calls: [{ name: t.name, arguments: t.args }] }) }
       : { name: t.name, arguments: JSON.stringify(t.args) } })) });
     for (const t of calls) history.push({ role: 'tool', tool_call_id: t.id, content: mcp(t)
