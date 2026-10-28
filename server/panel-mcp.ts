@@ -70,6 +70,12 @@ export function unknownNames(prompt: string, repoText: string, declared: string[
   }
   return [...names];
 }
+/**
+ * The sections of the Executor Prompt the skill gives. "Live data" says what the panel's sources have and lack: without
+ * it a split the source does not have became "when breakdown data is available" (28.10.2026), a criterion nothing fails.
+ */
+export const PROMPT_SECTIONS = ['Task:', 'Type:', 'Scenario for screenshots:', 'Relevant files', 'Live data', 'Acceptance criteria:', 'Notes for executor:'] as const;
+export const missingSections = (prompt: string) => PROMPT_SECTIONS.filter(section => !prompt.split('\n').some(line => line.trimStart().startsWith(section)));
 /** The text of the repository's tracked files (no binaries, none over 1 MB), read again after a minute; null without git. */
 let tracked: { at: number; text: string } | undefined;
 function trackedText(now: number): string | null {
@@ -186,6 +192,8 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     async run(args, { now }) {
       const missing = (args.files as { path: string; new?: boolean }[]).filter(f => !f.new && !existsSync(path.join(REPO_ROOT, f.path))).map(f => f.path);
       if (missing.length) throw new AgentViewError(400, `Tych plików nie ma w repozytorium: ${missing.join(', ')}. Wymień tylko pliki z wyników wyszukiwania; plik, który executor utworzy, oznacz "new": true.`);
+      const sections = missingSections(String(args.prompt));
+      if (sections.length) throw new AgentViewError(400, `W prompcie brakuje sekcji: ${sections.join(', ')}. Użyj dokładnie kształtu Executor Prompt ze skilla, każda sekcja od nowej linii.`);
       const repoText = trackedText(now);
       const unknown = repoText === null ? [] : unknownNames(String(args.prompt), repoText, ((args.outside ?? []) as { name: string }[]).map(o => o.name));
       if (unknown.length) throw new AgentViewError(400, `Tych nazw z promptu nie ma w żadnym pliku repozytorium: ${unknown.map(n => `\`${n}\``).join(', ')}. Nazwę, którą pokazał wynik narzędzia panelu (np. panel_quotas), albo nową, którą wprowadzi executor, podaj w "outside" z jej źródłem; nazwę, której nie pokazał żaden wynik narzędzia, usuń z promptu.`);

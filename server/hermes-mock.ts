@@ -72,10 +72,15 @@ const MOCK_PROMPT = [
   'Relevant files (from recon):',
   '- src/ChatWindow.tsx',
   '- src/cockpit/Cockpit.tsx',
+  'Live data (from panel tools):',
+  '- has: the watched task with its status (panel_cezar)',
+  '- lacks: nothing',
   'Acceptance criteria:',
   '- [ ] The header shows RUNNING / REVIEW / DONE of the watched task',
   '- [ ] Colours from the panel palette',
   '- [ ] Screenshots before/after on the standard scenario',
+  'Notes for executor:',
+  '- Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
 ].join('\n');
 /** `before`: text the agent writes ahead of this call (its plan before the card); the run's output is only the last answer. */
 type MockTool = { name: string; args: Record<string, unknown>; output: string; before?: string };

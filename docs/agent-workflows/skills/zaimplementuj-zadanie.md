@@ -42,7 +42,10 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
      synthetic and name things differently (the quota fixture has `claude-gpt-weekly`, live agy `3p-weekly`).
      `panel_quotas` also says which limits have the 5h split (28.10.2026 a task asked it for Claude & GPT, which has none).
    - Each thing the user explicitly asked for is its own criterion, in the sense they meant ("verified with agy": live
-     data, not only a fixture); data that does not exist yet gets a source in `server/`, or an analysis run first.
+     data, not only a fixture). The prompt's `Live data` section says what the source has and lacks; each lack gets a
+     criterion that builds it in `server/`, or the run is an analysis first. Never "when available": the third retry of
+     28.10.2026 wrote "support the split when breakdown data is available" for a group that has none, which nothing fails.
+     `panel_recon_report` refuses a prompt missing a section of the shape.
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
      sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
      and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at
@@ -100,6 +103,10 @@ Relevant files (from recon):
 - src/...
 - server/...
 
+Live data (from panel tools):
+- has: <what the tools showed> | none: the task shows no panel data
+- lacks: <what is asked but not in the source> | nothing
+
 Acceptance criteria:
 - [ ] Review current architecture in <files> and identify design constraints.
 - [ ] Investigate edge cases, failure modes, and compatibility considerations.
@@ -123,9 +130,13 @@ Relevant files (from recon):
 - src/...
 - server/...
 
+Live data (from panel tools):
+- has: 3p-5h and 3p-weekly under AGY / Claude and GPT models (panel_quotas)
+- lacks: a 5h split for that group (panel_quotas: only Claude, Codex, AGY / Gemini Models have it)
+
 Acceptance criteria:
 - [ ] ...
-- [ ] ...
+- [ ] Each "lacks" item is built, naming its source in server/ (never "when available"), or the run is an analysis.
 - [ ] Unit/integration tests added or updated and just check passes.
 
 Notes for executor:
@@ -153,7 +164,7 @@ Notes for executor:
    {
      "title": "Analiza: obsługa wielu kont bankowych w kafelku Konto",
      "workflow": "analysis",
-     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
+     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
    }
    ```
 
@@ -178,7 +189,7 @@ Notes for executor:
    {
      "title": "Wdrożenie: obsługa wielu kont bankowych",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```
 
@@ -195,6 +206,6 @@ Notes for executor:
    {
      "title": "Szary badge minionych spotkań w kalendarzu",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```

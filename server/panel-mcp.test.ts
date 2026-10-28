@@ -14,6 +14,11 @@ import { mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
 import { createScenarioSources } from './scenario';
 
 const TOKEN = 'a'.repeat(64);
+/** An Executor Prompt in the skill's shape, every section present. */
+const shaped = (task: string, criteria = '- [ ] x') => [
+  `Task: ${task}`, 'Type: UI', 'Scenario for screenshots: standard', 'Relevant files (from recon):', '- src/App.tsx',
+  'Live data (from panel tools):', '- none: the task shows no panel data', 'Acceptance criteria:', criteria, 'Notes for executor:', '- strictly',
+].join('\n');
 let server: Server, base: string, dir: string, mock: MockHermes;
 let close: () => void;
 
@@ -95,18 +100,18 @@ describe('panel MCP for Hermes', () => {
   });
 
   it('has card tools that show things to the user and dispatch nothing themselves', async () => {
-    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx', note: 'okno' }], kind: 'UI', scenario: 'standard', prompt: 'Task: x' });
+    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx', note: 'okno' }], kind: 'UI', scenario: 'standard', prompt: shaped('x') });
     expect(recon.isError).toBeUndefined();
     const id = /recon: (r-[0-9a-f]{12})/.exec(recon.content[0].text)![1];
     expect(await call('panel_recon_report', { files: [], kind: 'maybe', prompt: 'x' })).toMatchObject({ isError: true });
-    const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id });
+    const propose = await call('panel_cezar_propose', { title: 'Paski', prompt: shaped('x'), recon: id });
     expect(propose.content[0].text).toContain('zleca panel');
-    const analysisRecon = await call('panel_recon_report', { files: [], kind: 'non-UI', prompt: 'Task: analiza' });
-    const proposeAnalysis = await call('panel_cezar_propose', { title: 'Analiza pasków', prompt: 'Task: analiza', workflow: 'analysis', recon: /recon: (r-[0-9a-f]{12})/.exec(analysisRecon.content[0].text)![1] });
+    const analysisRecon = await call('panel_recon_report', { files: [], kind: 'non-UI', prompt: shaped('analiza') });
+    const proposeAnalysis = await call('panel_cezar_propose', { title: 'Analiza pasków', prompt: shaped('analiza'), workflow: 'analysis', recon: /recon: (r-[0-9a-f]{12})/.exec(analysisRecon.content[0].text)![1] });
     expect(proposeAnalysis.isError).toBeUndefined();
     // Only the two workflows the skill knows; anything else never reaches a card, let alone Cezar.
-    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id, workflow: 'rm-rf' })).toMatchObject({ isError: true });
-    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: 'Task: x', recon: id, todoId: 'zadanie' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: shaped('x'), recon: id, workflow: 'rm-rf' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_propose', { title: 'Paski', prompt: shaped('x'), recon: id, todoId: 'zadanie' })).toMatchObject({ isError: true });
     const watch = await call('panel_cezar_watch', { id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001' });
     expect(JSON.parse(watch.content[0].text).task).toMatchObject({ id: 'tabnote-poc-rn/7c1d9a02-aaaa-4bbb-8ccc-000000000001', status: expect.any(String) });
     expect(await call('panel_cezar_watch', { id: 'desk-panel/00000000-0000-0000-0000-00000000dead' })).toMatchObject({ isError: true });
@@ -121,33 +126,37 @@ describe('panel MCP for Hermes', () => {
 
   it('takes a proposal only after its recon answered, and a recon only of files the repository has', async () => {
     // Sent in the same answer as the searches (gemini flash did, 21 calls at once): no recon id yet.
-    const blind = await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w', recon: 'r-000000000000' });
+    const blind = await call('panel_cezar_propose', { title: 'Widget', prompt: shaped('w'), recon: 'r-000000000000' });
     expect(blind).toMatchObject({ isError: true });
     expect(blind.content[0].text).toContain('Najpierw wywołaj panel_recon_report');
-    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: shaped('w') })).toMatchObject({ isError: true });
 
-    const guessed = await call('panel_recon_report', { files: [{ path: 'src/nonexistent-types.ts' }, { path: 'src/App.tsx' }], kind: 'UI', prompt: 'Task: w' });
+    const guessed = await call('panel_recon_report', { files: [{ path: 'src/nonexistent-types.ts' }, { path: 'src/App.tsx' }], kind: 'UI', prompt: shaped('w') });
     expect(guessed).toMatchObject({ isError: true });
     expect(guessed.content[0].text).toContain('src/nonexistent-types.ts');
-    expect(await call('panel_recon_report', { files: [{ path: '../secrets.txt', new: true }], kind: 'UI', prompt: 'Task: w' })).toMatchObject({ isError: true });
+    expect(await call('panel_recon_report', { files: [{ path: '../secrets.txt', new: true }], kind: 'UI', prompt: shaped('w') })).toMatchObject({ isError: true });
 
-    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx' }, { path: 'src/tiles/GitHubPrTile.tsx', new: true }], kind: 'UI', prompt: 'Task: w' });
+    const recon = await call('panel_recon_report', { files: [{ path: 'src/App.tsx' }, { path: 'src/tiles/GitHubPrTile.tsx', new: true }], kind: 'UI', prompt: shaped('w') });
     expect(recon.isError).toBeUndefined();
     const id = /recon: (r-[0-9a-f]{12})/.exec(recon.content[0].text)![1];
-    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: inny', recon: id })).toMatchObject({ isError: true });
-    expect((await call('panel_cezar_propose', { title: 'Widget', prompt: 'Task: w', recon: id })).isError).toBeUndefined();
+    expect(await call('panel_cezar_propose', { title: 'Widget', prompt: shaped('inny'), recon: id })).toMatchObject({ isError: true });
+    expect((await call('panel_cezar_propose', { title: 'Widget', prompt: shaped('w'), recon: id })).isError).toBeUndefined();
   });
 
   it('takes a recon only of names in backticks the repository has, or whose source the dispatcher gives', async () => {
     // Built here, so that no file of the repository (this one included) holds the made-up names.
     const madeUp = ['qz', 'nowhere', '5h'].join('-'), live = ['qz', 'live', 'weekly'].join('-');
-    const prompt = `Task: w\nAcceptance criteria:\n- [ ] \`splitFor()\` in \`src/quota-cards.ts\` reads \`${live}\` and \`${madeUp}\`.`;
+    const prompt = shaped('w', `- [ ] \`splitFor()\` in \`src/quota-cards.ts\` reads \`${live}\` and \`${madeUp}\`.`);
     const refused = await call('panel_recon_report', { files: [{ path: 'src/quota-cards.ts' }], kind: 'UI', prompt });
     expect(refused).toMatchObject({ isError: true });
     expect(refused.content[0].text).toContain(`\`${live}\`, \`${madeUp}\``);
     expect(refused.content[0].text).not.toMatch(/splitFor|quota-cards/);
     const declared = await call('panel_recon_report', { files: [{ path: 'src/quota-cards.ts' }], kind: 'UI', prompt, outside: [{ name: live, source: 'panel_quotas' }, { name: madeUp, source: 'nowa' }] });
     expect(declared.isError).toBeUndefined();
+    // Without "Live data" (what the source has and lacks) an ask the source cannot meet became "when available".
+    const bare = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w').replace(/Live data[^]*?(?=Acceptance criteria:)/, '') });
+    expect(bare).toMatchObject({ isError: true });
+    expect(bare.content[0].text).toContain('brakuje sekcji: Live data');
     expect(unknownNames('`a` `x1` `5h` `Gemini Claude&GPT` `open: tile:quota`', 'Gemini Claude GPT open tile quota')).toEqual([]);
   });
 
