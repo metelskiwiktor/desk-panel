@@ -171,6 +171,19 @@ describe('panel MCP for Hermes', () => {
     expect(unknownNames('`a` `x1` `5h` `Gemini Claude&GPT` `open: tile:quota`', 'Gemini Claude GPT open tile quota')).toEqual([]);
   });
 
+  it('says which fields a to-do action takes when the agent sends others', async () => {
+    // As the agent tried them (28.10.2026): a due date the lists do not have, and `list` on updateTask.
+    const due = await call('panel_todo_action', { action: { action: 'addTask', list: 'l-5de7602c', title: 'Reset Codexa', by: 'agent', due: '2026-10-29T17:00' } });
+    expect(due).toMatchObject({ isError: true });
+    expect(due.content[0].text).toContain('addTask przyjmuje tylko pola: list, title, note, by. Tych pól nie ma: due.');
+    expect(due.content[0].text).toContain('Zadania nie mają terminu ani przypomnienia');
+    const update = await call('panel_todo_action', { action: { action: 'updateTask', list: 'l-5de7602c', task: 't-a73c8431', title: 'x' } });
+    expect(update.content[0].text).toContain('updateTask przyjmuje tylko pola: task, title, note, done. Tych pól nie ma: list.');
+    expect((await call('panel_todo_action', { action: { action: 'remind' } })).content[0].text).toContain('Nieznana akcja "remind". Akcje: createList');
+    const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todo_action').description).toContain('updateTask {task, title, note, done}');
+  });
+
   it('makes the to-do changes the chat agent may make', async () => {
     const made = await call('panel_todo_action', { action: { action: 'createList', name: 'Z Hermesa' } });
     expect(made.isError).toBeUndefined();

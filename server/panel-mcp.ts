@@ -118,6 +118,28 @@ function trackedText(now: number): string | null {
   return tracked.text;
 }
 
+/**
+ * The fields of each to-do action, read from the contract. The tool once answered every mistake with "check the action and
+ * its fields": the agent then tried `due` and `date`, sent `list` to updateTask three times, hit Hermes's loop guard, slept
+ * 60 s and read the panel's source to learn the shape (28.10.2026). The description and the error now name the fields.
+ */
+const TODO_FIELDS: Record<string, string[]> = Object.fromEntries(todoActionSchema.options.map(option =>
+  [String((option.shape.action as z.ZodLiteral<string>).value), Object.keys(option.shape).filter(key => key !== 'action')]));
+const NO_DUE = 'Zadania nie mają terminu ani przypomnienia: datę wpisz w tytuł lub notatkę.';
+function todoActionError(raw: unknown, issues: z.core.$ZodIssue[]): string {
+  const action = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const fields = typeof action.action === 'string' ? TODO_FIELDS[action.action] : undefined;
+  if (!fields) return `Nieznana akcja ${JSON.stringify(action.action ?? null)}. Akcje: ${Object.keys(TODO_FIELDS).join(', ')}.`;
+  const unknown = Object.keys(action).filter(key => key !== 'action' && !fields.includes(key));
+  const wrong = issues.filter(issue => issue.code !== 'unrecognized_keys').map(issue => `${issue.path.join('.') || 'akcja'}: ${issue.message}`).slice(0, 3);
+  return [
+    `${action.action} przyjmuje tylko pola: ${fields.join(', ')}.`,
+    unknown.length ? `Tych pól nie ma: ${unknown.join(', ')}.` : '',
+    wrong.length ? `Do poprawy: ${wrong.join('; ')}.` : '',
+    'list to id l-…, task to id t-….', unknown.some(key => /due|date|time|remind|deadline|termin/i.test(key)) ? NO_DUE : '',
+  ].filter(Boolean).join(' ');
+}
+
 const range = { from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie dziś)' }, to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie (domyślnie from + 6 dni, najwyżej 42 dni)' } };
 const schema = (properties: Record<string, unknown> = {}, required: string[] = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 
@@ -183,12 +205,12 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     },
   },
   panel_todo_action: {
-    description: 'Zmiana list zadań użytkownika: createList, addTask (zawsze z "by":"agent"), updateTask, moveTask, renameList, deleteTask, clearDone, deleteList. Usuwaj tylko na wyraźną prośbę.',
+    description: `Zmiana list zadań użytkownika. Akcje i jedyne pola, jakie przyjmują: ${Object.entries(TODO_FIELDS).map(([action, fields]) => `${action} {${fields.join(', ')}}`).join('; ')}. list to id l-…, task to id t-…; przy addTask zawsze "by":"agent". ${NO_DUE} Usuwaj tylko na wyraźną prośbę.`,
     input: z.object({ action: z.record(z.string(), z.unknown()) }).strict(),
-    schema: schema({ action: { type: 'object', description: 'Np. {"action":"addTask","list":"l-…","title":"…","by":"agent"}' } }, ['action']),
+    schema: schema({ action: { type: 'object', description: 'Np. {"action":"addTask","list":"l-…","title":"…","by":"agent"} albo {"action":"updateTask","task":"t-…","note":"…"}' } }, ['action']),
     async run(args, { sources }) {
       const parsed = todoActionSchema.safeParse(args.action);
-      if (!parsed.success) throw new AgentViewError(400, 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….');
+      if (!parsed.success) throw new AgentViewError(400, todoActionError(args.action, parsed.error.issues));
       return JSON.stringify(await sources.todoAction(parsed.data));
     },
   },
