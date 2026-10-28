@@ -53,6 +53,12 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
 - **Limity czasu**: każde żądanie do Hermesa ma 15 s (zdrowie 3 s), połączenie strumienia 15 s; cała tura najwyżej 15 min
   (`DESK_HERMES_TURN_TIMEOUT_MS`), potem przebieg jest anulowany, a tura kończy się błędem. Nic nie czeka bez końca: zatrzymanie,
   na które Hermes nie odpowie w 10 s, kończy turę po stronie panelu.
+- **Zawieszony model**: 6 min (`DESK_HERMES_SILENCE_MS`) bez żadnego zdarzenia, gdy nie działa narzędzie i nie czeka zgoda, przerywa
+  turę z komunikatem, że model nie odpowiedział. To dłużej, niż provider `antigravity-oauth` czeka na jedno wywołanie (300 s), więc
+  wywołanie na pewno zawisło. Hermes ponawia je jeszcze dwa razy z całą historią w świeżym procesie agy. 28.10.2026 każda próba
+  zawisła tak samo i trzy próby wypełniły cały 15-minutowy limit tury w ciszy. Szybkie błędy modelu („stale”, źle sformatowane
+  wywołanie narzędzia) kończą się w sekundy, więc te ponowienia działają dalej. Od pierwszej minuty ciszy wiadomość pokazuje, od ilu
+  minut model nie odpowiada i kiedy panel przerwie turę.
 
 ### Zgody i wolne narzędzia
 
@@ -131,6 +137,7 @@ Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]
 | `DESK_HERMES_URL` | `http://127.0.0.1:8642` | adres API servera; tylko `http` na loopback, bez danych logowania |
 | `DESK_HERMES_KEY` | brak | `API_SERVER_KEY` Hermesa, wysyłany jako `Bearer`; tylko na backendzie |
 | `DESK_HERMES_TURN_TIMEOUT_MS` | `900000` | najdłuższa tura |
+| `DESK_HERMES_SILENCE_MS` | `360000` | cisza (bez narzędzia i zgody), po której tura jest przerywana jako zawieszony model |
 | `DESK_MCP_TOKEN` | plik `mcp-token` | token narzędzi panelu dla Hermesa |
 
 ## Bezpieczeństwo

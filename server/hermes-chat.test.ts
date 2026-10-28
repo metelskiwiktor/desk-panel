@@ -408,6 +408,26 @@ describe('Hermes chat', () => {
     expect(mock.requests.some(r => r.path.endsWith('/cancel'))).toBe(true);
   });
 
+  it('ends a turn whose model call stays silent past one call\'s limit, long before the turn limit', async () => {
+    mock.configure({ stepMs: 400 });
+    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 100, silenceMs: 250 });
+    const { id } = await service.create({ text: 'Zawieszony model' });
+    const chat = await finishedChat(service, id);
+    expect(chat.items[1].status).toBe('error');
+    expect(chat.items[1].error).toMatch(/Model nie odpowiedział/);
+    expect(mock.requests.some(r => r.path.endsWith('/cancel'))).toBe(true);
+  });
+
+  it('does not count a running tool as silence', async () => {
+    // The mock's tool runs three steps (300 ms) with no event, longer than the silence limit; the rest is quicker.
+    mock.configure({ stepMs: 100 });
+    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 50, silenceMs: 250 });
+    const { id } = await service.create({ text: 'Co mam na listach?' });
+    const chat = await finishedChat(service, id);
+    expect(chat.items[1].status).toBe('done');
+    expect(mock.requests.some(r => r.path.endsWith('/cancel'))).toBe(false);
+  });
+
   it('refuses a second message while the first is answered', async () => {
     mock.configure({ stepMs: 30 });
     const service = hermes();

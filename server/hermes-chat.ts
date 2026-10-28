@@ -94,6 +94,12 @@ export interface HermesChatOptions {
   stallMs?: number;
   /** A turn that has not ended after this long is cancelled and reported. */
   turnTimeoutMs?: number;
+  /**
+   * Silence (no event, no running tool, no pending approval) after which the turn is cancelled: longer than one model
+   * call may take (antigravity-oauth gives up after 300 s), so the call hung. Hermes retries a hung call twice more,
+   * each hanging as long (28.10.2026), which used to spend the whole turn limit in silence.
+   */
+  silenceMs?: number;
   /** First wait before reconnecting to the event stream; doubles up to 10 s. */
   retryMs?: number;
   /** After a stop, how long to wait for Hermes to confirm before the panel ends the turn by itself. */
@@ -204,6 +210,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const log = options.log ?? createChatLog(dir, now);
   const stallMs = options.stallMs ?? 25_000;
   const turnTimeoutMs = options.turnTimeoutMs ?? 15 * 60_000;
+  const silenceMs = options.silenceMs ?? 6 * 60_000;
   const retryMs = options.retryMs ?? 1000;
   const cancelGraceMs = options.cancelGraceMs ?? 10_000;
   const intro = hermesPreamble();
@@ -436,10 +443,18 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     live.watchdog = setInterval(() => {
       if (live.done) return;
       if (now() > deadline) { void timeout(live); return; }
-      if (now() - live.lastEventAt >= stallMs) {
+      const silent = now() - live.lastEventAt;
+      if (silent >= stallMs) {
         // A pending approval or a running tool already says what is going on (with its time).
         const busy = (live.message.parts ?? []).some(p => (p.type === 'approval' && p.state === 'pending') || (p.type === 'tool' && p.state === 'running'));
-        if (!busy && !live.message.notice) { live.message.notice = 'Hermes milczy: sprawdzam stan przebiegu…'; touch(live.record, live.message); }
+        if (!busy && silent >= silenceMs) { void timeout(live, `Model nie odpowiedział przez ${Math.round(silent / 60_000)} min (wywołanie zawisło), więc tura została przerwana. Wyślij wiadomość ponownie; jeśli to się powtarza, zacznij nową rozmowę.`); return; }
+        const notice = silent >= 60_000
+          ? `Model nie odpowiada od ${Math.floor(silent / 60_000)} min; po ${Math.round(silenceMs / 60_000)} min ciszy panel przerwie turę.`
+          : 'Hermes milczy: sprawdzam stan przebiegu…';
+        if (!busy && live.message.notice !== notice && (!live.message.notice || live.message.notice.startsWith('Hermes milczy') || live.message.notice.startsWith('Model nie odpowiada'))) {
+          live.message.notice = notice;
+          touch(live.record, live.message);
+        }
         void reconcile(live, 'stall');
       }
     }, Math.max(50, Math.min(stallMs, 5000)));
@@ -466,11 +481,11 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     }
   };
 
-  const timeout = async (live: Live) => {
+  const timeout = async (live: Live, error = `Przekroczono limit czasu tury (${Math.round(turnTimeoutMs / 60_000)} min). Przebieg w Hermesie został przerwany.`) => {
     if (live.done) return;
     // Ended first, so the cancelled event the cancel brings does not turn a timeout into a stop.
     const run = live.turn.run;
-    const ended = finalize(live, { state: 'failed', error: `Przekroczono limit czasu tury (${Math.round(turnTimeoutMs / 60_000)} min). Przebieg w Hermesie został przerwany.` }, 'exit');
+    const ended = finalize(live, { state: 'failed', error }, 'exit');
     if (run) await client.cancel(run).catch(() => {});
     await ended;
   };

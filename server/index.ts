@@ -27,6 +27,7 @@ const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mail
 const hermes = createHermesChat({
   client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
   turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
+  silenceMs: Number(process.env.DESK_HERMES_SILENCE_MS) || undefined,
 });
 const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ panelUrl: `http://127.0.0.1:${port}` }) } });
 // The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
