@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readCezar } from './cezar';
-import { createCezarRun, readCezarDefaults } from './cezar-finished';
+import { createCezarRun, pinnedSteps, readCezarDefaults } from './cezar-finished';
 
 const asOf = '2026-10-24T18:00:00.000Z';
 const coverage = { projects: [{ projectId: 'p', state: 'complete' }] };
@@ -49,6 +49,22 @@ describe('createCezarRun', () => {
     expect(await readCezarDefaults('http://cezar.test', 'analysis', 'claude', request)).toMatchObject({ runner: 'claude', model: 'opus' });
     config.modelsLocked = true;
     expect(await readCezarDefaults('http://cezar.test', 'analysis', 'claude', request)).toMatchObject({ runner: 'claude', model: 'sonnet', modelsLocked: true });
+  });
+
+  it('names the steps whose runner the workflow fixes, as the dispatch card must show them', async () => {
+    // The repository's own workflow: the steps that write code on Codex, the review on another family.
+    const request = (async () => new Response(JSON.stringify({ defaultRunner: 'agy' }))) as typeof fetch;
+    const { pinned } = await readCezarDefaults('http://cezar.test', 'desk-panel-task', undefined, request);
+    expect(pinned).toEqual([
+      { id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' },
+      { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra' },
+      { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' },
+      { id: 'address', runner: 'codex', model: 'gpt-6.1-terra' },
+    ]);
+    // Only node keys count: a prompt that mentions "runner:" deeper in its text does not pin anything.
+    const yaml = 'nodes:\r\n  - id: a\r\n    type: agent\r\n    prompt: |\r\n      runner: claude\r\n  - id: b\r\n    type: check\r\n    runner: agy\r\n  - id: c\r\n    type: agent\r\n    runner: claude\r\n';
+    expect(pinnedSteps(yaml)).toEqual([{ id: 'c', runner: 'claude', model: null }]);
+    expect((await readCezarDefaults('http://cezar.test', 'no-such-workflow', undefined, request)).pinned).toEqual([]);
   });
 
   it('offers AGY presets when Cezar has no AGY catalog endpoint', async () => {

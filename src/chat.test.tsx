@@ -482,7 +482,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
       calls.push({ url, method, body });
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
-      if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false });
+      if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
       if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
       if (url === `/api/chats/${H}/dispatch`) {
         cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } } });
@@ -505,6 +505,9 @@ describe('the live cockpit (Hermes and the panel)', () => {
     const card = screen.getByRole('region', { name: 'Zgoda na zlecenie taska' });
     expect(within(card).getByText('Zlecić na Cezarze?')).toBeTruthy();
     expect(within(card).getByText('Workflow: analysis')).toBeTruthy();
+    // Steps the workflow pins run on their own runner: the card says so, and that the choice below is for the rest.
+    expect((await within(card).findByTestId('pinned-steps')).textContent).toBe('Workflow ustala wykonawcę kroków: implement · codex · gpt-6.1-terra, review · agy · claude-opus-5-5-low. Wybór niżej dotyczy tylko pozostałych kroków.');
+    expect(within(card).getByText(/^Pozostałe kroki według obecnych ustawień Cezara: codex · gpt-6\.1-sol\.$/)).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/dispatch') || c.url === '/api/cezar/runs')).toBe(false);
 
     await user.selectOptions(within(card).getByLabelText('Wykonawca Cezara'), 'codex');

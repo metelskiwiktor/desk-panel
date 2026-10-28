@@ -2,6 +2,11 @@
 
 You are the executor. Follow the sequence in your workflow prompt exactly.
 
+Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `address` run on `codex` (`gpt-6.1-terra`, the
+user's Codex subscription; `fix` and `address` continue the `implement` session), `review` on `agy` (`claude-opus-5-5-low`). A
+step's own runner and model win over the run's, so the dispatch card lists these pinned steps and its runner/model choice only
+reaches the others. Gemini 3.8 Flash judged worst in the dispatcher benchmarks of 28.10.2026 (docs/hermes.md, "Model").
+
 ## Efficiency & Tool Rules
 - **Absolute worktree paths**: Always pass full absolute paths inside your current worktree to `read_file`, `view_file`, `edit_file`, and `write_file`.
 - **Full-file reads**: Omit `StartLine`/`EndLine` on `read_file` unless a file exceeds 500 lines.
@@ -37,6 +42,6 @@ npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 -
 
 ## Phase 5 — Automated Verify, Pre-PR Review & PR Creation (handled by Cezar)
 1. **`verify`**: Runs `npm test`, `npm run build`, checks `git status --porcelain`, and saves `.ai/diff.patch` (loops back to `fix` up to 2 times on failure).
-2. **`review`**: A fresh `agy` (`gemini-3.8-flash-medium`) reviewer session inspects `.ai/diff.patch` and changed files without re-running the test suite, and emits `CEZ:VERDICT approve` or `CEZ:VERDICT changes` (for real `P0`/`P1`/`P2` issues).
+2. **`review`**: A fresh `agy` (`claude-opus-5-5-low`, another model family than the code's author) reviewer session inspects `.ai/diff.patch` and changed files without re-running the test suite, and emits `CEZ:VERDICT approve` or `CEZ:VERDICT changes` (for real `P0`/`P1`/`P2` issues).
 3. **`address` (if `changes`)**: Re-opens the `implement` session (`max: 1` round) to fix the reported `P0`/`P1`/`P2` issues, re-capture `after.png` if UI changed, and re-run `verify`.
 4. **`pr` + `screenshots-comment` + `review-comment`**: Opens the PR ready for review, attaches all before/after screenshots in `.ai/screenshots/` (`scripts/pr-screenshots.mjs`), and posts the pre-PR review summary on the PR.

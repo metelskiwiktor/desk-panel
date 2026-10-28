@@ -100,7 +100,8 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const [error, setError] = useState('');
   const [runner, setRunner] = useState('');
   const [model, setModel] = useState('');
-  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean } | null>(null);
+  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: { id: string; runner: string; model: string | null }[] } | null>(null);
+  const pinned = defaults?.pinned ?? [];
   useEffect(() => {
     const abort = new AbortController();
     setDefaults(null);
@@ -151,7 +152,8 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
             {['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'].map(name => <option key={name} value={name}>{name}</option>)}
           </select>
         </label>
-        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `Według obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
+        {pinned.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-text" data-testid="pinned-steps">Workflow ustala wykonawcę kroków: {pinned.map(s => `${s.id} · ${s.runner}${s.model ? ` · ${s.model}` : ''}`).join(', ')}. Wybór niżej dotyczy tylko pozostałych kroków.</p>}
+        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `${pinned.length ? 'Pozostałe kroki według' : 'Według'} obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
         {defaults && !defaults.modelsLocked && <label className="tw:text-xs tw:text-ck-muted">Model
           <select aria-label="Model Cezara" value={model} disabled={busy || defaults.models.length === 0} onChange={e => setModel(e.target.value)} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
             <option value="">Domyślny: {defaults.model || 'nieznany'}</option>
