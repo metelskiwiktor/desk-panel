@@ -50,6 +50,18 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
   zmian kodu w repozytoriach (desk-panel kartą, inne projekty opisem do zlecenia w Cezarze). Przykład z diagnozą:
   [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md). Preambuła trafia tylko do pierwszej wiadomości sesji: starsze
   rozmowy działają według instrukcji, z którymi się zaczęły.
+- **Koszt kontekstu.** Wszystko, co zwróci narzędzie, zostaje w rozmowie i jest wysyłane ponownie przy każdym wywołaniu modelu
+  (w rozmowie z 28.10.2026 wyniki narzędzi stanowiły 300 z 374 tys. znaków historii). Dlatego:
+  - `TERMINAL_CWD` Hermesa to `~/.desk-panel/agent`, poza repozytoriami. Hermes dokleja `AGENTS.md` katalogu do wyniku narzędzia
+    przy pierwszym dotknięciu katalogu, ale tylko wewnątrz katalogu roboczego. Przy `AndroidStudioProjects` jedna rozmowa
+    dostała tak ok. 57 tys. znaków: `desk-panel\AGENTS.md` z głównego checkoutu i z worktree'ów oraz 29 tys. z `cezar\AGENTS.md`.
+    API serwer Hermesa nie ma przełącznika `skip_context_files`, więc steruje tym tylko katalog roboczy.
+  - `tool_output` w `config.yaml` (dopisuje `just hermes-setup`): wyjście terminala do 16 tys. znaków, z początkiem i końcem
+    (wyniki testów są na końcu), `read_file` do 400 linii, linia do 600 znaków. Wartości domyślne Hermesa to 50 tys., 2000 i 2000.
+  - Kompresja historii Hermesa włącza się dopiero przy 50% okna modelu, czego przy oknie gemini-flash rozmowy panelu nie osiągają.
+    Nie jest przestawiona, bo streszczenie to kolejne wywołanie agy.
+  Zmiana katalogu lub limitów działa po restarcie usługi Hermesa (`just hermes RESTART`); Servy czyta manifest i `hermes.env`
+  przy każdym starcie.
 - **Limity czasu**: każde żądanie do Hermesa ma 15 s (zdrowie 3 s), połączenie strumienia 15 s; cała tura najwyżej 15 min
   (`DESK_HERMES_TURN_TIMEOUT_MS`), potem przebieg jest anulowany, a tura kończy się błędem. Nic nie czeka bez końca: zatrzymanie,
   na które Hermes nie odpowie w 10 s, kończy turę po stronie panelu.

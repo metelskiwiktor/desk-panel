@@ -14,7 +14,7 @@
         "API_SERVER_ENABLED": "true",
         "API_SERVER_HOST": "127.0.0.1",
         "API_SERVER_PORT": "8642",
-        "TERMINAL_CWD": "${UserProfile}\\AndroidStudioProjects"
+        "TERMINAL_CWD": "${UserProfile}\\.desk-panel\\agent"
       }
     }
   ]

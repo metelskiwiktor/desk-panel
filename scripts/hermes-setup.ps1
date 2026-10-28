@@ -77,6 +77,15 @@ if ($text -match '(?m)^\s+desk-panel:\s*$') {
 } else {
     Write-Warning "config.yaml already has mcp_servers: add 'desk-panel' under it by hand (url http://127.0.0.1:$PanelPort/api/mcp, header Authorization: Bearer <contents of $tokenFile>)."
 }
+# Shorter tool results: whatever a tool returns stays in the conversation and goes out again with every model call.
+# Terminal output keeps its head and tail (a test runner's failures are at the end).
+$text=if (Test-Path -LiteralPath $config) { Get-Content -LiteralPath $config -Raw } else { '' }
+if ($text -match '(?m)^tool_output:') {
+    Write-Host 'config.yaml: tool_output already present (left as it is).'
+} else {
+    Add-Content -LiteralPath $config -Value "`ntool_output:`n  max_bytes: 16000`n  max_lines: 400`n  max_line_length: 600`n" -Encoding ASCII
+    Write-Host 'config.yaml: added tool_output limits.'
+}
 
 # 5. Lock directory and hermes.env for Servy / Windows
 $lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }
@@ -87,7 +96,8 @@ Set-EnvValues (Join-Path $panelHome 'hermes.env') @{
     API_SERVER_ENABLED='true'
     API_SERVER_HOST='127.0.0.1'
     API_SERVER_PORT="$HermesPort"
-    TERMINAL_CWD=(Join-Path $HOME 'AndroidStudioProjects')
+    # Outside the repositories: Hermes appends a directory's AGENTS.md to a tool result only inside its working directory.
+    TERMINAL_CWD=(Join-Path $panelHome 'agent')
 }
 if ($env:LOCALAPPDATA) {
     $localHermes=Join-Path $env:LOCALAPPDATA 'hermes'
