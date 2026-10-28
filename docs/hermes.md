@@ -146,6 +146,13 @@ model, ogólne ustawienie nie wystarcza; `just hermes-setup` dopisuje wpis dla b
 restartu (Hermes czyta go przy każdym przebiegu); powrót do agy: `provider: antigravity-oauth`, `base_url: agy://local`,
 `default: gemini-3.8-flash-medium`. Codex i Claude zostają dla Cezara.
 
+Ten sam klucz ma też OpenCode (`~/.local/share/opencode/auth.json`, wpis `openrouter`; Cezar działa na koncie użytkownika, więc
+jego runner `opencode` go czyta), żeby taski Cezara mogły iść na DeepSeeku: `~/.config/opencode/opencode.jsonc` pokazuje z
+OpenRoutera tylko `deepseek/deepseek-v4-pro-0813` i `deepseek/deepseek-v4.1-flash-1017` (`whitelist`, z `data_collection: deny`),
+a karta zlecenia ma je w liście modeli runnera `opencode`. Przy wymianie klucza zmień go we wszystkich czterech miejscach (dwa
+`.env` Hermesa, `panel.env`, ten `auth.json`). W `desk-panel-task` kroki implement/fix/address i review mają wykonawcę z workflow,
+więc wybór DeepSeeka dotyczy tam tylko pozostałych kroków; w `analysis`, `implement` i `quick-task` obowiązuje cały run.
+
 Wybór z trzech testów na tym samym zestawie (skill „Zaimplementuj zadanie”, prawdziwy panel, każdy model po razie): zadanie już zrobione
 (PR niezmergowany), rozmowa o „zadaniach jako większym bycie” i obawa o podział zużycia, gdzie trzeba było odkryć, że `splitFor` nie ma
 wywołania produkcyjnego. DeepSeek V4.1 Flash wypadł najlepiej za swoją cenę (0,015–0,04 USD za zlecenie, 1–2 min), Qwen 3.8 Max
