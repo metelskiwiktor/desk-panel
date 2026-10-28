@@ -17,7 +17,7 @@ import { SourceError, type PanelSources } from './sources';
  */
 
 const outcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number() }),
+  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const storeSchema = z.object({
@@ -125,7 +125,7 @@ const PR_TTL_MS = 20_000, PR_SETTLED_TTL_MS = 5 * 60_000;
 
 export interface Cockpit {
   /** `items`: the conversation as the chat has it; the watched task follows from it by the contract (`watchedTask`). */
-  view(chatId: string, items: Parameters<typeof watchedTask>[0]): Promise<CockpitView>;
+  view(chatId: string, items: Parameters<typeof watchedTask>[0], decisions?: Record<string, DispatchOutcome>): Promise<CockpitView>;
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
 }
 
@@ -145,6 +145,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     renameSync(`${file}.tmp`, file);
   };
   const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, updatedAt: now() };
+  const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
 
   const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
   async function prOf(url: string, fallback: { title: string; branch?: string }): Promise<CockpitPrView> {
@@ -165,9 +166,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   }
 
   return {
-    async view(chatId, items) {
+    async view(chatId, items, decisions) {
       const chat = store.chats[chatId];
-      const id = watchedTask(items, chat?.dispatches ?? {}) ?? undefined;
+      const id = watchedTask(items, decisions ?? chat?.dispatches ?? {}) ?? undefined;
       let task: CockpitTaskView | null = null, pr: CockpitPrView | null = null;
       if (id && sources.cezarRun) {
         const raw = await sources.cezarRun(id).catch(() => null);
@@ -187,6 +188,10 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       // The same answer twice (a double click, a retry after a timeout) dispatches once.
       const known = chat.dispatches[input.toolCallId];
       if (known) return known;
+      const key = `${chatId}:${input.toolCallId}`;
+      const pending = pendingDispatches.get(key);
+      if (pending) return pending;
+      const operation = (async (): Promise<DispatchOutcome> => {
       if (input.decision === 'reject') {
         const outcome: DispatchOutcome = { decision: 'rejected', at: now() };
         chat.dispatches[input.toolCallId] = outcome;
@@ -199,14 +204,19 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         task: input.prompt,
         title: input.title,
         ...(input.workflow ? { workflow: input.workflow } : {}),
+        ...(input.runner ? { runner: input.runner } : {}),
+        ...(input.model ? { model: input.model } : {}),
         ...(input.todoId ? { todoId: input.todoId } : {}),
       });
-      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now() };
+      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}) };
       chat.dispatches[input.toolCallId] = outcome;
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();
       save();
       return outcome;
+      })();
+      pendingDispatches.set(key, operation);
+      try { return await operation; } finally { pendingDispatches.delete(key); }
     },
   };
 }

@@ -7,9 +7,20 @@ import { COCKPIT_TOOLS, cockpitToolDescription, watchedTask } from '../src/cockp
 import { cezarTaskView, createCockpit, prFromGh } from './cockpit';
 import type { PanelSources } from './sources';
 import { createTodoStore } from './todos';
+import { resolveLegacyDecisions } from './chat-routes';
+import type { ChatDetail } from '../src/chat-contract';
 
 const CEZAR = 'http://127.0.0.1:4321/';
 const RUN = 'desk-panel/f2c9501e-7121-4746-8fc8-19ee3ee9d968';
+
+it('resolves old decisions only when the original prompt identifies exactly one card', () => {
+  const card = (id: string, prompt: string) => ({ id, role: 'agent' as const, at: 1, status: 'done' as const, parts: [{ type: 'tool' as const, id: `${id}:call`, name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ prompt }), state: 'done' as const }] });
+  const conversation: ChatDetail = { id: 'chat', title: 'test', createdAt: 1, updatedAt: 1, messages: 2, running: false, engine: 'hermes', items: [card('a', 'analysis'), card('b', 'implementation')] };
+  const decision = { decision: 'dispatched' as const, taskId: RUN, prompt: 'analysis', url: 'url', at: 1 };
+  expect(resolveLegacyDecisions(conversation, { old: decision })).toMatchObject({ unresolved: false, dispatches: { 'a:call': decision } });
+  expect(resolveLegacyDecisions({ ...conversation, items: [...conversation.items, card('c', 'analysis')] }, { old: decision }).unresolved).toBe(true);
+  expect(resolveLegacyDecisions(conversation, { old: { decision: 'rejected', at: 1 } }).unresolved).toBe(true);
+});
 /** The fields a real Cezar run has (as read from Cezar 2026-10), trimmed. */
 const raw = (over: Record<string, unknown> = {}) => ({
   id: 'f2c9501e-7121-4746-8fc8-19ee3ee9d968', title: 'Domyślnie zminimalizowane paski stref', titleSummary: 'Paski stref', status: 'running',
@@ -151,6 +162,20 @@ describe('the cockpit of a conversation', () => {
     await cockpit.view(CHAT, [tool('panel_cezar_propose', 'call_1')]);
     expect(gh).toHaveBeenCalledTimes(1); // the PR is read gently
     expect(JSON.parse(readFileSync(file, 'utf8')).chats[CHAT].runs).toEqual([RUN]);
+  });
+
+  it('coalesces simultaneous answers on the same card', async () => {
+    const { cockpit, created } = setup();
+    const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Test', prompt: PROMPT };
+    const [first, second] = await Promise.all([cockpit.dispatch(CHAT, answer), cockpit.dispatch(CHAT, answer)]);
+    expect(first).toEqual(second);
+    expect(created).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards the user-selected runner and model', async () => {
+    const { cockpit, created } = setup();
+    await cockpit.dispatch(CHAT, { toolCallId: 'choice', decision: 'dispatch', title: 'Test', prompt: PROMPT, workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' });
+    expect(created).toHaveBeenCalledWith({ title: 'Test', task: PROMPT, workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' });
   });
 
   it('keeps a refusal, and dispatches nothing for it', async () => {

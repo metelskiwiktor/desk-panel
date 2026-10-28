@@ -38,8 +38,8 @@ export interface ReconArgs {
 
 /** Human in the loop: the agent asks before it hands a task to Cezar. */
 export const DISPATCH = 'cezar_dispatch';
-export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string }
-export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string } | { decision: 'rejected' };
+export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string; legacyUnresolved?: boolean }
+export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string } | { decision: 'rejected' };
 
 /** `@nasłuchuj cezara`: the agent watches a running Cezar task (watchdog). */
 export const WATCH = 'cezar_watch';

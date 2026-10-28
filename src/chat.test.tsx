@@ -481,6 +481,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
       calls.push({ url, method, body });
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
+      if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false });
       if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
       if (url === `/api/chats/${H}/dispatch`) {
         cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } } });
@@ -502,10 +503,13 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(recon).getByText('Rekonesans gotowy')).toBeTruthy();
     const card = screen.getByRole('region', { name: 'Zgoda na zlecenie taska' });
     expect(within(card).getByText('Zlecić na Cezarze?')).toBeTruthy();
+    expect(within(card).getByText('Workflow: analysis')).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/dispatch') || c.url === '/api/cezar/runs')).toBe(false);
 
+    await user.selectOptions(within(card).getByLabelText('Wykonawca Cezara'), 'codex');
+    await user.selectOptions(await within(card).findByLabelText('Model Cezara'), 'gpt-6.1-sol');
     await user.click(within(card).getByRole('button', { name: 'Zleć na Cezarze' }));
-    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt, workflow: 'analysis' }));
+    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt, workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' }));
     expect(await within(card).findByText('Zlecono na Cezarze')).toBeTruthy();
     const task = await screen.findByRole('region', { name: 'Aktywny task Cezara' });
     await waitFor(() => expect(within(task).getByText('RUNNING')).toBeTruthy());

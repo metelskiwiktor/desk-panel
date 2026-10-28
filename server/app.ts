@@ -41,6 +41,15 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
     const ownOrigin = `${proxied ? 'https' : 'http'}://${host}`;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
+    if (req.method === 'GET' && url.pathname === '/api/cezar/dispatch-defaults') {
+      const workflow = url.searchParams.get('workflow') || 'desk-panel-task';
+      const runner = url.searchParams.get('runner') || undefined;
+      if (!/^[a-z0-9_-]{1,64}$/.test(workflow) || (runner && !/^[a-z0-9_-]{1,32}$/.test(runner))) { res.writeHead(400).end(); return; }
+      res.setHeader('Cache-Control', 'no-store'); res.setHeader('Content-Type', 'application/json');
+      try { if (!sources.cezarDefaults) throw new SourceError(503); res.end(JSON.stringify(await sources.cezarDefaults(workflow, runner))); }
+      catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
+      return;
+    }
     if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit)) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
     if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl }); return; }

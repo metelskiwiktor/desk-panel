@@ -24,6 +24,7 @@ export interface PanelSources {
   cezarAction(id: string, action: CezarAction): Promise<void>;
   /** Start a new task run in Cezar (used by the chat dispatcher after user confirmation). */
   cezarCreateRun?(input: CezarCreateRunInput): Promise<CezarCreatedRun>;
+  cezarDefaults?(workflow: string, runner?: string): Promise<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean }>;
   calendar(): Promise<CalendarSource>;
   /** Garmin Connect plan, the coming workouts' steps and recent recordings. */
   training(): Promise<TrainingSource>;

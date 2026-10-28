@@ -69,8 +69,8 @@ export const cezarCreateRunSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   project: z.string().trim().min(1).max(64).default('desk-panel'),
   workflow: z.string().trim().min(1).max(64).default('desk-panel-task'),
-  runner: z.string().trim().min(1).max(32).default('agy'),
-  model: z.string().trim().min(1).max(128).default('gemini-3.8-flash-medium'),
+  runner: z.string().trim().min(1).max(32).regex(/^[a-z0-9_-]+$/).optional(),
+  model: z.string().trim().min(1).max(128).optional(),
   todoId: z.string().trim().min(1).max(64).optional(),
 }).strict();
 export type CezarCreateRunInput = z.input<typeof cezarCreateRunSchema>;
@@ -80,8 +80,8 @@ export interface CezarCreatedRun {
   project: string;
   url: string;
   workflow: string;
-  runner: string;
-  model: string;
+  runner?: string;
+  model?: string;
 }
 export const cezarSchema = z.object({
   observedAt: z.number().finite(), tasks: z.array(taskSchema), finished: z.array(finishedTaskSchema).default([]),

@@ -1,12 +1,28 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
-import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema } from '../src/chat-contract';
-import { cockpitDispatchSchema } from '../src/cockpit-contract';
+import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail } from '../src/chat-contract';
+import { cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
 
 const MAX_BODY = 64 * 1024;
+/** Old decisions used unstable stream ids. Resolve only a unique exact prompt; otherwise block new decisions. */
+export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Record<string, DispatchOutcome>) {
+  const resolved = { ...dispatches };
+  const cards = conversation.items.flatMap(m => m.role === 'agent' ? (m.parts ?? []).flatMap(p => {
+    if (p.type !== 'tool' || !p.name.includes('panel_cezar_propose') || !p.id.startsWith(`${m.id}:`)) return [];
+    try { const args = JSON.parse(p.input) as { prompt?: unknown }; return typeof args.prompt === 'string' ? [{ id: p.id, prompt: args.prompt }] : []; } catch { return []; }
+  }) : []);
+  let unresolved = false;
+  for (const [key, decision] of Object.entries(dispatches)) {
+    if (cards.some(card => card.id === key)) continue;
+    const matches = decision.decision === 'dispatched' ? cards.filter(card => card.prompt === decision.prompt) : [];
+    if (matches.length !== 1 || resolved[matches[0].id]) { unresolved = true; continue; }
+    resolved[matches[0].id] = decision;
+  }
+  return { dispatches: resolved, unresolved };
+}
 async function readBody(req: IncomingMessage): Promise<unknown> {
   let body = '';
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>64 KB)'); }
@@ -68,12 +84,30 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       // What the conversation's cockpit shows: read-only (Cezar, GitHub CLI, the to-do lists).
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
       // Which task follows from the conversation itself (the cockpit contract), never from the request.
-      return json(res, 200, await cockpit.view(id, (await chat.get(id)).items)), true;
+      const conversation = await chat.get(id);
+      const view = await cockpit.view(id, conversation.items);
+      if (conversation.engine === 'hermes') {
+        const legacy = resolveLegacyDecisions(conversation, view.dispatches);
+        const resolvedView = Object.keys(legacy.dispatches).length > Object.keys(view.dispatches).length
+          ? await cockpit.view(id, conversation.items, legacy.dispatches) : view;
+        return json(res, 200, { ...resolvedView, dispatches: legacy.dispatches, legacyUnresolved: legacy.unresolved }), true;
+      }
+      return json(res, 200, view), true;
     } else if (action === 'dispatch' && req.method === 'POST') {
       // The user's answer on a dispatch card: the only way the chat dispatches a task to Cezar.
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
       const input = parse(cockpitDispatchSchema, await readBody(req));
-      await chat.get(id);
+      const conversation = await chat.get(id);
+      if (conversation.engine === 'hermes') {
+        const matches = conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+          ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+          : []);
+        if (matches.length !== 1) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        const view = await cockpit.view(id, conversation.items);
+        const legacy = resolveLegacyDecisions(conversation, view.dispatches);
+        if (legacy.dispatches[input.toolCallId]) return json(res, 200, legacy.dispatches[input.toolCallId]), true;
+        if (legacy.unresolved) throw new ChatError(409, 'Nie można jednoznacznie przypisać wcześniejszej decyzji do karty. Potrzebna jest diagnostyka tej rozmowy przed zleceniem.');
+      }
       return json(res, 200, await cockpit.dispatch(id, input)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);

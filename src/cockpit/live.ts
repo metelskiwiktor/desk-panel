@@ -25,11 +25,11 @@ export const cardOf = (name: string) => {
 };
 
 const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
-  ? { decision: 'dispatched' as const, taskId: outcome.taskId, prompt: outcome.prompt, url: outcome.url }
+  ? { decision: 'dispatched' as const, taskId: outcome.taskId, prompt: outcome.prompt, url: outcome.url, runner: outcome.runner, model: outcome.model }
   : { decision: 'rejected' as const };
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
-export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}): CockpitMessage {
+export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false): CockpitMessage {
   if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
@@ -40,7 +40,7 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
       const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : p.output;
-      return { type: 'tool', id: p.id, name, args: parseArgs(p.input), result, running: p.state === 'running', error: p.error };
+      return { type: 'tool', id: p.id, name, args: { ...parseArgs(p.input), ...(name === DISPATCH ? { legacyUnresolved } : {}) }, result, running: p.state === 'running', error: p.error };
     }),
   };
 }
@@ -89,7 +89,7 @@ export function useLiveCockpit(): CockpitSource {
   const items = useMemo(() => chat.active && engineOf(chat.active) === 'hermes' ? chat.active.items : [], [chat.active]);
   const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
-  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches)), [items, dispatches]);
+  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved)), [items, dispatches, view?.legacyUnresolved]);
   const activeId = chat.activeId;
 
   const cockpit: CockpitState = useMemo(() => {
@@ -124,9 +124,9 @@ export function useLiveCockpit(): CockpitSource {
     async respond(id: string, response: unknown) {
       if (response === 'approve' || response === 'deny') { await chat.approve(id, response); return; }
       // A dispatch card: the panel dispatches (or not) as the user answered; the card shows the outcome from the cockpit.
-      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string };
+      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string; runner?: string; model?: string };
       if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
-      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}) });
+      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.model ? { model: r.model } : {}) });
       refresh();
     },
     chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, updatedAt: c.updatedAt })) ?? null,

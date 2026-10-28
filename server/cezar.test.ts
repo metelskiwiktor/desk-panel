@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readCezar } from './cezar';
-import { createCezarRun } from './cezar-finished';
+import { createCezarRun, readCezarDefaults } from './cezar-finished';
 
 const asOf = '2026-10-24T18:00:00.000Z';
 const coverage = { projects: [{ projectId: 'p', state: 'complete' }] };
@@ -42,7 +42,22 @@ describe('readCezar model', () => {
 });
 
 describe('createCezarRun', () => {
-  it('dispatches desk-panel-task on agy gemini-3.8-flash-medium by default and returns the task URL', async () => {
+  it('reads workflow-specific Cezar defaults and honors a selected runner and model lock', async () => {
+    const config = { defaultRunner: 'claude', defaultModels: { claude: 'sonnet', codex: 'native' }, workflowRunners: { analysis: 'codex' }, workflowModels: { analysis: { claude: 'opus', codex: 'gpt-6.1-sol' } }, modelsLocked: false };
+    const request = (async () => new Response(JSON.stringify(config))) as typeof fetch;
+    expect(await readCezarDefaults('http://cezar.test', 'analysis', undefined, request)).toMatchObject({ runner: 'codex', model: 'gpt-6.1-sol' });
+    expect(await readCezarDefaults('http://cezar.test', 'analysis', 'claude', request)).toMatchObject({ runner: 'claude', model: 'opus' });
+    config.modelsLocked = true;
+    expect(await readCezarDefaults('http://cezar.test', 'analysis', 'claude', request)).toMatchObject({ runner: 'claude', model: 'sonnet', modelsLocked: true });
+  });
+
+  it('offers AGY presets when Cezar has no AGY catalog endpoint', async () => {
+    const request = (async () => new Response(JSON.stringify({ defaultRunner: 'agy', workflowModels: { analysis: { agy: 'gemini-3.8-flash-high' } } }))) as typeof fetch;
+    const result = await readCezarDefaults('http://cezar.test', 'analysis', undefined, request);
+    expect(result).toMatchObject({ runner: 'agy', model: 'gemini-3.8-flash-high', catalogSource: 'presets' });
+    expect(result.models.map(m => m.id)).toEqual(['gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high']);
+  });
+  it('lets Cezar resolve workflow defaults and returns the task URL', async () => {
     const calls: { url: string; method: string; body: any }[] = [];
     const fetchMock = (async (input: URL | string, init?: RequestInit) => {
       const url = String(input);
@@ -61,8 +76,6 @@ describe('createCezarRun', () => {
       id: 'desk-panel/99887766',
       project: 'desk-panel',
       workflow: 'desk-panel-task',
-      runner: 'agy',
-      model: 'gemini-3.8-flash-medium',
       url: 'http://127.0.0.1:4173/p/desk-panel/tasks/99887766',
     });
     expect(calls[0]).toEqual({
@@ -71,8 +84,6 @@ describe('createCezarRun', () => {
       body: {
         task: 'Task: Add @ skill picker\nType: UI',
         workflow: 'desk-panel-task',
-        runner: 'agy',
-        model: 'gemini-3.8-flash-medium',
         autonomous: true,
         worktree: true,
       },
@@ -82,5 +93,15 @@ describe('createCezarRun', () => {
       method: 'PATCH',
       body: { title: 'Wybór skillów w czacie' },
     });
+  });
+
+  it('passes explicit runner and model to Cezar without replacing them', async () => {
+    let body: any;
+    const fetchMock = (async (_input: URL | string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: '99887766' }), { status: 201 });
+    }) as typeof fetch;
+    await createCezarRun('http://127.0.0.1:4173', { task: 'Analyze', workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' }, fetchMock);
+    expect(body).toMatchObject({ workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' });
   });
 });

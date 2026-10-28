@@ -36,6 +36,7 @@ export function hermesPreamble(): string {
     'Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.',
     'Topologia środowiska: repozytoria projektów użytkownika znajdują się w C:\\Users\\Viktor\\AndroidStudioProjects\\<projekt>. Artefakty zadań Cezara (logi, worktree) żyją wewnątrz danego projektu pod .ai/cezar/runs/<uuid>.* oraz .ai/cezar/worktrees/<uuid>. Nigdy nie przeszukuj całego profilu C:\\Users\\Viktor ani folderów chmury (OneDrive); operuj wyłącznie na konkretnym projekcie.',
     'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara.',
+    'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
@@ -178,6 +179,15 @@ export function fillFromHistory(message: ChatMessage, group: { parts: ChatPart[]
     seen.set(p.name, n + 1);
     const full = whole.get(p.name)?.[n];
     if (!full) continue;
+    // Never bind a dispatch card to a name-only streaming id. Session history supplies the real call id.
+    if (p.name.includes('panel_cezar_propose')) {
+      const streamedCount = (message.parts ?? []).filter(step => step.type === 'tool' && step.name === p.name).length;
+      const historyCalls = whole.get(p.name) ?? [];
+      // The stream has no reliable call ids. Order alone cannot disambiguate multiple identical tools.
+      if (streamedCount !== 1 || historyCalls.length !== 1) continue;
+      const stableId = `${message.id}:${full.id}`;
+      if (p.id !== stableId) { p.id = stableId; changed = true; }
+    }
     if (full.input && full.input.length > p.input.length) { p.input = full.input; changed = true; }
     if (full.output && full.output.length > (p.output?.length ?? 0)) { p.output = full.output; changed = true; }
   }
@@ -276,7 +286,8 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       else if (group && group.parts.length) {
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
-        out.push({ id: turn.agent, role: 'agent', at: turn.at, parts: group.parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
+        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : p);
+        out.push({ id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
         out.push({
@@ -351,8 +362,9 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       }
       case 'tool-start': {
         // A tool with this id is already there: the same event again (a replayed stream).
-        if (tools(live).some(t => t.id === event.id)) return;
-        parts.push({ type: 'tool', id: event.id, name: event.name, input: event.input, state: 'running', startedAt: now() });
+        if (event.id !== event.name && tools(live).some(t => t.id === event.id)) return;
+        const toolId = event.id === event.name || event.name.includes('panel_cezar_propose') ? `pending:${live.turn.agent}:${id ?? parts.length}` : event.id;
+        parts.push({ type: 'tool', id: toolId, name: event.name, input: event.input, state: 'running', startedAt: now() });
         live.message.notice = undefined;
         break;
       }
@@ -362,7 +374,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         if (!tool) return;
         tool.state = 'done';
         tool.endedAt = now();
-        if (event.error) { tool.error = true; tool.output = `Błąd: ${event.error}`.slice(0, 600); }
+        if (event.error) { tool.error = true; tool.output = `Błąd: ${event.output || event.error}`.slice(0, 600); }
         else if (event.output) tool.output = event.output.slice(0, 4000);
         break;
       }

@@ -194,6 +194,23 @@ describe('Hermes chat', () => {
     expect(message.parts).toMatchObject([{ input: '*', output: 'pełne' }, { input: '{"id":"desk-panel/x"}', output: '{"task":{"id":"desk-panel/x"}}' }]);
   });
 
+  it('refuses to guess which of several same-named streamed proposals matches history', () => {
+    const name = 'mcp__desk_panel__panel_cezar_propose';
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 0, parts: [
+      { type: 'tool', id: 'pending:1', name, input: '', state: 'done' },
+      { type: 'tool', id: 'pending:2', name, input: '', state: 'done' },
+    ] };
+    const first = { type: 'tool' as const, id: 'call_1', name, input: '{"prompt":"analysis"}', state: 'done' as const };
+    const second = { ...first, id: 'call_2', input: '{"prompt":"implementation"}' };
+    fillFromHistory(message, { parts: [first] });
+    expect(message.parts?.map(p => p.type === 'tool' && p.id)).toEqual(['pending:1', 'pending:2']);
+    fillFromHistory(message, { parts: [first, second] });
+    expect(message.parts?.map(p => p.type === 'tool' && p.id)).toEqual(['pending:1', 'pending:2']);
+    const single = { ...message, parts: [message.parts![0]] };
+    fillFromHistory(single, { parts: [first] });
+    expect(single.parts?.[0]).toMatchObject({ id: 'answer:call_1' });
+  });
+
   it('reads the history where Hermes 0.21 keeps it (/api/sessions, in pages), and where older ones did', async () => {
     const first = hermes();
     const { id } = await first.create({ text: 'Co tu jest?' });

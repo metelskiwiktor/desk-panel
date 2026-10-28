@@ -182,6 +182,10 @@ export function createScenarioSources(file: string): PanelSources {
         model: input.model || 'gemini-3.8-flash-medium',
       };
     },
+    async cezarDefaults(_workflow, runner) {
+      const selected = runner || 'agy';
+      return { runner: selected, model: selected === 'agy' ? 'gemini-3.8-flash-medium' : null, models: selected === 'agy' ? ['low', 'medium', 'high'].map(level => ({ id: `gemini-3.8-flash-${level}`, label: `gemini-3.8-flash-${level}` })) : [], catalogSource: 'scenario', modelsLocked: false };
+    },
     calendar: () => serve('calendar'),
     training: () => serve('training'),
     googleAccounts: () => serve('googleAccounts'),

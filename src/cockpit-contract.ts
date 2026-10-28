@@ -39,7 +39,7 @@ export interface CockpitPrView {
   checksError?: string;
 }
 export type DispatchOutcome =
-  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number }
+  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number; runner?: string; model?: string }
   | { decision: 'rejected'; at: number };
 export interface CockpitView {
   observedAt: number;
@@ -47,6 +47,8 @@ export interface CockpitView {
   pr: CockpitPrView | null;
   /** The user's answer on each dispatch card of the conversation, by its tool call id. */
   dispatches: Record<string, DispatchOutcome>;
+  /** A historical decision cannot be attributed safely to a single card. */
+  legacyUnresolved?: boolean;
 }
 
 /** `projekt/uuid`: a project name that cannot be a path step (`..`), and a run id. */
@@ -59,6 +61,8 @@ export const cockpitDispatchSchema = z.object({
   title: z.string().trim().min(1).max(120),
   /** The Cezar workflow: `analysis` (read-only, its findings come back to the chat) or `desk-panel-task` (implementation). */
   workflow: z.enum(CEZAR_WORKFLOWS).optional(),
+  runner: z.string().trim().min(1).max(32).regex(/^[a-z0-9_-]+$/).optional(),
+  model: z.string().trim().min(1).max(128).optional(),
   /** What goes to the executor: the agent's prompt, or the user's correction of it. */
   prompt: z.string().trim().min(1).max(32_000),
   /** A to-do item the task implements (Cezar gets it with the run). */

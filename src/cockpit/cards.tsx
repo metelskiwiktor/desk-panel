@@ -85,13 +85,25 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const [editing, setEditing] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [runner, setRunner] = useState('');
+  const [model, setModel] = useState('');
+  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean } | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    setDefaults(null);
+    const query = new URLSearchParams({ workflow: args.workflow || 'desk-panel-task', ...(runner ? { runner } : {}) });
+    fetch(`/api/cezar/dispatch-defaults?${query}`, { signal: abort.signal }).then(r => r.ok ? r.json() : null).then(value => { if (!abort.signal.aborted && value && typeof value.modelsLocked === 'boolean' && Array.isArray(value.models)) setDefaults(value); }).catch(() => {});
+    return () => abort.abort();
+  }, [args.workflow, runner]);
   const decided = result as DispatchResult | undefined;
   // Hermes streams a tool without its arguments: the prompt arrives when the answer ends (from the session).
   const waiting = !args.prompt?.trim();
-  const busy = running || sending || waiting;
+  const unidentified = toolCallId.startsWith('pending:') || toolCallId.includes('panel_cezar_propose');
+  const busy = running || sending || waiting || unidentified || args.legacyUnresolved;
   const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
     setSending(true); setError('');
-    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId }); setEditing(null); }
+    const selectedRunner = runner || (model ? defaults?.runner : undefined);
+    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId, ...(selectedRunner ? { runner: selectedRunner } : {}), ...(!defaults?.modelsLocked && model ? { model } : {}) }); setEditing(null); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };
@@ -103,7 +115,30 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
     </div>
     <div className="tw:grid tw:gap-3 tw:p-4">
       {waiting && !decided && <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted" role="status"><LoaderCircle size={13} className="tw:animate-spin" aria-hidden="true" />Czekam na prompt od Hermesa…</p>}
+      {unidentified && !decided && <p role="status">Czekam na potwierdzenie tożsamości karty z historii Hermesa.</p>}
+      {args.legacyUnresolved && !decided && <p role="alert">Wcześniejszej decyzji nie można jednoznacznie przypisać do karty. Przed kolejnym zleceniem potrzebna jest diagnostyka rozmowy.</p>}
       <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
+      {args.workflow && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Workflow: {args.workflow}</p>}
+      {decided?.decision === 'dispatched' && (decided.runner || decided.model) && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybrano: {decided.runner ?? 'wykonawca domyślny'}{decided.model ? ` · ${decided.model}` : ''}</p>}
+      {!decided && <div className="tw:grid tw:gap-2">
+        <label className="tw:text-xs tw:text-ck-muted">Wykonawca
+          <select aria-label="Wykonawca Cezara" value={runner} disabled={busy} onChange={e => { setRunner(e.target.value); setModel(''); }} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
+            <option value="">Domyślny dla workflow w Cezarze</option>
+            {['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'].map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
+        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `Według obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
+        {defaults && !defaults.modelsLocked && <label className="tw:text-xs tw:text-ck-muted">Model
+          <select aria-label="Model Cezara" value={model} disabled={busy || defaults.models.length === 0} onChange={e => setModel(e.target.value)} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
+            <option value="">Domyślny: {defaults.model || 'nieznany'}</option>
+            {defaults.models.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>}
+        {defaults?.catalogSource === 'unavailable' && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Katalog modeli jest niedostępny; można użyć domyślnego modelu.</p>}
+        {defaults?.catalogSource === 'stale' && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Lista modeli pochodzi z wcześniejszego odczytu Cezara.</p>}
+        {defaults?.modelsLocked && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybór modelu jest zablokowany w ustawieniach Cezara.</p>}
+        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Dla AGY poziom może być częścią nazwy modelu, np. gemini-3.8-flash-low, -medium lub -high. Cezar nie udostępnia osobnego pola poziomu rozumowania.</p>
+      </div>}
       {editing !== null
         ? <textarea value={editing} onChange={e => setEditing(e.target.value)} aria-label="Prompt dla executora" rows={9}
           className="tw:w-full tw:resize-y tw:rounded-xl tw:border tw:border-ck-cal tw:bg-ck-bg tw:p-3 tw:font-ck-mono tw:text-[12px] tw:leading-relaxed tw:text-ck-text" />

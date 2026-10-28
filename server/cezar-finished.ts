@@ -129,13 +129,45 @@ export async function cezarAction(base: string, id: string, action: CezarAction,
 }
 
 const createdRunSchema = z.object({ id: z.string().min(1) });
+const dispatchConfigSchema = z.object({
+  defaultRunner: z.string().nullish(),
+  defaultModels: z.record(z.string(), z.string()).optional(),
+  workflowRunners: z.record(z.string(), z.string()).optional(),
+  workflowModels: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  modelsLocked: z.boolean().optional(),
+});
 
-/** Starts a new task run in Cezar (defaults to desk-panel-task on agy / gemini-3.8-flash-medium in an isolated worktree). */
+export async function readCezarDefaults(base: string, workflow: string, selectedRunner?: string, request: typeof fetch = fetch) {
+  const response = await request(new URL('/api/v1/p/desk-panel/config', base), { signal: AbortSignal.timeout(4000), redirect: 'error' });
+  if (!response.ok) throw new Error(`Cezar HTTP ${response.status}`);
+  const config = dispatchConfigSchema.parse(await response.json());
+  const runner = selectedRunner || config.workflowRunners?.[workflow] || config.defaultRunner || null;
+  const model = runner ? ((config.modelsLocked ? undefined : config.workflowModels?.[workflow]?.[runner]) || config.defaultModels?.[runner] || null) : null;
+  let models: { id: string; label: string }[] = [];
+  let catalogSource = 'unavailable';
+  if (runner === 'agy') {
+    models = ['gemini-3.8-flash-low', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-high'].map(id => ({ id, label: id }));
+    catalogSource = 'presets';
+  } else if (runner && ['claude', 'codex', 'opencode', 'cursor', 'junie'].includes(runner)) {
+    try {
+      const url = new URL('/api/v1/models', base);
+      url.searchParams.set('runner', runner);
+      const catalog = await request(url, { signal: AbortSignal.timeout(4000), redirect: 'error' });
+      if (catalog.ok) {
+        const parsed = z.object({ models: z.array(z.object({ id: z.string().min(1).max(128), label: z.string().optional() })).max(500), source: z.string().optional(), stale: z.boolean().optional() }).parse(await catalog.json());
+        models = parsed.models.map(item => ({ id: item.id, label: item.label || item.id }));
+        catalogSource = parsed.stale ? 'stale' : (parsed.source || 'catalog');
+      }
+    } catch { /* defaults remain usable without a model catalog */ }
+  }
+  if (model && !models.some(item => item.id === model)) models.unshift({ id: model, label: model });
+  return { runner, model, models, catalogSource, modelsLocked: config.modelsLocked === true };
+}
+
+/** Starts an isolated task; Cezar resolves its workflow-specific runner and model when not explicitly selected. */
 export async function createCezarRun(base: string, input: CezarCreateRunInput, request: typeof fetch = fetch): Promise<CezarCreatedRun> {
   const project = input.project || 'desk-panel';
   const workflow = input.workflow || 'desk-panel-task';
-  const runner = input.runner || 'agy';
-  const model = input.model || 'gemini-3.8-flash-medium';
   const response = await request(new URL(`/api/v1/p/${encodeURIComponent(project)}/runs`, base), {
     method: 'POST',
     signal: AbortSignal.timeout(8000),
@@ -144,8 +176,8 @@ export async function createCezarRun(base: string, input: CezarCreateRunInput, r
     body: JSON.stringify({
       task: input.task,
       workflow,
-      runner,
-      model,
+      ...(input.runner ? { runner: input.runner } : {}),
+      ...(input.model ? { model: input.model } : {}),
       worktree: true,
       autonomous: true,
       ...(input.todoId ? { todoId: input.todoId } : {}),
@@ -171,8 +203,8 @@ export async function createCezarRun(base: string, input: CezarCreateRunInput, r
     project,
     url: new URL(`/p/${encodeURIComponent(project)}/tasks/${encodeURIComponent(created.id)}`, base).href,
     workflow,
-    runner,
-    model,
+    ...(input.runner ? { runner: input.runner } : {}),
+    ...(input.model ? { model: input.model } : {}),
   };
 }
 
