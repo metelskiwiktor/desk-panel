@@ -35,7 +35,7 @@ export function getQuotaCards(accounts: QuotaAccount[] | null): QuotaCardItem[] 
       let title = model;
       let badge: string | undefined;
       if (model === 'Gemini Models' || model === 'Gemini') title = 'Gemini';
-      else if (model === 'Claude and GPT models' || model === 'Claude & GPT') title = 'Agy: Claude & GPT';
+      else if (model === 'Claude and GPT models' || model === 'Claude & GPT' || model === 'Gemini Claude&GPT') title = 'Gemini Claude&GPT';
       else if (model.includes('Argon')) { title = 'Gemini 4 Argon'; badge = 'frontier'; }
       cards.push({ id: `agy:${model}`, provider: 'AGY', title, badge, snapshots: sortSnapshots(snapshots) });
     }
