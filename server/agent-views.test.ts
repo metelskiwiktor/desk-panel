@@ -139,6 +139,34 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     expect(text).toContain('  - fix: nieudane — błąd: spawn ENAMETOOLONG');
     expect(text).toContain('Wyjście weryfikacji (błędy):');
     expect(text).toContain('FAIL src/test.tsx');
+    expect(text).toContain('Wynik kroku: panel_cezar z id i krok (verify).');
+  });
+
+  it('cezar: krok pokazuje błędy bez stosu i ostrzega, gdy Cezar uciął wyjście', async () => {
+    const verify = [
+      ' ✓ src/ok.test.tsx (3 tests) 900ms',
+      'Error: Not implemented: window.scrollTo',
+      '    at module.exports (node_modules/jsdom/lib/not-implemented.js:9:17)',
+      ' ❯ src/zones.test.tsx (14 tests | 1 failed) 9478ms',
+      '      × leaves the work area out 226ms',
+      ' ✓ src/other.test.tsx (2 tests) 10ms',
+      '… (output truncated)',
+    ].join('\n');
+    const withRun = {
+      cezarRun: async () => ({
+        id: 'r1', project: 'desk-panel', title: 'T', status: 'failed',
+        graphState: { outputs: { verify: { exitCode: 1, output: verify }, implement: { summary: 'Dodano kafelek PR.' } } },
+      }),
+    } as unknown as PanelSources;
+    const views = agentViews(withRun);
+    const step = await views.cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r1&krok=verify'), now);
+    expect(step).toContain('Krok verify, kod wyjścia 1:');
+    expect(step).toContain('× leaves the work area out');
+    expect(step).not.toContain('at module.exports');
+    expect(step).not.toContain('src/other.test.tsx');
+    expect(step).toContain('Nie dopowiadaj ich');
+    expect(await views.cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r1&krok=implement'), now)).toContain('Dodano kafelek PR.');
+    expect(await views.cezar(new URL('http://x/api/agent/cezar?id=desk-panel/r1&krok=fix'), now)).toContain('Kroki z wynikiem: verify, implement.');
   });
 
   it('trening: kroki dopiero na prośbę', async () => {

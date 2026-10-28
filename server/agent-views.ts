@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { SourceError, type PanelSources } from './sources';
 import type { TrainingStep } from '../src/training-contract';
 
@@ -62,6 +64,22 @@ function rangeOf(url: URL, now: number, zone: string): Range {
 
 const clip = (text: string, max: number) => { const flat = text.replace(/\s+/g, ' ').trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 const minutes = (seconds: number) => { const m = Math.round(seconds / 60); return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`; };
+
+/** Cezar keeps only the head of a check's output (`CHECK_OUTPUT_CAP`); a test runner prints its failures at the end. */
+const CHECK_TRUNCATED = '… (output truncated)';
+const FAILURE_LINE = /^\s*(?:❯|×|FAIL\b)|AssertionError|\bError:|error TS\d|^\s*(?:Expected|Received)\b|^\s*[-+] |^\s*(?:Test Files|Tests)\s+\d|exited non-zero/;
+/**
+ * The lines of a Cezar check (`npm test`, typecheck, build) that say what failed, without stack frames and passing
+ * tests, and a warning when Cezar cut the output: the agent must not fill in failures it cannot see (it once did).
+ */
+function checkExcerpt(output: string, maxLines: number): string[] {
+  const text = output.replace(/\u001b\[[0-9;]*m/g, '');
+  const lines = text.split('\n').filter(l => l.trim() && l.trim() !== CHECK_TRUNCATED);
+  const failing = lines.filter(l => FAILURE_LINE.test(l) && !/^\s+at /.test(l));
+  const shown = (failing.length ? failing : lines.slice(-maxLines)).slice(0, maxLines).map(l => `  ${clip(l, 160)}`);
+  if (!text.includes(CHECK_TRUNCATED)) return shown;
+  return [...shown, '  Uwaga: Cezar zapisał tylko początek wyjścia; szczegóły błędów (asercje, diff) mogły się nie zmieścić. Nie dopowiadaj ich: powiedz, że ich nie widać, albo uruchom ten jeden plik testu w worktree.'];
+}
 
 /** One line saying why there is no data, or null when the source answered. */
 function unavailable(name: string, status: string, hasData: boolean, message?: string): string | null {
@@ -139,7 +157,22 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
           `Zadanie Cezara ${run.project ? `${run.project}/` : ''}${run.id ?? id}: ${clip(run.titleSummary || run.title || '', 120)} [${statusText}]`,
         ];
         if (run.error) out.push(`Błąd główny: ${clip(String(run.error), 300)}`);
-        if (run.worktreePath) out.push(`Worktree: ${run.worktreePath}`);
+        const outputs: Record<string, any> = run.graphState?.outputs ?? {};
+        const step = url.searchParams.get('krok')?.trim();
+        if (step) {
+          const result = outputs[step];
+          if (!result) return [...out, `Krok „${clip(step, 40)}”: brak zapisanego wyniku. Kroki z wynikiem: ${Object.keys(outputs).join(', ') || 'brak'}.`].join('\n');
+          out.push(`Krok ${step}${typeof result.exitCode === 'number' ? `, kod wyjścia ${result.exitCode}` : ''}${result.verdict ? `, werdykt ${clip(String(result.verdict), 40)}` : ''}:`);
+          if (typeof result.output === 'string' && result.output.trim()) out.push(...checkExcerpt(result.output, 40));
+          else if (result.summary) out.push(`  ${clip(String(result.summary), 1500)}`);
+          else out.push('  (krok nie zapisał wyjścia ani podsumowania)');
+          return out.join('\n');
+        }
+        if (run.worktreePath) {
+          out.push(`Worktree: ${run.worktreePath}`);
+          const handoff = String(run.worktreePath).replace(/[\\/]worktrees[\\/]([^\\/]+)[\\/]?$/, (_, id) => `${path.sep}runs${path.sep}${id}.handoff.md`);
+          if (handoff !== run.worktreePath && existsSync(handoff)) out.push(`Notatka przekazania: ${handoff}`);
+        }
         if (run.branch) out.push(`Gałąź: ${run.branch}`);
         if (Array.isArray(run.steps) && run.steps.length) {
           out.push('Kroki:');
@@ -149,15 +182,12 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
             out.push(`  - ${s.id ?? s.name ?? 'krok'}: ${stepStatus}${err}`);
           }
         }
-        const verifyOutput = run.graphState?.outputs?.verify?.output;
+        const verifyOutput = outputs.verify?.output;
         if (typeof verifyOutput === 'string' && verifyOutput.trim()) {
-          const stripped = verifyOutput.replace(/\u001b\[[0-9;]*m/g, '');
-          const failLines = stripped.split('\n').filter(l => /(?:FAIL|Error:|AssertionError|failed|exited non-zero)/i.test(l)).slice(0, 8);
-          if (failLines.length) {
-            out.push('Wyjście weryfikacji (błędy):');
-            out.push(...failLines.map(l => `  ${clip(l.trim(), 140)}`));
-          }
+          out.push('Wyjście weryfikacji (błędy):', ...checkExcerpt(verifyOutput, 12));
         }
+        const withResult = Object.keys(outputs).filter(k => outputs[k]?.output || outputs[k]?.summary);
+        if (withResult.length) out.push(`Wynik kroku: panel_cezar z id i krok (${withResult.join(', ')}).`);
         if (run.task) {
           out.push(`Zlecenie (początek): ${clip(String(run.task), 250)}`);
         }

@@ -86,6 +86,8 @@ describe('panel MCP for Hermes', () => {
     expect(await call('panel_mail', { limit: 500 })).toMatchObject({ isError: true });
     expect(await call('panel_system', { extra: 1 })).toMatchObject({ isError: true });
     expect(await call('panel_cezar_action', { id: '../x', action: 'archive' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar', { krok: 'verify' })).toMatchObject({ isError: true });
+    expect(await call('panel_cezar', { id: 'desk-panel/x', krok: '../verify' })).toMatchObject({ isError: true });
     expect(await call('panel_todo_action', { action: { action: 'dropDatabase' } })).toMatchObject({ isError: true });
     const unknown = await (await rpc({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'bank_labels', arguments: {} } })).json() as any;
     expect(unknown.error.code).toBe(-32602);

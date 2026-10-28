@@ -44,6 +44,12 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
 - **Karty Cezara:** identyfikator wywołania w strumieniu może być samą nazwą narzędzia. Karta pozostaje nieaktywna, aż panel powiąże ją z wywołaniem z historii sesji; identyfikator karty zawiera również id odpowiedzi. Serwer sprawdza to ponownie przy decyzji. Dawny zapis decyzji wiąże się z kartą tylko przy jednym dokładnym dopasowaniu promptu; przy niejednoznaczności nowe decyzje są blokowane do diagnostyki. Równoczesne odpowiedzi na tę samą kartę są łączone w jednym procesie; brak potwierdzenia z Cezara po przekroczeniu czasu nadal wymaga sprawdzenia przed ponowieniem.
 - Karta pokazuje workflow oraz domyślne wartości odczytane z konfiguracji Cezara; użytkownik może wybrać runner i model z listy. Dla runnerów obsługujących `/api/v1/models` lista pochodzi z katalogu Cezara; AGY nie ma tam katalogu, więc panel pokazuje bieżące presety `gemini-3.8-flash-low`, `-medium`, `-high`. Bez wyboru panel nie narzuca swojego modelu ani runnera: Cezar rozstrzyga je według konfiguracji workflow. Wybrane jawnie wartości są zachowane przy decyzji; nie są dowodem modelu faktycznie obsługującego przebieg. API zlecenia Cezara nie ma osobnego pola poziomu rozumowania.
 - Instrukcja Wektora zabrania mu samodzielnie naprawiać stan i restartować usługi. Jest to instrukcja modelu, nie techniczna izolacja procesu Hermesa; nie należy traktować jej jako zabezpieczenia przed dostępem do plików lub powłoki.
+- Instrukcja każe mu też pracować z dowodów, bo model flash zgadywał: ścieżki, hashe i id tylko z wyników narzędzi (najpierw
+  wyszukanie, potem odczyt), wywołania zależne dopiero po wyniku, zawężone wyniki, przyczyna błędu tylko taka, jaką widać (ucięte
+  wyjście Cezara mówi to wprost; Wektor wymyślił kiedyś asercję testu), błąd środowiska zgłaszany, nie obchodzony, i żadnych
+  zmian kodu w repozytoriach (desk-panel kartą, inne projekty opisem do zlecenia w Cezarze). Przykład z diagnozą:
+  [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md). Preambuła trafia tylko do pierwszej wiadomości sesji: starsze
+  rozmowy działają według instrukcji, z którymi się zaczęły.
 - **Limity czasu**: każde żądanie do Hermesa ma 15 s (zdrowie 3 s), połączenie strumienia 15 s; cała tura najwyżej 15 min
   (`DESK_HERMES_TURN_TIMEOUT_MS`), potem przebieg jest anulowany, a tura kończy się błędem. Nic nie czeka bez końca: zatrzymanie,
   na które Hermes nie odpowie w 10 s, kończy turę po stronie panelu.
@@ -68,7 +74,7 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
-| `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` pełne szczegóły i błędy zadania |
+| `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wycinek wyniku kroku: linie błędów bez stosu i przechodzących testów albo podsumowanie agenta, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek) |
 | `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |
 | `panel_todos` | `list`, `ukonczone` |

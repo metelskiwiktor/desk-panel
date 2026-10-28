@@ -57,10 +57,14 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     run: view('training', a => ({ from: a.from, to: a.to, kroki: a.kroki ? '1' : undefined })),
   },
   panel_cezar: {
-    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane). Opcjonalny parametr id (projekt/uuid) zwraca pełne szczegóły i błędy wskazanego zadania.',
-    input: z.object({ id: text(200).optional() }).strict(),
-    schema: schema({ id: { type: 'string', description: 'Id zadania projekt/uuid (np. desk-panel/cb2f59e7-...)' } }),
-    run: view('cezar', a => ({ id: a.id })),
+    description: 'Zadania Cezara (aktywne i zakończone, niezarchiwizowane). Z parametrem id (projekt/uuid): szczegóły, kroki i błędy wskazanego zadania. Z id i krok: wycinek wyniku tego kroku (błędy testów i typów, podsumowanie agenta); używaj tego zamiast czytania plików .ai/cezar/runs.',
+    input: z.object({ id: text(200).optional(), krok: z.string().trim().regex(/^[\w-]{1,60}$/).optional() }).strict()
+      .refine(a => !a.krok || a.id, { message: 'krok wymaga id' }),
+    schema: schema({
+      id: { type: 'string', description: 'Id zadania projekt/uuid (np. desk-panel/cb2f59e7-...)' },
+      krok: { type: 'string', description: 'Id kroku z listy kroków, np. verify, implement, fix (wymaga id)' },
+    }),
+    run: view('cezar', a => ({ id: a.id, krok: a.krok })),
   },
   panel_mail: {
     description: 'Nieprzeczytane wątki Gmail z 30 dni: nadawca, temat, początek (bez treści).',
