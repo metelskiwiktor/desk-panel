@@ -34,7 +34,7 @@ function processIdentity(operation, launch) {
   if (process.platform !== 'win32') throw new Error('Automatic recovery of an unresponsive preview is available on Windows only; inspect the PID manually.');
   const helper = fileURLToPath(new URL('./preview-process.ps1', import.meta.url));
   const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper,
-    '-Operation', operation, '-ProcessId', String(launch.pid), '-Marker', launch.marker];
+    '-Operation', operation, '-ProcessId', String(launch.pid || 0), '-Marker', launch.marker];
   if (operation === 'terminate') args.push('-Creation', launch.creation);
   const result = spawnSync('powershell.exe', args, { encoding: 'utf8', windowsHide: true, timeout: 20000 });
   if (result.status !== 0) throw new Error(`Unable to verify preview process identity: ${(result.stderr || result.error?.message || 'unknown error').trim()}`);
@@ -52,8 +52,21 @@ if (action === 'status') {
   let launch = readLaunch();
   const setup = readSetup();
   if (!launch && setup?.pid && alive(setup.pid)) throw new Error('Preview is still preparing the checkout or dependencies; wait for start to finish before stopping.');
-  if (launch?.pending) throw new Error('Preview launch did not record a PID; inspect its process before cleanup.');
-  if (!launch && existsSync(launchFile)) throw new Error('Preview process identity is unreadable; inspect it before cleanup.');
+  if (launch?.pending) {
+    if (!/^[a-f0-9]{64}$/.test(launch.marker || '')) throw new Error('Preview launch marker is invalid; inspect before cleanup.');
+    const found = processIdentity('find', launch);
+    if (found === 'gone') {
+      if (setup?.pid && alive(setup.pid)) throw new Error('Preview launch is still in progress; retry stop shortly.');
+      launch = null;
+    } else {
+      if (!/^\d+$/.test(found)) throw new Error('Could not identify the pending preview process.');
+      launch = { pid: Number(found), marker: launch.marker };
+      const creation = processIdentity('identify', launch);
+      if (!/^\d+$/.test(creation)) throw new Error('Could not identify the pending preview process.');
+      launch.creation = creation;
+    }
+  }
+  if (!launch && existsSync(launchFile) && !readLaunch()?.pending) throw new Error('Preview process identity is unreadable; inspect it before cleanup.');
   if (state && launch?.pid) for (let i = 0; i < 40 && alive(launch.pid); i++) await pause(250);
   // The starter writes PID first, then the kernel creation identity. Never guess during that window.
   for (let i = 0; i < 80 && launch?.pid && !launch.creation && alive(launch.pid); i++) { await pause(250); launch = readLaunch(); }

@@ -62,7 +62,8 @@ describe('preview state directory', () => {
       expect(refused.stderr).toContain('different process');
       expect(existsSync(stateDir)).toBe(true);
       expect(child.exitCode).toBeNull();
-      writeFileSync(join(stateDir, 'launch.json'), JSON.stringify({ ...launch, creation }));
+      // Simulate a crash immediately after spawn, before the starter persisted the PID.
+      writeFileSync(join(stateDir, 'launch.json'), JSON.stringify({ marker, pending: true }));
       const stopped = runStop();
       expect(stopped.status, stopped.stderr).toBe(0);
       expect(existsSync(stateDir)).toBe(false);

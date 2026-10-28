@@ -1,5 +1,12 @@
-param([ValidateSet("identify", "terminate")][string]$Operation, [int]$ProcessId, [string]$Marker, [string]$Creation)
+param([ValidateSet("find", "identify", "terminate")][string]$Operation, [int]$ProcessId, [string]$Marker, [string]$Creation)
 $ErrorActionPreference = 'Stop'
+if ($Operation -eq 'find') {
+  if ($Marker -notmatch '^[a-f0-9]{64}$') { throw 'Invalid preview process marker.' }
+  $matches = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($Marker) })
+  if ($matches.Count -gt 1) { throw 'Multiple preview processes share this marker; inspect them manually.' }
+  if ($matches.Count -eq 0) { Write-Output 'gone' } else { Write-Output $matches[0].ProcessId }
+  exit 0
+}
 # Pin one kernel process object for both the creation-time check and termination.
 Add-Type -TypeDefinition @"
 using System;
