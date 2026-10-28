@@ -157,6 +157,11 @@ describe('panel MCP for Hermes', () => {
     const bare = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w').replace(/Live data[^]*?(?=Acceptance criteria:)/, '') });
     expect(bare).toMatchObject({ isError: true });
     expect(bare.content[0].text).toContain('brakuje sekcji: Live data');
+    // A criterion that passes whatever is done; saying what to show without data is a requirement.
+    const escape = await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w', '- [ ] The 5h split for the group when breakdown segments are available.\n- [ ] Update the fixture if needed.') });
+    expect(escape).toMatchObject({ isError: true });
+    expect(escape.content[0].text).toContain('when breakdown segments are available. | - [ ] Update the fixture if needed.');
+    expect((await call('panel_recon_report', { files: [], kind: 'UI', prompt: shaped('w', '- [ ] Shows "Brak danych" when no data is available.') })).isError).toBeUndefined();
     expect(unknownNames('`a` `x1` `5h` `Gemini Claude&GPT` `open: tile:quota`', 'Gemini Claude GPT open tile quota')).toEqual([]);
   });
 

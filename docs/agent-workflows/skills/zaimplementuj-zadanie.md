@@ -45,7 +45,11 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
      data, not only a fixture). The prompt's `Live data` section says what the source has and lacks; each lack gets a
      criterion that builds it in `server/`, or the run is an analysis first. Never "when available": the third retry of
      28.10.2026 wrote "support the split when breakdown data is available" for a group that has none, which nothing fails.
-     `panel_recon_report` refuses a prompt missing a section of the shape.
+     `panel_recon_report` refuses a prompt missing a section of the shape, and criteria that pass whatever is done
+     ("when … available", "if needed", "once … exist"; not "an empty state when no data is available"). The fourth retry
+     moved the split into `server/usageBreakdown.ts`, still "when segments are available": the split is computed by
+     cezar-adapter, another repository, which `panel_quotas` now says. A lack only another repository can build goes to
+     the plan as separate work there, not into this task's criteria. Criteria name behaviour, not today's readings.
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
      sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
      and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at

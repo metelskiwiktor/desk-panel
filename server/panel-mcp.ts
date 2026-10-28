@@ -76,6 +76,20 @@ export function unknownNames(prompt: string, repoText: string, declared: string[
  */
 export const PROMPT_SECTIONS = ['Task:', 'Type:', 'Scenario for screenshots:', 'Relevant files', 'Live data', 'Acceptance criteria:', 'Notes for executor:'] as const;
 export const missingSections = (prompt: string) => PROMPT_SECTIONS.filter(section => !prompt.split('\n').some(line => line.trimStart().startsWith(section)));
+/**
+ * Criteria that pass whatever the executor does: "…when breakdown segments are available" was written twice
+ * (28.10.2026) for a split the source does not have. A lack is built, named as follow-up, or analysed instead.
+ */
+const SOFT = /\b(?:when|if|where|once|as long as)\b[^.;\n]{0,40}\b(?:available|possible|present|exists?|supported|provided)\b|\bif (?:needed|applicable|any)\b/i;
+export function softCriteria(prompt: string): string[] {
+  const lines = prompt.split('\n');
+  const start = lines.findIndex(line => line.trimStart().startsWith('Acceptance criteria:'));
+  if (start < 0) return [];
+  const end = lines.findIndex((line, i) => i > start && /^\s*[A-Z][\w ()]*:\s*$/.test(line) && !/^\s*[-*]/.test(line));
+  // "…an empty state when no data is available" says what to show without it: a requirement, not an escape.
+  const soft = (line: string) => SOFT.test(line) && !/\b(?:no|not|none|without|unavailable|missing)\b/i.test(SOFT.exec(line)![0]);
+  return lines.slice(start + 1, end < 0 ? undefined : end).filter(line => /^\s*[-*]/.test(line) && soft(line)).map(line => line.trim());
+}
 /** The text of the repository's tracked files (no binaries, none over 1 MB), read again after a minute; null without git. */
 let tracked: { at: number; text: string } | undefined;
 function trackedText(now: number): string | null {
@@ -194,6 +208,8 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       if (missing.length) throw new AgentViewError(400, `Tych plików nie ma w repozytorium: ${missing.join(', ')}. Wymień tylko pliki z wyników wyszukiwania; plik, który executor utworzy, oznacz "new": true.`);
       const sections = missingSections(String(args.prompt));
       if (sections.length) throw new AgentViewError(400, `W prompcie brakuje sekcji: ${sections.join(', ')}. Użyj dokładnie kształtu Executor Prompt ze skilla, każda sekcja od nowej linii.`);
+      const soft = softCriteria(String(args.prompt));
+      if (soft.length) throw new AgentViewError(400, `Te kryteria przejdą, cokolwiek executor zrobi: ${soft.join(' | ')}. Kryterium mówi, co ma działać; brak z "Live data" executor buduje (plik w server/), a gdy trzeba go zbudować poza tym repozytorium, usuń go z kryteriów i nazwij w planie dla użytkownika jako osobną pracę.`);
       const repoText = trackedText(now);
       const unknown = repoText === null ? [] : unknownNames(String(args.prompt), repoText, ((args.outside ?? []) as { name: string }[]).map(o => o.name));
       if (unknown.length) throw new AgentViewError(400, `Tych nazw z promptu nie ma w żadnym pliku repozytorium: ${unknown.map(n => `\`${n}\``).join(', ')}. Nazwę, którą pokazał wynik narzędzia panelu (np. panel_quotas), albo nową, którą wprowadzi executor, podaj w "outside" z jej źródłem; nazwę, której nie pokazał żaden wynik narzędzia, usuń z promptu.`);

@@ -258,7 +258,7 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       // (Agy Claude & GPT, 28.10.2026) was dispatched as if the data were there.
       const usage = await sources.usageBreakdown?.().catch(() => undefined);
       const split = !usage ? null : usage.status !== 'connected' ? `Podział zużycia okna 5h na źródła: niedostępny (${usage.status}).`
-        : `Podział zużycia okna 5h na źródła (części paska): ${usage.providers.map(p => `${p.provider === 'Gemini' ? 'AGY / Gemini Models' : p.provider} (${p.segments.length} części)`).join(', ') || 'brak'}; inne limity go nie mają.`;
+        : `Podział zużycia okna 5h na źródła (części paska): ${usage.providers.map(p => `${p.provider === 'Gemini' ? 'AGY / Gemini Models' : p.provider} (${p.segments.length} części)`).join(', ') || 'brak'}; inne limity go nie mają. Podział liczy cezar-adapter (osobne repozytorium, /panel/v2/usage/breakdown): nowy limit w podziale to zmiana w adapterze, nie w desk-panel.`;
       return [header, ...(lines.length ? lines : ['Brak odczytów.']), ...(split ? [split] : [])].join('\n');
     },
 
