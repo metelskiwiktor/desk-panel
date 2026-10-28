@@ -105,6 +105,16 @@ if ($text -match '(?m)^agent:') {
     Add-Content -LiteralPath $config -Value "`nagent:`n  max_turns: 40`n  budget_warning_ratio: 0.5`n" -Encoding ASCII
     Write-Host 'config.yaml: agent.max_turns 40, budget_warning_ratio 0.5.'
 }
+# The agent reads the user's mail, calendar and bank summaries: through OpenRouter only to hosts that do not train on them.
+# The API server applies provider_routing only per model (provider_routing.models.<id>), so the current model gets its entry.
+$text=Get-Content -LiteralPath $config -Raw
+$model=if ($text -match '(?m)^  default:\s*(\S+)') { $Matches[1] } else { $null }
+if ($text -match '(?m)^provider_routing:') {
+    Write-Host "config.yaml: provider_routing already present (left as it is; the panel expects data_collection: deny under models.$model)."
+} elseif ($model) {
+    Add-Content -LiteralPath $config -Value "`nprovider_routing:`n  data_collection: deny`n  models:`n    ${model}:`n      data_collection: deny`n" -Encoding ASCII
+    Write-Host "config.yaml: provider_routing data_collection deny for $model."
+}
 
 # 5. Lock directory and hermes.env for Servy / Windows
 $lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }

@@ -135,12 +135,32 @@ wyłączone, a przyciski to „Przełącz na AGY” i „Sprawdź ponownie” (o
 Wiadomość, której Hermes nie przyjął, nie trafia do rozmowy (`503` z powodem). Rozmowa Hermesa otwarta przy wyłączonym Hermesie
 pokazuje pytania, a przy odpowiedziach „Nie można teraz wczytać odpowiedzi z sesji Hermesa…” — wrócą, gdy Hermes wstanie.
 
+## Model
+
+Od 28.10.2026 Hermes Wektora działa na **DeepSeek V4.1 Flash przez OpenRouter** (`model.provider: openrouter`,
+`model.default: deepseek/deepseek-v4.1-flash-1017`, `base_url: https://openrouter.ai/api/v1` w obu `config.yaml`). Klucz
+`OPENROUTER_API_KEY` wpisuje użytkownik w `~/.hermes/.env` i w `%LOCALAPPDATA%\hermes\.env` (tę kopię czyta usługa); ma limit wydatków
+ustawiony w OpenRouter. Agent widzi pocztę, kalendarz i skróty z banku, więc `provider_routing.models.<model>.data_collection: deny`:
+OpenRouter kieruje żądania tylko do dostawców, którzy nie trenują na danych. Serwer API Hermesa stosuje `provider_routing` tylko per
+model, ogólne ustawienie nie wystarcza; `just hermes-setup` dopisuje wpis dla bieżącego modelu. Model zmienia się w configu bez
+restartu (Hermes czyta go przy każdym przebiegu); powrót do agy: `provider: antigravity-oauth`, `base_url: agy://local`,
+`default: gemini-3.8-flash-medium`. Codex i Claude zostają dla Cezara.
+
+Wybór z trzech testów na tym samym zestawie (skill „Zaimplementuj zadanie”, prawdziwy panel, każdy model po razie): zadanie już zrobione
+(PR niezmergowany), rozmowa o „zadaniach jako większym bycie” i obawa o podział zużycia, gdzie trzeba było odkryć, że `splitFor` nie ma
+wywołania produkcyjnego. DeepSeek V4.1 Flash wypadł najlepiej za swoją cenę (0,015–0,04 USD za zlecenie, 1–2 min), Qwen 3.8 Max
+równie trafnie, ale do 14 min i 0,57 USD, GLM 5.3 nierówno. Gemini 3.8 Flash przez agy powielił zrobione zadanie i przeoczył martwy
+kod; Claude Sonnet i Opus przez agy myślały najlepiej, ale jedno zlecenie brało 4–8% tygodniowej puli Claude & GPT (agy słabo
+cache'uje Claude'a). Szacunek kosztu w sesji Hermesa (`estimated_cost_usd`) zaniżał rachunek OpenRouter mniej więcej o połowę:
+wydatki sprawdzaj w OpenRouter.
+
 ## Instalacja i uruchamianie (Windows)
 
 Panel i Hermes to **dwie osobne usługi Servy**; żadna nie czeka na drugą przy starcie, więc kolejność po restarcie komputera jest
 dowolna (panel pokazuje „Hermes niedostępny”, dopóki Hermes nie wstanie; narzędzia MCP odpowiadają, gdy wstanie panel).
 
-1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`.** Oba katalogi muszą być
+1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`** (provider jest potrzebny
+   tylko do modeli agy; model domyślny idzie przez OpenRouter, zob. „Model”). Oba katalogi muszą być
    checkoutami Git: domyślnie `~/.hermes/hermes-agent` i `~/.hermes/plugins/antigravity-oauth`. Inne lokalizacje można wskazać
    zmiennymi `DESK_HERMES_SOURCE` i `DESK_HERMES_PROVIDER_SOURCE` w środowisku uruchamiającym skrypty. Provider musi być czysty.
    Nie używaj tymczasowych katalogów prób (PoC) jako docelowej instalacji.
