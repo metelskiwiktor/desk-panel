@@ -559,6 +559,26 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(calls.some(c => c.url.endsWith('/dispatch'))).toBe(false);
   });
 
+  it('shows a recon whose arguments are not of the card\'s shape instead of blanking the chat', async () => {
+    liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    // As DeepSeek sent it (28.10.2026), refused by Hermes's own argument check before it reached the panel.
+    const odd: ChatMessage = { id: 'a5', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'r5', name: 'mcp__desk_panel__panel_recon_report', state: 'done',
+        input: JSON.stringify({ files: [{ path: 'src/Workspace.tsx', note: 'kafelek' }, { path: { bad: 1 } }, 'src/x.ts'], kind: 'UI', scenario: { page: 'pulpit', name: 'standard', open: 'tile:openrouter' }, prompt: { text: 'x' } }),
+        output: JSON.stringify({ error: "arguments.scenario (type): {'page': 'pulpit'} is not of type 'string'. The tool was NOT invoked." }) },
+      { type: 'text', text: 'Poprawiam rekonesans.' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, odd], { id: H }) });
+    const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
+    expect(within(recon).getByText('Rekonesans odrzucony')).toBeTruthy();
+    expect(within(recon).getByText('src/Workspace.tsx')).toBeTruthy();
+    expect(within(recon).queryByText(/scenariusz/)).toBeNull();
+    expect(screen.getByText('Poprawiam rekonesans.')).toBeTruthy();
+  });
+
   it('watches the task the conversation names, and shows the watch card live', async () => {
     const calls = liveServer();
     const user = userEvent.setup();

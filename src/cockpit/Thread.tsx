@@ -11,7 +11,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
-import { CardActions, DispatchCard, HermesApprovalCard, ReconCard, WatchCard } from './cards';
+import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, WatchCard } from './cards';
 import {
   DISPATCH, HERMES_APPROVAL, RECON, WATCH,
   type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type WatchArgs,
@@ -70,10 +70,10 @@ export function toThreadMessage(m: CockpitMessage): ThreadMessageLike {
 
 // The panel's cards, as assistant-ui tool UIs: they win over its generic tool row for these names, and stand on their own
 // (`standalone`) instead of folding into the group of tool calls.
-const ReconUI = makeAssistantToolUI<ReconArgs, unknown>({ toolName: RECON, display: 'standalone', render: ReconCard });
-const DispatchUI = makeAssistantToolUI<DispatchArgs, DispatchResult>({ toolName: DISPATCH, display: 'standalone', render: DispatchCard });
-const WatchUI = makeAssistantToolUI<WatchArgs, unknown>({ toolName: WATCH, display: 'standalone', render: WatchCard });
-const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: HermesApprovalCard });
+const ReconUI = makeAssistantToolUI<ReconArgs, unknown>({ toolName: RECON, display: 'standalone', render: props => <CardBoundary><ReconCard {...props} /></CardBoundary> });
+const DispatchUI = makeAssistantToolUI<DispatchArgs, DispatchResult>({ toolName: DISPATCH, display: 'standalone', render: props => <CardBoundary><DispatchCard {...props} /></CardBoundary> });
+const WatchUI = makeAssistantToolUI<WatchArgs, unknown>({ toolName: WATCH, display: 'standalone', render: props => <CardBoundary><WatchCard {...props} /></CardBoundary> });
+const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
 type Custom = { context: ContextItem[]; notice?: string; status: CockpitMessage['status'] };
 const useCustom = () => useAuiState(s => s.message.metadata.custom) as Custom;

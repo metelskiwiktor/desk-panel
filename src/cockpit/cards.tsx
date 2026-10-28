@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { Component, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
 import {
@@ -12,6 +12,17 @@ import { watchAnswerTask } from '../cockpit-contract';
  */
 export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask }>({ respond: () => {}, running: false });
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
+
+/** One card that cannot render says so in its place; without this, React drops the whole chat window (a black screen). */
+export class CardBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    return this.state.failed
+      ? <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-line tw:px-3 tw:py-2 tw:text-xs tw:text-ck-muted" role="alert">Nie da się pokazać tej karty: agent przysłał nieoczekiwane dane.</p>
+      : this.props.children;
+  }
+}
 
 /** `0:53`, `2:05`: how long something has been going. */
 export const elapsed = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };

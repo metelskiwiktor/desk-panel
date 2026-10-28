@@ -17,6 +17,23 @@ const parseArgs = (input: string): Record<string, unknown> => {
   return input ? { input } : {};
 };
 
+/**
+ * A card's arguments, only the fields of the type the card renders. They come from the model as it wrote them, even a call
+ * Hermes refused: `scenario` as `{page, name, open}` (28.10.2026) put an object into the card and blanked the whole chat.
+ */
+const TEXT_FIELDS = ['scenario', 'prompt', 'title', 'repo', 'workflow', 'todoId', 'taskId', 'id'] as const;
+export function cardArgs(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of TEXT_FIELDS) if (typeof raw[key] === 'string') out[key] = raw[key];
+  if (raw.kind === 'UI' || raw.kind === 'non-UI') out.kind = raw.kind;
+  if (Array.isArray(raw.files)) {
+    out.files = raw.files.flatMap(f => f && typeof f === 'object' && typeof (f as { path?: unknown }).path === 'string'
+      ? [{ path: (f as { path: string }).path, ...(typeof (f as { note?: unknown }).note === 'string' ? { note: (f as { note: string }).note } : {}) }]
+      : []);
+  }
+  return out;
+}
+
 /** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
 const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH } as const;
 export const cardOf = (name: string) => {
@@ -42,7 +59,8 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : p.output;
       const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
-      return { type: 'tool', id: p.id, name, args: { ...parseArgs(p.input), ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
+      const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
+      return { type: 'tool', id: p.id, name, args: { ...args, ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
     }),
   };
 }
