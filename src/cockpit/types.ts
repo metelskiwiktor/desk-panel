@@ -42,7 +42,7 @@ export interface ReconArgs {
 export const DISPATCH = 'cezar_dispatch';
 /** `refused`: why the panel refused the proposal (sent before its recon's answer); the card offers no „Zleć” then. */
 export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string; legacyUnresolved?: boolean; refused?: string }
-export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string } | { decision: 'rejected' };
+export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string; steps?: Record<string, { runner?: string; model?: string }> } | { decision: 'rejected' };
 
 /** `@nasłuchuj cezara`: the agent watches a running Cezar task (watchdog). */
 export const WATCH = 'cezar_watch';

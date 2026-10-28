@@ -82,14 +82,14 @@ describe('Google Calendar', () => {
   it('renders calendar rows and their source detail', async () => {
     const at = Date.now();
     const source = { status: 'connected', live: true, name: 'Google Calendar', calendarId: 'owner@gmail.com', observedAt: at,
-      data: [{ id: 'real', title: 'Rzeczywiste wydarzenie', description: 'Opis z Google', startAt: at + 3600_000, endAt: at + 7200_000, allDay: false, sourceUrl: 'https://calendar.google.com/event?eid=real' }] };
+      data: [{ id: 'real', title: 'Rzeczywiste wydarzenie', description: 'Opis z Google', startAt: at - 60_000, endAt: at + 60_000, allDay: false, sourceUrl: 'https://calendar.google.com/event?eid=real' }] };
     vi.stubGlobal('fetch', vi.fn(async path => Response.json(path === '/api/calendar' ? source : {
       tasks: [], observedAt: at, counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 }, partial: false, scheduled: 0,
     })));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
-    // The event is on the day ribbon and in the next-days strip: either opens it.
+    // Under way now, so it is on today's ribbon at any hour (an hour ahead fell on tomorrow after 23:00).
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ }).length).toBeGreaterThan(0));
     await user.click(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ })[0]);
     expect(screen.getByText('Opis z Google')).toBeTruthy();

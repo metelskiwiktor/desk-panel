@@ -27,7 +27,7 @@ export interface PanelSources {
   /** Start a new task run in Cezar (used by the chat dispatcher after user confirmation). */
   cezarCreateRun?(input: CezarCreateRunInput): Promise<CezarCreatedRun>;
   /** `pinned`: agent steps whose runner (and model) the workflow fixes; the run's choice does not reach them. */
-  cezarDefaults?(workflow: string, runner?: string): Promise<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: { id: string; runner: string; model: string | null }[] }>;
+  cezarDefaults?(workflow: string, runner?: string): Promise<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: { id: string; runner: string; model: string | null; follows?: string }[] }>;
   calendar(): Promise<CalendarSource>;
   /** Garmin Connect plan, the coming workouts' steps and recent recordings. */
   training(): Promise<TrainingSource>;

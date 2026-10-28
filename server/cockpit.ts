@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
+import { stepOverridesSchema } from '../src/cezar-contract';
 import { SourceError, type PanelSources } from './sources';
 import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
 
@@ -19,7 +20,7 @@ export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
  */
 
 const outcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional() }),
+  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const storeSchema = z.object({
@@ -176,9 +177,10 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         ...(input.workflow ? { workflow: input.workflow } : {}),
         ...(input.runner ? { runner: input.runner } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}),
         ...(input.todoId ? { todoId: input.todoId } : {}),
       });
-      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}) };
+      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}), ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}) };
       chat.dispatches[input.toolCallId] = outcome;
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();

@@ -4,8 +4,9 @@ You are the executor. Follow the sequence in your workflow prompt exactly.
 
 Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `address` run on `codex` (`gpt-6.1-terra`, the
 user's Codex subscription; `fix` and `address` continue the `implement` session), `review` on `agy` (`claude-opus-5-5-low`). A
-step's own runner and model win over the run's, so the dispatch card lists these pinned steps and its runner/model choice only
-reaches the others. Gemini 3.8 Flash judged worst in the dispatcher benchmarks of 28.10.2026 (docs/hermes.md, "Model").
+step's own runner and model win over the run's, so the dispatch card lists these pinned steps with their own runner and
+model choice for that one task (Cezar's `stepOverrides`, spec `2026-10-28-step-overrides` in the cezar repo; `fix` and
+`address` follow `implement`, so its session stays on one runner); the card's general choice reaches the other steps. Gemini 3.8 Flash judged worst in the dispatcher benchmarks of 28.10.2026 (docs/hermes.md, "Model").
 
 ## Efficiency & Tool Rules
 - **Absolute worktree paths**: Always pass full absolute paths inside your current worktree to `read_file`, `view_file`, `edit_file`, and `write_file`.

@@ -92,6 +92,56 @@ export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>)
   </section>;
 }
 
+type PinnedStep = { id: string; runner: string; model: string | null; follows?: string };
+/** What the user picked for a pinned step on the card; empty strings keep the workflow's pin. */
+type StepChoice = { runner: string; model: string };
+const RUNNERS = ['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'];
+/** Pinned steps that start their own session; one continuing another's session (fix, address after implement) follows it. */
+const leadSteps = (pinned: PinnedStep[]) => pinned.filter(s => !s.follows || !pinned.some(p => p.id === s.follows));
+/**
+ * Cezar's `stepOverrides` from the card: only steps whose choice differs from the pin, each lead with its followers, so a
+ * continued session stays on one runner. A new runner without a model lets Cezar resolve that runner's default.
+ */
+export function stepOverrides(pinned: PinnedStep[], choices: Record<string, StepChoice>, modelsLocked: boolean) {
+  const out: Record<string, { runner?: string; model?: string }> = {};
+  for (const lead of leadSteps(pinned)) {
+    const choice = choices[lead.id];
+    if (!choice) continue;
+    const runner = choice.runner && choice.runner !== lead.runner ? choice.runner : undefined;
+    const model = !modelsLocked && choice.model ? choice.model : undefined;
+    if (!runner && !model) continue;
+    for (const step of [lead, ...pinned.filter(s => s.follows === lead.id)]) out[step.id] = { ...(runner ? { runner } : {}), ...(model ? { model } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function PinnedStepChoice({ workflow, lead, followers, choice, disabled, modelsLocked, onChange }: {
+  workflow: string; lead: PinnedStep; followers: PinnedStep[]; choice?: StepChoice; disabled: boolean; modelsLocked: boolean; onChange: (choice: StepChoice) => void;
+}) {
+  const runner = choice?.runner || lead.runner;
+  const moved = runner !== lead.runner;
+  const [catalog, setCatalog] = useState<{ model: string | null; models: { id: string; label: string }[] } | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    setCatalog(null);
+    fetch(`/api/cezar/dispatch-defaults?${new URLSearchParams({ workflow, runner })}`, { signal: abort.signal }).then(r => r.ok ? r.json() : null)
+      .then(value => { if (!abort.signal.aborted && value && Array.isArray(value.models)) setCatalog(value); }).catch(() => {});
+    return () => abort.abort();
+  }, [workflow, runner]);
+  const models = catalog?.models ?? [];
+  const label = `${lead.id}${followers.length ? ` (z ${followers.map(s => s.id).join(', ')})` : ''}`;
+  return <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted">
+    <span className="tw:font-ck-mono tw:text-ck-text">{label}</span>
+    <select aria-label={`Wykonawca kroku ${lead.id}`} value={runner} disabled={disabled} onChange={e => onChange({ runner: e.target.value, model: '' })} className="tw:bg-ck-surface-2 tw:text-ck-text">
+      {RUNNERS.map(name => <option key={name} value={name}>{name === lead.runner ? `${name} (workflow)` : name}</option>)}
+    </select>
+    {!modelsLocked && <select aria-label={`Model kroku ${lead.id}`} value={choice?.model ?? ''} disabled={disabled} onChange={e => onChange({ runner, model: e.target.value })} className="tw:bg-ck-surface-2 tw:text-ck-text">
+      <option value="">{moved ? `Domyślny: ${catalog?.model || 'nieznany'}` : `Z workflow: ${lead.model || 'domyślny'}`}</option>
+      {models.filter(item => moved || item.id !== lead.model).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+    </select>}
+  </div>;
+}
+
 /** Human in the loop: nothing goes to Cezar until the user says so here, and the prompt can be corrected first. */
 export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartProps<DispatchArgs, DispatchResult>) {
   const { respond, running } = useContext(CardActions);
@@ -100,8 +150,9 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const [error, setError] = useState('');
   const [runner, setRunner] = useState('');
   const [model, setModel] = useState('');
-  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: { id: string; runner: string; model: string | null }[] } | null>(null);
+  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: PinnedStep[] } | null>(null);
   const pinned = defaults?.pinned ?? [];
+  const [stepChoices, setStepChoices] = useState<Record<string, StepChoice>>({});
   useEffect(() => {
     const abort = new AbortController();
     setDefaults(null);
@@ -128,7 +179,8 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
     setSending(true); setError('');
     const selectedRunner = runner || (model ? defaults?.runner : undefined);
-    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId, ...(selectedRunner ? { runner: selectedRunner } : {}), ...(!defaults?.modelsLocked && model ? { model } : {}) }); setEditing(null); }
+    const steps = stepOverrides(pinned, stepChoices, defaults?.modelsLocked === true);
+    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId, ...(selectedRunner ? { runner: selectedRunner } : {}), ...(!defaults?.modelsLocked && model ? { model } : {}), ...(steps ? { steps } : {}) }); setEditing(null); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };
@@ -145,14 +197,20 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
       <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
       {args.workflow && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Workflow: {args.workflow}</p>}
       {decided?.decision === 'dispatched' && (decided.runner || decided.model) && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybrano: {decided.runner ?? 'wykonawca domyślny'}{decided.model ? ` · ${decided.model}` : ''}</p>}
+      {decided?.decision === 'dispatched' && decided.steps && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Kroki: {Object.entries(decided.steps).map(([id, o]) => `${id} · ${o.runner ?? 'jak w workflow'}${o.model ? ` · ${o.model}` : ''}`).join(', ')}</p>}
       {!decided && <div className="tw:grid tw:gap-2">
         <label className="tw:text-xs tw:text-ck-muted">Wykonawca
           <select aria-label="Wykonawca Cezara" value={runner} disabled={busy} onChange={e => { setRunner(e.target.value); setModel(''); }} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
             <option value="">Domyślny dla workflow w Cezarze</option>
-            {['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'].map(name => <option key={name} value={name}>{name}</option>)}
+            {RUNNERS.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
         </label>
-        {pinned.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-text" data-testid="pinned-steps">Workflow ustala wykonawcę kroków: {pinned.map(s => `${s.id} · ${s.runner}${s.model ? ` · ${s.model}` : ''}`).join(', ')}. Wybór niżej dotyczy tylko pozostałych kroków.</p>}
+        {pinned.length > 0 && <div className="tw:grid tw:gap-1" data-testid="pinned-steps">
+          <p className="tw:m-0 tw:text-xs tw:text-ck-text">Kroki z wykonawcą ustalonym w workflow; tutaj zmienisz go tylko dla tego taska:</p>
+          {leadSteps(pinned).map(lead => <PinnedStepChoice key={lead.id} workflow={args.workflow || 'desk-panel-task'} lead={lead} followers={pinned.filter(s => s.follows === lead.id)}
+            choice={stepChoices[lead.id]} disabled={Boolean(busy)} modelsLocked={defaults?.modelsLocked === true}
+            onChange={choice => setStepChoices(current => ({ ...current, [lead.id]: choice }))} />)}
+        </div>}
         <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `${pinned.length ? 'Pozostałe kroki według' : 'Według'} obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
         {defaults && !defaults.modelsLocked && <label className="tw:text-xs tw:text-ck-muted">Model
           <select aria-label="Model Cezara" value={model} disabled={busy || defaults.models.length === 0} onChange={e => setModel(e.target.value)} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">

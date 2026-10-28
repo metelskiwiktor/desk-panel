@@ -57,9 +57,9 @@ describe('createCezarRun', () => {
     const { pinned } = await readCezarDefaults('http://cezar.test', 'desk-panel-task', undefined, request);
     expect(pinned).toEqual([
       { id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' },
-      { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra' },
+      { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' },
       { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' },
-      { id: 'address', runner: 'codex', model: 'gpt-6.1-terra' },
+      { id: 'address', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' },
     ]);
     // Only node keys count: a prompt that mentions "runner:" deeper in its text does not pin anything.
     const yaml = 'nodes:\r\n  - id: a\r\n    type: agent\r\n    prompt: |\r\n      runner: claude\r\n  - id: b\r\n    type: check\r\n    runner: agy\r\n  - id: c\r\n    type: agent\r\n    runner: claude\r\n';
@@ -119,5 +119,10 @@ describe('createCezarRun', () => {
     }) as typeof fetch;
     await createCezarRun('http://127.0.0.1:4173', { task: 'Analyze', workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' }, fetchMock);
     expect(body).toMatchObject({ workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' });
+    expect(body).not.toHaveProperty('stepOverrides');
+    // Steps the workflow pins go as Cezar's stepOverrides, which win over the pins for this task only.
+    const steps = { implement: { runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4-pro-0813' }, fix: { runner: 'opencode' } };
+    await createCezarRun('http://127.0.0.1:4173', { task: 'Build', steps }, fetchMock);
+    expect(body).toMatchObject({ workflow: 'desk-panel-task', stepOverrides: steps });
   });
 });

@@ -143,16 +143,18 @@ const dispatchConfigSchema = z.object({
 /**
  * Agent steps of a workflow file that name their own runner (and model): Cezar runs them on those whatever the run was
  * started with, so the dispatch card must say so (28.10.2026 it showed "agy · gemini-3.8-flash-medium" while the
- * implement step ran on gemini-3.8-flash-high). Node keys sit at four spaces; prompts are indented deeper.
+ * implement step ran on gemini-3.8-flash-high). Node keys sit at four spaces; prompts are indented deeper. `follows`: the
+ * step continues that step's session (fix and address continue implement), so the card moves them together.
  */
-export type PinnedStep = { id: string; runner: string; model: string | null };
+export type PinnedStep = { id: string; runner: string; model: string | null; follows?: string };
 export function pinnedSteps(yaml: string): PinnedStep[] {
   const steps: PinnedStep[] = [];
   for (const block of yaml.replace(/\r\n/g, '\n').split(/\n(?= {2}- id: )/)) {
     const id = /^ {2}- id: *(\S+)/m.exec(block)?.[1];
     const runner = /\n {4}runner: *(\S+)/.exec(block)?.[1];
     if (!id || !runner || !/\n {4}type: *agent\b/.test(block)) continue;
-    steps.push({ id, runner, model: /\n {4}model: *(\S+)/.exec(block)?.[1] ?? null });
+    const follows = /\n {4}session:\s*\n {6}continue: *(\S+)/.exec(block)?.[1];
+    steps.push({ id, runner, model: /\n {4}model: *(\S+)/.exec(block)?.[1] ?? null, ...(follows ? { follows } : {}) });
   }
   return steps;
 }
@@ -202,6 +204,7 @@ export async function createCezarRun(base: string, input: CezarCreateRunInput, r
       workflow,
       ...(input.runner ? { runner: input.runner } : {}),
       ...(input.model ? { model: input.model } : {}),
+      ...(input.steps ? { stepOverrides: input.steps } : {}),
       worktree: true,
       autonomous: true,
       ...(input.todoId ? { todoId: input.todoId } : {}),

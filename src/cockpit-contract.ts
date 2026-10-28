@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { todoTaskId } from './todo-contract';
+import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -39,7 +40,7 @@ export interface CockpitPrView {
   checksError?: string;
 }
 export type DispatchOutcome =
-  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number; runner?: string; model?: string }
+  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number; runner?: string; model?: string; steps?: StepOverrides }
   | { decision: 'rejected'; at: number };
 export interface CockpitView {
   observedAt: number;
@@ -63,6 +64,8 @@ export const cockpitDispatchSchema = z.object({
   workflow: z.enum(CEZAR_WORKFLOWS).optional(),
   runner: z.string().trim().min(1).max(32).regex(/^[a-z0-9_-]+$/).optional(),
   model: z.string().trim().min(1).max(128).optional(),
+  /** Runner/model of steps the workflow pins, chosen on the card for this task only (Cezar `stepOverrides`). */
+  steps: stepOverridesSchema.optional(),
   /** What goes to the executor: the agent's prompt, or the user's correction of it. */
   prompt: z.string().trim().min(1).max(32_000),
   /** A to-do item the task implements (Cezar gets it with the run). */
