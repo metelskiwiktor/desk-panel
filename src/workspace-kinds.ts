@@ -31,10 +31,10 @@ export const limitKinds = (cards: QuotaCardItem[]) => [...new Set([...LIMITS_OF_
 export const MULTI_KINDS: readonly string[] = ['todo'];
 
 /**
- * What an empty tile offers, in this order: the limits, then Cezar, mail and the computer, then the widgets that may
- * repeat. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
+ * What an empty tile offers, in this order: the limits, then Cezar, mail, the computer, the account, Smart Actions and
+ * GitHub PR, then the widgets that may repeat. A new widget kind is listed here too, or no empty tile ever offers it. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
  */
 export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean, multi: readonly string[] = MULTI_KINDS): string[] {
-  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', 'smart-actions', ...multi])];
+  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', 'smart-actions', 'github-pr', ...multi])];
   return kinds.filter(kind => (multi.includes(kind) || !placed.includes(kind)) && available(kind));
 }

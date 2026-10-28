@@ -1,6 +1,6 @@
 # GitHub: kafelek PR i kokpit
 
-Kafelek **GitHub PR** (`github-pr`, `src/tiles/GitHubPrTile.tsx`) pokazuje otwarte pull requesty z kilku repozytoriów: numer,
+Kafelek **GitHub PR** (`github-pr`, `src/tiles/GitHubPrTile.tsx`; w pustym miejscu pulpitu ikona pull requesta) pokazuje otwarte pull requesty z kilku repozytoriów: numer,
 tytuł, repozytorium, autora, stan review, etykiety i zbiorczy stan CI, z linkiem do PR. Kokpit czatu (Wektor) pokazuje PR
 obserwowanego taska Cezara i jego checki. Oba czytają GitHub przez jeden moduł, `server/github.ts`.
 

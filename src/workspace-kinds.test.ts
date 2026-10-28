@@ -36,17 +36,17 @@ describe('what an empty tile offers', () => {
   it('is every limit first (Claude and Codex even before the first reading), then Cezar, mail, the computer and the bank', () => {
     expect(limitKinds([])).toEqual(['quota:Claude', 'quota:Codex']);
     expect(pickable(cards, [], () => true)).toEqual([
-      'quota:Claude', 'quota:Codex', 'quota:agy:Gemini Models', 'quota:agy:Gemini 4 Argon', 'cezar', 'mail', 'system', 'bank', 'smart-actions', 'todo']);
+      'quota:Claude', 'quota:Codex', 'quota:agy:Gemini Models', 'quota:agy:Gemini 4 Argon', 'cezar', 'mail', 'system', 'bank', 'smart-actions', 'github-pr', 'todo']);
     expect(kindOfCard(cards[2])).toBe('quota:agy:Gemini Models');
   });
   it('leaves out what is already on the grid and what the settings switched off', () => {
     expect(pickable(cards, ['quota:Claude', 'mail'], kind => kind !== 'system' && kind !== 'quota:agy:Gemini 4 Argon'))
-      .toEqual(['quota:Codex', 'quota:agy:Gemini Models', 'cezar', 'bank', 'smart-actions', 'todo']);
+      .toEqual(['quota:Codex', 'quota:agy:Gemini Models', 'cezar', 'bank', 'smart-actions', 'github-pr', 'todo']);
   });
   it('offers a widget that may repeat again and again, last, while the settings allow it; today that is the to-do list', () => {
     expect(MULTI_KINDS).toEqual(['todo']);
     expect(pickable(cards, ['todo', 'todo', 'mail'], () => true, ['todo'])).toEqual([
-      'quota:Claude', 'quota:Codex', 'quota:agy:Gemini Models', 'quota:agy:Gemini 4 Argon', 'cezar', 'system', 'bank', 'smart-actions', 'todo']);
+      'quota:Claude', 'quota:Codex', 'quota:agy:Gemini Models', 'quota:agy:Gemini 4 Argon', 'cezar', 'system', 'bank', 'smart-actions', 'github-pr', 'todo']);
     expect(pickable(cards, [], kind => kind !== 'todo', ['todo'])).not.toContain('todo');
   });
 });
