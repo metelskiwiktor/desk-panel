@@ -282,7 +282,7 @@ export function createOpenRouterClient(options: OpenRouterClientOptions = {}): O
               const data = await res.json() as any;
               const costUsd = Number(data?.data?.total_cost ?? data?.data?.usage ?? 0);
               const model = String(data?.data?.model || item.model);
-              const day = data?.data?.created_at ? String(data.data.created_at).slice(0, 10) : item.day;
+              const day = item.day;
               cache.generations[item.id] = {
                 day,
                 model,

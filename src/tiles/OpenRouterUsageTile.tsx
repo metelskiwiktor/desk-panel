@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle, Coins } from 'lucide-react';
 import type { OpenRouterDayUsage, OpenRouterUsage } from '../openrouter-contract';
-import { useOpenRouterUsage, type OpenRouterUsageState } from '../useOpenRouterUsage';
+import { useOpenRouterUsage } from '../useOpenRouterUsage';
 
 export interface OpenRouterUsageTileProps {
   wide?: boolean;
@@ -24,6 +24,15 @@ const MODEL_COLORS = [
   '#7ee787', // light green
 ];
 
+/** Stable deterministic color assignment derived solely from the model id */
+export function getModelColor(modelId: string): string {
+  let hash = 5381;
+  for (let i = 0; i < modelId.length; i++) {
+    hash = ((hash << 5) + hash) ^ modelId.charCodeAt(i);
+  }
+  return MODEL_COLORS[Math.abs(hash) % MODEL_COLORS.length];
+}
+
 function formatUsd(amount: number | null | undefined): string {
   if (amount === null || amount === undefined || isNaN(amount)) return '—';
   if (amount === 0) return '$0.00';
@@ -41,23 +50,21 @@ interface HoverInfo {
   modelUsd?: number;
 }
 
-export function OpenRouterUsageTile({
+interface OpenRouterUsageTileViewProps {
+  wide?: boolean;
+  tall?: boolean;
+  data: OpenRouterUsage | null;
+  loading: boolean;
+  error: string | null;
+}
+
+function OpenRouterUsageTileView({
   wide = false,
   tall = false,
-  usage: initialUsage,
-  loading: initialLoading,
-  error: initialError,
-}: OpenRouterUsageTileProps): ReactNode {
-  const hookState: OpenRouterUsageState | null = initialUsage ? null : useOpenRouterUsage();
-
-  const loading = initialLoading !== undefined
-    ? initialLoading
-    : initialError
-      ? false
-      : (hookState?.status === 'loading');
-  const error = initialError ?? (hookState?.status === 'error' ? hookState.message : null);
-  const data: OpenRouterUsage | null = initialUsage ?? (hookState?.status === 'connected' ? hookState : null);
-
+  data,
+  loading,
+  error,
+}: OpenRouterUsageTileViewProps): ReactNode {
   const [hovered, setHovered] = useState<HoverInfo | null>(null);
 
   const rawDays = data?.days ?? [];
@@ -68,11 +75,11 @@ export function OpenRouterUsageTile({
     return rawDays;
   }, [rawDays, wide]);
 
-  const { colorMap, modelList } = useMemo(() => {
+  const modelList = useMemo(() => {
     const ids = new Set<string>();
     const models: Array<{ id: string; label: string; totalUsd: number }> = [];
 
-    for (const d of visibleDays) {
+    for (const d of rawDays) {
       for (const m of d.models) {
         if (!ids.has(m.id)) {
           ids.add(m.id);
@@ -84,14 +91,8 @@ export function OpenRouterUsageTile({
       }
     }
     models.sort((a, b) => b.totalUsd - a.totalUsd);
-
-    const map = new Map<string, string>();
-    models.forEach((m, idx) => {
-      map.set(m.id, MODEL_COLORS[idx % MODEL_COLORS.length]);
-    });
-
-    return { colorMap: map, modelList: models };
-  }, [visibleDays]);
+    return models;
+  }, [rawDays]);
 
   const maxTotal = useMemo(() => {
     const max = Math.max(...visibleDays.map(d => d.totalUsd), 0.001);
@@ -177,7 +178,7 @@ export function OpenRouterUsageTile({
                         >
                           {day.models.map(m => {
                             const segHeight = day.totalUsd > 0 ? (m.usd / day.totalUsd) * 100 : 0;
-                            const color = colorMap.get(m.id) ?? '#888';
+                            const color = getModelColor(m.id);
                             return (
                               <div
                                 key={m.id}
@@ -246,7 +247,7 @@ export function OpenRouterUsageTile({
                     <div key={m.id} className="or-legend-item" title={`${m.label}: ${formatUsd(m.totalUsd)}`}>
                       <span
                         className="or-legend-dot"
-                        style={{ backgroundColor: colorMap.get(m.id) }}
+                        style={{ backgroundColor: getModelColor(m.id) }}
                         aria-hidden="true"
                       />
                       <span className="or-legend-name">{m.label}</span>
@@ -260,4 +261,38 @@ export function OpenRouterUsageTile({
       </div>
     </section>
   );
+}
+
+function OpenRouterUsageTileConnected({ wide, tall }: { wide?: boolean; tall?: boolean }): ReactNode {
+  const state = useOpenRouterUsage();
+  return (
+    <OpenRouterUsageTileView
+      wide={wide}
+      tall={tall}
+      data={state.status === 'connected' ? state : null}
+      loading={state.status === 'loading'}
+      error={state.status === 'error' ? state.message : null}
+    />
+  );
+}
+
+export function OpenRouterUsageTile({
+  wide = false,
+  tall = false,
+  usage,
+  loading,
+  error,
+}: OpenRouterUsageTileProps): ReactNode {
+  if (usage !== undefined || loading !== undefined || error !== undefined) {
+    return (
+      <OpenRouterUsageTileView
+        wide={wide}
+        tall={tall}
+        data={usage ?? null}
+        loading={loading ?? false}
+        error={error ?? null}
+      />
+    );
+  }
+  return <OpenRouterUsageTileConnected wide={wide} tall={tall} />;
 }

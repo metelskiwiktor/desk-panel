@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { OpenRouterUsageTile } from './OpenRouterUsageTile';
+import { OpenRouterUsageTile, getModelColor } from './OpenRouterUsageTile';
 import type { OpenRouterUsage } from '../openrouter-contract';
 
 describe('OpenRouterUsageTile', () => {
@@ -98,5 +98,21 @@ describe('OpenRouterUsageTile', () => {
       expect(screen.getByText('$14.85')).toBeTruthy();
     });
     expect(screen.getByText('$42.50')).toBeTruthy();
+  });
+
+  it('assigns stable colours based on model ID', () => {
+    const color1 = getModelColor('anthropic/claude-3.5-sonnet');
+    const color2 = getModelColor('anthropic/claude-3.5-sonnet');
+    expect(color1).toBe(color2);
+
+    const { container: cWide } = render(<OpenRouterUsageTile usage={sampleUsage} wide tall />);
+    const segWide = cWide.querySelector('[aria-label="claude-3.5-sonnet: $1.50"]') as HTMLElement;
+    expect(segWide?.style.backgroundColor).toBeTruthy();
+
+    cleanup();
+
+    const { container: cNarrow } = render(<OpenRouterUsageTile usage={sampleUsage} wide={false} tall={false} />);
+    const segNarrow = cNarrow.querySelector('[aria-label="claude-3.5-sonnet: $1.50"]') as HTMLElement;
+    expect(segNarrow?.style.backgroundColor).toBe(segWide?.style.backgroundColor);
   });
 });
