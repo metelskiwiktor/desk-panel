@@ -238,9 +238,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         const preview = assignPreview(ledger, plan);
         if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
         const { toolCallId: _id, decision: _decision, ...choice } = input;
-        const items = assignMarks(ledger, plan, choice);
+        const { items, create } = assignMarks(ledger, plan, choice);
         if (!items.length) throw new BankPlanError(409, 'Nic nie jest zaznaczone ani wybrane: nie ma czego oznaczyć.');
-        const result = await sources.bankLabelAction({ action: 'markMany', items });
+        const result = await sources.bankLabelAction({ action: 'markMany', create, items });
         return { decision: 'applied', at: now(), assigned: result.assigned ?? items.length, choice, preview };
       });
     },

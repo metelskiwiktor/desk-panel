@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDone, type BankMove } from '../src/bank-labels-contract';
 import {
-  BANK_ASSIGN_LIMITS, type BankAssign, type BankAssignChoice, type BankAssignMark, type BankAssignPool, type BankAssignPreview, type BankAssignRecipient, type BankAssignTemplate,
+  BANK_ASSIGN_LIMITS, type BankAssign, type BankAssignChoice, type BankAssignPick, type BankAssignMark, type BankAssignPool, type BankAssignPreview, type BankAssignRecipient, type BankAssignTemplate,
 } from '../src/bank-assign-contract';
 import type { BankLedger } from './bank-labels';
 import { dayIn } from './bank-show';
@@ -117,42 +117,56 @@ export function assignPreview(ledger: BankLedger, plan: BankAssign): BankAssignP
   };
 }
 
-/** One operation's mark, as the labels store takes it. */
-export interface MarkItem { tx: string; move: BankMove; category: string | null; tags: string[]; party: string | null; recurring: boolean }
+/** One operation's mark, as the labels store takes it (`newCategory`: a spending category the user made on the card, named). */
+export interface MarkItem { tx: string; move: BankMove; category: string | null; newCategory?: string; tags: string[]; party: string | null; recurring: boolean }
+
+const same = (a: string, b: string) => a.localeCompare(b, 'pl', { sensitivity: 'accent' }) === 0;
 
 /**
- * What to mark, worked out again from what is kept now. A recipient's operations (when ticked) get their own pick, else the
- * recipient's pick, else (for a certain recipient) its only template. A payment of the pool is marked only by its own pick: nothing
- * is ever chosen for it. A pick that is not there any more (a template the list no longer has, a category deleted meanwhile) is
- * dropped, never replaced by a guess.
+ * What to mark, worked out again from what is kept now, and the new categories it needs. A recipient's operations (when ticked) get
+ * their own pick, else the recipient's pick, else (for a certain recipient) its only template. A payment of the pool is marked only by
+ * its own pick: nothing is ever chosen for it. A pick that is not there any more (a template the list no longer has, a category
+ * deleted meanwhile, a new category not declared) is dropped, never replaced by a guess.
  */
-export function assignMarks(ledger: BankLedger, plan: BankAssign, choice: BankAssignChoice = {}): MarkItem[] {
+export function assignMarks(ledger: BankLedger, plan: BankAssign, choice: BankAssignChoice = {}): { items: MarkItem[]; create: string[] } {
   const items: MarkItem[] = [];
+  const create: string[] = [];
   const pickOf = (tx: string) => choice.picks?.find(p => p.tx === tx);
   const byCategory = (e: Entry, party: string | null, id: string): MarkItem | null => {
     const category = ledger.categories.find(c => c.id === id);
     return category ? { tx: e.tx, move: category.move, category: category.id, tags: [], party, recurring: false } : null;
   };
+  // A category made on the card: one the user declared; an existing spending category of that name is used instead of a second one.
+  const byNew = (e: Entry, party: string | null, name: string): MarkItem | null => {
+    const declared = choice.newCategories?.find(n => same(n, name));
+    if (!declared) return null;
+    const existing = ledger.categories.find(c => c.move === 'spend' && same(c.name, declared));
+    if (existing) return { tx: e.tx, move: 'spend', category: existing.id, tags: [], party, recurring: false };
+    if (!create.some(n => same(n, declared))) create.push(declared);
+    return { tx: e.tx, move: 'spend', category: null, newCategory: declared, tags: [], party, recurring: false };
+  };
   const byTemplate = (e: Entry, t: Template, party: string | null): MarkItem => ({ tx: e.tx, move: t.move, category: t.category, tags: t.tags, party: t.party ?? party, recurring: t.recurring });
+  const resolve = (e: Entry, party: string | null, pick: BankAssignPick | undefined, templates: Template[]): MarkItem | null => {
+    if (!pick) return null;
+    if (pick.category) return byCategory(e, party, pick.category);
+    if (pick.newCategory) return byNew(e, party, pick.newCategory);
+    const t = templates.find(x => x.key === pick.template);
+    return t ? byTemplate(e, t, party) : null;
+  };
   for (const r of recipients(ledger, plan)) {
     if (choice.skip?.includes(r.key)) continue;
-    const groupKey = choice.groupPicks?.find(g => g.group === r.key)?.template;
-    const groupTemplate = r.templates.find(t => t.key === groupKey) ?? (r.certain ? r.templates[0] : undefined);
+    const group: BankAssignPick | undefined = choice.groupPicks?.find(g => g.group === r.key) ?? (r.certain ? { template: r.templates[0].key } : undefined);
     for (const e of r.entries) {
       if (choice.skipOps?.includes(e.tx)) continue;
-      const pick = pickOf(e.tx);
-      if (pick?.category) { const m = byCategory(e, r.party, pick.category); if (m) items.push(m); continue; }
-      const t = pick?.template ? r.templates.find(x => x.key === pick.template) : groupTemplate;
-      if (t) items.push(byTemplate(e, t, r.party));
+      const m = resolve(e, r.party, pickOf(e.tx) ?? group, r.templates);
+      if (m) items.push(m);
     }
   }
   const p = pool(ledger, plan);
   for (const e of p.entries.slice(0, BANK_ASSIGN_LIMITS.poolItems)) {
-    const pick = pickOf(e.tx);
-    if (!pick || choice.skipOps?.includes(e.tx)) continue;
-    if (pick.category) { const m = byCategory(e, null, pick.category); if (m) items.push(m); continue; }
-    const t = p.templates.find(x => x.key === pick.template);
-    if (t) items.push(byTemplate(e, t, null));
+    if (choice.skipOps?.includes(e.tx)) continue;
+    const m = resolve(e, null, pickOf(e.tx), p.templates);
+    if (m) items.push(m);
   }
-  return items;
+  return { items, create };
 }

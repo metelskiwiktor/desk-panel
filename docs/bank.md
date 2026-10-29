@@ -219,6 +219,9 @@ Płatność, której bank nie podpisuje sklepem (telefon, BLIK, z karty), nie ma
 „Bez sklepu”, gdzie użytkownik zaznacza płatności (filtr po kwocie i „zaznacz widoczne” pomagają), a potem klika szablon (zestaw: ruch, kategoria, etykiety,
 ewentualnie notatka „druga strona”, liczony z jego dotychczasowych oznaczeń takich płatności, od najczęściej użytego) albo wybiera dowolną kategorię. Dokładnie ta sama kwota
 oznaczona wcześniej tak samo co najmniej dwa razy daje tylko dopisek przy płatności i pierwsze miejsce szablonu na liście tej płatności, nigdy zaznaczenie.
+Kategorię, której użytkownik jeszcze nie ma, zakłada się wprost z karty („+ Nowa kategoria…” na liście przy operacji, płatności albo odbiorcy; wydatek, kolor i ikonę
+wybiera panel): istnieje tylko na karcie, dopóki nie padnie „Wykonaj”, a wtedy `markMany` zakłada ją i oznacza w jednym zapisie (nazwa istniejącej kategorii
+wydatków to ta kategoria, bez duplikatu; odrzucony zapis nie zostawia kategorii). Żądanie niesie `newCategories` (nazwy) i odwołuje się do nich w `picks`/`groupPicks` przez `newCategory`.
 Nic nie wchodzi do zapisu bez zaznaczenia lub wyboru, a zaznaczenie na karcie nie jest zapisem: oznacza dopiero „Wykonaj”.
 `POST /api/chats/:id/bank-plan` bierze wtedy tylko wybór (`skip` odbiorców, `skipOps` operacji, `groupPicks` szablon grupy, `picks` szablon albo kategoria
 operacji; klucze `r-…`, `t-…`, id kategorii), który panel rozwiązuje jeszcze raz na tym, co trzyma w chwili kliknięcia i odrzuca to, czego już nie ma.

@@ -148,11 +148,16 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('clear'), tx: bankTxId }).strict(),
   z.object({ action: z.literal('accept'), tx: bankTxId, option: z.number().int().min(0).max(2).default(0) }).strict(),
   z.object({ action: z.literal('reject'), tx: bankTxId }).strict(),
-  /** Many operations marked in one write (the bulk card): each with its whole mark, as the panel worked it out for the user's choice. An operation already done refuses the lot. */
+  /**
+   * Many operations marked in one write (the bulk card): each with its whole mark, as the panel worked it out for the user's choice.
+   * `create` are spending categories made first (one that exists is used), which items may name in `newCategory`. An operation already
+   * done refuses the lot.
+   */
   z.object({
     action: z.literal('markMany'),
+    create: z.array(categoryName).max(5).default([]),
     items: z.array(z.object({
-      tx: bankTxId, move: z.enum(BANK_MOVES), category: bankCategoryId.nullable(), tags: tags.default([]), party: bankPartyId.nullable(), recurring: z.boolean(),
+      tx: bankTxId, move: z.enum(BANK_MOVES), category: bankCategoryId.nullable(), newCategory: categoryName.optional(), tags: tags.default([]), party: bankPartyId.nullable(), recurring: z.boolean(),
     }).strict()).min(1).max(300),
   }).strict(),
   z.object({ action: z.literal('createCategory'), name: categoryName, move: z.enum(BANK_CATEGORY_MOVES).default('spend'), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict(),

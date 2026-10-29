@@ -173,6 +173,22 @@ describe('bank label store', () => {
     await expect(store.apply({ action: 'markMany', items: [] } as never)).rejects.toMatchObject({ status: 400 });
   });
 
+  it('makes the categories named on the card in the same write, uses one that exists, and makes nothing when the write is refused', async () => {
+    const ops = [map(raw.card('O;1', '2026-10-26', '43.90')), map(raw.card('O;2', '2026-10-25', '80.00')), map(raw.card('O;3', '2026-10-24', '12.00'))];
+    const { store } = setup(ops);
+    const food = (await store.apply({ action: 'createCategory', name: 'Jedzenie' })).category!.id;
+    const item = (tx: string, over: Record<string, unknown> = {}) => ({ tx, move: 'spend', category: null, tags: [], party: null, recurring: false, ...over });
+    // refused as a whole (an unknown new name): no category is made
+    await expect(store.apply({ action: 'markMany', create: ['Paliwo'], items: [item('acc:O;1', { newCategory: 'Paliwo' }), item('acc:O;2', { newCategory: 'Inna' })] } as never)).rejects.toMatchObject({ status: 404 });
+    expect((await store.read()).data!.categories.map(c => c.name)).toEqual(['Jedzenie']);
+    expect(await store.apply({ action: 'markMany', create: ['Paliwo', 'jedzenie'], items: [item('acc:O;1', { newCategory: 'Paliwo' }), item('acc:O;2', { newCategory: 'Jedzenie' }), item('acc:O;3', { category: food })] } as never)).toMatchObject({ ok: true, assigned: 3 });
+    const data = (await store.read()).data!;
+    const fuel = data.categories.find(c => c.name === 'Paliwo')!;
+    expect(data.categories.map(c => c.name)).toEqual(['Jedzenie', 'Paliwo']);
+    expect(data.labels['acc:O;1']).toMatchObject({ move: 'spend', category: fuel.id });
+    expect(data.labels['acc:O;2']).toMatchObject({ category: food });
+  });
+
   it('refuses what it cannot do and changes nothing then', async () => {
     const persistence = memory();
     const { store } = setup([map(raw.card('O;1', '2026-10-26', '43.90'))], persistence);

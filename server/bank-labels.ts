@@ -339,14 +339,18 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         // All or none: an operation that is gone or already done (marked meanwhile) refuses the lot.
         const { ops } = await view(file);
         if (new Set(action.items.map(i => i.tx)).size !== action.items.length) throw new BankLabelError(400, 'Operacja jest na liście dwa razy.');
+        // Categories made on the card come first (one that exists is used); they are rolled back with the rest if anything refuses.
+        const made = new Map<string, string>();
+        for (const name of action.create) made.set(name.toLowerCase(), (await mutate(file, { action: 'createCategory', name, move: 'spend' } as BankLabelActionParsed)).category!.id);
         let assigned = 0;
         for (const item of action.items) {
+          const category = item.newCategory ? made.get(item.newCategory.toLowerCase()) ?? missing('Nie ma takiej nowej kategorii.') : item.category;
           const found = ops.find(o => o.t.id === item.tx) ?? missing('Nie ma takiej operacji w ostatnim odczycie banku.');
           const before = file.labels[item.tx];
           if (isDone(before)) throw new BankLabelError(409, 'Ta operacja jest już oznaczona.');
           // What the mark does not say stays as it was (tags, repeat, description of a mark that only said who).
           const next = checked(file, {
-            move: item.move, category: item.category, tags: item.tags.length ? canonical(file.tags, item.tags) : before?.tags ?? [], party: item.party ?? before?.party ?? null,
+            move: item.move, category, tags: item.tags.length ? canonical(file.tags, item.tags) : before?.tags ?? [], party: item.party ?? before?.party ?? null,
             recurring: item.recurring || (before?.recurring ?? false), comment: before?.comment ?? '',
           });
           if (!before && Object.keys(file.labels).length >= MAX_LABELS) throw new BankLabelError(409, `Może być najwyżej ${MAX_LABELS} oznaczeń.`);

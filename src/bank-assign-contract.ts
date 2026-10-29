@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { BankColor, BankIcon, BankMove } from './bank-labels-contract';
-import { bankCategoryId, bankTxId } from './bank-labels-contract';
+import { bankCategoryId, bankTxId, BANK_LABEL_LIMITS } from './bank-labels-contract';
 
 /**
  * Marking many operations at once with the panel's own suggestions (`panel_bank_assign`, the consent card). Wektor names only a
@@ -12,7 +12,7 @@ import { bankCategoryId, bankTxId } from './bank-labels-contract';
  * marked until the user clicks „Wykonaj”, and nothing the panel works out is trusted from the request: the request names
  * recipients, operations, template keys and category ids, and the panel resolves them again against what it keeps now.
  */
-export const BANK_ASSIGN_LIMITS = { items: 40, poolItems: 300, skip: 60, skipOps: 300, groupPicks: 60, picks: 600, templates: 6 } as const;
+export const BANK_ASSIGN_LIMITS = { items: 40, poolItems: 300, skip: 60, skipOps: 300, groupPicks: 60, picks: 600, templates: 6, newCategories: 5 } as const;
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const bankAssignSchema = z.object({
@@ -92,17 +92,24 @@ export interface BankAssignPreview {
   problems: string[];
 }
 
+const categoryName = z.string().trim().min(1).max(BANK_LABEL_LIMITS.name);
+/** A mark chosen by hand: one of the recipient's templates, a category of the user's, or a spending category made on the card (by its name). */
+const pickFields = { template: bankTemplateKey.optional(), category: bankCategoryId.optional(), newCategory: categoryName.optional() };
+const exactlyOne = (p: { template?: unknown; category?: unknown; newCategory?: unknown }) => [p.template, p.category, p.newCategory].filter(v => v !== undefined).length === 1;
+export type BankAssignPick = { template?: string; category?: string; newCategory?: string };
+
 /** What the user chose on the card; every part can only be narrower or equal to what the panel works out again. */
 export const bankAssignChoiceSchema = z.object({
   /** Recipients unticked. */
   skip: z.array(bankRecipientKey).max(BANK_ASSIGN_LIMITS.skip).optional(),
   /** Single operations unticked. */
   skipOps: z.array(bankTxId).max(BANK_ASSIGN_LIMITS.skipOps).optional(),
-  /** The template chosen for a whole recipient (the default for a certain one is its only template). */
-  groupPicks: z.array(z.object({ group: bankRecipientKey, template: bankTemplateKey }).strict()).max(BANK_ASSIGN_LIMITS.groupPicks).optional(),
-  /** The mark chosen for one operation: one of its recipient's templates, or one of the user's categories. */
-  picks: z.array(z.object({ tx: bankTxId, template: bankTemplateKey.optional(), category: bankCategoryId.optional() }).strict()
-    .refine(p => (p.template === undefined) !== (p.category === undefined), { message: 'Exactly one of template and category' })).max(BANK_ASSIGN_LIMITS.picks).optional(),
+  /** The mark chosen for a whole recipient (the default for a certain one is its only template). */
+  groupPicks: z.array(z.object({ group: bankRecipientKey, ...pickFields }).strict().refine(exactlyOne, { message: 'Exactly one kind of pick' })).max(BANK_ASSIGN_LIMITS.groupPicks).optional(),
+  /** The mark chosen for one operation. */
+  picks: z.array(z.object({ tx: bankTxId, ...pickFields }).strict().refine(exactlyOne, { message: 'Exactly one kind of pick' })).max(BANK_ASSIGN_LIMITS.picks).optional(),
+  /** Spending categories the user made on the card; they exist only if a pick uses them, and are made in the same write that marks. */
+  newCategories: z.array(categoryName).max(BANK_ASSIGN_LIMITS.newCategories).optional(),
 });
 export type BankAssignChoice = z.infer<typeof bankAssignChoiceSchema>;
 

@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { bankAssignSchema, type BankAssignCategory, type BankAssignChoice, type BankAssignMark, type BankAssignOutcome, type BankAssignPool, type BankAssignPreview, type BankAssignRecipient, type BankAssignTemplate } from '../bank-assign-contract';
+import { bankAssignSchema, type BankAssignCategory, type BankAssignChoice, type BankAssignPick, type BankAssignMark, type BankAssignOutcome, type BankAssignPool, type BankAssignPreview, type BankAssignRecipient, type BankAssignTemplate } from '../bank-assign-contract';
 import { CardActions, refusedNote } from './cards';
 import { ConsentShell } from './consent-card';
 import type { BankAssignArgs } from './types';
@@ -22,29 +22,38 @@ const categoryLabel = (c: BankAssignCategory) => `${c.move === 'spend' ? 'Wydate
 export interface AssignSelection {
   skip: ReadonlySet<string>;
   skipOps: ReadonlySet<string>;
-  groupPicks: Readonly<Record<string, string>>;
-  picks: Readonly<Record<string, { template?: string; category?: string }>>;
+  groupPicks: Readonly<Record<string, BankAssignPick>>;
+  picks: Readonly<Record<string, BankAssignPick>>;
+  /** Spending categories made on this card; they are created by „Wykonaj”, together with the marks that use them. */
+  newCategories: readonly string[];
 }
-const EMPTY: AssignSelection = { skip: new Set(), skipOps: new Set(), groupPicks: {}, picks: {} };
+const EMPTY: AssignSelection = { skip: new Set(), skipOps: new Set(), groupPicks: {}, picks: {}, newCategories: [] };
+const pickOf = (p: { template?: string; category?: string; newCategory?: string }): BankAssignPick => Object.fromEntries(Object.entries({ template: p.template, category: p.category, newCategory: p.newCategory }).filter(([, v]) => v !== undefined));
 const fromChoice = (c: BankAssignChoice): AssignSelection => ({
-  skip: new Set(c.skip), skipOps: new Set(c.skipOps), groupPicks: Object.fromEntries((c.groupPicks ?? []).map(g => [g.group, g.template])),
-  picks: Object.fromEntries((c.picks ?? []).map(p => [p.tx, { template: p.template, category: p.category }])),
+  skip: new Set(c.skip), skipOps: new Set(c.skipOps), groupPicks: Object.fromEntries((c.groupPicks ?? []).map(g => [g.group, pickOf(g)])),
+  picks: Object.fromEntries((c.picks ?? []).map(p => [p.tx, pickOf(p)])), newCategories: c.newCategories ?? [],
 });
+const sameName = (a: string, b: string) => a.localeCompare(b, 'pl', { sensitivity: 'accent' }) === 0;
 
-/** The template a recipient's operations follow: the one picked for it, else (when its earlier operations all agree) the only one. */
-const groupTemplate = (r: BankAssignRecipient, sel: AssignSelection) => r.templates.find(t => t.key === sel.groupPicks[r.key]) ?? (r.certain ? r.templates[0] : undefined);
-/** What one operation would be marked with now: its own pick, else its recipient's template; none when nothing is chosen. */
-function markOf(r: BankAssignRecipient, tx: string, sel: AssignSelection, categories: BankAssignCategory[]): string | null {
-  const pick = sel.picks[tx];
-  if (pick?.category) { const c = categories.find(x => x.id === pick.category); return c ? categoryLabel(c) : null; }
-  const t = pick?.template ? r.templates.find(x => x.key === pick.template) : groupTemplate(r, sel);
+/** A pick in words, or null when it points at something that is not there. */
+function pickLabel(pick: BankAssignPick | undefined, templates: BankAssignTemplate[], categories: BankAssignCategory[], sel: AssignSelection): string | null {
+  if (!pick) return null;
+  if (pick.category) { const c = categories.find(x => x.id === pick.category); return c ? categoryLabel(c) : null; }
+  if (pick.newCategory) return sel.newCategories.some(n => sameName(n, pick.newCategory!)) ? `Wydatek · ${pick.newCategory} (nowa)` : null;
+  const t = templates.find(x => x.key === pick.template);
   return t ? markLabel(t.mark) : null;
 }
-/** How many of a recipient's operations get a mark and what they sum to; the ones beyond those listed follow the recipient's template. */
+/** What a recipient's operations follow: the pick for the whole recipient, else (when its earlier operations all agree) its only template. */
+const groupPick = (r: BankAssignRecipient, sel: AssignSelection): BankAssignPick | undefined => sel.groupPicks[r.key] ?? (r.certain ? { template: r.templates[0].key } : undefined);
+/** What one operation would be marked with now: its own pick, else its recipient's; none when nothing is chosen. */
+function markOf(r: BankAssignRecipient, tx: string, sel: AssignSelection, categories: BankAssignCategory[]): string | null {
+  return pickLabel(sel.picks[tx] ?? groupPick(r, sel), r.templates, categories, sel);
+}
+/** How many of a recipient's operations get a mark and what they sum to; the ones beyond those listed follow the recipient's pick. */
 function counted(r: BankAssignRecipient, sel: AssignSelection, categories: BankAssignCategory[]) {
   if (sel.skip.has(r.key)) return { count: 0, total: 0 };
   const listed = r.items.filter(i => !sel.skipOps.has(i.tx) && markOf(r, i.tx, sel, categories));
-  const rest = groupTemplate(r, sel) ? r.hidden : 0;
+  const rest = pickLabel(groupPick(r, sel), r.templates, categories, sel) ? r.hidden : 0;
   const total = rest ? r.total - r.items.filter(i => !listed.includes(i)).reduce((s, i) => s + i.amount, 0) : listed.reduce((s, i) => s + i.amount, 0);
   return { count: listed.length + rest, total: Math.round(total * 100) / 100 };
 }
@@ -54,6 +63,41 @@ const historyText = (r: BankAssignRecipient) => `wcześniej: ${r.templates.map(t
 const opt = 'tw:bg-ck-surface-2 tw:text-ck-text';
 const selectStyle = { height: 26, minHeight: 0, paddingTop: 0, paddingBottom: 0 } as const;
 const checkbox = 'tw:size-4 tw:accent-[#7ca9ff]';
+
+/** The categories of a field's list: the user's own, the ones made on this card, and the way to make one. */
+function CategoryOptions({ categories, sel }: { categories: BankAssignCategory[]; sel: AssignSelection }) {
+  return <optgroup className={opt} label="Wszystkie kategorie">
+    {categories.map(c => <option className={opt} key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}
+    {sel.newCategories.map(n => <option className={opt} key={`n:${n}`} value={`n:${n}`}>{`Wydatek · ${n} (nowa)`}</option>)}
+    <option className={opt} value="__new">+ Nowa kategoria…</option>
+  </optgroup>;
+}
+/** A field's value as a pick: a template, a category, or a category made on the card. */
+const pickFromValue = (value: string): BankAssignPick => value.startsWith('t:') ? { template: value.slice(2) } : value.startsWith('n:') ? { newCategory: value.slice(2) } : { category: value.slice(2) };
+const valueOfPick = (p: BankAssignPick | undefined) => p?.category ? `c:${p.category}` : p?.newCategory ? `n:${p.newCategory}` : p?.template ? `t:${p.template}` : '';
+
+/**
+ * The name of a new spending category, asked right under the row it is for. An existing spending category of that name is taken as it is,
+ * never a second one; a new one only exists on the card until „Wykonaj”.
+ */
+function NewCategoryForm({ onSubmit, onCancel }: { onSubmit: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('');
+  const submit = () => { const clean = name.trim().replace(/\s+/g, ' ').slice(0, 40); if (clean) onSubmit(clean); };
+  return <div className="tw:flex tw:items-center tw:gap-1.5 tw:py-1 tw:text-xs">
+    <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }}
+      placeholder="Nazwa nowej kategorii wydatków" aria-label="Nazwa nowej kategorii" maxLength={40}
+      className="tw:h-6 tw:w-56 tw:rounded-md tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:text-xs tw:text-ck-text" />
+    <button type="button" onClick={submit} disabled={!name.trim()} className={`${chip} tw:border tw:border-ck-cal tw:text-ck-text tw:disabled:opacity-50`}>Dodaj</button>
+    <button type="button" onClick={onCancel} className={`${chip} tw:border tw:border-ck-line tw:text-ck-muted`}>Anuluj</button>
+  </div>;
+}
+/** The selection after choosing a category by name: an existing spending category is used, otherwise it is added as new. */
+function withNamed(sel: AssignSelection, categories: BankAssignCategory[], name: string): { pick: BankAssignPick; newCategories: readonly string[] } {
+  const existing = categories.find(c => c.move === 'spend' && sameName(c.name, name));
+  if (existing) return { pick: { category: existing.id }, newCategories: sel.newCategories };
+  const known = sel.newCategories.find(n => sameName(n, name)) ?? name;
+  return { pick: { newCategory: known }, newCategories: sel.newCategories.includes(known) ? sel.newCategories : [...sel.newCategories, known] };
+}
 const selectOn = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-text';
 const selectOff = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-muted';
 
@@ -62,25 +106,40 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
   r: BankAssignRecipient; sel: AssignSelection; categories: BankAssignCategory[]; onChange: (next: AssignSelection) => void; locked: boolean; expanded: boolean; onFlip: () => void;
 }) {
   const t = counted(r, sel, categories), partial = t.count > 0 && t.count < r.count;
-  const group = groupTemplate(r, sel);
+  const group = groupPick(r, sel);
+  const groupText = pickLabel(group, r.templates, categories, sel);
+  const [adding, setAdding] = useState<{ tx: string } | 'group' | null>(null);
   const set = (patch: Partial<AssignSelection>) => onChange({ ...sel, ...patch });
   const toggleGroup = () => {
     if (t.count > 0) { set({ skip: new Set(sel.skip).add(r.key) }); return; }
     const skip = new Set(sel.skip); skip.delete(r.key);
     const skipOps = new Set([...sel.skipOps].filter(tx => !r.items.some(i => i.tx === tx)));
-    set({ skip, skipOps, ...(group ? {} : { groupPicks: { ...sel.groupPicks, [r.key]: r.templates[0].key } }) });
+    set({ skip, skipOps, ...(groupText ? {} : { groupPicks: { ...sel.groupPicks, [r.key]: { template: r.templates[0].key } } }) });
   };
   const pickGroup = (tpl: BankAssignTemplate) => {
     const groupPicks = { ...sel.groupPicks };
-    if (groupPicks[r.key] === tpl.key && !r.certain) delete groupPicks[r.key]; else groupPicks[r.key] = tpl.key;
+    if (groupPicks[r.key]?.template === tpl.key && !r.certain) delete groupPicks[r.key]; else groupPicks[r.key] = { template: tpl.key };
     const skip = new Set(sel.skip); skip.delete(r.key);
     set({ groupPicks, skip });
   };
   const setOp = (tx: string, value: string) => {
+    if (value === '__new') { setAdding({ tx }); return; }
     const picks = { ...sel.picks };
-    if (!value) delete picks[tx]; else if (value.startsWith('t:')) picks[tx] = { template: value.slice(2) }; else picks[tx] = { category: value.slice(2) };
+    if (!value) delete picks[tx]; else picks[tx] = pickFromValue(value);
     const skipOps = new Set(sel.skipOps); skipOps.delete(tx);
     set({ picks, skipOps });
+  };
+  const setGroup = (value: string) => {
+    if (value === '__new') { setAdding('group'); return; }
+    if (!value) return;
+    set({ groupPicks: { ...sel.groupPicks, [r.key]: pickFromValue(value) }, skip: new Set([...sel.skip].filter(k => k !== r.key)) });
+  };
+  const named = (name: string) => {
+    const { pick, newCategories } = withNamed(sel, categories, name);
+    const skip = new Set([...sel.skip].filter(k => k !== r.key));
+    if (adding === 'group') onChange({ ...sel, newCategories, groupPicks: { ...sel.groupPicks, [r.key]: pick }, skip });
+    else if (adding) { const skipOps = new Set(sel.skipOps); skipOps.delete(adding.tx); onChange({ ...sel, newCategories, picks: { ...sel.picks, [adding.tx]: pick }, skipOps }); }
+    setAdding(null);
   };
   const toggleOp = (tx: string, has: boolean) => {
     if (has) { set({ skipOps: new Set(sel.skipOps).add(tx) }); return; }
@@ -101,29 +160,37 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
       <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}`}>
         <span className="tw:text-xs tw:text-ck-muted">oznacz jako</span>
         {r.templates.map(tpl => {
-          const on = group?.key === tpl.key;
+          const on = group?.template === tpl.key;
           return <button key={tpl.key} type="button" disabled={locked} aria-pressed={on} onClick={() => pickGroup(tpl)}
             className={`${chip} tw:border ${on ? 'tw:border-ck-cal tw:bg-ck-cal/25 tw:text-ck-text' : 'tw:border-ck-line tw:bg-ck-surface-2 tw:text-ck-muted tw:hover:text-ck-text'}`}>
             {on && <Check size={12} aria-hidden="true" />}{markLabel(tpl.mark)}{tpl.count > 0 && r.templates.length > 1 ? ` ×${tpl.count}` : ''}
           </button>;
         })}
+        {group && !group.template && groupText && <button type="button" disabled={locked} aria-pressed="true" onClick={() => { const groupPicks = { ...sel.groupPicks }; delete groupPicks[r.key]; set({ groupPicks }); }}
+          className={`${chip} tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:text-ck-text`}><Check size={12} aria-hidden="true" />{groupText}</button>}
+        <select className={selectOff} style={selectStyle} value="" disabled={locked} aria-label={`Inna kategoria dla ${r.name}`} onChange={e => setGroup(e.target.value)}>
+          <option className={opt} value="">Inna kategoria…</option>
+          <CategoryOptions categories={categories} sel={sel} />
+        </select>
       </div>
     </div>
+    {adding === 'group' && <div className="tw:px-3 tw:pl-[44px]"><NewCategoryForm onSubmit={named} onCancel={() => setAdding(null)} /></div>}
     {expanded && <ul className="tw:m-0 tw:mb-1 tw:grid tw:list-none tw:gap-1 tw:px-3 tw:pb-2 tw:pl-[44px] tw:text-xs">
       {r.items.map(i => {
         const pick = sel.picks[i.tx];
         const has = !sel.skip.has(r.key) && !sel.skipOps.has(i.tx) && !!markOf(r, i.tx, sel, categories);
-        const value = !has ? '__off' : pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
-        return <li key={i.tx} className="tw:flex tw:items-center tw:gap-2">
+        const value = !has ? '__off' : valueOfPick(pick);
+        return <li key={i.tx} className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
           <input type="checkbox" className={checkbox} checked={has} disabled={locked} onChange={() => toggleOp(i.tx, has)} aria-label={`Oznacz ${i.day} ${i.name}`} />
           <span className={`tw:min-w-0 tw:flex-1 tw:truncate ${has ? 'tw:text-ck-text' : 'tw:text-ck-muted'}`}>{i.day} · {i.name} · {signed(i.amount)}</span>
           <select className={has ? selectOn : selectOff} style={selectStyle} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`}
             onChange={e => e.target.value === '__off' ? set({ skipOps: new Set(sel.skipOps).add(i.tx) }) : setOp(i.tx, e.target.value)}>
             <option className={opt} value="__off">nie oznaczaj</option>
-            {group && <option className={opt} value="">{shortLabel(group.mark)}</option>}
-            <optgroup className={opt} label="Z historii odbiorcy">{r.templates.filter(tpl => tpl.key !== group?.key).map(tpl => <option className={opt} key={tpl.key} value={`t:${tpl.key}`}>{shortLabel(tpl.mark)}</option>)}</optgroup>
-            <optgroup className={opt} label="Wszystkie kategorie">{categories.map(c => <option className={opt} key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
+            {groupText && <option className={opt} value="">{groupText}</option>}
+            <optgroup className={opt} label="Z historii odbiorcy">{r.templates.filter(tpl => tpl.key !== group?.template).map(tpl => <option className={opt} key={tpl.key} value={`t:${tpl.key}`}>{shortLabel(tpl.mark)}</option>)}</optgroup>
+            <CategoryOptions categories={categories} sel={sel} />
           </select>
+          {adding && adding !== 'group' && adding.tx === i.tx && <span className="tw:basis-full tw:pl-6"><NewCategoryForm onSubmit={named} onCancel={() => setAdding(null)} /></span>}
         </li>;
       })}
       {r.hidden > 0 && <li>… jeszcze {r.hidden} (według szablonu grupy)</li>}
@@ -149,10 +216,17 @@ function PoolSection({ pool, categories, sel, onChange, locked }: {
   pool: BankAssignPool; categories: BankAssignCategory[]; sel: AssignSelection; onChange: (next: AssignSelection) => void; locked: boolean;
 }) {
   const done = poolCounted(pool, sel);
-  const set = (tx: string, pick: { template?: string; category?: string } | null) => {
+  const [adding, setAdding] = useState<string | null>(null);
+  const set = (tx: string, pick: BankAssignPick | null) => {
     const picks = { ...sel.picks };
     if (pick) picks[tx] = pick; else delete picks[tx];
     onChange({ ...sel, picks });
+  };
+  const named = (name: string) => {
+    if (!adding) return;
+    const { pick, newCategories } = withNamed(sel, categories, name);
+    onChange({ ...sel, newCategories, picks: { ...sel.picks, [adding]: pick } });
+    setAdding(null);
   };
   return <div className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid="assign-pool">
     <div className="tw:flex tw:justify-between tw:gap-3 tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted">
@@ -161,7 +235,7 @@ function PoolSection({ pool, categories, sel, onChange, locked }: {
     <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1.5 tw:px-3 tw:py-2 tw:text-xs">
       {pool.items.map(i => {
         const pick = sel.picks[i.tx];
-        const value = pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
+        const value = valueOfPick(pick);
         const hinted = i.hint ? pool.templates.find(t => t.key === i.hint!.template) : undefined;
         return <li key={i.tx} className="tw:flex tw:flex-wrap tw:items-center tw:gap-x-2 tw:gap-y-0.5">
           <input type="checkbox" className={checkbox} checked={!!pick} disabled={locked || !hinted} aria-label={`Przyjmij ${i.day} ${signed(i.amount)}`}
@@ -169,11 +243,12 @@ function PoolSection({ pool, categories, sel, onChange, locked }: {
           <span className="tw:text-ck-muted">{i.day}</span>
           <span className="tw:min-w-0 tw:flex-1 tw:text-ck-text">{signed(i.amount)}</span>
           <select className={value ? selectOn : selectOff} style={selectStyle} value={value} disabled={locked} aria-label={`Oznaczenie płatności ${i.day} ${signed(i.amount)}`}
-            onChange={e => { const v = e.target.value; set(i.tx, !v ? null : v.startsWith('t:') ? { template: v.slice(2) } : { category: v.slice(2) }); }}>
+            onChange={e => { const v = e.target.value; if (v === '__new') setAdding(i.tx); else set(i.tx, v ? pickFromValue(v) : null); }}>
             <option className={opt} value="">nie oznaczaj</option>
             <optgroup className={opt} label="Szablony">{[...pool.templates].sort((a, b) => Number(b.key === i.hint?.template) - Number(a.key === i.hint?.template)).map(t => <option className={opt} key={t.key} value={`t:${t.key}`}>{templateLabel(t, true)}</option>)}</optgroup>
-            <optgroup className={opt} label="Wszystkie kategorie">{categories.map(c => <option className={opt} key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
+            <CategoryOptions categories={categories} sel={sel} />
           </select>
+          {adding === i.tx && <span className="tw:basis-full tw:pl-6"><NewCategoryForm onSubmit={named} onCancel={() => setAdding(null)} /></span>}
           {hinted && i.hint && <span className="tw:basis-full tw:pl-6 tw:text-ck-muted" data-testid="assign-hint">ta sama kwota: {templateLabel(hinted, true)}, {i.hint.count} {times(i.hint.count)}</span>}
         </li>;
       })}
@@ -258,11 +333,16 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
     setSending(true); setError('');
     const live = new Set(rows.map(r => r.key));
     const opsOf = new Map([...rows.flatMap(r => r.items.map(i => [i.tx, r.key] as const)), ...(preview?.pool?.items ?? []).map(i => [i.tx, 'pool'] as const)]);
+    const groupPicks = Object.entries(mine.groupPicks).filter(([g]) => live.has(g)).map(([group, p]) => ({ group, ...p }));
+    const picks = Object.entries(mine.picks).filter(([tx]) => opsOf.has(tx)).map(([tx, p]) => ({ tx, ...p }));
+    // Only the new categories something still uses are sent: one the user made and then dropped is never created.
+    const used = mine.newCategories.filter(n => [...groupPicks, ...picks].some(p => p.newCategory && sameName(p.newCategory, n)));
     const extra: BankAssignChoice = {
       ...(mine.skip.size ? { skip: [...mine.skip].filter(k => live.has(k)) } : {}),
       ...([...mine.skipOps].some(tx => opsOf.has(tx)) ? { skipOps: [...mine.skipOps].filter(tx => opsOf.has(tx)) } : {}),
-      ...(Object.keys(mine.groupPicks).some(g => live.has(g)) ? { groupPicks: Object.entries(mine.groupPicks).filter(([g]) => live.has(g)).map(([group, template]) => ({ group, template })) } : {}),
-      ...(Object.keys(mine.picks).some(tx => opsOf.has(tx)) ? { picks: Object.entries(mine.picks).filter(([tx]) => opsOf.has(tx)).map(([tx, p]) => ({ tx, ...(p.category ? { category: p.category } : { template: p.template }) })) as BankAssignChoice['picks'] } : {}),
+      ...(groupPicks.length ? { groupPicks: groupPicks as BankAssignChoice['groupPicks'] } : {}),
+      ...(picks.length ? { picks: picks as BankAssignChoice['picks'] } : {}),
+      ...(used.length ? { newCategories: used } : {}),
     };
     try { await respond(toolCallId, { kind: 'bankPlan', decision, ...(decision === 'apply' ? extra : {}) }); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }

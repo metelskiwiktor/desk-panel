@@ -91,38 +91,55 @@ describe('what would be marked', () => {
   const orlen = () => byName('Orlen').key;
 
   it('marks only the certain recipients by default, each with its own template, and nothing of the pool', () => {
-    expect(assignMarks(ledger, plan())).toEqual([
+    expect(assignMarks(ledger, plan()).items).toEqual([
       { tx: 's1', move: 'spend', category: 'c-3', tags: [], party: 'p-spolem', recurring: false }, { tx: 's2', move: 'spend', category: 'c-3', tags: [], party: 'p-spolem', recurring: false },
     ]);
   });
 
   it('takes a template for a whole recipient, and for one operation a template or any category', () => {
-    const marks = assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }], picks: [{ tx: 'o2', template: t('Orlen', 1) }, { tx: 's1', category: 'c-2' }] });
+    const marks = assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }], picks: [{ tx: 'o2', template: t('Orlen', 1) }, { tx: 's1', category: 'c-2' }] }).items;
     expect(Object.fromEntries(marks.map(m => [m.tx, m.category]))).toEqual({ s1: 'c-2', s2: 'c-3', o1: 'c-1', o2: 'c-2' });
     // a category of another move sets that move (a source of income is an income), and the recipient stays
-    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'a1', category: 'c-4' }] })).toContainEqual({ tx: 'a1', move: 'income', category: 'c-4', tags: [], party: 'p-alicja', recurring: false });
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'a1', category: 'c-4' }] }).items).toContainEqual({ tx: 'a1', move: 'income', category: 'c-4', tags: [], party: 'p-alicja', recurring: false });
   });
 
   it('marks a payment of the pool only by its own pick: a template with the note it carried, or a category with none', () => {
     const pool = preview().pool!;
     const tipTemplate = pool.templates[1].key, noted = pool.templates[2].key;
-    const marks = assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }, { tx: 't2', template: tipTemplate }, { tx: 't3', template: tipTemplate }] });
+    const marks = assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }, { tx: 't2', template: tipTemplate }, { tx: 't3', template: tipTemplate }] }).items;
     expect(marks).toContainEqual({ tx: 't1', move: 'spend', category: 'c-2', tags: [], party: 'p-pyszne', recurring: false });
     expect(marks).toContainEqual({ tx: 't2', move: 'spend', category: 'c-5', tags: ['tipply'], party: null, recurring: false });
     // a payment with no lead is not on the card, so a pick for it is dropped
     expect(marks.map(m => m.tx)).not.toContain('t3');
-    expect(assignMarks(ledger, plan(), { picks: [{ tx: 't1', category: 'c-1' }] })).toContainEqual({ tx: 't1', move: 'spend', category: 'c-1', tags: [], party: null, recurring: false });
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 't1', category: 'c-1' }] }).items).toContainEqual({ tx: 't1', move: 'spend', category: 'c-1', tags: [], party: null, recurring: false });
     // a group pick does nothing to the pool, and an operation unticked is left out
-    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }] }).map(m => m.tx)).not.toContain('t1');
-    expect(assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }], skipOps: ['t1'] }).map(m => m.tx)).not.toContain('t1');
+    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }] }).items.map(m => m.tx)).not.toContain('t1');
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }], skipOps: ['t1'] }).items.map(m => m.tx)).not.toContain('t1');
+  });
+
+  it('makes a category the user named on the card, once, for a group or an operation, and never a second one with an existing name', () => {
+    const made = assignMarks(ledger, plan(), { newCategories: ['Paliwo premium'], groupPicks: [{ group: orlen(), newCategory: 'paliwo PREMIUM' }], picks: [{ tx: 'a1', newCategory: 'Paliwo premium' }] });
+    expect(made.create).toEqual(['Paliwo premium']);
+    expect(made.items.filter(m => m.newCategory)).toEqual([
+      { tx: 'o1', move: 'spend', category: null, newCategory: 'Paliwo premium', tags: [], party: 'p-orlen', recurring: false },
+      { tx: 'o2', move: 'spend', category: null, newCategory: 'Paliwo premium', tags: [], party: 'p-orlen', recurring: false },
+      { tx: 'a1', move: 'spend', category: null, newCategory: 'Paliwo premium', tags: [], party: 'p-alicja', recurring: false },
+    ]);
+    // a name that is a spending category already is that category (no second one), and a name nobody declared is dropped
+    const existing = assignMarks(ledger, plan(), { newCategories: ['paliwo'], picks: [{ tx: 'o1', newCategory: 'Paliwo' }] });
+    expect(existing.create).toEqual([]);
+    expect(existing.items).toContainEqual({ tx: 'o1', move: 'spend', category: 'c-1', tags: [], party: 'p-orlen', recurring: false });
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'o1', newCategory: 'Cokolwiek' }] })).toMatchObject({ create: [], items: [{ tx: 's1' }, { tx: 's2' }] });
+    // a category picked for a whole recipient
+    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), category: 'c-2' }] }).items.filter(m => m.tx.startsWith('o')).map(m => m.category)).toEqual(['c-2', 'c-2']);
   });
 
   it('leaves out the recipients and operations the user unticked, and drops what is no longer there', () => {
-    expect(assignMarks(ledger, plan(), { skip: [byName('Społem').key] })).toEqual([]);
-    expect(assignMarks(ledger, plan(), { skipOps: ['s1'] }).map(m => m.tx)).toEqual(['s2']);
+    expect(assignMarks(ledger, plan(), { skip: [byName('Społem').key] }).items).toEqual([]);
+    expect(assignMarks(ledger, plan(), { skipOps: ['s1'] }).items.map(m => m.tx)).toEqual(['s2']);
     // a template that is not this recipient's, a deleted category and an unknown key are dropped, never guessed
-    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'o1', template: t('Społem', 0) }, { tx: 'o2', category: 'c-99' }, { tx: 't1', template: 't-00000000' }, { tx: 'nope', category: 'c-1' }] }).map(m => m.tx)).toEqual(['s1', 's2']);
-    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: 'r-00000000', template: t('Orlen', 0) }] }).map(m => m.tx)).toEqual(['s1', 's2']);
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'o1', template: t('Społem', 0) }, { tx: 'o2', category: 'c-99' }, { tx: 't1', template: 't-00000000' }, { tx: 'nope', category: 'c-1' }] }).items.map(m => m.tx)).toEqual(['s1', 's2']);
+    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: 'r-00000000', template: t('Orlen', 0) }] }).items.map(m => m.tx)).toEqual(['s1', 's2']);
   });
 });
 
@@ -133,12 +150,12 @@ describe('the answer on the card', () => {
   const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:1/', gh: async () => '{}' });
 
   it('marks what is ticked and chosen in one write, once, and keeps the choice', async () => {
-    const choice = { groupPicks: [{ group: byName('Orlen').key, template: byName('Orlen').templates[0].key }], skipOps: ['o2'], picks: [{ tx: 'a1', category: 'c-2' }, { tx: 't1', template: preview().pool!.templates[0].key }] };
+    const choice = { groupPicks: [{ group: byName('Orlen').key, template: byName('Orlen').templates[0].key }], skipOps: ['o2'], picks: [{ tx: 'a1', category: 'c-2' }, { tx: 't1', template: preview().pool!.templates[0].key }, { tx: 't2', newCategory: 'Paliwo premium' }], newCategories: ['Paliwo premium'] };
     const first = await cockpit.bankAssign('chat', { toolCallId: 'm1:b-1', decision: 'apply', ...choice }, plan());
-    expect(first).toMatchObject({ decision: 'applied', assigned: 5, choice });
+    expect(first).toMatchObject({ decision: 'applied', assigned: 6, choice });
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ action: 'markMany' });
-    expect(calls[0].items.map(i => [i.tx, i.category])).toEqual([['s1', 'c-3'], ['s2', 'c-3'], ['o1', 'c-1'], ['a1', 'c-2'], ['t1', 'c-2']]);
+    expect(calls[0]).toMatchObject({ action: 'markMany', create: ['Paliwo premium'] });
+    expect(calls[0].items.map(i => [i.tx, i.category])).toEqual([['s1', 'c-3'], ['s2', 'c-3'], ['o1', 'c-1'], ['a1', 'c-2'], ['t2', null], ['t1', 'c-2']]);
     expect(await cockpit.bankAssign('chat', { toolCallId: 'm1:b-1', decision: 'apply' }, plan())).toEqual(first);
     expect(calls).toHaveLength(1);
   });

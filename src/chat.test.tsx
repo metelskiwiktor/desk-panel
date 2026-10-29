@@ -741,6 +741,36 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
   });
 
+  it('makes a category from the card for a whole recipient: it shows as new, an existing name is not made twice, and only Wykonaj sends it', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const turnWithCard: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'a9:b-1', name: 'mcp__desk_panel__panel_bank_assign', input: JSON.stringify({ tytul: 'Podpowiedzi', from: '2026-09-24' }), output: JSON.stringify({ result: `${CARD_SHOWN.bankAssign}: 4 operacje.` }), state: 'done' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na masowe oznaczenie' });
+    const mixed = await within(card).findByTestId('assign-mixed');
+    // the field asks for a name; a name that is a spending category already is taken as that one
+    await user.selectOptions(within(mixed).getByLabelText('Inna kategoria dla Orlen'), '__new');
+    await user.type(within(mixed).getByLabelText('Nazwa nowej kategorii'), 'paliwo{Enter}');
+    expect(within(mixed).getByRole('button', { name: 'Wydatek · Paliwo' })).toBeTruthy();
+    expect(within(card).getByText(/Zaznaczone: 4 operacji, [-−]269,91/)).toBeTruthy();
+    // a name that is new: shown as new, offered in the lists of the other fields
+    await user.selectOptions(within(mixed).getByLabelText('Inna kategoria dla Orlen'), '__new');
+    await user.type(within(mixed).getByLabelText('Nazwa nowej kategorii'), 'Paliwo premium');
+    await user.click(within(mixed).getByRole('button', { name: 'Dodaj' }));
+    expect(within(mixed).getByRole('button', { name: 'Wydatek · Paliwo premium (nowa)' })).toBeTruthy();
+    expect(within(mixed).getAllByRole('option', { name: 'Wydatek · Paliwo premium (nowa)' }).length).toBeGreaterThan(0);
+    expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
+    await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
+    await waitFor(() => expect(within(card).getByText('Oznaczono 5 operacji.')).toBeTruthy());
+    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({
+      toolCallId: 'a9:b-1', decision: 'apply', groupPicks: [{ group: 'r-22222222', newCategory: 'Paliwo premium' }], newCategories: ['Paliwo premium'],
+    });
+  });
+
   it('watches the task the conversation names, and shows the watch card live', async () => {
     const calls = liveServer();
     const user = userEvent.setup();
