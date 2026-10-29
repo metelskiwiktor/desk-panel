@@ -81,8 +81,24 @@ Nie powstaje drugie wydarzenie. Przy niepewności karta pokazuje błąd zamiast 
 
 ## Sprawdzenie
 
+29.10.2026 użytkownik potwierdził w tej sesji, że pełny przebieg działa po jego stronie, po ponownym połączeniu Google:
+wybór terminu, rezerwacja na ZnanyLekarz i zapis wydarzenia z karty. Osobny odczyt statusu konta potwierdził
+`connected` i `canCreateEvents: true`. Jest to potwierdzenie użytkownika oraz kontrola zgody, a nie automatyczny test
+prawdziwej rezerwacji wykonany przez agenta. Nie trzeba ponawiać zgody przy każdej wizycie; ponowne połączenie jest
+potrzebne przy brakującym uprawnieniu lub cofniętym/wygasłym logowaniu.
+
+Instrukcje rozmowy pochodzą z `PANEL_GUIDES.wizyty` i `PANEL_GUIDES.kalendarz` w `src/chat-contract.ts`, udostępnianych
+Hermesowi przez `panel_guide`. Ten plik opisuje implementację dla programisty; sama zmiana Markdown nie aktualizuje
+instrukcji w rozmowie. Preambuła wskazuje przewodniki, a opisy narzędzi pochodzą z `COCKPIT_TOOLS`. Przewodnik już
+odczytany w starej rozmowie pozostaje w jej historii — po zmianie zasad potrzebny jest nowy odczyt albo nowa rozmowa.
+Kliknięcie karty odświeża jej stan, ale nie wysyła automatycznej wiadomości do modelu ani nie uruchamia kolejnej tury
+(`src/cockpit/live.ts`, `server/chat-routes.ts`). Potwierdzenie zapisu pokazuje karta; sama wcześniejsza wypowiedź Wektora
+nie jest dowodem wykonania. Przy późniejszym pytaniu o agendę źródłem danych jest odczyt `panel_calendar`.
+
 `just screenshots wizyty --pages pulpit --open chat-appointment` pokazuje kartę na syntetycznych danych. Stany:
 `chat-appointment-selected` (godzina wybrana, pola uzupełnione) i `chat-appointment-saved` (zapis do atrapy Google).
+`chat-appointment-axis` sprawdza kolizję, zmianę dnia, powrót do Cezara i nawigację do podsumowania w szerokim i wąskim
+oknie, w tym fokus na przycisku „Wybieram…”. Samo przełączenie zakładki bez przewinięcia nie wystarcza w szerokim oknie.
 Scenariusz nie wywołuje ZnanyLekarz ani prawdziwego Google. Nie klikaj potwierdzenia w prawdziwym czacie jako testu.
 
 Testy: `server/znanylekarz.test.ts`, `server/appointments.test.ts`, `server/calendar-write.test.ts`,

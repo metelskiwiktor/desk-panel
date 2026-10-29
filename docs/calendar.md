@@ -54,6 +54,10 @@ nowych zdarzeń panelu.
 
 ## Tworzenie wydarzenia po zgodzie na karcie
 
+Stan sprawdzony 29.10.2026: konto kalendarza zwraca `connected` i `canCreateEvents: true`; użytkownik potwierdził
+działający zapis po rzeczywistej rezerwacji. Wcześniejsza informacja z tej sesji, że zgoda na zapis nadal jest brakująca,
+jest już nieaktualna. Bieżące uprawnienie zawsze sprawdzaj w statusie konta, nie na podstawie tej historycznej notatki.
+
 Wektor może zaproponować jedno wydarzenie narzędziem `panel_calendar_propose` (tytuł, początek i koniec z offsetem,
 opcjonalnie miejsce i opis). Model sam niczego nie zapisuje. Karta pokazuje szczegóły; dopiero **Dodaj do Google Calendar**
 wysyła `POST /api/chats/:id/calendar-plan` (`Origin` sprawdzany, plan pochodzi z zakończonego wywołania tej rozmowy).

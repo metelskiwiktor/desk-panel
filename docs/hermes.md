@@ -121,7 +121,7 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
 
-Opisy czterech narzędzi kokpitu (co, kiedy, skutek) i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
+Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 
 Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę).

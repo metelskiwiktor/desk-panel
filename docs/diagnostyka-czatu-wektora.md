@@ -50,6 +50,12 @@ Drugi filtr może nadal zwrócić prywatne i długie dane. Zawęź go do konkret
 
 ## Na co patrzeć
 
+- **„Przejdź do podsumowania” nic nie robi.** W szerokim oknie obie kolumny są już widoczne, więc samo `setPane('chat')`
+  nie daje efektu. Przycisk ma wywołać `review()` właściwej karty: odsłonić czat, przewinąć do jej akcji i ustawić fokus.
+  Przed wyborem celem jest „Wybieram…”, po wyborze link rezerwacji. Sprawdzaj fokus i położenie celu, a nie tylko zmianę
+  stanu zakładki. Regresja jest sprawdzana przez `chat-appointment-axis` oraz `src/appointment-card.test.tsx`.
+  To problem nawigacji UI, nie powód do zmiany promptu ani ponawiania rezerwacji.
+
 - **Karta wizyty lub kalendarza.** Zakończone `panel_znanylekarz` / `panel_calendar_propose` mają id
   `<wiadomość>:v-<16 znaków>` (`server/appointment-cards.ts`, odtwarzane także z historii Hermesa). W wyniku wizyty musi być
   `ref=a-…`, wskazujące konkretny odczyt w `appointments.dpapi`. `GET /api/chats/<id>/appointment?toolCallId=…` pokazuje odczyt,

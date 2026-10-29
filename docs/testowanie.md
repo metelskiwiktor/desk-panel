@@ -28,6 +28,7 @@ just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po
 just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
 just screenshots wizyty --pages pulpit --open chat-appointment-selected # automatycznie wypełniony kalendarz
 just screenshots wizyty --pages pulpit --open chat-appointment-saved # zapis do atrapy Google
+just screenshots wizyty --pages pulpit --open chat-appointment-axis # oś, kolizje, dni, Cezar i powrót do podsumowania
 ```
 
 `--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.
@@ -72,8 +73,13 @@ zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odr
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
-Katalog `.ai/` (worktree zadań Cezara: inne gałęzie, starszy kod) jest wyłączony z uruchamiania testów w `vite.config.ts`: jego testy czytają `scenarios/` tego
-checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
+Katalogi `.ai/` i `.claude/worktrees/` są wyłączone z uruchamiania testów w `vite.config.ts`: zawierają inne checkouty,
+które mogą czytać scenariusze z niewłaściwej gałęzi i ładować drugą kopię Reacta (`Invalid hook call`).
+
+Przy serii timeoutów 5 s w różnych testach UI najpierw sprawdź obciążenie i równoległość. 29.10.2026 domyślny przebieg
+miewał timeouty, a ta sama wersja przechodziła pełny zestaw z ograniczeniem `VITEST_MAX_WORKERS` do 2 lub 4. W PowerShell:
+`$env:VITEST_MAX_WORKERS='4'; just check` (tylko w bieżącej powłoce; usunięcie: `Remove-Item Env:VITEST_MAX_WORKERS`).
+Nie podnoś automatycznie timeoutów i nie uznawaj każdego błędu za problem obciążenia — porównaj konkretne błędy i wyniki.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI).

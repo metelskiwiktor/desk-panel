@@ -89,7 +89,7 @@ through its long-running API server on loopback (`DESK_HERMES_URL`, key `DESK_HE
 or logs); its sessions are canonical and `~/.desk-panel/hermes-chats` keeps only the mapping (session, run ids, what the user
 typed and pointed at). Hermes reads the panel through the narrow MCP tools at `/api/mcp` (server/panel-mcp.ts: loopback only,
 bearer token from `~/.desk-panel/mcp-token`, requests with an Origin refused), the same views and two writes as the agy
-preamble, plus four cockpit tools defined by one contract table (`COCKPIT_TOOLS` in src/cockpit-contract.ts: what, when, effect; the
+preamble, plus cockpit tools defined by one contract table (`COCKPIT_TOOLS` in src/cockpit-contract.ts: what, when, effect; the
 cockpit watches a task only after a dispatch from the card, `panel_cezar_watch` or until `panel_cockpit_clear`, never by
 guessing); a new tool there needs the same care as a new agent view. No silent fallback: Hermes down is shown, AGY is the
 user's manual choice. `just hermes CHECK|RUN|…`, `just hermes-setup`, `just hermes-install`; never start or register it without

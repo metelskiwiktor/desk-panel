@@ -35,7 +35,7 @@ Moving between phases: `soft` = a criterion still forming; `expect` = a rule tha
 - **Card** in `src/cockpit/`: `cards.tsx` (data card `ShowCard`), `consent-card.tsx` (`ConsentShell` + `MergeBody`; a new shape of change = a new body in the same shell, e.g. `assign-card.tsx` for bulk marking). Register in `Thread.tsx` (`makeAssistantToolUI`), map the tool name in `live.ts` (`CARDS`, `cockpitMessage`, `respond`), constants in `types.ts`. Add the key to `CARD_SHOWN`.
 - **Consent for writes**: the tool only proposes. The card shows a before/after the panel works out; nothing changes until the user clicks. `POST /api/chats/:id/bank-plan` (Origin-checked) takes `{toolCallId, decision}` plus, for a bulk card, only the user's *choice* (what was unticked, picked, named: keys the panel made, never marks or ids it must trust); the plan is read from the conversation's own tool call, re-checked against current data, applied once (idempotent, kept in `cockpit.json`). The answer keeps the preview, so a decided card still shows what it was.
 - **Card ids** come from content, not from Hermes: `stableBankCardId` (message + hash of the plan, `server/hermes-chat.ts`). Hermes gives no usable call id (two cards in one answer stayed `pending:` and a click was refused with 409). Test with the ids the chat really makes, never `m1:x`.
-- **Docs**: `AGENTS.md`, `docs/bank.md`. Update the guide lines (`BANK_GUIDE` in `src/chat-contract.ts`). A guide is registered in `PANEL_GUIDES` (area, `when`, lines): Wektor reads it with `panel_guide` when a conversation reaches the area, and the same lines are the `@Bank` skill. The preamble only has one line per guide (`guideRules()`). A new area (calendar, to-dos) = a new entry, not more preamble.
+- **Docs**: `AGENTS.md` and the matching integration document (`docs/bank.md`, `docs/znanylekarz.md`, `docs/calendar.md`, etc.). Update the guide lines (`BANK_GUIDE` in `src/chat-contract.ts`). A guide is registered in `PANEL_GUIDES` (area, `when`, lines): Wektor reads it with `panel_guide` when a conversation reaches the area, and the same lines are the `@Bank` skill. The preamble only has one line per guide (`guideRules()`). A new area (calendar, to-dos) = a new entry, not more preamble.
 
 ## The skill text (`BANK_GUIDE`) - rules we hold
 
@@ -56,8 +56,8 @@ An **agent harness** is everything around the model except its reasoning: the lo
 | Instructions | short preamble (`hermesPreamble()`: identity, evidence rules, tool table, one line per guide) + area guides read on demand (`panel_guide`, `PANEL_GUIDES`), `@` skills |
 | Tools (actions) | MCP tools of the panel (`server/panel-mcp.ts`), narrow, enumerated fields |
 | Human in the loop | cards: data card, consent card (the tool only proposes) |
-| Guardrails | no write tools for the agent; plan read from the conversation, re-checked, applied atomically on the user's click |
-| State / memory | `cockpit.json` (decisions and previews), Hermes sessions |
+| Guardrails | direct writes limited to to-dos and finished Cezar actions; other changes use a conversation-bound plan and the user's click |
+| State / memory | `cockpit.json` (decisions and previews), `appointments.dpapi` (visits and frozen calendar writes), Hermes sessions |
 | Observability | `~/.desk-panel/chat-logs`, the card's own preview |
 | Evaluation | `scripts/wektor-test.mjs` and the cases, judged with the user |
 
@@ -136,6 +136,17 @@ When a conversation looks wrong (a card misbehaves, an answer is odd, a turn han
 - **Card bugs worth remembering:** a native `<select>` list takes the field's background, so a translucent field colour opens a light list with light text (paint every `<option>`); a choice for a whole group must clear the per-item picks or the card says one thing and saves another; a name that is `truncate`d next to a wide control disappears (give it its own line); a card in a kept test chat re-fetches its preview live, so an old chat shows the new layout.
 - **Suggestions are sure only from two agreeing marks** (`server/bank-suggest.ts`): one earlier mark is a sample. A change to such a rule breaks older tests that assumed "sure after one"; update them on purpose, not to green.
 - **Tool work:** `server/hermes-chat.ts`, `server/panel-mcp.ts`, `server/bank.ts` and several tests are CRLF (git warns); a python helper that reads with `newline=''`, edits on `\n` text and writes back the original endings avoids a mixed file. Long heredocs with quotes break in this shell: write the script with the Write tool, run it, delete it.
+
+## Lessons from appointments and calendar (2026-10-29)
+
+- Agent instructions live in `PANEL_GUIDES` / `COCKPIT_TOOLS`, delivered through the preamble and `panel_guide`;
+  editing repository Markdown alone does not update the model's instructions. An already-read guide stays in an old chat's history.
+- Availability belongs to the provider; calendar collisions are separate annotations. Missing coverage, stale/partial reads
+  or unknown duration mean uncertainty, never a promise of free time. Read service duration, never infer it from gaps between slots.
+- A navigation button must visibly reach its target. Switching to the chat pane alone does nothing when both panes are
+  already visible. Test scrolling and focus on the correct card in wide and narrow layouts, without triggering the write.
+- Keep evidence levels distinct: synthetic UI/provider fixtures, a live agent's read/proposal, and a real booking/calendar
+  write confirmed by the user. The harness does not test the last step by clicking a real consent card.
 
 ## Gotchas
 
