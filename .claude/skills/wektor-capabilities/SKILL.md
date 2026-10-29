@@ -34,6 +34,29 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 - The consent card is **not proactive**: on a request for advice he first suggests the change in words and asks whether to show the card; the card comes after the user agrees, or at once when the user explicitly asks for a concrete change. Not every bank conversation means the user wants a change.
 - What the user judged good: verdict first with a reason from the numbers, <= 6 sentences without lists, says since when marks exist and how much is unmarked, "trudno ocenic" instead of a forecast when the sample is small, names of services allowed but no table of rows, proposes only steps his tools can do, no `execute_code`, ends with one concrete next step, never says he changed something.
 
+## Designing a card (we decide it with the user, visually)
+
+- **Mock first, build after.** Before any card code, show 2-3 variants as mockups (the `visualize` widget: read_me with `mockup`, flat, no gradients, host colours) and let the user choose; then refine on his feedback, then implement. Our first merge card was reworked twice that way (flow bars -> effect zones -> rows with one arrow).
+- **He should see the effect without reading.** Colours, icons, symbols and counts carry the meaning, text only labels: a green chip with a plus for what is created, a struck-through grey name with a red minus for what goes, a grey chip for what stays, one shared arrow, one tile for the result. A short legend explains the symbols once.
+- **Always answer "what is created, changed, removed?"** The user asked it about every change (is a category made, is a tag removed, does a tag stay): the card must show new things, removed things and kept things (including labels/tags), and say what does not change (amounts, dates, other sides; nothing goes to the bank).
+- **Order of rows**: count, name, what it already has | arrow | what it becomes. More than ~6 rows scroll inside, the result tile stays on top.
+- **States**: loading preview, problems (the preview says why it cannot go ahead; no "Wykonaj"), open, decided. A decided card keeps showing what was proposed (rejected: dimmed; applied: as it was), from the preview kept with the answer.
+- **One card = one change.** Two changes in one request are two cards (tested: Wektor sends two `panel_bank_propose`, each answered on its own). A card with several groups and one "Wykonaj" is possible but bigger; build it only when the user wants one click for all.
+- **Reuse**: shell (`ConsentShell`) vs body (`MergeBody`). Other shapes (move items between states, delete) get their own body, chosen by the tool, never described by the model (a small model generating UI is costly and error-prone; he passes parameters, the panel draws).
+- **Look at the real card** in the browser pane before calling it done (zoom in): the first real render showed a red strike-through colouring the names and a total wrapping onto two lines, which no unit test would catch. Style tokens are the `tw:ck-*` Tailwind classes; category colours/icons come from `COLOR_VALUES`/`ICONS` in `src/bank-look.tsx`.
+
+## Hermes (the agent runtime) - what we learned
+
+- Docs: `docs/hermes.md` (config, model, service), `docs/czat.md`, `docs/diagnostyka-czatu-wektora.md`. Service `Desk-Panel-Hermes` (Servy): `just hermes STATUS|RESTART|CHECK`; config `~/.hermes/config.yaml`, key in `~/.hermes/.env` and `%LOCALAPPDATA%\hermes\.env`; panel tools are registered once by `just hermes-setup` (MCP server `desk-panel`, token `~/.desk-panel/mcp-token`). Never start or register it without the user (standing exception: the restart in this workflow). It runs DeepSeek V4.1 Flash through OpenRouter.
+- **Tool list is cached from Hermes's start**: a new tool or a changed schema is invisible until `just hermes RESTART` (the first run after adding `panel_show` answered "no such tool in this session"). Changes to a tool's *answer text* or to the panel's code need only `just update`.
+- **Schemas are enforced by Hermes before the call** (`additionalProperties: false`): a wrong field name returns a validation error and he retries. He first loads schemas with `tool_describe`, so a tool's description and field names are what he sees.
+- **The preamble** (`hermesPreamble()` in `server/hermes-chat.ts`, with `BANK_GUIDE` and the cockpit tool table) goes only in the first message of a session. A change to it affects new chats, not running ones.
+- **Tool call ids are unreliable**: the stream often gives only the tool's name (`pending:` ids in our store), the history gives `call_...`. That is why a card's identity is made from its content (`stableBankCardId`), and why the Cezar dispatch card has its own binding rules (`fillFromHistory`; it refuses to guess among several same-named cards).
+- Hermes has its own tools (shell, files, `execute_code`, `tool_search`); `execute_code` is blocked for approval, and he sometimes tries it to add numbers: the tool summaries should already carry the sums, and the skill says not to compute.
+- A Hermes turn ends after 40 model calls; the usage counters in our logs (`0 wywolan modelu`) are not reliable for cost. `skills.creation_nudge_interval: 0` is set so Hermes does not write skills on his own; the skills live in `src/chat-contract.ts`.
+- A turn costs 100-230k input tokens (mostly his own system prompt and tool schemas) and 5-90 s; fine on this model, but keep tool answers short.
+- History: Hermes keeps the sessions; the panel keeps only the mapping (`~/.desk-panel/hermes-chats`). After a restart the conversation is rebuilt from Hermes's history, so anything the panel adds to a part live (ids, outputs) must be derivable again from the history.
+
 ## Gotchas
 
 - Windows: long heredocs in the shell break on quotes. Write a script file to the scratchpad with the Write tool and run it; avoid `\s` in non-raw Python strings (use the Edit tool for TS regexes).
