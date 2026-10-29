@@ -368,14 +368,14 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     input: bankAssignSchema.extend({ tytul: text(80).optional() }).strict(),
     schema: schema({
       tytul: { type: 'string', description: 'Krótki tytuł karty po polsku' },
-      from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD operacji do oznaczenia (domyślnie wszystkie zapisane)' },
-      to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie' },
+      from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD; podaj tylko gdy użytkownik sam wskazał okres, bez niego panel bierze wszystkie zapisane operacje' },
+      to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie; tak samo tylko na prośbę użytkownika' },
     }),
     async run(args, { sources }) {
       const preview = assignPreview(await sources.bankLedger(), bankAssignSchema.parse(args));
       if (preview.problems.length) throw new AgentViewError(400, preview.problems.join(' '));
       const count = preview.groups.reduce((sum, g) => sum + g.count, 0);
-      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru: są na karcie osobno i zostają nieoznaczone, dopóki użytkownik nie kliknie opcji. Zakres: ${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}, powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
+      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru: są na karcie osobno i zostają nieoznaczone, dopóki użytkownik nie kliknie opcji. Zakres: ${preview.range.from || preview.range.to ? `${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}` : 'wszystkie zapisane operacje'}${preview.range.first ? `, z dni ${preview.range.first} – ${preview.range.last}` : ''}; powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
   panel_cockpit_clear: {

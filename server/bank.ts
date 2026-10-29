@@ -17,9 +17,10 @@ export const BANK_REFRESH_MS = 7 * 3_600_000;
 /** After a failed reading the bank is left alone for a while. */
 const RETRY_MS = 30 * 60_000;
 const CONSENT_MS = 179 * DAY;
-const HISTORY_DAYS = 35;
-const MAX_PAGES = 3;
-const KEEP = 200;
+/** How far back a reading asks: 90 days is what a bank gives without a fresh sign-in; a bank that refuses the period is asked for the shorter one. */
+const HISTORY_DAYS = 90, FALLBACK_HISTORY_DAYS = 35;
+const MAX_PAGES = 8;
+const KEEP = 700;
 const LOGIN_MS = 10 * 60_000;
 /** The bank answers an account request slowly now and then. */
 const CALL_TIMEOUT_MS = 60_000;
@@ -143,9 +144,22 @@ export function createBank(options: {
   };
 
   async function refresh(current: Session) {
-    const from = new Date(now() - HISTORY_DAYS * DAY).toISOString().slice(0, 10);
+    let days = HISTORY_DAYS;
     const accounts: BankAccount[] = [];
     const transactions: BankTransaction[] = [];
+    const operations = async (uid: string): Promise<BankTransaction[]> => {
+      const from = new Date(now() - days * DAY).toISOString().slice(0, 10);
+      const list: BankTransaction[] = [];
+      let continuation: string | undefined;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const query = new URLSearchParams({ date_from: from, transaction_status: 'BOOK', ...(continuation ? { continuation_key: continuation } : {}) });
+        const answer = await call(`/accounts/${encodeURIComponent(uid)}/transactions?${query}`);
+        (answer.transactions as unknown[] | undefined)?.forEach((raw, i) => { const t = mapTransaction(raw, uid, page * 1000 + i); if (t) list.push(t); });
+        continuation = typeof answer.continuation_key === 'string' && answer.continuation_key ? answer.continuation_key : undefined;
+        if (!continuation) break;
+      }
+      return list;
+    };
     for (const account of current.accounts) {
       const balances = (await call(`/accounts/${encodeURIComponent(account.uid)}/balances`)).balances as Record<string, any>[] | undefined;
       // Closing booked is the balance the bank statement shows; the others are the next best.
@@ -154,13 +168,13 @@ export function createBank(options: {
         id: account.uid, name: account.name, last4: account.last4, currency: pick?.balance_amount?.currency ?? account.currency,
         balance: amountOf(pick?.balance_amount?.amount), balanceAt: day(pick?.reference_date) ?? now(),
       });
-      let continuation: string | undefined;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const query = new URLSearchParams({ date_from: from, transaction_status: 'BOOK', ...(continuation ? { continuation_key: continuation } : {}) });
-        const answer = await call(`/accounts/${encodeURIComponent(account.uid)}/transactions?${query}`);
-        (answer.transactions as unknown[] | undefined)?.forEach((raw, i) => { const t = mapTransaction(raw, account.uid, page * 1000 + i); if (t) transactions.push(t); });
-        continuation = typeof answer.continuation_key === 'string' && answer.continuation_key ? answer.continuation_key : undefined;
-        if (!continuation) break;
+      try { transactions.push(...await operations(account.uid)); }
+      catch (error) {
+        // A bank that refuses the longer period (a bad request) is asked once for the shorter one, and then for good in this reading.
+        if (days > FALLBACK_HISTORY_DAYS && error instanceof BankError && error.reason === 'bank' && (error.status === 400 || error.status === 422)) {
+          days = FALLBACK_HISTORY_DAYS;
+          transactions.push(...await operations(account.uid));
+        } else throw error;
       }
     }
     const seen = new Set<string>();

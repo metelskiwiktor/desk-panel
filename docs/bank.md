@@ -110,7 +110,7 @@ Okno nie wylicza wszystkiego: druga strona pokazuje wybraną albo pole z nazwą 
 pasujących); etykiety pokazują wybrane i osiem najczęstszych, resztę znajduje wpisywanie. Wpisana nazwa równa zapisanej stronie to ta strona;
 „to ktoś inny” robi nową o tej samej nazwie. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
 
-Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc salda rozliczeń i przyszłe widoki
+Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo panel czyta z banku 90 dni (a gdy bank odrzuci taki okres, 35), więc salda rozliczeń i przyszłe widoki
 operacji cyklicznych mają całą historię bez migracji. Plik ma wersję 4 (ruch, jedna oś, druga strona bez rodzaju). Kod, który przenosił pliki
 wersji 1–3 przy odczycie, usunięto po przeniesieniu jedynego pliku; starszy plik trafia do kopii obok i oznaczenia zaczynają się od zera
 (historia gita ma ten kod, commit przed `6c9634d`).

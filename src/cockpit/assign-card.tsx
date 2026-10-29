@@ -113,8 +113,9 @@ export function AssignBody({ preview, sel, onGroup, onOp, onPick, locked = false
 
 /** The days the card covers, in words: what was asked and what the operations really span. */
 function rangeText(p: BankAssignPreview) {
-  const asked = !p.range.from && !p.range.to ? 'wszystkie zapisane operacje' : `${p.range.from ?? 'od początku'} – ${p.range.to ?? 'do dziś'}`;
-  return `Zakres: ${asked}${p.range.first ? ` · operacje z ${p.range.first === p.range.last ? p.range.first : `${p.range.first} do ${p.range.last}`}` : ''}`;
+  const span = p.range.first ? (p.range.first === p.range.last ? p.range.first : `${p.range.first} do ${p.range.last}`) : null;
+  if (!p.range.from && !p.range.to) return `Wszystkie zapisane operacje${span ? `: z dni ${span}` : ''}`;
+  return `Zakres: ${p.range.from ?? 'od początku'} – ${p.range.to ?? 'do dziś'}${span ? ` · operacje z ${span}` : ''}`;
 }
 
 const toggled = (set: ReadonlySet<string>, id: string) => { const next = new Set(set); if (!next.delete(id)) next.add(id); return next; };
