@@ -151,7 +151,7 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
     set({ skipOps, ...(markOf(r, tx, sel, categories) ? {} : { picks: { ...sel.picks, [tx]: { template: r.templates[0].key } } }), skip: new Set([...sel.skip].filter(k => k !== r.key)) });
   };
   return <div className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-recipient={r.key}>
-    <div className="tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2">
+    <div className="tw:grid tw:grid-cols-[20px_minmax(0,1fr)] tw:items-center tw:gap-x-3 tw:gap-y-1.5 tw:px-3 tw:py-2">
       <input type="checkbox" className={checkbox} checked={t.count > 0} ref={el => { if (el) el.indeterminate = partial; }} disabled={locked} onChange={toggleGroup}
         aria-label={`Oznacz ${r.count} operacji: ${r.name}`} />
       <div className="tw:min-w-0">
@@ -160,7 +160,7 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
           {expanded ? <ChevronUp size={13} className="tw:flex-none" aria-hidden="true" /> : <ChevronDown size={13} className="tw:flex-none" aria-hidden="true" />}<span className="tw:truncate">{historyText(r)}</span>
         </button>
       </div>
-      <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}`}>
+      <div className="tw:col-start-2 tw:flex tw:flex-wrap tw:items-center tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}`}>
         <span className="tw:text-xs tw:text-ck-muted">oznacz jako</span>
         {r.templates.map(tpl => {
           const on = group?.template === tpl.key;
