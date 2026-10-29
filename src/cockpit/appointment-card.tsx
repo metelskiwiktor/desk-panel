@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { CalendarCheck, CalendarDays, Check, ExternalLink, RefreshCw } from 'lucide-react';
 import { z } from 'zod';
@@ -74,6 +74,8 @@ function GoogleConsent({ available, refresh }: { available: boolean; refresh(): 
 export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePartProps<AppointmentArgs, unknown>) {
   const { respond, running } = useContext(CardActions);
   const workspace = useAppointmentWorkspace();
+  const summary = useRef<HTMLElement>(null);
+  const openSummary = workspace?.openSummary;
   const ready = status.type !== 'running' && !args.refused && toolCallId.includes(':v-');
   const { value: view, error, setError, refresh } = useCard('appointment', toolCallId, appointmentViewSchema, !!ready);
   const [day, setDay] = useState(''), [picked, setPicked] = useState(''), [busy, setBusy] = useState(false);
@@ -94,11 +96,21 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
   useEffect(() => {
     if (!view) { remove?.(toolCallId); return; }
     put?.(toolCallId, { view, day: day || (selection ? dayKey(selection.slot.startAt, view.preview.timeZone) : active), picked, disabled: busy || running, endAt,
-      chooseDay: d => { setDay(d); setPicked(''); }, chooseSlot: setPicked });
-  }, [put, remove, toolCallId, view, active, day, picked, busy, running, selection, endAt]);
+      chooseDay: d => { setDay(d); setPicked(''); }, chooseSlot: setPicked,
+      review: () => {
+        openSummary?.();
+        // Wait for the chat pane to become visible on narrow windows, then find
+        // this card's action even when another card is further down the thread.
+        window.setTimeout(() => {
+          const target = summary.current?.querySelector<HTMLElement>('[data-visit-summary-action]') ?? summary.current;
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 0);
+      } });
+  }, [put, remove, toolCallId, view, active, day, picked, busy, running, selection, endAt, openSummary]);
   useEffect(() => { if (view) offer?.(toolCallId, view.preview.observedAt); }, [!!view, offer, toolCallId]);
   useEffect(() => () => remove?.(toolCallId), [remove, toolCallId]);
-  return <section className={card} aria-label="Umów wizytę">
+  return <section ref={summary} tabIndex={-1} className={card} aria-label="Umów wizytę">
     <div className={head}><CalendarDays size={16} className="tw:text-ck-cal" /><b className="tw:font-medium">Umów wizytę</b><span className="tw:ml-auto tw:text-xs tw:text-ck-muted">ZnanyLekarz</span></div>
     <div className="tw:grid tw:gap-4 tw:p-4">
       {args.refused ? <p className={refusedNote} role="alert">{args.refused}</p> : null}
@@ -107,7 +119,7 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
         <div><p className="tw:m-0 tw:text-base tw:font-medium tw:text-ck-text">{p.doctor}</p><p className="tw:m-0 tw:text-sm tw:text-ck-muted">{p.service}</p><p className="tw:mt-1 tw:mb-0 tw:text-sm">{p.location} · {money(p)}{p.durationMinutes ? ` · ${p.durationMinutes} min` : ''}</p></div>
         {view.saved ? <Saved saved={view.saved} /> : selection ? <>
           <div className="tw:border-l-[3px] tw:border-ck-cal tw:pl-3"><p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybrany termin</p><p className="tw:my-1 tw:text-base tw:font-medium">{format(selection.slot.startAt, p.timeZone, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p><p className="tw:m-0 tw:text-sm">{time(selection.slot.startAt, p.timeZone)} · {p.location} · {money(p)}</p></div>
-          <div className="tw:flex tw:flex-wrap tw:gap-2">{url && <a className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} href={url} target="_blank" rel="noopener noreferrer">Otwórz ZnanyLekarz <ExternalLink size={14} /></a>}<button type="button" className={`${btn} tw:border tw:border-ck-line-2`} disabled={busy || running || view.writeStarted} onClick={() => void answer({ action: 'reset', selectionId: selection.id })}>Zmień termin</button></div>
+          <div className="tw:flex tw:flex-wrap tw:gap-2">{url && <a className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action href={url} target="_blank" rel="noopener noreferrer">Otwórz ZnanyLekarz <ExternalLink size={14} /></a>}<button type="button" className={`${btn} tw:border tw:border-ck-line-2`} disabled={busy || running || view.writeStarted} onClick={() => void answer({ action: 'reset', selectionId: selection.id })}>Zmień termin</button></div>
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Dokończ rezerwację i ewentualną płatność na stronie lekarza, a potem wróć do tej karty. Samo otwarcie linku nie potwierdza wizyty.</p>
           <hr className="tw:m-0 tw:border-ck-line" />
           <CalendarFields draft={selection.draft} startAt={selection.slot.startAt} zone={p.timeZone} title={title} setTitle={setTitle} end={end} setEnd={setEnd} locked={view.writeStarted} />
@@ -117,7 +129,7 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
           {!!days.length && <div className="tw:grid tw:gap-2 tw:rounded-xl tw:border tw:border-ck-cal/30 tw:bg-ck-cal/5 tw:p-3"><span className="tw:text-xs tw:text-ck-muted">{slot ? 'Podgląd wybranego terminu' : 'Terminy i Twój kalendarz'}</span><b className="tw:text-base tw:font-medium">{slot ? `${format(slot.startAt, p.timeZone, { weekday: 'long', day: 'numeric', month: 'long' })} · ${time(slot.startAt, p.timeZone)}${p.durationMinutes ? `–${time(slot.startAt + p.durationMinutes * 60_000, p.timeZone)}` : ''}` : 'Wybierz godzinę na osi dnia'}</b><button type="button" className={`${btn} tw:w-fit tw:bg-ck-surface-2`} onClick={() => { show?.(toolCallId); workspace?.openTimeline(); }}>Pokaż terminy i kalendarz</button></div>}
           {!days.length && <p className="tw:m-0 tw:text-sm">Brak wspólnych dostępnych terminów w tym zakresie.{p.query.firstVisit === undefined ? ' Powiedz Wektorowi, czy to pierwsza czy kolejna wizyta — dostępność może się różnić.' : ''}</p>}
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{p.slots.length} terminów · {p.from} – {p.to}. Odczyt {format(p.observedAt, p.timeZone, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.{p.query.firstVisit === undefined ? ' Wspólne dla pierwszej i kolejnej wizyty.' : p.query.firstVisit ? ' Pierwsza wizyta.' : ' Kolejna wizyta.'}</p>
-          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={!slot || busy || running} onClick={() => slot && void answer({ action: 'select', slotId: slot.id })}>{busy ? 'Sprawdzam dostępność…' : `Wybieram ${slot ? time(slot.startAt, p.timeZone) : 'termin'}`}</button>
+          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action disabled={!slot || busy || running} onClick={() => slot && void answer({ action: 'select', slotId: slot.id })}>{busy ? 'Sprawdzam dostępność…' : `Wybieram ${slot ? time(slot.startAt, p.timeZone) : 'termin'}`}</button>
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybór w panelu nie rezerwuje wizyty. Dostępność sprawdzimy ponownie.</p>
         </>}
       </>}

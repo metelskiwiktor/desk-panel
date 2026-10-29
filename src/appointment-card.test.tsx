@@ -70,6 +70,13 @@ describe('the days and times card', () => {
     expect(screen.getByText(/Kolizja: Omówienie projektu/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wybieram 13:20' }).hasAttribute('disabled')).toBe(false);
     expect(x.respond).not.toHaveBeenCalled(); expect(x.writeCalendar).not.toHaveBeenCalled();
+    const scroll = vi.fn();
+    const action = screen.getByRole('button', { name: 'Wybieram 13:20' });
+    action.scrollIntoView = scroll;
+    await x.user.click(screen.getByRole('button', { name: 'Przejdź do podsumowania' }));
+    await waitFor(() => expect(document.activeElement).toBe(action));
+    expect(scroll).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    expect(x.respond).not.toHaveBeenCalled();
     await x.user.click(screen.getByRole('button', { name: 'Wybieram 13:20' }));
     await screen.findByRole('link', { name: /Otwórz ZnanyLekarz/ });
     expect(x.writeCalendar).not.toHaveBeenCalled();

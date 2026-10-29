@@ -161,6 +161,8 @@ if (!values.shot) {
             const timeline = page.getByRole('region', { name: 'Terminy na tle kalendarza' });
             await timeline.getByRole('button', { name: '13:20 — kolizja', exact: true }).click();
             await timeline.getByText('Kolizja: Omówienie projektu', { exact: true }).waitFor();
+            await timeline.getByRole('button', { name: 'Przejdź do podsumowania', exact: true }).click();
+            await page.waitForFunction(() => document.activeElement?.hasAttribute('data-visit-summary-action'));
             if (await visit.getByRole('button', { name: 'Wybieram 13:20', exact: true }).isDisabled()) throw new Error('Kolizja nie może zabraniać wyboru.');
             await timeline.getByRole('navigation', { name: 'Dzień wizyty' }).getByRole('button').nth(1).click();
             if (!await visit.getByRole('button', { name: 'Wybieram termin', exact: true }).isDisabled()) throw new Error('Zmiana dnia musi czyścić podgląd.');
@@ -186,6 +188,7 @@ if (!values.shot) {
             await timeline.getByRole('button', { name: '08:00', exact: true }).click();
             await page.screenshot({ path: join(values.out, 'wizyty-axis-narrow-calendar.png'), fullPage: true });
             await timeline.getByRole('button', { name: 'Przejdź do podsumowania', exact: true }).click();
+            await page.waitForFunction(() => document.activeElement?.hasAttribute('data-visit-summary-action'));
             await visit.getByRole('button', { name: 'Wybieram 08:00', exact: true }).waitFor();
             const overflow = await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1);
             if (overflow) throw new Error('Wąskie okno ma poziome przepełnienie.');

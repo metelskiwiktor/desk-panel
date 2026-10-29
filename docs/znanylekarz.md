@@ -25,7 +25,8 @@ Karta nie tworzy automatycznych zaproszeń ani linku do wideokonferencji. Link d
 `AppointmentWorkspace` łączy kartę z prawym panelem w obrębie otwartej rozmowy. Każda karta ma własny wybór i podgląd;
 najnowsza propozycja otwiera oś dnia. Zakładka **Cezar** zachowuje dostęp do obserwowanego taska. W wąskim oknie przycisk
 **Pokaż terminy i kalendarz** przełącza na kokpit, a **Przejdź do podsumowania** wraca do czatu. Szerokość samego okna,
-także po ręcznym zmniejszeniu, decyduje o układzie.
+także po ręcznym zmniejszeniu, decyduje o układzie. Przejście do podsumowania przewija właściwą kartę i ustawia fokus
+na „Wybieram…” (po wyborze: na linku rezerwacji), także gdy obie kolumny są już widoczne. Nie zatwierdza terminu.
 
 - Wszystkie godziny danego dnia są przyciskami na osi; nakładające się wizyty mają osobne kolumny. Oś przewija się pionowo.
   Długie puste przerwy są skrócone i podpisane „przerwa na osi”; obie kolumny mają identyczną skalę.

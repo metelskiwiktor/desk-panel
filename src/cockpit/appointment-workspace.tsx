@@ -10,6 +10,7 @@ export interface VisitWorkspaceEntry {
   endAt: number | null;
   chooseDay(day: string): void;
   chooseSlot(id: string): void;
+  review(): void;
 }
 const Workspace = createContext<{
   entries: Record<string, VisitWorkspaceEntry>;

@@ -81,7 +81,7 @@ export function AppointmentPanel({ entry }: { entry: VisitWorkspaceEntry }) {
       })}</div>
     </div>
     <footer className="visit-footer" aria-live="polite">
-      {pickedSlot ? <><b>{slotClock(pickedSlot.startAt)}{duration ? `–${slotClock(pickedSlot.startAt + duration * 60_000)}` : ' · czas trwania niepodany'}</b><span>{conflicts.length ? `Kolizja: ${conflicts.map(e => e.title).join(', ')}` : !assess(pickedSlot.startAt, duration) ? 'Nie można potwierdzić braku kolizji.' : 'Bez kolizji w odczytanym kalendarzu.'}</span><button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} onClick={() => workspace?.openSummary()}>Przejdź do podsumowania</button></> : <span>Kliknij godzinę w kolumnie „Dostępne wizyty”.</span>}
+      {pickedSlot ? <><b>{slotClock(pickedSlot.startAt)}{duration ? `–${slotClock(pickedSlot.startAt + duration * 60_000)}` : ' · czas trwania niepodany'}</b><span>{conflicts.length ? `Kolizja: ${conflicts.map(e => e.title).join(', ')}` : !assess(pickedSlot.startAt, duration) ? 'Nie można potwierdzić braku kolizji.' : 'Bez kolizji w odczytanym kalendarzu.'}</span><button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} onClick={() => entry.review()}>Przejdź do podsumowania</button></> : <span>Kliknij godzinę w kolumnie „Dostępne wizyty”.</span>}
       <small>Wybór godziny pokazuje podgląd. Rezerwację potwierdzisz na ZnanyLekarz.</small>
     </footer>
   </section>;
