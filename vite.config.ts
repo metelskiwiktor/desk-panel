@@ -14,6 +14,9 @@ export default defineConfig({
   // Task worktrees contain other branches and their own React; never collect their tests in this checkout.
   test: {
     restoreMocks: true, exclude: [...configDefaults.exclude, '.ai/**', '.claude/worktrees/**'],
+    // The panel runs on one PC in Poland and scenarios write local times (`today+2@08:00`) that cards show in Europe/Warsaw;
+    // CI runners are on UTC, so the tests keep the zone the panel lives in.
+    env: { TZ: 'Europe/Warsaw' },
     // Server and scripts run without a DOM; only the UI pays for jsdom. A UI test that renders the whole panel takes 1–3 s
     // of CPU, more while just check builds beside it: its limit catches a hang, not a slow machine.
     projects: [
