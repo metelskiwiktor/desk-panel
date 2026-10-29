@@ -5,6 +5,7 @@
       "say": "Scal Gry i Elektronikę w jedną kategorię o nazwie Gadżety",
       "expect": {
         "calls": [
+          "panel_guide",
           "panel_bank_propose"
         ],
         "notCalls": [
@@ -18,6 +19,12 @@
           "zmieniłem",
           "scaliłem",
           "przeniosłem"
+        ],
+        "order": [
+          [
+            "panel_guide",
+            "panel_bank_propose"
+          ]
         ]
       },
       "soft": [

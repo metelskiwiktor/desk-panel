@@ -5,6 +5,7 @@
       "say": "Ile wydaję na subskrypcje? Pokaż mi je",
       "expect": {
         "calls": [
+          "panel_guide",
           "panel_bank",
           "panel_show"
         ],
@@ -14,7 +15,13 @@
           "panel_cezar_propose",
           "panel_recon_report"
         ],
-        "maxTools": 8
+        "maxTools": 8,
+        "order": [
+          [
+            "panel_guide",
+            "panel_bank"
+          ]
+        ]
       },
       "soft": [
         {

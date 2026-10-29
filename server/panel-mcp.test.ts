@@ -145,6 +145,17 @@ describe('panel MCP for Hermes', () => {
     expect((await fetch(`${base}/api/bank/show?kategorie=lekarz`)).status).toBe(404);
   });
 
+  it('gives the guide of an area on request, and says in its description which areas have one', async () => {
+    const guide = await call('panel_guide', { topic: 'bank' });
+    expect(guide.isError).toBeUndefined();
+    expect(guide.content[0].text).toContain('Przewodnik „bank”');
+    expect(guide.content[0].text).toContain('Pokrycie danych');
+    expect(await call('panel_guide', { topic: 'kalendarz' })).toMatchObject({ isError: true });
+    expect(await call('panel_guide', {})).toMatchObject({ isError: true });
+    const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_guide').description).toMatch(/Tematy: bank \(rozmowa o koncie/);
+  });
+
   it('proposes a bank change by a card: it checks the names against the categories and changes nothing itself', async () => {
     const before = await (await fetch(`${base}/api/bank/plan?merge=Subskrypcje&into=Zdrowie`)).json() as { sources: { count: number }[] };
     const shown = await call('panel_bank_propose', { merge: ['Subskrypcje', 'Rachunki'], into: 'Stałe opłaty', tytul: 'Stałe opłaty' });

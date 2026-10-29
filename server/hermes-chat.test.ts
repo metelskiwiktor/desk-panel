@@ -211,6 +211,15 @@ describe('Hermes chat', () => {
     expect(single.parts?.[0]).toMatchObject({ id: 'answer:call_1' });
   });
 
+  it('keeps the area guides out of the preamble: one line each says that panel_guide has them and when to read one', () => {
+    const preamble = hermesPreamble();
+    expect(preamble).toContain('panel_guide');
+    expect(preamble).toMatch(/- bank: rozmowa o koncie bankowym/);
+    // what the guide says is read from the tool, not carried at the start of every conversation
+    expect(preamble).not.toContain('Pokrycie danych');
+    expect(preamble).not.toContain('Rozmowa o koncie bankowym (PKO BP');
+  });
+
   it('gives a bank change card an id from its plan: apart for different plans, one for the same plan, stable across reads', () => {
     const name = 'mcp__desk_panel__panel_bank_propose';
     const tool = (id: string, input: string) => ({ type: 'tool' as const, id, name, input, state: 'done' as const });

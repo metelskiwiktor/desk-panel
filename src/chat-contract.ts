@@ -43,6 +43,17 @@ export const BANK_GUIDE: readonly string[] = [
   '  2. „Trudno ocenić: Netflix i Spotify to razem 4 operacje i 90 zł, ale oznaczasz dopiero od 2026-10-15, a 31 wcześniejszych wydatków (1 800 zł) jest nieoznaczonych. Karta obok. Od kiedy masz te subskrypcje? Od tego zależy, czy to mały temat, czy stały koszt.”',
 ];
 
+/**
+ * The guides of the panel's areas, read by Wektor when a conversation reaches the area (`panel_guide`), not all of them at the
+ * start of every conversation: a long preamble dilutes the rules for a small model and grows with every area (bank, calendar,
+ * to-dos…). The preamble only says that a guide exists and when to read it (one line each, made from `when`).
+ */
+export const PANEL_GUIDES = {
+  bank: { when: 'rozmowa o koncie bankowym: wydatki, kategorie, oznaczenia operacji, salda, pokazanie lub zmiana czegoś w koncie', lines: BANK_GUIDE },
+} as const satisfies Record<string, { when: string; lines: readonly string[] }>;
+export type GuideTopic = keyof typeof PANEL_GUIDES;
+export const GUIDE_TOPICS = Object.keys(PANEL_GUIDES) as [GuideTopic, ...GuideTopic[]];
+
 export const CHAT_SKILLS: readonly ChatSkill[] = [
   {
     id: 'zaimplementuj-zadanie',

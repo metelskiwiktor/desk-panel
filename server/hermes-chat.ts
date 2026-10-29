@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { BANK_GUIDE } from '../src/chat-contract';
+import { PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
@@ -27,6 +27,14 @@ export function cockpitRules(): string[] {
   ];
 }
 
+/** The preamble's lines about the guides: that they exist and when to read one; the guides themselves come from `panel_guide`. */
+export function guideRules(): string[] {
+  return [
+    'Przewodniki dziedzin: zasady rozmowy o danej dziedzinie czytasz narzędziem panel_guide (z tematem), a nie masz ich tutaj. Gdy rozmowa dochodzi do dziedziny z listy, wywołaj panel_guide z jej tematem, zanim użyjesz innych narzędzi tej dziedziny, i stosuj go do końca rozmowy; raz na rozmowę wystarczy.',
+    ...Object.entries(PANEL_GUIDES).map(([topic, guide]) => `- ${topic}: ${guide.when}.`),
+  ];
+}
+
 export function hermesPreamble(): string {
   return [
     'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
@@ -43,7 +51,7 @@ export function hermesPreamble(): string {
     'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara. Nie proponuj zmian, których te dwa narzędzia nie robią (np. wydarzenia w kalendarzu, przypomnienia, wysłania maila): od razu powiedz, że panel tego nie potrafi.',
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
-    ...BANK_GUIDE,
+    ...guideRules(),
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
 }

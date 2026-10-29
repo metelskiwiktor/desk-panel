@@ -5,6 +5,7 @@
       "say": "Mam sporo wydatków typu psycholog/fizjoterapeuta/podolog - może scalić to w 1 o nazwie Lekarz z tagami? Co uważasz? Pokaż je",
       "expect": {
         "calls": [
+          "panel_guide",
           "panel_bank",
           "panel_show"
         ],
@@ -15,7 +16,13 @@
           "panel_recon_report",
           "panel_bank_propose"
         ],
-        "maxTools": 8
+        "maxTools": 8,
+        "order": [
+          [
+            "panel_guide",
+            "panel_bank"
+          ]
+        ]
       },
       "soft": [
         {

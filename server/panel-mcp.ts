@@ -12,6 +12,7 @@ import { todoActionSchema } from '../src/todo-contract';
 import { bankShowObject, bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
 import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
 import { bankPlanSchema, BANK_PLAN_LIMITS } from '../src/bank-plan-contract';
+import { GUIDE_TOPICS, PANEL_GUIDES } from '../src/chat-contract';
 import { planPreview } from './bank-plan';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
@@ -160,6 +161,15 @@ const range = { from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD
 const schema = (properties: Record<string, unknown> = {}, required: string[] = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 
 export const PANEL_TOOLS: Record<string, Tool> = {
+  panel_guide: {
+    description: `Zasady rozmowy o jednej dziedzinie panelu (jak odpowiadać, co pokazywać, czego nie robić). Wywołaj raz na początku rozmowy o tej dziedzinie, przed jej innymi narzędziami, i stosuj do końca rozmowy. Tematy: ${Object.entries(PANEL_GUIDES).map(([topic, g]) => `${topic} (${g.when})`).join('; ')}.`,
+    input: z.object({ topic: z.enum(GUIDE_TOPICS) }).strict(),
+    schema: schema({ topic: { type: 'string', enum: [...GUIDE_TOPICS], description: 'Dziedzina, o której rozmawiasz' } }, ['topic']),
+    async run(args) {
+      const guide = PANEL_GUIDES[args.topic as keyof typeof PANEL_GUIDES];
+      return `Przewodnik „${args.topic}”: obowiązuje do końca tej rozmowy.\n${guide.lines.join('\n')}`;
+    },
+  },
   panel_calendar: {
     description: 'Wydarzenia kalendarza Google użytkownika w zakresie dni (czas lokalny Europe/Warsaw).',
     input: z.object({ from: date.optional(), to: date.optional(), opisy: flag }).strict(),
@@ -393,7 +403,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };

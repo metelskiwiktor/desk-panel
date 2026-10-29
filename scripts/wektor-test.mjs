@@ -2,7 +2,7 @@
 // Runs a conversation case against the live panel's Wektor (Hermes) and checks what it did: which tools it called, what
 // it said, how many calls it took. Reads only what the case's tools read; a case must never make Wektor write.
 //   node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174]
-// A case is scripts/wektor-cases/<case>.json: { description, turns: [{ say, expect: { calls, notCalls, text, textNot, maxTools, maxSeconds }, soft: [{ name, text }] }] }.
+// A case is scripts/wektor-cases/<case>.json: { description, turns: [{ say, expect: { calls, notCalls, order: [[a, b]] (a is called before b), text, textNot, maxTools, maxSeconds }, soft: [{ name, text }] }] }.
 // `expect` fails the run, `soft` is only reported (judgement we watch, not yet a rule). The chats stay (titled "[test] <case> #<run>"):
 // the user reads them; `--delete` removes them.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -60,6 +60,7 @@ function judge(turn, message, seconds) {
   const check = (label, ok) => checks.push({ label, ok });
   for (const n of e.calls ?? []) check(`woła ${n}`, names.includes(n));
   for (const n of e.notCalls ?? []) check(`nie woła ${n}`, !names.includes(n));
+  for (const [a, b] of e.order ?? []) check(`${a} przed ${b}`, names.includes(a) && names.indexOf(a) < (names.includes(b) ? names.indexOf(b) : Infinity));
   for (const r of e.text ?? []) check(`tekst pasuje do /${r}/i`, new RegExp(r, 'i').test(text));
   for (const r of e.textNot ?? []) check(`tekst nie pasuje do /${r}/i`, !new RegExp(r, 'i').test(text));
   if (e.maxTools !== undefined) check(`najwyżej ${e.maxTools} wywołań narzędzi (jest ${tools.length})`, tools.length <= e.maxTools);
