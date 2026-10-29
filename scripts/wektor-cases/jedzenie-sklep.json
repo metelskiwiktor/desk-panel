@@ -1,13 +1,12 @@
 {
-  "description": "Czy scalić dwie duże kategorie (inny temat i inna skala niż porzadki-kategorie): sprawdza, czy Wektor osądza z danych, a nie z wzoru.",
+  "description": "Czy scalić dwie duże kategorie (inny temat i inna skala niż porzadki-kategorie): sprawdza, czy Wektor osądza z danych, a nie z wzoru. Pytanie nie prosi o pokazanie: karta danych albo jej propozycja to obserwacja, nie reguła.",
   "turns": [
     {
       "say": "Czy ma sens scalić Jedzenie ze Sklepem spożywczym? Co uważasz?",
       "expect": {
         "calls": [
           "panel_guide",
-          "panel_bank",
-          "panel_show"
+          "panel_bank"
         ],
         "notCalls": [
           "panel_todo_action",
@@ -15,15 +14,13 @@
           "panel_cezar_propose",
           "panel_recon_report"
         ],
-        "maxTools": 8,
-        "order": [
-          [
-            "panel_guide",
-            "panel_show"
-          ]
-        ]
+        "maxTools": 8
       },
       "soft": [
+        {
+          "name": "pokazuje kartę danych albo proponuje ją",
+          "text": "kart|pokaz|tabel|słupk"
+        },
         {
           "name": "zaczyna od werdyktu",
           "text": "^[^\\n]{0,200}(tak|nie|raczej|trudno|warto|nie warto)"
