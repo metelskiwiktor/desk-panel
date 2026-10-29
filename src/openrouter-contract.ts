@@ -32,6 +32,4 @@ export const openrouterUsageSchema = z.object({
 
 export type OpenRouterModelUsage = z.infer<typeof openrouterModelUsageSchema>;
 export type OpenRouterDayUsage = z.infer<typeof openrouterDayUsageSchema>;
-export type OpenRouterTotals = z.infer<typeof openrouterTotalsSchema>;
-export type OpenRouterCredits = z.infer<typeof openrouterCreditsSchema>;
 export type OpenRouterUsage = z.infer<typeof openrouterUsageSchema>;

@@ -32,7 +32,9 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   scripts as ANSI: keep them ASCII.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
   DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
-- `just check`: all tests, typecheck and frontend build. Run before publishing.
+- `just check`: tests, typecheck, dead code (knip, production mode) and frontend build in parallel. Run before publishing;
+  `just test-fast` runs only the tests touched by uncommitted changes. Tests guard invariants, not commits: change the
+  existing test, merge duplicates, and add no code that only a test uses (docs/testowanie.md).
 - `just update [--force]`: deploy to the service — on main it merges origin/main only when it
   cannot conflict with local work (otherwise lists the files and changes
   nothing); on another branch it pulls nothing. Runs tests and build, swaps dist and

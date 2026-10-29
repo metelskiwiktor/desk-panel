@@ -153,4 +153,3 @@ export function useChat(fixed?: ChatEngine) {
     send, stop, rename, remove, refresh, clearError: useCallback(() => setError(''), []),
   };
 }
-export type ChatState = ReturnType<typeof useChat>;

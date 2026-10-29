@@ -22,6 +22,7 @@ export type OpenRouterUsageState =
  * answer came. Now it shows the last one at once and refreshes it; a failed refresh keeps it on screen.
  */
 let last: (OpenRouterUsage & { status: 'connected' }) | null = null;
+/** @internal Tests start without the cached reading. */
 export function forgetOpenRouterUsage() { last = null; }
 
 export function useOpenRouterUsage(): OpenRouterUsageState {

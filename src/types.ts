@@ -80,20 +80,6 @@ export const gitHubPullRequestSchema = z.object({
   checks: z.array(gitHubPrCheckSchema).optional(),
 });
 
-export interface GitHubPrData {
-  pullRequests: GitHubPullRequest[];
-  repositories?: string[];
-  totalCount?: number;
-  lastUpdated?: string | number;
-}
-
-export const gitHubPrDataSchema = z.object({
-  pullRequests: z.array(gitHubPullRequestSchema),
-  repositories: z.array(z.string()).optional(),
-  totalCount: z.number().optional(),
-  lastUpdated: z.union([z.string(), z.number()]).optional(),
-});
-
 export interface GitHubPrSource {
   pullRequests: GitHubPullRequest[];
   repositories?: string[];

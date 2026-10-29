@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
 import { nearestSize } from './SizeGrip';
-import { BOTTOM_SIZES, DEFAULT_ZONES, TOP_CYCLE, TOP_SIZES, ZONES_KEY, cycleSize, parseZones, stepSize, useZones } from './zones';
+import { BOTTOM_SIZES, DEFAULT_ZONES, TOP_CYCLE, ZONES_KEY, cycleSize, parseZones, useZones } from './zones';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime(); // a Wednesday
 beforeEach(() => {
@@ -17,12 +17,6 @@ const renderWith = (scenario: ScenarioName = 'standard') => { vi.stubGlobal('fet
 const frame = () => document.querySelector('.p3-frame')!;
 
 describe('zone sizes', () => {
-  it('steps along the order and stops at the ends', () => {
-    expect(stepSize(TOP_SIZES, 'std', -1)).toBe('cmp');
-    expect(stepSize(TOP_SIZES, 'cmp', -1)).toBe('cmp');
-    expect(stepSize(BOTTOM_SIZES, 'mid', 1)).toBe('month');
-    expect(stepSize(BOTTOM_SIZES, 'month', 1)).toBe('month');
-  });
   it('cycles round, from the last size to the first', () => {
     expect([cycleSize(TOP_CYCLE, 'std'), cycleSize(TOP_CYCLE, 'cmp')]).toEqual(['cmp', 'std']);
     expect([cycleSize(BOTTOM_SIZES, 'short'), cycleSize(BOTTOM_SIZES, 'mid'), cycleSize(BOTTOM_SIZES, 'month')]).toEqual(['mid', 'month', 'short']);

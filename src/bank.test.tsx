@@ -24,8 +24,6 @@ const marks = (data: Partial<BankLabelsData> = {}, act: BankLabelsHook['act'] = 
 });
 const hook = (source: BankSource, over: Partial<BankHook> = {}): BankHook => ({ source, signIn: null, error: '', busy: false, connect: vi.fn(async () => {}), refresh: vi.fn(), labels: marks(), ...over });
 const FOOD = { id: 'c-00000001', name: 'Jedzenie', move: 'spend', color: 'orange', icon: 'utensils' } as const;
-const SHRINK = { id: 'c-00000002', name: 'Psycholog', move: 'spend', color: 'violet', icon: 'brain' } as const;
-const ANNA = { id: 'p-00000001', name: 'Anna', identifiers: [{ id: 'abc', kind: 'account', hint: '··1234' }] } as const;
 
 describe('bank helpers', () => {
   it('always shows the sign, with a real minus', () => {

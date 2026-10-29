@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.tsx!",
+    "server/index.ts!",
+    "scripts/*.{ts,mjs}!",
+    "scripts/garmin-probe/*.mjs"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "server/**/*.ts!",
+    "scripts/**/*.{ts,mjs}!"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": [
+    "tailwindcss",
+    "tw-shimmer"
+  ],
+  "ignoreIssues": {
+    "src/components/**": [
+      "exports",
+      "types"
+    ]
+  },
+  "ignoreBinaries": [
+    "tsx"
+  ],
+  "ignore": [
+    "src/test-*.ts"
+  ]
+}

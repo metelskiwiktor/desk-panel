@@ -12,7 +12,7 @@ import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
 import { HermesError, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
 import {
   titleFrom, withContext,
-  type ChatApproval, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
+  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
 } from '../src/chat-contract';
 
 /**

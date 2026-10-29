@@ -14,13 +14,6 @@ export function relative(ms: number) {
   const h = Math.floor(minutes / 60), m = minutes % 60;
   return `za ${h} h${m ? ` ${m} min` : ''}`;
 }
-/** "30 min", "1 h", "1 h 30 min". */
-export function duration(ms: number) {
-  const minutes = Math.round(ms / MINUTE);
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.floor(minutes / 60), m = minutes % 60;
-  return `${h} h${m ? ` ${m} min` : ''}`;
-}
 function startOfDay(at: number, plusDays = 0) {
   const d = new Date(at);
   d.setHours(0, 0, 0, 0);
@@ -29,10 +22,6 @@ function startOfDay(at: number, plusDays = 0) {
 }
 const floorHour = (at: number) => { const d = new Date(at); d.setMinutes(0, 0, 0); return d.getTime(); };
 const ceilHour = (at: number) => { const f = floorHour(at); return f === at ? at : f + HOUR; };
-const dayLabel = (at: number) => {
-  const d = new Date(at);
-  return `${d.toLocaleDateString('pl-PL', { weekday: 'short' }).replace('.', '')} ${d.getDate()}`;
-};
 
 export interface AgendaBlock {
   event: CalendarEvent;
@@ -79,32 +68,4 @@ export function todayAgenda(events: CalendarEvent[], now: number): TodayAgenda {
   const count = `${blocks.length} ${plural(blocks.length, 'spotkanie', 'spotkania', 'spotkań')}`;
   return { blocks, allDay, hours, nowTop: pct(now),
     summary: first.ongoing ? `${count} · jedno trwa` : `${count} · ${blocks.length > 1 ? 'najbliższe ' : ''}${first.rel}` };
-}
-
-export type UpcomingDay =
-  | { kind: 'day'; label: string; rel: string; items: { event: CalendarEvent; time: string; duration: string }[] }
-  | { kind: 'free'; label: string; rel: string };
-
-/** The next `days` days grouped by day; consecutive days without events fold into one line. */
-export function upcomingDays(events: CalendarEvent[], now: number, days = 6): UpcomingDay[] {
-  const result: UpcomingDay[] = [];
-  let freeRun: number[] = [];
-  const flush = () => {
-    if (!freeRun.length) return;
-    const n = freeRun.length;
-    result.push({ kind: 'free', label: n === 1 ? dayLabel(freeRun[0]) : `${dayLabel(freeRun[0])} – ${dayLabel(freeRun[n - 1])}`,
-      rel: `wolne · ${n} ${plural(n, 'dzień', 'dni', 'dni')}` });
-    freeRun = [];
-  };
-  for (let i = 1; i <= days; i++) {
-    const from = startOfDay(now, i), to = startOfDay(now, i + 1);
-    const items = events.filter(e => e.startAt < to && e.endAt > from && (e.allDay || e.startAt >= from))
-      .sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || a.startAt - b.startAt)
-      .map(event => ({ event, time: event.allDay ? 'cały dzień' : time(event.startAt), duration: event.allDay ? '' : duration(event.endAt - event.startAt) }));
-    if (!items.length) { freeRun.push(from); continue; }
-    flush();
-    result.push({ kind: 'day', label: dayLabel(from), rel: i === 1 ? 'jutro' : `za ${i} ${plural(i, 'dzień', 'dni', 'dni')}`, items });
-  }
-  flush();
-  return result;
 }

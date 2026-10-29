@@ -5,6 +5,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { verify } from './check.mjs';
 import { installedMatches, recordInstalled } from './dependencies.mjs';
 
 const BRANCH = 'main';
@@ -98,11 +99,11 @@ if (reinstall) {
 }
 
 // 3. Verify, then build next to the served dist and swap only on success.
-const checked = run('npm', ['test']) && run('npx', ['tsc', '--noEmit']) && run('npx', ['vite', 'build', '--outDir', 'dist.next', '--emptyOutDir']);
+const checked = await verify('dist.next');
 if (!checked) {
   rmSync('dist.next', { recursive: true, force: true });
   if (stopped) service('START');
-  fail('Testy lub build nie przeszły. Usługa dalej serwuje poprzednią wersję frontendu.',
+  fail('Testy, typy, martwy kod lub build nie przeszły. Usługa dalej serwuje poprzednią wersję frontendu.',
     incoming ? [`Zmiany z ${REMOTE} są już scalone lokalnie (poprzedni HEAD: ${before.slice(0, 8)}).`] : []);
 }
 rmSync('dist.old', { recursive: true, force: true });

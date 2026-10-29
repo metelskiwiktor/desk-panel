@@ -61,7 +61,6 @@ const repoPath = z.string().trim().min(1).max(300).refine(p => !path.isAbsolute(
  */
 const RECON_TTL_MS = 6 * 60 * 60_000, RECONS_KEPT = 100;
 const recons = new Map<string, { prompt: string; at: number }>();
-export function forgetRecons() { recons.clear(); }
 
 /**
  * Names the prompt puts in backticks (a window id, a function, a field) that no tracked file of the repository mentions

@@ -122,7 +122,6 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   };
   const data = { tasks: cezar.source, calendar, system, quotas:{...quotas,data:filterQuotas(quotas.data,quotaVisibility.value)} };
   const tasks = orderedTasks(data.tasks.data ?? []);
-  const activeTasks = tasks.filter((task) => task.status !== 'done');
   const events = [...(data.calendar.data ?? [])]
     .filter((e) => e.endAt >= now)
     .sort((a, b) => a.startAt - b.startAt);

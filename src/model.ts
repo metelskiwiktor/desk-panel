@@ -105,10 +105,6 @@ export interface DashboardData {
   quotas: Source<QuotaAccount[]>;
   system: Source<SystemSample[]>;
 }
-/** One read-only boundary, no credentials in the browser. Real adapters come later. */
-export interface DashboardAdapter {
-  read(signal?: AbortSignal): Promise<DashboardData>;
-}
 export type Detail =
   | { kind: 'task'; id: string }
   | { kind: 'event'; id: string }

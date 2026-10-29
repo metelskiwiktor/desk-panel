@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { BankTransaction } from '../src/bank-contract';
 import { bankLabelsSourceSchema } from '../src/bank-labels-contract';
 import { mapTransaction } from './bank';
-import { createBankLabelStore, type BankLabelFile, type BankLabelPersistence } from './bank-labels';
+import { createBankLabelStore, type BankLabelPersistence } from './bank-labels';
 import { maskPhones, partiesOf, publicTransaction } from './bank-parties';
 import { agentViews } from './agent-views';
 import type { PanelSources } from './sources';

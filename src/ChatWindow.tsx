@@ -26,7 +26,6 @@ function whenOf(at: number, now: number): string {
   const days = Math.round((startOfDay(now) - startOfDay(at)) / DAY);
   return days <= 0 ? clock.format(at) : days === 1 ? 'wczoraj' : days < 7 ? dayName.format(at) : shortDate.format(at);
 }
-export const messageCount = (n: number) => `${n} ${n === 1 ? 'wiadomość' : 'wiadomości'}`;
 
 /** `?cockpit=mock` (scenarios, trying the window out) plays a scripted Wektor; `&hermes=down` shows it without Hermes. */
 const mockOptions = () => {

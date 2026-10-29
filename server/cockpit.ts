@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
-  watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
+  watchedTask, type CezarStatus, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { stepOverridesSchema } from '../src/cezar-contract';
-import { bankPlanSchema, type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
+import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { BankPlanError, planPreview } from './bank-plan';
 import { assignMarks, assignPreview } from './bank-assign';
 import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';

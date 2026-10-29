@@ -38,7 +38,7 @@ const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
   'github-pr': { title: 'GitHub PR', icon: GitPullRequest },
   openrouter: { title: 'OpenRouter', icon: Coins },
 };
-/** Every widget kind the grid can show besides the limits; each must also be one an empty cell offers (`pickable`). */
+/** Every widget kind the grid can show besides the limits; each must also be one an empty cell offers (`pickable`). @internal */
 export const WIDGET_KINDS: readonly string[] = Object.keys(FIXED);
 /** Name and icon of a kind. Claude and Codex are known before the first reading; an Antigravity group is named by its card. */
 function describe(kind: string, cards: QuotaCardItem[]): { title: string; icon: LucideIcon } {

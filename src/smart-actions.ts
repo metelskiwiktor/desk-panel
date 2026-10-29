@@ -177,14 +177,6 @@ export class SmartActionRegistry {
 
 export const defaultRuleRegistry = new SmartActionRegistry([ZNANY_LEKARZ_RULE]);
 
-export function registerSmartActionRule(rule: SmartActionRule): void {
-  defaultRuleRegistry.register(rule);
-}
-
-export function unregisterSmartActionRule(id: string): void {
-  defaultRuleRegistry.unregister(id);
-}
-
 export function getRegisteredSmartActionRules(): SmartActionRule[] {
   return defaultRuleRegistry.getRules();
 }
@@ -341,14 +333,6 @@ export function saveDismissedActionId(id: string): void {
     const current = loadDismissedActionIds();
     current.add(id);
     localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...current]));
-  } catch {
-    // Storage might be restricted
-  }
-}
-
-export function clearDismissedActionIds(): void {
-  try {
-    localStorage.removeItem(DISMISSED_STORAGE_KEY);
   } catch {
     // Storage might be restricted
   }
