@@ -483,6 +483,11 @@ describe('the live cockpit (Hermes and the panel)', () => {
       calls.push({ url, method, body });
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
+      if (url.startsWith('/api/bank/show')) return reply({
+        view: 'tabela', from: '2026-01-01', to: '2026-10-29', unknown: ['lekarz'], hidden: 0, observedAt: NOW, total: { count: 2, spent: 270 },
+        categories: [{ id: 'c-1', name: 'Psycholog', color: 'violet', count: 2, spent: 270 }],
+        rows: [{ day: '2026-10-20', amount: -150, name: 'Gabinet Anna K.', category: 'Psycholog', tags: ['terapia'] }, { day: '2026-09-20', amount: -120, name: 'Gabinet Anna K.', category: 'Psycholog', tags: [] }],
+      });
       if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
       if (url === `/api/chats/${H}/dispatch`) {
         cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } } });
@@ -585,6 +590,30 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(recon).getByText('src/Workspace.tsx')).toBeTruthy();
     expect(within(recon).queryByText(/scenariusz/)).toBeNull();
     expect(screen.getByText('Poprawiam rekonesans.')).toBeTruthy();
+  });
+
+  it('shows the data card: the rows are read from the panel, the arguments of the model only say what to show', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const show: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 's1', name: 'mcp__desk_panel__panel_show', input: JSON.stringify({ tytul: 'Psycholog', kategorie: ['psych', 'lekarz'], widok: 'tabela' }), output: JSON.stringify({ result: `${CARD_SHOWN.show}. Pokazano: Psycholog 2 op.` }), state: 'done' },
+      { type: 'tool', id: 's2', name: 'mcp__desk_panel__panel_show', input: JSON.stringify({ kategorie: 'nie lista' }), output: JSON.stringify({ result: 'Niepoprawne argumenty' }), state: 'done', error: true },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, show], { id: H }) });
+    const cards = await screen.findAllByRole('region', { name: /^Karta:/ });
+    const card = cards[0];
+    expect(card.getAttribute('aria-label')).toBe('Karta: Psycholog');
+    expect((await within(card).findAllByText('Gabinet Anna K.')).length).toBe(2);
+    expect(within(card).getByText(/Bez dopasowania: lekarz/)).toBeTruthy();
+    const request = calls.find(c => c.url.startsWith('/api/bank/show'))!;
+    expect(request.method).toBe('GET');
+    expect(request.url).toContain('kategorie=psych');
+    expect(request.url).toContain('kategorie=lekarz');
+    // A call with arguments of another shape says so in its place and fetches nothing.
+    expect(await screen.findByText('Agent przysłał niepoprawne zapytanie karty.')).toBeTruthy();
+    expect(calls.filter(c => c.url.startsWith('/api/bank/show'))).toHaveLength(1);
   });
 
   it('watches the task the conversation names, and shows the watch card live', async () => {

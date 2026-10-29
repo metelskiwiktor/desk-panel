@@ -1,9 +1,11 @@
 import { Component, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
+import { Check, ChartColumn, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
 import {
-  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
+  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type StepState, type WatchArgs,
 } from './types';
+import { bankShowQuerySchema, type BankShowData } from '../bank-show-contract';
+import { COLOR_VALUES } from '../bank-look';
 import { watchAnswerTask } from '../cockpit-contract';
 
 /**
@@ -275,6 +277,73 @@ export function WatchCard({ args, result, status }: ToolCallMessagePartProps<Wat
     </div>
   </section>;
 }
+const pln = (amount: number) => `${amount.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
+const dayLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/**
+ * `panel_show`: bank spending of some categories as a table or bars. The model sent only what to show; the rows are read
+ * here from the panel (`GET /api/bank/show`), so they never went through it, and the card shows the marks as they are now.
+ */
+export function ShowCard({ args }: ToolCallMessagePartProps<ShowArgs>) {
+  const query = bankShowQuerySchema.safeParse(args);
+  const key = query.success ? JSON.stringify(query.data) : '';
+  const [state, setState] = useState<{ key: string; data?: BankShowData; error?: string }>({ key: '' });
+  useEffect(() => {
+    if (!query.success) return;
+    const params = new URLSearchParams({ widok: query.data.widok });
+    for (const name of query.data.kategorie) params.append('kategorie', name);
+    if (query.data.from) params.set('from', query.data.from);
+    if (query.data.to) params.set('to', query.data.to);
+    let gone = false;
+    fetch(`/api/bank/show?${params}`, { signal: AbortSignal.timeout(15_000) }).then(async response => {
+      const body = await response.json().catch(() => null) as (BankShowData & { error?: string }) | null;
+      if (gone) return;
+      setState(response.ok && body ? { key, data: body } : { key, error: body?.error || 'Nie udało się pobrać danych karty.' });
+    }, () => { if (!gone) setState({ key, error: 'Nie udało się pobrać danych karty.' }); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the query
+  }, [key]);
+  const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Wydatki';
+  const data = state.key === key ? state.data : undefined;
+  const error = !query.success ? 'Agent przysłał niepoprawne zapytanie karty.' : state.key === key ? state.error : undefined;
+  const widest = Math.max(1, ...(data?.categories.map(c => Math.max(0, c.spent)) ?? []));
+  return <section className={card} aria-label={`Karta: ${title}`}>
+    <div className={head}>
+      <ChartColumn size={16} className="tw:text-ck-cal" aria-hidden="true" />
+      <span className={eyebrow}>{title}</span>
+      {data && <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{dayLabel(data.from)} – {dayLabel(data.to)}</span>}
+    </div>
+    <div className="tw:grid tw:gap-3 tw:p-4">
+      {error && <p className={refusedNote} role="alert">{error}</p>}
+      {!data && !error && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Wczytuję…</p>}
+      {data && <>
+        <p className="tw:m-0 tw:text-ck-text"><b className="tw:font-semibold">{pln(data.total.spent)}</b> <span className="tw:text-ck-muted">· {data.total.count} {data.total.count === 1 ? 'operacja' : 'operacji'}</span></p>
+        {data.view === 'słupki' || data.categories.length > 1 ? <ul className="tw:m-0 tw:grid tw:list-none tw:gap-2 tw:p-0">
+          {data.categories.map(c => <li key={c.id} className="tw:grid tw:gap-1">
+            <div className="tw:flex tw:items-baseline tw:gap-2"><span className="tw:text-ck-text">{c.name}</span><span className="tw:text-xs tw:text-ck-faint">{c.count} op.</span><span className="tw:ml-auto tw:font-ck-mono tw:text-[13px] tw:text-ck-text">{pln(c.spent)}</span></div>
+            <div className="tw:h-2 tw:overflow-hidden tw:rounded-full tw:bg-ck-surface-2" aria-hidden="true"><div className="tw:h-full tw:rounded-full" style={{ width: `${Math.round(Math.max(0, c.spent) / widest * 100)}%`, background: COLOR_VALUES[c.color] }} /></div>
+          </li>)}
+        </ul> : null}
+        {data.view === 'tabela' && <div className="tw:overflow-x-auto">
+          <table className="tw:w-full tw:border-collapse tw:text-[13px]">
+            <thead><tr className="tw:text-left tw:text-[11px] tw:uppercase tw:tracking-wider tw:text-ck-muted"><th className="tw:py-1 tw:pr-3 tw:font-semibold">Dzień</th><th className="tw:py-1 tw:pr-3 tw:font-semibold">Operacja</th><th className="tw:py-1 tw:pr-3 tw:font-semibold">Kategoria</th><th className="tw:py-1 tw:text-right tw:font-semibold">Kwota</th></tr></thead>
+            <tbody>
+              {data.rows.map((r, i) => <tr key={`${i}:${r.day}:${r.name}`} className="tw:border-t tw:border-ck-line">
+                <td className="tw:whitespace-nowrap tw:py-1.5 tw:pr-3 tw:text-ck-muted">{dayLabel(r.day)}</td>
+                <td className="tw:py-1.5 tw:pr-3 tw:text-ck-text">{r.name}{r.tags.map(t => <span key={t} className="tw:ml-1.5 tw:text-xs tw:text-ck-faint">#{t}</span>)}</td>
+                <td className="tw:py-1.5 tw:pr-3 tw:text-ck-muted">{r.category}</td>
+                <td className="tw:whitespace-nowrap tw:py-1.5 tw:text-right tw:font-ck-mono tw:text-ck-text">{pln(-r.amount)}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+        {data.hidden > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">… i {data.hidden} starszych (zawęź zakres dat).</p>}
+        {data.unknown.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">Bez dopasowania: {data.unknown.join(', ')}.</p>}
+      </>}
+    </div>
+  </section>;
+}
+
 /** The task in a watch tool's answer (`{"task":{…}}`), if it has one. */
 const parseTask = (result: unknown) => watchAnswerTask<CockpitTask>(result);
 

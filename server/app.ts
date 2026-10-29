@@ -15,6 +15,8 @@ import { handleMcpRoute } from './panel-mcp';
 import { todoActionSchema } from '../src/todo-contract';
 import { TodoError } from './todos';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
+import { bankShowQuerySchema } from '../src/bank-show-contract';
+import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
@@ -120,6 +122,19 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         res.writeHead(answer.status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(answer.body);
         return;
       }
+    }
+    if (url.pathname === '/api/bank/show') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const query = bankShowQuerySchema.safeParse({ widok: url.searchParams.get('widok') ?? undefined, kategorie: url.searchParams.getAll('kategorie'), from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
+        if (!query.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(bankShow(await sources.bankLedger(), query.data, dayIn(Date.now(), 'Europe/Warsaw'))));
+      } catch (error) {
+        const status = error instanceof BankShowError ? error.status : error instanceof SourceError ? error.status : 502;
+        res.writeHead(status).end(JSON.stringify({ error: error instanceof BankShowError ? error.message : 'Nie udało się pobrać danych karty.' }));
+      }
+      return;
     }
     const route = routes[url.pathname];
     if (route) {

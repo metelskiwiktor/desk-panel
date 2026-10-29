@@ -49,6 +49,10 @@ export const WATCH = 'cezar_watch';
 /** The mock gives the steps; Hermes gives the task id (`id`) and its tool answers with the task as JSON. */
 export interface WatchArgs { taskId?: string; id?: string; steps?: { label: string; state: StepState }[]; progress?: number }
 
+/** The data card (`panel_show`): the arguments as the model wrote them (the card checks them); the rows the card reads itself. */
+export const SHOW = 'bank_show';
+export interface ShowArgs { tytul?: unknown; widok?: unknown; kategorie?: unknown; from?: unknown; to?: unknown; refused?: string }
+
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
 export interface HermesApprovalArgs { tool: string; detail: string; state: 'pending' | 'approved' | 'denied' | 'expired'; at: number }

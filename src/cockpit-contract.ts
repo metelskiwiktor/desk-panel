@@ -91,7 +91,7 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show';
 }
 
 export const COCKPIT_TOOLS = {
@@ -113,6 +113,12 @@ export const COCKPIT_TOOLS = {
     effect: 'użytkownik widzi kartę taska na żywo, a kokpit obok czatu obserwuje ten task (status, kroki, PR, checki CI).',
     card: 'watch',
   },
+  panel_show: {
+    purpose: 'Karta z danymi banku w rozmowie: wydatki wybranych kategorii jako tabela albo słupki (widok: "tabela" lub "słupki"; kategorie po nazwie, zakres from/to, domyślnie ostatnie 365 dni).',
+    when: 'gdy użytkownik prosi o pokazanie wydatków („pokaż je”) albo gdy zestawienie liczb czyta się łatwiej na karcie niż w tekście; po tym, jak sam znasz nazwy kategorii z panel_bank. Nie powtarzaj w tekście wierszy z karty.',
+    effect: 'użytkownik widzi kartę z wierszami, które panel czyta sam (nie przechodzą przez Ciebie); w odpowiedzi dostajesz tylko podsumowanie i listę innych kategorii wydatków z sumami, żebyś mógł ocenić, czy coś jeszcze pasuje. Karta niczego nie zmienia.',
+    card: 'show',
+  },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
     when: 'gdy użytkownik prosi, by przestać obserwować task, albo wyraźnie zmienia temat na coś niezwiązanego z obserwowanym taskiem.',
@@ -127,7 +133,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.

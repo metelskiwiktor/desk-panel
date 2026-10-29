@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
 import { CARD_SHOWN, CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
 import { todoActionSchema } from '../src/todo-contract';
+import { bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
+import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
 import { SourceError, type PanelSources } from './sources';
@@ -303,6 +305,28 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       return JSON.stringify({ task: { id: task.id, title: task.title, status: task.status, progress: Math.round(task.progress * 100) / 100, tokens: task.tokens, steps: task.steps, pr: task.prUrl ?? null, url: task.url } });
     },
   },
+  panel_show: {
+    description: cockpitToolDescription('panel_show'),
+    input: bankShowQuerySchema.extend({ tytul: text(80).optional() }).strict(),
+    schema: schema({
+      tytul: { type: 'string', description: 'Krótki tytuł karty po polsku, np. „Psycholog, fizjoterapeuta, podolog”' },
+      widok: { type: 'string', enum: [...BANK_SHOW_VIEWS], description: '"tabela": operacje z sumami kategorii; "słupki": porównanie sum kategorii' },
+      kategorie: { type: 'array', maxItems: BANK_SHOW_LIMITS.categories, items: { type: 'string' }, description: 'Nazwy kategorii wydatków (wystarczy ich część), z panel_bank' },
+      from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie 365 dni wstecz)' },
+      to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD (domyślnie dziś)' },
+    }, ['kategorie']),
+    async run(args, { sources, now }) {
+      try {
+        const query = bankShowQuerySchema.parse(args);
+        const ledger = await sources.bankLedger();
+        const data = bankShow(ledger, query, dayIn(now, DEFAULT_ZONE));
+        return `${CARD_SHOWN.show}. ${bankShowSummary(ledger, data)} Wiersze są na karcie: nie wypisuj ich ponownie. Napisz krótko, co o tym sądzisz.`;
+      } catch (error) {
+        if (error instanceof BankShowError) throw new AgentViewError(error.status, error.message);
+        throw error;
+      }
+    },
+  },
   panel_cockpit_clear: {
     description: cockpitToolDescription('panel_cockpit_clear'),
     input: z.object({}).strict(), schema: schema(),
@@ -349,7 +373,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };
