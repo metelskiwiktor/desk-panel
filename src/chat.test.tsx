@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within, act, fireEvent } from '@testi
 import userEvent from '@testing-library/user-event';
 import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
 import { CARD_SHOWN } from './cockpit-contract';
-import { ChatWindow, groupOf, messageCount } from './ChatWindow';
+import { ChatWindow, groupOf } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
 import { clearChatDraft, getChatDraft } from './chat-draft';
@@ -58,9 +58,6 @@ describe('helpers', () => {
   it('groups conversations by day', () => {
     const day = 86_400_000;
     expect([NOW, NOW - day, NOW - 3 * day, NOW - 20 * day].map(t => groupOf(t, NOW))).toEqual(['Dziś', 'Wczoraj', 'Ostatnie 7 dni', 'Starsze']);
-  });
-  it('counts messages in Polish', () => {
-    expect([1, 2, 5].map(messageCount)).toEqual(['1 wiadomość', '2 wiadomości', '5 wiadomości']);
   });
   it('replaces a message in place, or adds it', () => {
     const a = { id: 'a', role: 'user', at: 1, text: 'x' } as ChatMessage, b = { id: 'b', role: 'agent', at: 2 } as ChatMessage;

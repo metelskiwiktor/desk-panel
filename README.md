@@ -24,7 +24,7 @@ npm start
 Otwórz `http://127.0.0.1:5174`. Bez Cezara panel działa ze stanem niedostępności;
 nie wstawia przykładowych zadań zamiast prawdziwych.
 
-`just` wyświetla krótki zestaw komend; `just check` uruchamia testy i build, `just update`
+`just` wyświetla krótki zestaw komend; `just check` uruchamia testy, typy, knip i build, `just update`
 wdraża do usługi Windows. Autostart, usługa i kiosk: [docs/system.md](docs/system.md).
 
 ## Dokumentacja

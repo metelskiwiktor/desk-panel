@@ -12,5 +12,13 @@ export default defineConfig({
   // The Host header stays the page's own: the server compares it with Origin on actions (a string target would rewrite it).
   server: { host: '127.0.0.1', proxy: { '/api': { target: process.env.DESK_API_URL || 'http://127.0.0.1:5174', changeOrigin: false } } },
   // Task worktrees contain other branches and their own React; never collect their tests in this checkout.
-  test: { environment: 'jsdom', setupFiles: ['src/test-setup.ts'], restoreMocks: true, exclude: [...configDefaults.exclude, '.ai/**', '.claude/worktrees/**'] },
+  test: {
+    restoreMocks: true, exclude: [...configDefaults.exclude, '.ai/**', '.claude/worktrees/**'],
+    // Server and scripts run without a DOM; only the UI pays for jsdom. A UI test that renders the whole panel takes 1–3 s
+    // of CPU, more while just check builds beside it: its limit catches a hang, not a slow machine.
+    projects: [
+      { extends: true, test: { name: 'server', include: ['server/**/*.test.ts', 'scripts/**/*.test.mjs'], environment: 'node' } },
+      { extends: true, test: { name: 'ui', include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['src/test-setup.ts'], testTimeout: 15_000 } },
+    ],
+  },
 });

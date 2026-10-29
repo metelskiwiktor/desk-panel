@@ -59,10 +59,29 @@ prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`
 ## Weryfikacja
 
 ```powershell
-npm run typecheck
-npm test
-npm run build
+just test-fast   # w trakcie pracy: tylko testy, których dotyczą niezacommitowane zmiany (vitest --changed)
+just check       # przed publikacją: testy, typy, martwy kod (knip) i build naraz (scripts/check.mjs)
 ```
+
+`scripts/check.mjs` uruchamia cztery kroki równolegle i pokazuje wyjście tylko tego, który nie przeszedł; `just update` używa
+tego samego (build idzie do `dist.next`). tsc jest przyrostowy (cache w `node_modules/.cache`). Vitest ma dwa projekty:
+`server` (server/ i scripts/, bez DOM) i `ui` (src/, jsdom). knip (`knip.json`) działa w trybie produkcyjnym: kod, którego
+używają tylko testy, też jest martwy. Wyjątkiem jest haczyk dla testów (np. reset pamięci podręcznej modułu) oznaczony `@internal`
+w JSDoc. Podkomponenty assistant-ui w `src/components` (kod wygenerowany) są z tego wyłączone.
+
+Czas testów to w większości CPU: ok. 190 s na 8 rdzeniach, z czego ok. 40% to jsdom i import `App` w każdym pliku UI. Dzielenie
+plików, `isolate: false`, happy-dom i `userEvent.setup({ delay: null })` sprawdzone 29.10.2026: nie skracają czasu albo psują
+testy z `vi.mock`. Szybciej będzie tylko przy mniejszej liczbie testów renderujących cały panel.
+
+### Jak pisać testy
+
+- Test pilnuje niezmiennika, nie commita: tego, co ma zostać prawdą po refaktorze (kontrakt API, Origin-check, brak zapisu,
+  maskowanie numerów, reguła podpowiedzi, widoczny skutek kliknięcia). Wygląd sprawdza zrzut scenariusza, nie test.
+- Zmiana zachowania przepisuje istniejący test. Nowy test jest dla nowego niezmiennika; test, który sprawdza to samo co inny,
+  się scala albo usuwa (w opisie commita: co pilnuje tego dalej).
+- Czysta logika ma test na funkcji. `render(<App />)` jest dla przepływu przez kilka elementów panelu: kosztuje ok. 1 s CPU.
+- Nie dopisuje się kodu ani eksportów po to, żeby test przeszedł. Kod, którego używa tylko test, jest martwy (knip go zgłosi).
+- Czas: wstrzykiwany zegar (`now`) albo `vi.useFakeTimers`, nie czekanie na `setTimeout` w teście.
 
 Testy obejmują interfejs (na scenariuszach z `scenarios/` podawanych przez
 to samo API co serwer scenariuszy), layout, reguły i historię zdarzeń, gesty oraz integrację:
@@ -76,5 +95,5 @@ Katalog `.ai/` (worktree zadań Cezara: inne gałęzie, starszy kod) jest wyłą
 checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
-`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI).
+`npm ci` i `scripts/check.mjs` na Ubuntu i Windows (tylko tam działa test DPAPI).
 

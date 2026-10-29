@@ -261,4 +261,3 @@ export function createBank(options: {
     },
   };
 }
-export type Bank = ReturnType<typeof createBank>;

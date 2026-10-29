@@ -153,7 +153,6 @@ export function skillItem(skill: ChatSkill): ContextItem {
 export const chatEngines = ['hermes', 'agy'] as const;
 export type ChatEngine = typeof chatEngines[number];
 export const DEFAULT_ENGINE: ChatEngine = 'hermes';
-export const ENGINE_LABEL: Record<ChatEngine, string> = { hermes: 'Hermes', agy: 'AGY' };
 /** Whether an engine can take a message now; `error` says why not, in Polish. */
 export interface EngineStatus { engine: ChatEngine; available: boolean; error?: string }
 

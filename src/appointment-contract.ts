@@ -45,7 +45,6 @@ export type CalendarSaved = z.infer<typeof calendarSavedSchema>;
 export const appointmentSelectionSchema = z.object({
   id: z.string().regex(/^s-[a-f0-9]{32}$/), slot: appointmentSlotSchema, draft: calendarDraftSchema.nullable(), at: z.number().finite(),
 });
-export type AppointmentSelection = z.infer<typeof appointmentSelectionSchema>;
 export const appointmentViewSchema = z.object({
   preview: appointmentPreviewSchema, selection: appointmentSelectionSchema.nullable(),
   saved: calendarSavedSchema.nullable(), canWriteCalendar: z.boolean(),

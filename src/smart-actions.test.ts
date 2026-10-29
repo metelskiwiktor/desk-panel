@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { MailThread } from './mail-contract';
 import type { Task } from './model';
 import {
-  clearDismissedActionIds,
   defaultRuleRegistry,
   extractAppointmentUrl,
   extractUrl,
@@ -14,11 +13,9 @@ import {
   parseEmailAction,
   parseSmartActions,
   parseTaskAction,
-  registerSmartActionRule,
   saveDismissedActionId,
   saveRulesConfig,
   SmartActionRegistry,
-  unregisterSmartActionRule,
   ZNANY_LEKARZ_RULE,
   type SmartActionRule,
 } from './smart-actions';
@@ -166,7 +163,7 @@ describe('SmartActionRegistry & Extensibility', () => {
     expect(parseEmailAction(thread)).toBeNull();
 
     // Register custom rule
-    registerSmartActionRule(customRule);
+    defaultRuleRegistry.register(customRule);
     expect(getRegisteredSmartActionRules().some((r) => r.id === 'custom-pr-rule')).toBe(true);
 
     const action = parseEmailAction(thread);
@@ -175,7 +172,7 @@ describe('SmartActionRegistry & Extensibility', () => {
     expect(action?.actionLabel).toBe('Zobacz PR');
 
     // Clean up
-    unregisterSmartActionRule('custom-pr-rule');
+    defaultRuleRegistry.unregister('custom-pr-rule');
     expect(getRegisteredSmartActionRules().some((r) => r.id === 'custom-pr-rule')).toBe(false);
     expect(parseEmailAction(thread)).toBeNull();
   });
@@ -296,7 +293,7 @@ describe('parseSmartActions and dismissed storage', () => {
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe('cezar:cezar-1');
 
-    clearDismissedActionIds();
+    localStorage.clear();
     expect(loadDismissedActionIds().size).toBe(0);
   });
 });

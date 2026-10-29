@@ -73,7 +73,6 @@ export const MOVE_WORDS: Record<BankMove, string> = { spend: 'Wydatek', income: 
 
 export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Proposal | null {
   const categories = new Map(ctx.categories.map(c => [c.id, c]));
-  const owners = new Map(ctx.owners.map(o => [o.id, o]));
 
   // Who it is, by the first identifier that belongs to someone, the surest kind first.
   let link: { owner: Owner; reason: string; reliable: boolean } | undefined;

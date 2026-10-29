@@ -503,9 +503,9 @@ describe('Hermes chat', () => {
   });
 
   it('does not count a running tool as silence', async () => {
-    // The mock's tool runs three steps (300 ms) with no event, longer than the silence limit; the rest is quicker.
-    mock.configure({ stepMs: 100 });
-    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 50, silenceMs: 250 });
+    // The mock's tool runs three steps (150 ms) with no event, longer than the silence limit; the rest is quicker.
+    mock.configure({ stepMs: 50 });
+    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 25, silenceMs: 125 });
     const { id } = await service.create({ text: 'Co mam na listach?' });
     const chat = await finishedChat(service, id);
     expect(chat.items[1].status).toBe('done');
@@ -532,9 +532,9 @@ const quickAgy = () => () => {
 };
 
 describe('both engines', () => {
-  function hub() {
+  function hub(now?: () => number) {
     const agy = createAgentChat({ dir, launch: quickAgy(), idleMs: 60_000 });
-    const chat = createChatHub({ dir, engines: { hermes: hermes(), agy } });
+    const chat = createChatHub({ dir, engines: { hermes: hermes({ now }), agy } });
     services.push(chat);
     return chat;
   }
@@ -582,15 +582,16 @@ describe('both engines', () => {
   });
 
   it('reports which engines can take a message', async () => {
-    const chat = hub();
+    let clock = Date.now();
+    const chat = hub(() => clock);
     expect(await chat.engines!()).toEqual([{ engine: 'hermes', available: true }, { engine: 'agy', available: true }]);
     mock.setDown(true);
-    await new Promise(resolve => setTimeout(resolve, 5100)); // past the health cache
+    clock += 5100; // past the health cache
     const engines = await chat.engines!();
     expect(engines[0]).toMatchObject({ engine: 'hermes', available: false });
     expect(engines[0].error).toBeTruthy();
     expect(engines[1]).toEqual({ engine: 'agy', available: true });
-  }, 10_000);
+  });
 });
 
 describe('agy chats from before engines', () => {

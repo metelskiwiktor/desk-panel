@@ -51,11 +51,15 @@ kiosk-taskbar action="HIDE" display="P16":
 garmin-login:
     npx tsx scripts/garmin-login.ts
 
-# Run all tests, typecheck and produce the frontend served by the service.
+# Tests, typecheck, dead code (knip) and the frontend build, side by side. Run before publishing.
 check:
     node scripts/ensure-deps.mjs
-    npm test
-    npm run build
+    node scripts/check.mjs
+
+# While working: only the tests that the uncommitted changes can affect (vitest --changed).
+test-fast:
+    node scripts/ensure-deps.mjs
+    npx vitest run --changed
 
 # Bring origin/main in (stops on any conflict with local work), test, build and restart
 # the service with it, uncommitted local changes included. Pass --force to redeploy.

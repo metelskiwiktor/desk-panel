@@ -7,13 +7,12 @@ import {
   taskLabels,
   type CalendarEvent,
   type Detail,
-  type QuotaAccount,
   type QuotaSnapshot,
   type Source,
   type Task,
 } from './model';
 import { time, stamp, date, allDayDate, preciseStamp } from './format';
-import { quotaPace, quotaPaceLabels, quotaResetIn, sortSnapshots, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
+import { quotaPace, quotaPaceLabels, quotaResetIn, QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
 
 export function SourceNote<T>({
   source,
@@ -228,39 +227,6 @@ export function QuotaLegend() {
     </ul>
     <p className="meta">Kolor porównuje zużycie z równomiernym tempem do resetu. Zielony nie gwarantuje dostępności limitu. Nieaktualny odczyt jest szary, bez kreski czasu. Po resecie czekamy na nowy pomiar.</p>
   </section>;
-}
-export function QuotaCard({
-  account,
-  now,
-  open,
-  sourceConnected,
-}: {
-  account: QuotaAccount;
-  now: number;
-  open: (detail: Detail) => void;
-  sourceConnected: boolean;
-}) {
-  return (
-    <button
-      className="quota-account"
-      onClick={() => open({ kind: 'quota', provider: account.provider })}
-    >
-      <span className="provider">
-        <span className={`provider-logo ${account.provider.toLowerCase()}`}>
-          {account.provider === 'Claude' ? '✳' : account.provider === 'AGY' ? '✦' : '⌘'}
-        </span>
-        <strong>{account.provider}</strong>
-        <ChevronRight size={17} />
-      </span>
-      {account.snapshots.length ? (
-        sortSnapshots(account.snapshots).map((s) => (
-          <QuotaWindow key={`${s.model || ""}:${s.window}`} snapshot={s} now={now} sourceConnected={sourceConnected} />
-        ))
-      ) : (
-        <span className="meta">{account.reason ? quotaReason(account.reason) : "Brak snapshotów"}</span>
-      )}
-    </button>
-  );
 }
 export function SourceLink({ url }: { url?: string }) {
   const href = safeUrl(url);

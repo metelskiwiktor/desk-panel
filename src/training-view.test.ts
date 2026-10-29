@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TrainingStep } from './training-contract';
-import { flattenSteps, formatDuration, profileBars, stepLabels, stepsDuration } from './training-view';
+import { flattenSteps, formatDuration, profileBars, stepLabels } from './training-view';
 
 const power = (low: number, high: number) => ({ type: 'power' as const, low, high });
 /** Garmin's "Próg": 15' warm-up, 2 × (8' hard + 4' easy) with the last rest skipped, 15' cool-down. */
@@ -10,6 +10,7 @@ const threshold: TrainingStep[] = [
     { kind: 'interval', durationSec: 480, target: power(242, 282) }, { kind: 'recovery', durationSec: 240, target: power(121, 175) }] },
   { kind: 'cooldown', durationSec: 900, target: power(121, 175) },
 ];
+const seconds = (steps: TrainingStep[]) => flattenSteps(steps).reduce((sum, b) => sum + b.sec, 0);
 const longRide: TrainingStep[] = [{ kind: 'interval', durationSec: 5400, target: power(121, 175) }];
 
 describe('training view', () => {
@@ -24,9 +25,9 @@ describe('training view', () => {
   });
   it('expands repeats and drops the last rest Garmin skips', () => {
     expect(flattenSteps(threshold).map(b => [b.kind, b.sec])).toEqual([['warmup', 900], ['interval', 480], ['recovery', 240], ['interval', 480], ['cooldown', 900]]);
-    expect(stepsDuration(threshold)).toBe(3000); // Garmin's own estimate for the workout.
+    expect(seconds(threshold)).toBe(3000); // Garmin's own estimate for the workout.
     const keepRest: TrainingStep[] = [{ ...threshold[1], skipLastRest: false }];
-    expect(stepsDuration(keepRest)).toBe(1440);
+    expect(seconds(keepRest)).toBe(1440);
   });
   it('draws the profile proportional to time and power', () => {
     const bars = profileBars(threshold);
