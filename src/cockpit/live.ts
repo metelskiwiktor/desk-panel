@@ -65,6 +65,9 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
   };
 }
 
+/** What a bulk-assign card adds to its answer: the groups and operations unticked and the options picked (empty ones left out). */
+const pickAssign = (r: Record<string, unknown>) => Object.fromEntries(['skip', 'skipOps', 'picks'].filter(k => Array.isArray(r[k]) && (r[k] as unknown[]).length).map(k => [k, r[k]]));
+
 async function call(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
   const payload = await response.json().catch(() => null) as { error?: string } | null;
@@ -147,7 +150,7 @@ export function useLiveCockpit(): CockpitSource {
       // A bank change card: the panel changes the categories (or not) as the user answered; the card shows the outcome from the cockpit.
       if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'bankPlan') {
         if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
-        await call(`/api/chats/${activeId}/bank-plan`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision, ...((response as { skip?: string[] }).skip?.length ? { skip: (response as { skip: string[] }).skip } : {}) });
+        await call(`/api/chats/${activeId}/bank-plan`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision, ...pickAssign(response as Record<string, unknown>) });
         refresh();
         return;
       }

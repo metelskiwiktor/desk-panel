@@ -211,9 +211,10 @@ radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźne
 Masowe oznaczanie podpowiedziami (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`),
 resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Do karty trafiają tylko operacje nieoznaczone z **pewną** podpowiedzią
 (`suggestion.sure`), zgrupowane po tym, co podpowiedź mówi (jedno oznaczenie to jedna grupa, klucz `g-…` ze skrótu oznaczenia); podpowiedzi „do wyboru"
-zostają poza kartą, bo wybiera je użytkownik, i karta mówi ile ich jest. Wiersz grupy: ptaszek, ile i co to za operacje, oznaczenie, jakie dostaną, suma;
-rozwija się do listy operacji. Użytkownik może odznaczyć grupę: `POST /api/chats/:id/bank-plan` bierze wtedy też `skip` (klucze grup), który może
-tylko zawęzić to, co panel liczy na nowo w chwili kliknięcia. Zapis to jedna atomowa akcja `acceptMany` (jedna podpowiedź, która przestała być pewna,
+(też te oparte na jednym wcześniejszym oznaczeniu: pewność zaczyna się od dwóch zgodnych) są w osobnej sekcji z opcjami do kliknięcia i nic z nich nie wchodzi
+do zapisu bez kliknięcia. Karta zaczyna od zakresu dat (o co pytano i jakie dni obejmują operacje). Wiersz grupy: ptaszek, ile i co to za operacje, oznaczenie,
+jakie dostaną, suma; rozwija się do listy operacji, każda z własnym ptaszkiem. `POST /api/chats/:id/bank-plan` bierze wtedy też `skip` (klucze grup) i `skipOps`
+(operacje), które mogą tylko zawęzić to, co panel liczy na nowo w chwili kliknięcia, oraz `picks` (operacja i numer opcji z tych, które panel sam liczy). Zapis to jedna atomowa akcja `acceptMany` (jedna podpowiedź, która przestała być pewna,
 odrzuca całość), wynik i podgląd zostają w `cockpit.json`. Id karty to skrót zakresu dni, więc ten sam zakres to ta sama karta.
 
 ### Otwarte pomysły (Wektor i bank)

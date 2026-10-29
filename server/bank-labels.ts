@@ -339,12 +339,15 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         // Every sure suggestion of these operations as it is now, or none: a suggestion that is gone or became a choice refuses all.
         const { ops, proposals } = await view(file);
         let assigned = 0;
-        for (const tx of action.txs) {
+        const wanted = [...action.txs.map(tx => ({ tx, option: 0, sure: true })), ...action.picks.map(p => ({ ...p, sure: false }))];
+        if (new Set(wanted.map(w => w.tx)).size !== wanted.length) throw new BankLabelError(400, 'Operacja jest na liście dwa razy.');
+        for (const { tx, option, sure } of wanted) {
           const found = ops.find(o => o.t.id === tx) ?? missing('Nie ma takiej operacji w ostatnim odczycie banku.');
           const proposal = proposals.get(tx);
-          if (!proposal?.suggestion.sure) throw new BankLabelError(409, 'Ta operacja nie ma już pewnej podpowiedzi.');
+          if (!proposal || (sure && !proposal.suggestion.sure)) throw new BankLabelError(409, 'Ta operacja nie ma już pewnej podpowiedzi.');
+          const chosen = proposal.suggestion.options[option] ?? missing('Nie ma takiej możliwości.');
           const before = file.labels[tx];
-          const next = checked(file, withOption(before, proposal.suggestion.options[0]));
+          const next = checked(file, withOption(before, chosen));
           if (isEmpty(next)) continue;
           if (!before && Object.keys(file.labels).length >= MAX_LABELS) throw new BankLabelError(409, `Może być najwyżej ${MAX_LABELS} oznaczeń.`);
           keepWords(file, next.tags);

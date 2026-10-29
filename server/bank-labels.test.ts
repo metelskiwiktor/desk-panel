@@ -133,7 +133,7 @@ describe('bank label store', () => {
     const data = (await store.read()).data!;
     expect(data.known['acc:O;2']).toBe(mine);
     expect(data.pending).toEqual(['acc:O;2']);
-    expect(data.suggestions['acc:O;2']).toEqual({ sure: true, options: [{ move: 'income', category: salary, party: mine, recurring: true, reasons: ['ten sam rachunek ··0000: Moja firma', 'Przychód · Pensja · cykliczne: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:O;2']).toEqual({ sure: false, options: [{ move: 'income', category: salary, party: mine, recurring: true, reasons: ['ten sam rachunek ··0000: Moja firma', 'Przychód · Pensja · cykliczne: 1 z 1 raz'] }] });
     expect(data.suggestions['acc:O;1']).toBeUndefined();
     // The side's habit, for the move buttons; none for an operation already done.
     expect(data.habits).toEqual({ 'acc:O;2': { income: 1 } });
@@ -141,19 +141,33 @@ describe('bank label store', () => {
     expect((await store.read()).data!.pending).toEqual([]);
   });
 
-  it('accepts the sure suggestions of many operations in one write, or none', async () => {
-    const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
+  it('is sure of a transfer only after two agreeing marks; a single mark is a choice that can be picked', async () => {
+    const ops = [map(raw.transferIn('O;0', '2026-10-19', '1000.00')), map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
     const { store } = setup(ops);
     const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
     const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
     await store.apply({ action: 'label', tx: 'acc:O;1', move: 'income', category: salary, party: mine, recurring: true });
-    // one of them has no sure suggestion: nothing is marked
+    expect((await store.read()).data!.suggestions['acc:O;2'].sure).toBe(false);
+    await store.apply({ action: 'label', tx: 'acc:O;0', move: 'income', category: salary, party: mine, recurring: true });
+    expect((await store.read()).data!.suggestions['acc:O;2']).toMatchObject({ sure: true });
+  });
+
+  it('accepts the sure suggestions and the picked options of many operations in one write, or none', async () => {
+    const ops = [map(raw.transferIn('O;0', '2026-10-19', '1000.00')), map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
+    const { store } = setup(ops);
+    const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
+    const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
+    for (const tx of ['acc:O;0', 'acc:O;1']) await store.apply({ action: 'label', tx, move: 'income', category: salary, party: mine, recurring: true });
+    // one of them has no suggestion at all: nothing is marked
     await expect(store.apply({ action: 'acceptMany', txs: ['acc:O;2', 'acc:O;4'] })).rejects.toMatchObject({ status: 409 });
     expect((await store.read()).data!.pending).toContain('acc:O;2');
-    expect(await store.apply({ action: 'acceptMany', txs: ['acc:O;2', 'acc:O;3'] })).toMatchObject({ ok: true, assigned: 2 });
+    expect(await store.apply({ action: 'acceptMany', txs: ['acc:O;2'], picks: [{ tx: 'acc:O;3', option: 0 }] })).toMatchObject({ ok: true, assigned: 2 });
     const data = (await store.read()).data!;
     expect(data.labels['acc:O;3']).toMatchObject({ move: 'income', category: salary, party: mine, recurring: true });
     expect(data.pending).not.toContain('acc:O;2');
+    // a pick of an option that is not there, the same operation twice, and nothing at all are refused
+    await expect(store.apply({ action: 'acceptMany', txs: [], picks: [{ tx: 'acc:O;4', option: 2 }] })).rejects.toMatchObject({ status: 409 });
+    await expect(store.apply({ action: 'acceptMany', txs: ['acc:O;4'], picks: [{ tx: 'acc:O;4', option: 0 }] })).rejects.toMatchObject({ status: 400 });
     await expect(store.apply({ action: 'acceptMany', txs: [] })).rejects.toMatchObject({ status: 400 });
   });
 
@@ -208,13 +222,13 @@ describe('bank label store', () => {
     await store.apply({ action: 'label', tx: 'acc:O;1', move: 'spend', category: food, tags: ['zakupy'], party: spolem, recurring: false });
     let data = (await store.read()).data!;
     expect(data.known['acc:O;3']).toBe(spolem);
-    expect(data.suggestions['acc:O;3']).toEqual({ sure: true, options: [{ move: 'spend', category: food, tags: ['zakupy'], party: spolem, reasons: ['ten sam tekst w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:O;3']).toEqual({ sure: false, options: [{ move: 'spend', category: food, tags: ['zakupy'], party: spolem, reasons: ['ten sam tekst w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
     expect(data.labels['acc:O;3']).toBeUndefined();
     // Older than the day "to be marked" counts from: not counted, but still suggested when opened.
     await store.apply({ action: 'setSince', since: '2026-10-25' });
     data = (await store.read()).data!;
     expect(data.pending).toEqual([]);
-    expect(data.suggestions['acc:O;3'].sure).toBe(true);
+    expect(data.suggestions['acc:O;3'].sure).toBe(false);
     await store.apply({ action: 'accept', tx: 'acc:O;3' });
     data = (await store.read()).data!;
     expect(data.labels['acc:O;3']).toEqual({ move: 'spend', category: food, tags: ['zakupy'], party: spolem, recurring: false, comment: '' });

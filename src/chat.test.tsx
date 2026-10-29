@@ -482,12 +482,18 @@ describe('the live cockpit (Hermes and the panel)', () => {
         ],
         moved: 4, tagged: 3, noTag: 1, problems: [],
       };
+  const shop = { name: 'Sklep spożywczy', color: 'green', icon: 'cart' };
+  const food = { name: 'Jedzenie', color: 'orange', icon: 'utensils' };
   const assignPreviewMock = {
+    range: { from: '2026-09-24', to: null, first: '2026-09-24', last: '2026-10-06' },
     groups: [
-      { key: 'g-aaaaaaaa', move: 'income', category: { name: 'Pensja', color: 'teal', icon: 'banknote' }, party: null, tags: [], count: 6, total: 6000, why: 'ten sam rachunek', items: [{ day: '2026-10-03', name: 'Firma Informatyczna', amount: 1000 }], hidden: 5 },
-      { key: 'g-bbbbbbbb', move: 'spend', category: { name: 'Sklep spożywczy', color: 'green', icon: 'cart' }, party: null, tags: [], count: 16, total: -484.5, why: 'ten sam sprzedawca', items: [{ day: '2026-10-06', name: 'Biedronka', amount: -28.87 }], hidden: 15 },
+      { key: 'g-aaaaaaaa', move: 'income', category: { name: 'Pensja', color: 'teal', icon: 'banknote' }, party: 'Firma', tags: [], count: 2, total: 2000, why: 'ten sam rachunek', hidden: 0,
+        items: [{ tx: 't1', day: '2026-10-03', name: 'Firma Informatyczna', amount: 1000 }, { tx: 't2', day: '2026-09-25', name: 'Firma Informatyczna', amount: 1000 }] },
+      { key: 'g-bbbbbbbb', move: 'spend', category: shop, party: null, tags: [], count: 2, total: -50, why: 'ten sam sprzedawca', hidden: 0,
+        items: [{ tx: 't3', day: '2026-10-06', name: 'Biedronka', amount: -30 }, { tx: 't4', day: '2026-10-05', name: 'Spar', amount: -20 }] },
     ],
-    choices: { count: 1, total: -80.59 }, problems: [],
+    choices: { count: 1, total: -200.15, items: [{ tx: 't5', day: '2026-10-05', name: 'Stacja paliw', amount: -200.15, why: 'Jedzenie: 1 z 1 raz', options: [{ move: 'spend', category: food, party: null, tags: [] }] }] },
+    problems: [],
   };
   function liveServer() {
     const calls: Call[] = [];
@@ -502,7 +508,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url.startsWith('/api/bank/plan')) return reply(planPreviewMock);
       if (url.startsWith('/api/bank/assign')) return reply(assignPreviewMock);
       if (url === `/api/chats/${H}/bank-plan` && body?.toolCallId === 'a9:b-1') {
-        const outcome = { decision: 'applied', at: NOW, assigned: 6, skipped: body.skip ?? [], preview: assignPreviewMock };
+        const outcome = { decision: 'applied', at: NOW, assigned: 4, skipped: body.skip ?? [], skippedOps: body.skipOps ?? [], picked: body.picks ?? [], preview: assignPreviewMock };
         cockpit = view({ bankPlans: { 'a9:b-1': outcome } });
         return reply(outcome);
       }
@@ -682,29 +688,37 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
   });
 
-  it('shows the groups of suggested marks, lets one be unticked, and sends only the unticked keys with Wykonaj', async () => {
+  it('shows the range, groups with ticks per operation and the choices; sends only what was unticked or picked with Wykonaj', async () => {
     const calls = liveServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
     await openConversation(user, /Zadanie z maila/);
     const turnWithCard: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
-      { type: 'tool', id: 'a9:b-1', name: 'mcp__desk_panel__panel_bank_assign', input: JSON.stringify({ tytul: 'Podpowiedzi', from: '2026-09-24' }), output: JSON.stringify({ result: `${CARD_SHOWN.bankAssign}: 22 operacji.` }), state: 'done' },
+      { type: 'tool', id: 'a9:b-1', name: 'mcp__desk_panel__panel_bank_assign', input: JSON.stringify({ tytul: 'Podpowiedzi', from: '2026-09-24' }), output: JSON.stringify({ result: `${CARD_SHOWN.bankAssign}: 4 operacje.` }), state: 'done' },
     ] };
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
     const card = await screen.findByRole('region', { name: 'Zgoda na masowe oznaczenie' });
     const groups = await within(card).findByTestId('assign-groups');
+    expect(within(card).getByTestId('assign-range').textContent).toBe('Zakres: 2026-09-24 – do dziś · operacje z 2026-09-24 do 2026-10-06');
     expect(within(groups).getByText('Przychód · Pensja')).toBeTruthy();
     expect(within(groups).getByText('Wydatek · Sklep spożywczy')).toBeTruthy();
-    expect(within(card).getByText(/Zaznaczone: 22 operacji/)).toBeTruthy();
-    expect(within(card).getByText(/1 operacja ma tylko propozycje do wyboru/)).toBeTruthy();
-    await user.click(within(groups).getByText('ten sam rachunek'));
-    expect(within(groups).getByText('… jeszcze 5')).toBeTruthy();
-    await user.click(within(groups).getByRole('checkbox', { name: /Oznacz 16 operacji/ }));
-    expect(within(card).getByText(/Zaznaczone: 6 operacji/)).toBeTruthy();
+    expect(within(card).getByText(/Zaznaczone: 4 operacji, \+1\s?950,00 zł/)).toBeTruthy();
+    // the choice is listed with its option and nothing is picked yet
+    const choices = within(card).getByTestId('assign-choices');
+    expect(within(choices).getByText('Stacja paliw')).toBeTruthy();
+    const option = within(choices).getByRole('button', { name: 'Wydatek · Jedzenie' });
+    expect(option.getAttribute('aria-pressed')).toBe('false');
+    // one operation of a group is unticked: the group is partly ticked and the sum follows
+    await user.click(within(groups).getAllByText('ten sam sprzedawca')[0]);
+    await user.click(within(groups).getByRole('checkbox', { name: 'Oznacz 2026-10-05 Spar' }));
+    expect(within(groups).getByText('1 z 2 ×')).toBeTruthy();
+    expect(within(card).getByText(/Zaznaczone: 3 operacji, \+1\s?970,00 zł/)).toBeTruthy();
+    await user.click(option);
+    expect(within(card).getByText(/Zaznaczone: 3 operacji i 1 wybrana, \+1\s?769,85 zł/)).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
     await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
-    await waitFor(() => expect(within(card).getByText(/Oznaczono 6 operacji; jedna grupa została bez zmian\./)).toBeTruthy());
-    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({ toolCallId: 'a9:b-1', decision: 'apply', skip: ['g-bbbbbbbb'] });
+    await waitFor(() => expect(within(card).getByText(/Oznaczono 4 operacji; część \(jedna pozycja lub grupa\) została bez zmian\./)).toBeTruthy());
+    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({ toolCallId: 'a9:b-1', decision: 'apply', skipOps: ['t4'], picks: [{ tx: 't5', option: 0 }] });
     expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
   });
 

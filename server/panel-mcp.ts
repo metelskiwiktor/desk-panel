@@ -375,7 +375,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       const preview = assignPreview(await sources.bankLedger(), bankAssignSchema.parse(args));
       if (preview.problems.length) throw new AgentViewError(400, preview.problems.join(' '));
       const count = preview.groups.reduce((sum, g) => sum + g.count, 0);
-      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru i nie wejdzie na kartę. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
+      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru: są na karcie osobno i zostają nieoznaczone, dopóki użytkownik nie kliknie opcji. Zakres: ${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}, powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
   panel_cockpit_clear: {

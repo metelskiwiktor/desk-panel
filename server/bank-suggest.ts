@@ -143,7 +143,8 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
     signatures.push('who');
   }
   if (!options.length) return null;
-  // Sure only when a reliable link leads to marks that all agree and that no one rejected on this basis.
+  // Sure only when a reliable link leads to marks that all agree (at least two: one earlier mark is a sample, not a habit)
+  // and that no one rejected on this basis.
   const doubted = ctx.rejections.some(r => r.tx !== tx && r.basis === basis && r.signature === signatures[0]);
-  return { suggestion: { sure: reliable && groups.size <= 1 && options.length === 1 && !doubted, options }, basis, signatures };
+  return { suggestion: { sure: reliable && (total >= 2 || groups.size === 0) && groups.size <= 1 && options.length === 1 && !doubted, options }, basis, signatures };
 }

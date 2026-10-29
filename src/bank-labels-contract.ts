@@ -149,7 +149,11 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('accept'), tx: bankTxId, option: z.number().int().min(0).max(2).default(0) }).strict(),
   z.object({ action: z.literal('reject'), tx: bankTxId }).strict(),
   /** The first (sure) suggestion of each of these operations, all in one write (the bulk card); one that is no longer sure refuses the lot. */
-  z.object({ action: z.literal('acceptMany'), txs: z.array(bankTxId).min(1).max(300) }).strict(),
+  z.object({
+    action: z.literal('acceptMany'), txs: z.array(bankTxId).max(300).default([]),
+    /** Operations whose suggestion is only a choice: the user's pick of one option (index), taken as it is now. */
+    picks: z.array(z.object({ tx: bankTxId, option: z.number().int().min(0).max(2) }).strict()).max(60).default([]),
+  }).strict().refine(a => a.txs.length + a.picks.length > 0, { message: 'Nothing to accept' }),
   z.object({ action: z.literal('createCategory'), name: categoryName, move: z.enum(BANK_CATEGORY_MOVES).default('spend'), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict(),
   z.object({ action: z.literal('updateCategory'), category: bankCategoryId, name: categoryName.optional(), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict()
     .refine(a => a.name !== undefined || a.color !== undefined || a.icon !== undefined, { message: 'Nothing to change' }),
