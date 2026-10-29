@@ -70,9 +70,11 @@ tego samego (build idzie do `dist.next`). tsc jest przyrostowy (cache w `node_mo
 używają tylko testy, też jest martwy. Wyjątkiem jest haczyk dla testów (np. reset pamięci podręcznej modułu) oznaczony `@internal`
 w JSDoc. Podkomponenty assistant-ui w `src/components` (kod wygenerowany) są z tego wyłączone.
 
-Czas testów to w większości CPU: ok. 190 s na 8 rdzeniach, z czego ok. 40% to jsdom i import `App` w każdym pliku UI. Dzielenie
-plików, `isolate: false`, happy-dom i `userEvent.setup({ delay: null })` sprawdzone 29.10.2026: nie skracają czasu albo psują
-testy z `vi.mock`. Szybciej będzie tylko przy mniejszej liczbie testów renderujących cały panel.
+Czas testów to w większości CPU: ok. 150 s na 8 rdzeniach (było 190 s przed odchudzeniem testów renderujących cały panel),
+z czego ok. 40% to jsdom i import `App` w każdym pliku UI. `isolate: false`, happy-dom i `userEvent.setup({ delay: null })`
+sprawdzone 29.10.2026: nie skracają czasu albo psują testy z `vi.mock`. Podział pliku pomaga tylko, gdy jeden plik kończy się
+długo po reszcie (tak było z czatem: `chat.test.tsx` i `chat-cockpit.test.tsx` mają wspólne `chat.test-kit.tsx`); gdy CPU
+jest zajęte do końca, tylko dokłada narzut. Pliki `*.test-kit.tsx` to pomocnicy testów (knip ich nie liczy jako martwych).
 
 ### Jak pisać testy
 

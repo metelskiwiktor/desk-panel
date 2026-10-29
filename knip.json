@@ -26,6 +26,7 @@
     "tsx"
   ],
   "ignore": [
-    "src/test-*.ts"
+    "src/test-*.ts",
+    "src/**/*.test-kit.{ts,tsx}"
   ]
 }
