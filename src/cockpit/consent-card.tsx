@@ -69,11 +69,13 @@ export function MergeBody({ preview }: { preview: BankPlanPreview }) {
     <div style={COLUMNS}>
       <div className="tw:self-end tw:pb-1.5 tw:pl-0.5 tw:text-xs tw:text-ck-muted">Teraz</div>
       <div />
-      <div className="tw:flex tw:items-center tw:gap-2 tw:rounded-t-xl tw:bg-ck-cal/15 tw:px-3 tw:py-2">
-        <Icon size={20} style={{ color: COLOR_VALUES[preview.into.color] }} aria-hidden="true" />
-        <span className="tw:text-[15px] tw:font-semibold tw:text-ck-text">{preview.into.name}</span>
-        {preview.into.created && <span className="tw:rounded tw:bg-ck-green/25 tw:px-1.5 tw:text-[11px] tw:text-ck-text">nowa</span>}
-        <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{preview.into.after.count} op. · {pln(preview.into.after.spent)}</span>
+      <div className="tw:grid tw:gap-0.5 tw:rounded-t-xl tw:bg-ck-cal/15 tw:px-3 tw:py-2">
+        <div className="tw:flex tw:items-center tw:gap-2">
+          <Icon size={20} className="tw:flex-none" style={{ color: COLOR_VALUES[preview.into.color] }} aria-hidden="true" />
+          <span className="tw:min-w-0 tw:truncate tw:text-[15px] tw:font-semibold tw:text-ck-text">{preview.into.name}</span>
+          {preview.into.created && <span className="tw:flex-none tw:rounded tw:bg-ck-green/25 tw:px-1.5 tw:text-[11px] tw:text-ck-text">nowa</span>}
+        </div>
+        <span className="tw:pl-7 tw:text-xs tw:text-ck-muted">{preview.into.after.count} op. · {pln(preview.into.after.spent)}</span>
       </div>
     </div>
     <div className="tw:max-h-72 tw:overflow-y-auto" style={{ ...COLUMNS, gridTemplateRows: `repeat(${rows.length}, auto)`, marginTop: -6 }} data-testid="merge-rows">
@@ -82,7 +84,7 @@ export function MergeBody({ preview }: { preview: BankPlanPreview }) {
         <div style={{ gridColumn: 1, gridRow: i + 1 }} className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-x-2 tw:gap-y-1 tw:border-t tw:border-ck-line tw:py-2 tw:pr-1">
           <i className="tw:size-2.5 tw:flex-none tw:rounded-full" style={{ background: COLOR_VALUES[s.color] }} aria-hidden="true" />
           <span className="tw:text-[13px] tw:text-ck-muted">{s.count} ×</span>
-          <span className="tw:text-sm tw:text-ck-text tw:line-through" style={{ textDecorationColor: '#E24B4A', textDecorationThickness: 1.5 }}>{s.name}</span>
+          <span className="tw:text-sm tw:text-ck-muted tw:line-through">{s.name}</span>
           {s.keeps.map(t => <span key={t} className={kept}>#{t}</span>)}
           <Minus size={14} className="tw:ml-auto tw:flex-none tw:text-ck-red" aria-label="kategoria zniknie" />
         </div>
