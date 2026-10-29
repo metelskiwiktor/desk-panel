@@ -50,6 +50,9 @@ function counted(r: BankAssignRecipient, sel: AssignSelection, categories: BankA
 }
 const historyText = (r: BankAssignRecipient) => `wcześniej: ${r.templates.map(t => `${markLabel(t.mark)} ${t.count} ${times(t.count)}`).join(', ')}`;
 
+/** The list of a field opens on a plain light background unless every entry is painted (a translucent field colour is not enough); and a field is kept small. */
+const opt = 'tw:bg-ck-surface-2 tw:text-ck-text';
+const selectStyle = { height: 26, minHeight: 0, paddingTop: 0, paddingBottom: 0 } as const;
 const checkbox = 'tw:size-4 tw:accent-[#7ca9ff]';
 const selectOn = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-text';
 const selectOff = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-muted';
@@ -114,12 +117,12 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
         return <li key={i.tx} className="tw:flex tw:items-center tw:gap-2">
           <input type="checkbox" className={checkbox} checked={has} disabled={locked} onChange={() => toggleOp(i.tx, has)} aria-label={`Oznacz ${i.day} ${i.name}`} />
           <span className={`tw:min-w-0 tw:flex-1 tw:truncate ${has ? 'tw:text-ck-text' : 'tw:text-ck-muted'}`}>{i.day} · {i.name} · {signed(i.amount)}</span>
-          <select className={has ? selectOn : selectOff} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`}
+          <select className={has ? selectOn : selectOff} style={selectStyle} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`}
             onChange={e => e.target.value === '__off' ? set({ skipOps: new Set(sel.skipOps).add(i.tx) }) : setOp(i.tx, e.target.value)}>
-            <option value="__off">nie oznaczaj</option>
-            {group && <option value="">{shortLabel(group.mark)}</option>}
-            <optgroup label="Z historii odbiorcy">{r.templates.filter(tpl => tpl.key !== group?.key).map(tpl => <option key={tpl.key} value={`t:${tpl.key}`}>{shortLabel(tpl.mark)}</option>)}</optgroup>
-            <optgroup label="Wszystkie kategorie">{categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
+            <option className={opt} value="__off">nie oznaczaj</option>
+            {group && <option className={opt} value="">{shortLabel(group.mark)}</option>}
+            <optgroup className={opt} label="Z historii odbiorcy">{r.templates.filter(tpl => tpl.key !== group?.key).map(tpl => <option className={opt} key={tpl.key} value={`t:${tpl.key}`}>{shortLabel(tpl.mark)}</option>)}</optgroup>
+            <optgroup className={opt} label="Wszystkie kategorie">{categories.map(c => <option className={opt} key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
           </select>
         </li>;
       })}
@@ -165,11 +168,11 @@ function PoolSection({ pool, categories, sel, onChange, locked }: {
             onChange={() => hinted && set(i.tx, pick ? null : { template: hinted.key })} />
           <span className="tw:text-ck-muted">{i.day}</span>
           <span className="tw:min-w-0 tw:flex-1 tw:text-ck-text">{signed(i.amount)}</span>
-          <select className={value ? selectOn : selectOff} value={value} disabled={locked} aria-label={`Oznaczenie płatności ${i.day} ${signed(i.amount)}`}
+          <select className={value ? selectOn : selectOff} style={selectStyle} value={value} disabled={locked} aria-label={`Oznaczenie płatności ${i.day} ${signed(i.amount)}`}
             onChange={e => { const v = e.target.value; set(i.tx, !v ? null : v.startsWith('t:') ? { template: v.slice(2) } : { category: v.slice(2) }); }}>
-            <option value="">nie oznaczaj</option>
-            <optgroup label="Szablony">{[...pool.templates].sort((a, b) => Number(b.key === i.hint?.template) - Number(a.key === i.hint?.template)).map(t => <option key={t.key} value={`t:${t.key}`}>{templateLabel(t, true)}</option>)}</optgroup>
-            <optgroup label="Wszystkie kategorie">{categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
+            <option className={opt} value="">nie oznaczaj</option>
+            <optgroup className={opt} label="Szablony">{[...pool.templates].sort((a, b) => Number(b.key === i.hint?.template) - Number(a.key === i.hint?.template)).map(t => <option className={opt} key={t.key} value={`t:${t.key}`}>{templateLabel(t, true)}</option>)}</optgroup>
+            <optgroup className={opt} label="Wszystkie kategorie">{categories.map(c => <option className={opt} key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
           </select>
           {hinted && i.hint && <span className="tw:basis-full tw:pl-6 tw:text-ck-muted" data-testid="assign-hint">ta sama kwota: {templateLabel(hinted, true)}, {i.hint.count} {times(i.hint.count)}</span>}
         </li>;
