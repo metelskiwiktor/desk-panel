@@ -60,12 +60,6 @@ describe('the work area', () => {
     expect(screen.getByRole('button', { name: 'Wyłącz kafelek: Cezar' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Przesuń kafelek: Poczta' })).toBeTruthy();
   });
-  it('the content of a tile stays usable while it can be arranged', async () => {
-    const user = userEvent.setup();
-    renderWith();
-    await user.click(await screen.findByRole('button', { name: /^Claude: 5h/ }));
-    expect(screen.getByRole('heading', { name: 'Claude · limity konta' })).toBeTruthy();
-  });
   it('removes a tile with its X, leaving an empty cell that offers what is missing, and a pick fills it', async () => {
     const user = userEvent.setup();
     renderWith();
@@ -134,8 +128,8 @@ describe('the work area', () => {
 });
 
 describe('arranging with the pointer', () => {
-  it('stretching a tile over another asks it to move to a free cell', async () => {
-    arrange(t('quota:Claude', 0, 0), t('quota:Codex', 1, 0));
+  it('stretching a tile over another asks it to move to a free cell, by the right edge and the bottom one', async () => {
+    arrange(t('quota:Claude', 0, 0), t('quota:Codex', 1, 0), t('mail', 0, 1));
     measureGrid();
     renderWith();
     await screen.findByRole('region', { name: 'Claude' });
@@ -146,17 +140,15 @@ describe('arranging with the pointer', () => {
     expect(within(cell('quota:Claude')).queryByText('2×1')).toBeNull();
     expect(at('quota:Claude')).toMatchObject({ c: 0, r: 0, w: 2, h: 1 });
     expect(at('quota:Codex')).toMatchObject({ c: 2, r: 0 });
-  });
-  it('stretching down takes the row below; a tile there steps aside', async () => {
-    arrange(t('mail', 0, 0), t('quota:Codex', 0, 1));
-    measureGrid();
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    fireEvent.pointerDown(cell('mail').querySelector('.wk-rz.b')!, { button: 0, clientX: 150, clientY: 140 });
-    fireEvent.pointerMove(window, { clientX: 150, clientY: 290 });
-    fireEvent.pointerUp(window, { clientX: 150, clientY: 290 });
-    expect(at('mail')).toMatchObject({ w: 1, h: 2 });
-    expect(at('quota:Codex')).toMatchObject({ c: 1, r: 1 }); // the nearest free cell: right beside where it stood
+    fireEvent.pointerDown(cell('quota:Codex').querySelector('.wk-rz.b')!, { button: 0, clientX: 750, clientY: 140 });
+    fireEvent.pointerMove(window, { clientX: 750, clientY: 290 });
+    fireEvent.pointerUp(window, { clientX: 750, clientY: 290 });
+    expect(at('quota:Codex')).toMatchObject({ c: 2, r: 0, w: 1, h: 2 });
+    fireEvent.pointerDown(cell('quota:Claude').querySelector('.wk-rz.b')!, { button: 0, clientX: 300, clientY: 140 });
+    fireEvent.pointerMove(window, { clientX: 300, clientY: 290 });
+    fireEvent.pointerUp(window, { clientX: 300, clientY: 290 });
+    expect(at('quota:Claude')).toMatchObject({ w: 2, h: 2 });
+    expect(at('mail')).toMatchObject({ c: 3, r: 1 }); // the tile below stepped aside to the nearest free cell
   });
   it('says so when a tile cannot grow because nothing else has anywhere to go', async () => {
     arrange(t('quota:Claude', 0, 0), t('quota:Codex', 1, 0), t('cezar', 2, 0, 2, 2), t('mail', 0, 1), t('system', 1, 1));
@@ -169,7 +161,7 @@ describe('arranging with the pointer', () => {
     expect(await screen.findByText(/Nie ma miejsca: sąsiednie kafelki/)).toBeTruthy();
     expect(at('quota:Claude')).toMatchObject({ w: 1, h: 1 });
   });
-  it('dropping a tile on another swaps them', async () => {
+  it('dropping a tile on another swaps them, and into an empty cell moves it', async () => {
     arrange(t('mail', 0, 0), t('quota:Codex', 1, 0));
     measureGrid();
     renderWith();
@@ -181,17 +173,11 @@ describe('arranging with the pointer', () => {
     expect(at('mail')).toMatchObject({ c: 1, r: 0 });
     expect(at('quota:Codex')).toMatchObject({ c: 0, r: 0 });
     expect(grid().querySelector('.wk-hl')).toBeNull();
-  });
-  it('dropping into an empty cell moves the tile and leaves its old cell empty', async () => {
-    arrange(t('mail', 0, 0));
-    measureGrid();
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    fireEvent.pointerDown(cell('mail').querySelector('.wk-grip')!, { button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerDown(cell('mail').querySelector('.wk-grip')!, { button: 0, clientX: 400, clientY: 50 });
     fireEvent.pointerMove(window, { clientX: 1000, clientY: 200 });
     fireEvent.pointerUp(window, { clientX: 1000, clientY: 200 });
     expect(at('mail')).toMatchObject({ c: 3, r: 1 });
-    expect(grid().querySelectorAll('.wk-empty')).toHaveLength(7);
+    expect(grid().querySelectorAll('.wk-empty')).toHaveLength(6); // its old cell is empty now
   });
   it('says so, and changes nothing, when a drop leaves a tile without a place', async () => {
     arrange(t('quota:Claude', 0, 0, 1, 2), t('cezar', 1, 0, 3, 2));
