@@ -484,7 +484,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
       if (url.startsWith('/api/bank/show')) return reply({
-        view: 'tabela', from: '2026-01-01', to: '2026-10-29', unknown: ['lekarz'], hidden: 0, observedAt: NOW, total: { count: 2, spent: 270 },
+        view: 'tabela', from: '2026-01-01', to: '2026-10-29', unknown: ['lekarz'], hidden: 0, observedAt: NOW, total: { count: 2, spent: 270 }, span: { first: '2026-09-20', last: '2026-10-20' },
         categories: [{ id: 'c-1', name: 'Psycholog', color: 'violet', count: 2, spent: 270 }],
         rows: [{ day: '2026-10-20', amount: -150, name: 'Gabinet Anna K.', category: 'Psycholog', tags: ['terapia'] }, { day: '2026-09-20', amount: -120, name: 'Gabinet Anna K.', category: 'Psycholog', tags: [] }],
       });
@@ -598,7 +598,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     render(<ChatWindow onClose={() => {}} />);
     await openConversation(user, /Zadanie z maila/);
     const show: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
-      { type: 'tool', id: 's1', name: 'mcp__desk_panel__panel_show', input: JSON.stringify({ tytul: 'Psycholog', kategorie: ['psych', 'lekarz'], widok: 'tabela' }), output: JSON.stringify({ result: `${CARD_SHOWN.show}. Pokazano: Psycholog 2 op.` }), state: 'done' },
+      { type: 'tool', id: 's1', name: 'mcp__desk_panel__panel_show', input: JSON.stringify({ tytul: 'Psycholog', kategorie: ['psych', 'lekarz'], view: 'tabela' }), output: JSON.stringify({ result: `${CARD_SHOWN.show}. Pokazano: Psycholog 2 op.` }), state: 'done' },
       { type: 'tool', id: 's2', name: 'mcp__desk_panel__panel_show', input: JSON.stringify({ kategorie: 'nie lista' }), output: JSON.stringify({ result: 'Niepoprawne argumenty' }), state: 'done', error: true },
     ] };
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, show], { id: H }) });

@@ -126,7 +126,7 @@ describe('panel MCP for Hermes', () => {
   });
 
   it('shows a data card: the model gets a summary and the other categories, never the rows; the card reads them from the panel', async () => {
-    const shown = await call('panel_show', { kategorie: ['zdrow', 'rachun'], widok: 'słupki', tytul: 'Zdrowie i rachunki' });
+    const shown = await call('panel_show', { kategorie: ['zdrow', 'rachun'], view: 'słupki', tytul: 'Zdrowie i rachunki' });
     expect(shown.isError).toBeUndefined();
     expect(shown.content[0].text).toContain('Karta z danymi jest u użytkownika');
     expect(shown.content[0].text).toMatch(/Inne kategorie wydatków w tym zakresie:/);
@@ -134,13 +134,13 @@ describe('panel MCP for Hermes', () => {
     expect(unknown).toMatchObject({ isError: true });
     expect(unknown.content[0].text).toMatch(/Kategorie wydatków:.*Zdrowie/);
     expect(await call('panel_show', { kategorie: [] })).toMatchObject({ isError: true });
-    expect(await call('panel_show', { kategorie: ['zdrow'], widok: 'wykres' })).toMatchObject({ isError: true });
-    const route = await fetch(`${base}/api/bank/show?widok=tabela&kategorie=zdrow&kategorie=lekarz`);
+    expect(await call('panel_show', { kategorie: ['zdrow'], view: 'wykres' })).toMatchObject({ isError: true });
+    const route = await fetch(`${base}/api/bank/show?view=tabela&kategorie=zdrow&kategorie=lekarz`);
     expect(route.status).toBe(200);
     const body = await route.json() as { categories: { name: string }[]; unknown: string[]; rows: unknown[] };
     expect(body.categories.map(c => c.name)).toEqual(['Zdrowie']);
     expect(body.unknown).toEqual(['lekarz']);
-    expect((await fetch(`${base}/api/bank/show?widok=tabela`)).status).toBe(400);
+    expect((await fetch(`${base}/api/bank/show?view=tabela`)).status).toBe(400);
     expect((await fetch(`${base}/api/bank/show?kategorie=lekarz`)).status).toBe(404);
   });
 

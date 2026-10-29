@@ -53,8 +53,9 @@ export function bankShow(ledger: BankLedger, query: BankShowQuery, today: string
     category: matched.get(e.label!.category!)!.name, tags: e.label!.tags.map(t => masked(clip(t, 30))),
   }));
   return {
-    view: query.widok, from, to, unknown, categories, rows,
+    view: query.view, from, to, unknown, categories, rows,
     total: { count: entries.length, spent: categories.reduce((sum, c) => sum + c.spent, 0) },
+    span: entries.length ? { first: bookedOn(Math.min(...entries.map(e => e.op.at))), last: bookedOn(Math.max(...entries.map(e => e.op.at))) } : null,
     hidden: Math.max(0, entries.length - rows.length), observedAt: ledger.observedAt,
   };
 }
@@ -76,7 +77,7 @@ export function bankShowSummary(ledger: BankLedger, data: BankShowData): string 
   const names = new Map(ledger.categories.map(c => [c.id, c.name]));
   const rest = [...others].sort((a, b) => b[1].spent - a[1].spent).map(([id, o]) => `${names.get(id) ?? '?'} ${o.count} op. ${money(o.spent)}`);
   return [
-    `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)} (${data.from} – ${data.to}).`,
+    `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)}; zakres ${data.from} – ${data.to}${data.span ? `, same operacje od ${data.span.first} do ${data.span.last}` : ''}.`,
     data.unknown.length ? `Bez dopasowania: ${data.unknown.join(', ')}.` : '',
     `Inne kategorie wydatków w tym zakresie: ${rest.length ? rest.join('; ') : 'brak'}.`,
   ].filter(Boolean).join(' ');

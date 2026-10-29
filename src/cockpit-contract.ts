@@ -114,7 +114,7 @@ export const COCKPIT_TOOLS = {
     card: 'watch',
   },
   panel_show: {
-    purpose: 'Karta z danymi banku w rozmowie: wydatki wybranych kategorii jako tabela albo słupki (widok: "tabela" lub "słupki"; kategorie po nazwie, zakres from/to, domyślnie ostatnie 365 dni).',
+    purpose: 'Karta z danymi banku w rozmowie: wydatki wybranych kategorii jako tabela albo słupki (view: "tabela" lub "słupki"; kategorie po nazwie, zakres from/to, domyślnie ostatnie 365 dni).',
     when: 'gdy użytkownik prosi o pokazanie wydatków („pokaż je”) albo gdy zestawienie liczb czyta się łatwiej na karcie niż w tekście; po tym, jak sam znasz nazwy kategorii z panel_bank. Nie powtarzaj w tekście wierszy z karty.',
     effect: 'użytkownik widzi kartę z wierszami, które panel czyta sam (nie przechodzą przez Ciebie); w odpowiedzi dostajesz tylko podsumowanie i listę innych kategorii wydatków z sumami, żebyś mógł ocenić, czy coś jeszcze pasuje. Karta niczego nie zmienia.',
     card: 'show',

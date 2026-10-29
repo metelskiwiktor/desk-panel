@@ -311,7 +311,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     input: bankShowQuerySchema.extend({ tytul: text(80).optional() }).strict(),
     schema: schema({
       tytul: { type: 'string', description: 'Krótki tytuł karty po polsku, np. „Psycholog, fizjoterapeuta, podolog”' },
-      widok: { type: 'string', enum: [...BANK_SHOW_VIEWS], description: '"tabela": operacje z sumami kategorii; "słupki": porównanie sum kategorii' },
+      view: { type: 'string', enum: [...BANK_SHOW_VIEWS], description: '"tabela": operacje z sumami kategorii; "słupki": porównanie sum kategorii' },
       kategorie: { type: 'array', maxItems: BANK_SHOW_LIMITS.categories, items: { type: 'string' }, description: 'Nazwy kategorii wydatków (wystarczy ich część), z panel_bank' },
       from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie 365 dni wstecz)' },
       to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD (domyślnie dziś)' },

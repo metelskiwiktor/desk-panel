@@ -22,7 +22,7 @@ const ledger: BankLedger = {
 
 describe('bank card data', () => {
   it('matches categories by a part of the name, sums spending (a refund lowers it) and leaves other moves and currencies out', () => {
-    const data = bankShow(ledger, { widok: 'tabela', kategorie: ['psych', 'podo', 'lekarz'] }, '2026-10-29');
+    const data = bankShow(ledger, { view: 'tabela', kategorie: ['psych', 'podo', 'lekarz'] }, '2026-10-29');
     expect(data.categories.map(c => [c.name, c.count, c.spent])).toEqual([['Psycholog', 3, 270], ['Podolog', 1, 120]]);
     expect(data.unknown).toEqual(['lekarz']);
     expect(data.total).toEqual({ count: 4, spent: 390 });
@@ -30,21 +30,22 @@ describe('bank card data', () => {
   });
 
   it('masks long digit runs, keeps the range and says how many rows were not shown', () => {
-    const data = bankShow(ledger, { widok: 'słupki', kategorie: ['Psycholog'], from: '2026-10-01', to: '2026-10-29' }, '2026-10-29');
+    const data = bankShow(ledger, { view: 'słupki', kategorie: ['Psycholog'], from: '2026-10-01', to: '2026-10-29' }, '2026-10-29');
     expect(JSON.stringify(data)).not.toMatch(/48123456789/);
     expect(data).toMatchObject({ view: 'słupki', from: '2026-10-01', to: '2026-10-29', hidden: 0, total: { count: 2 } });
   });
 
   it('refuses a question that matches nothing with the names there are, and a range that is not one', () => {
-    expect(() => bankShow(ledger, { widok: 'tabela', kategorie: ['lekarz'] }, '2026-10-29')).toThrow(/Psycholog, Podolog, Apteka/);
-    expect(() => bankShow(ledger, { widok: 'tabela', kategorie: ['psych'], from: '2026-10-29', to: '2026-10-01' }, '2026-10-29')).toThrow(BankShowError);
-    expect(() => bankShow(ledger, { widok: 'tabela', kategorie: ['psych'], from: '2024-01-01', to: '2026-10-29' }, '2026-10-29')).toThrow(/najwyżej/);
+    expect(() => bankShow(ledger, { view: 'tabela', kategorie: ['lekarz'] }, '2026-10-29')).toThrow(/Psycholog, Podolog, Apteka/);
+    expect(() => bankShow(ledger, { view: 'tabela', kategorie: ['psych'], from: '2026-10-29', to: '2026-10-01' }, '2026-10-29')).toThrow(BankShowError);
+    expect(() => bankShow(ledger, { view: 'tabela', kategorie: ['psych'], from: '2024-01-01', to: '2026-10-29' }, '2026-10-29')).toThrow(/najwyżej/);
   });
 
   it('tells the model only a summary, with the other spending categories so it can notice a related one itself', () => {
-    const data = bankShow(ledger, { widok: 'tabela', kategorie: ['psych', 'podo'] }, '2026-10-29');
+    const data = bankShow(ledger, { view: 'tabela', kategorie: ['psych', 'podo'] }, '2026-10-29');
     const summary = bankShowSummary(ledger, data);
     expect(summary).toContain('Razem 4 operacji');
+    expect(summary).toContain('same operacje od 2026-09-20 do 2026-10-20');
     expect(summary).toContain('Inne kategorie wydatków w tym zakresie: Apteka 1 op. 45,50 zł');
     expect(summary).not.toContain('Gabinet');
   });

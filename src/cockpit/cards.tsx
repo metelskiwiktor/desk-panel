@@ -290,7 +290,7 @@ export function ShowCard({ args }: ToolCallMessagePartProps<ShowArgs>) {
   const [state, setState] = useState<{ key: string; data?: BankShowData; error?: string }>({ key: '' });
   useEffect(() => {
     if (!query.success) return;
-    const params = new URLSearchParams({ widok: query.data.widok });
+    const params = new URLSearchParams({ view: query.data.view });
     for (const name of query.data.kategorie) params.append('kategorie', name);
     if (query.data.from) params.set('from', query.data.from);
     if (query.data.to) params.set('to', query.data.to);
