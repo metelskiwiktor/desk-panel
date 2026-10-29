@@ -11,6 +11,8 @@ import { CARD_SHOWN, CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from 
 import { todoActionSchema } from '../src/todo-contract';
 import { bankShowObject, bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
 import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
+import { bankPlanSchema, BANK_PLAN_LIMITS } from '../src/bank-plan-contract';
+import { planPreview } from './bank-plan';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
 import { SourceError, type PanelSources } from './sources';
@@ -329,6 +331,22 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       }
     },
   },
+  panel_bank_propose: {
+    description: cockpitToolDescription('panel_bank_propose'),
+    input: bankPlanSchema.extend({ tytul: text(80).optional() }).strict(),
+    schema: schema({
+      tytul: { type: 'string', description: 'Krótki tytuł karty po polsku' },
+      merge: { type: 'array', maxItems: BANK_PLAN_LIMITS.sources, items: { type: 'string' }, description: 'Dokładne nazwy kategorii wydatków do scalenia (tak, jak podaje je panel_bank)' },
+      into: { type: 'string', description: 'Nazwa kategorii docelowej: istniejącej kategorii wydatków albo nowej' },
+      tags: { type: 'boolean', description: 'true (domyślnie): nazwy scalanych kategorii zostają jako etykiety na ich operacjach' },
+    }, ['merge', 'into']),
+    async run(args, { sources }) {
+      const plan = bankPlanSchema.parse(args);
+      const preview = planPreview(await sources.bankLedger(), plan);
+      if (preview.problems.length) throw new AgentViewError(400, preview.problems.join(' '));
+      return `${CARD_SHOWN.bankPlan}: ${preview.moved} operacji z ${preview.sources.map(s => `„${s.name}”`).join(', ')} przejdzie do „${preview.into.name}”${preview.into.created ? ' (nowa kategoria)' : ''}; zmienia dopiero kliknięcie użytkownika. Nie pisz, że zmieniłeś. Zakończ odpowiedź jednym zdaniem.`;
+    },
+  },
   panel_cockpit_clear: {
     description: cockpitToolDescription('panel_cockpit_clear'),
     input: z.object({}).strict(), schema: schema(),
@@ -375,7 +393,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };

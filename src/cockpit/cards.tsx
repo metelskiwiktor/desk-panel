@@ -1,10 +1,11 @@
 import { Component, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, ChartColumn, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
+import { Check, ChartColumn, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Merge, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
 import {
-  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type StepState, type WatchArgs,
+  type BankPlanArgs, type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type StepState, type WatchArgs,
 } from './types';
 import { bankShowQuerySchema, type BankShowData } from '../bank-show-contract';
+import { bankPlanSchema, type BankPlanOutcome, type BankPlanPreview } from '../bank-plan-contract';
 import { COLOR_VALUES } from '../bank-look';
 import { watchAnswerTask } from '../cockpit-contract';
 
@@ -341,6 +342,82 @@ export function ShowCard({ args }: ToolCallMessagePartProps<ShowArgs>) {
         {data.hidden > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">… i {data.hidden} starszych (zawęź zakres dat).</p>}
         {data.unknown.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">Bez dopasowania: {data.unknown.join(', ')}.</p>}
       </>}
+    </div>
+  </section>;
+}
+
+/**
+ * `panel_bank_propose`: the consent card for a change in the spending categories. Wektor only named the change; what it
+ * would do (the before and after) is worked out here by the panel (`GET /api/bank/plan`), and nothing changes until the
+ * user clicks „Wykonaj”. The answer is kept with the conversation, so the card shows what was decided later too.
+ */
+export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartProps<BankPlanArgs>) {
+  const { respond, running } = useContext(CardActions);
+  const plan = bankPlanSchema.safeParse(args);
+  const key = plan.success ? JSON.stringify(plan.data) : '';
+  const decided = result && typeof result === 'object' && ['applied', 'rejected'].includes((result as { decision?: string }).decision ?? '') ? result as BankPlanOutcome : undefined;
+  const [state, setState] = useState<{ key: string; data?: BankPlanPreview; error?: string }>({ key: '' });
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!plan.success || decided) return;
+    const params = new URLSearchParams({ into: plan.data.into, tags: plan.data.tags ? '1' : '0' });
+    for (const name of plan.data.merge) params.append('merge', name);
+    let gone = false;
+    fetch(`/api/bank/plan?${params}`, { signal: AbortSignal.timeout(15_000) }).then(async response => {
+      const body = await response.json().catch(() => null) as (BankPlanPreview & { error?: string }) | null;
+      if (gone) return;
+      setState(response.ok && body ? { key, data: body } : { key, error: body?.error || 'Nie udało się pobrać podglądu zmiany.' });
+    }, () => { if (!gone) setState({ key, error: 'Nie udało się pobrać podglądu zmiany.' }); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the plan
+  }, [key, !!decided]);
+  const preview = state.key === key ? state.data : undefined;
+  const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Zmiana w kategoriach';
+  const unidentified = toolCallId.startsWith('pending:') || toolCallId.includes('panel_bank_propose');
+  const blocked = !!args.refused || !plan.success || !!preview?.problems.length;
+  const busy = running || sending || unidentified || !preview || blocked;
+  const answer = async (decision: 'apply' | 'reject') => {
+    setSending(true); setError('');
+    try { await respond(toolCallId, { kind: 'bankPlan', decision }); }
+    catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
+    finally { setSending(false); }
+  };
+  return <section className={`${card} ${decided ? '' : 'tw:border-ck-cal/60 tw:shadow-[0_0_0_1px_rgba(124,169,255,0.25)]'}`} aria-label="Zgoda na zmianę kategorii">
+    <div className={head}>
+      <Merge size={16} className="tw:text-ck-cal" aria-hidden="true" />
+      <b className="tw:font-semibold tw:text-ck-text">{!decided ? 'Wykonać zmianę?' : decided.decision === 'applied' ? 'Zmiana wykonana' : 'Odrzucono'}</b>
+      <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{title}</span>
+    </div>
+    <div className="tw:grid tw:gap-3 tw:p-4">
+      {args.refused && !decided && <p className={refusedNote} role="alert">Panel nie przyjął propozycji: {args.refused}</p>}
+      {!plan.success && !decided && <p className={refusedNote} role="alert">Agent przysłał niepoprawną propozycję zmiany.</p>}
+      {state.key === key && state.error && !decided && <p className={refusedNote} role="alert">{state.error}</p>}
+      {plan.success && !preview && !state.error && !decided && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Liczę podgląd…</p>}
+      {!decided && preview?.problems.map(p => <p key={p} className={refusedNote} role="alert">{p}</p>)}
+      {preview && !preview.problems.length && !decided && <div className="tw:grid tw:gap-3 sm:tw:grid-cols-2">
+        <div className="tw:grid tw:content-start tw:gap-1.5">
+          <div className={eyebrow}>Teraz</div>
+          <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:p-0">
+            {preview.sources.map(s => <li key={s.id} className="tw:flex tw:items-baseline tw:gap-2"><span className="tw:text-ck-text">{s.name}</span><span className="tw:text-xs tw:text-ck-faint">{s.count} op.</span>{s.tag && <span className="tw:text-xs tw:text-ck-muted">→ #{s.tag}</span>}<span className="tw:ml-auto tw:font-ck-mono tw:text-[13px] tw:text-ck-text">{pln(s.spent)}</span></li>)}
+            {!preview.into.created && <li className="tw:flex tw:items-baseline tw:gap-2 tw:border-t tw:border-ck-line tw:pt-1"><span className="tw:text-ck-muted">{preview.into.name} (już jest)</span><span className="tw:text-xs tw:text-ck-faint">{preview.into.before.count} op.</span><span className="tw:ml-auto tw:font-ck-mono tw:text-[13px] tw:text-ck-muted">{pln(preview.into.before.spent)}</span></li>}
+          </ul>
+        </div>
+        <div className="tw:grid tw:content-start tw:gap-1.5">
+          <div className={eyebrow}>Po zmianie</div>
+          <div className="tw:flex tw:items-baseline tw:gap-2"><span className="tw:text-ck-text tw:font-semibold">{preview.into.name}</span>{preview.into.created && <span className="tw:rounded-md tw:bg-ck-cal/15 tw:px-1.5 tw:py-0.5 tw:text-[11px] tw:text-ck-cal">nowa</span>}<span className="tw:text-xs tw:text-ck-faint">{preview.into.after.count} op.</span><span className="tw:ml-auto tw:font-ck-mono tw:text-[13px] tw:text-ck-text">{pln(preview.into.after.spent)}</span></div>
+          <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Kategorie {preview.sources.map(s => `„${s.name}”`).join(', ')} znikną.</p>
+        </div>
+      </div>}
+      {preview && !preview.problems.length && !decided && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Zmieni {preview.moved} oznaczeń{preview.sources.some(s => s.tag) ? `, dopisze etykiety do ${preview.tagged}` : ''}. Zmiana dotyczy tylko Twoich oznaczeń w panelu: nic nie idzie do banku.</p>}
+      {!decided && <div className="tw:flex tw:flex-wrap tw:gap-2">
+        <button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg tw:hover:bg-[#9bbcff]`} disabled={busy} onClick={() => void answer('apply')}><Check size={15} aria-hidden="true" />Wykonaj</button>
+        <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={running || sending || unidentified} onClick={() => void answer('reject')}><X size={15} aria-hidden="true" />Odrzuć</button>
+      </div>}
+      {sending && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zapisuję decyzję…</p>}
+      {error && <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4]" role="alert">{error}</p>}
+      {decided?.decision === 'applied' && <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Przeniesiono {decided.moved} oznaczeń do „{decided.into}”{decided.created ? ' (nowa kategoria)' : ''}.</p>}
+      {decided?.decision === 'rejected' && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Nic nie zostało zmienione.</p>}
     </div>
   </section>;
 }

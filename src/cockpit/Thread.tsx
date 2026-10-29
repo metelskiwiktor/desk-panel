@@ -11,10 +11,10 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
-import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
+import { BankPlanCard, CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import {
-  DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
-  type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type WatchArgs,
+  BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
+  type BankPlanArgs, type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type WatchArgs,
 } from './types';
 
 /*
@@ -73,6 +73,7 @@ export function toThreadMessage(m: CockpitMessage): ThreadMessageLike {
 const ReconUI = makeAssistantToolUI<ReconArgs, unknown>({ toolName: RECON, display: 'standalone', render: props => <CardBoundary><ReconCard {...props} /></CardBoundary> });
 const DispatchUI = makeAssistantToolUI<DispatchArgs, DispatchResult>({ toolName: DISPATCH, display: 'standalone', render: props => <CardBoundary><DispatchCard {...props} /></CardBoundary> });
 const WatchUI = makeAssistantToolUI<WatchArgs, unknown>({ toolName: WATCH, display: 'standalone', render: props => <CardBoundary><WatchCard {...props} /></CardBoundary> });
+const BankPlanUI = makeAssistantToolUI<BankPlanArgs, unknown>({ toolName: BANK_PLAN, display: 'standalone', render: props => <CardBoundary><BankPlanCard {...props} /></CardBoundary> });
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
@@ -282,7 +283,7 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>
       <CardActions.Provider value={actions}>
-        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><ApprovalUI />
+        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><ApprovalUI />
         <div className="tw:relative tw:min-h-0 tw:flex-1">
           <Conversation {...props} />
         </div>

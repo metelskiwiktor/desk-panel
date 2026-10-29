@@ -120,7 +120,7 @@ describe('panel MCP for Hermes', () => {
     expect((await call('panel_cockpit_clear', {})).content[0].text).toContain('nie obserwuje');
     const listed = await (await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).json() as any;
     // The cockpit tools describe themselves by the contract: what, when, and what follows.
-    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_cockpit_clear']) {
+    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_bank_propose', 'panel_cockpit_clear']) {
       expect(listed.result.tools.find((t: { name: string }) => t.name === name).description).toMatch(/Kiedy: .* Skutek: /);
     }
   });
@@ -143,6 +143,21 @@ describe('panel MCP for Hermes', () => {
     expect(body.unknown).toEqual(['lekarz']);
     expect((await fetch(`${base}/api/bank/show?view=tabela`)).status).toBe(400);
     expect((await fetch(`${base}/api/bank/show?kategorie=lekarz`)).status).toBe(404);
+  });
+
+  it('proposes a bank change by a card: it checks the names against the categories and changes nothing itself', async () => {
+    const before = await (await fetch(`${base}/api/bank/plan?merge=Subskrypcje&into=Zdrowie`)).json() as { sources: { count: number }[] };
+    const shown = await call('panel_bank_propose', { merge: ['Subskrypcje', 'Rachunki'], into: 'Stałe opłaty', tytul: 'Stałe opłaty' });
+    expect(shown.isError).toBeUndefined();
+    expect(shown.content[0].text).toContain('Karta zgody na zmianę w koncie jest u użytkownika');
+    expect(shown.content[0].text).toContain('zmienia dopiero kliknięcie użytkownika');
+    const wrong = await call('panel_bank_propose', { merge: ['subskr'], into: 'X' });
+    expect(wrong).toMatchObject({ isError: true });
+    expect(wrong.content[0].text).toMatch(/Nie ma kategorii wydatków „subskr”.*Kategorie wydatków:/);
+    expect(await call('panel_bank_propose', { merge: [], into: 'X' })).toMatchObject({ isError: true });
+    expect(await call('panel_bank_propose', { merge: ['Rachunki'], into: 'X', move: 'income' })).toMatchObject({ isError: true });
+    // Nothing was changed by asking: the same preview as before.
+    expect(await (await fetch(`${base}/api/bank/plan?merge=Subskrypcje&into=Zdrowie`)).json()).toMatchObject({ sources: [{ count: before.sources[0].count }] });
   });
 
   it('takes a proposal only after its recon answered, and a recon only of files the repository has', async () => {

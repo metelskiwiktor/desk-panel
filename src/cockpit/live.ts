@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ContextItem } from '../chat-contract';
 import { cardRefusal, COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
-import { DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
+import { BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
 const IDLE: CockpitState = { watching: false };
 /** While the task runs (or a check does) the cockpit is read often; otherwise now and then. */
@@ -35,7 +35,7 @@ export function cardArgs(raw: Record<string, unknown>): Record<string, unknown> 
 }
 
 /** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
-const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW } as const;
+const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN } as const;
 export const cardOf = (name: string) => {
   const tool = COCKPIT_TOOLS[panelToolName(name) as CockpitToolName] as { card?: keyof typeof CARDS } | undefined;
   return tool?.card ? CARDS[tool.card] : name;
@@ -46,7 +46,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
   : { decision: 'rejected' as const };
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
-export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false): CockpitMessage {
+export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}): CockpitMessage {
   if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
@@ -56,8 +56,8 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       if (p.type === 'approval') return { type: 'tool', id: p.id, name: HERMES_APPROVAL, args: { tool: p.tool, detail: p.detail, state: p.state, at: p.at }, running: p.state === 'pending' };
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
-      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : p.output;
-      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : null;
+      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN ? bankPlans[p.id] : p.output;
+      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
       const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
       return { type: 'tool', id: p.id, name, args: { ...args, ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
@@ -109,7 +109,8 @@ export function useLiveCockpit(): CockpitSource {
   const items = useMemo(() => chat.active && engineOf(chat.active) === 'hermes' ? chat.active.items : [], [chat.active]);
   const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
-  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved)), [items, dispatches, view?.legacyUnresolved]);
+  const bankPlans = view?.bankPlans;
+  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans)), [items, dispatches, view?.legacyUnresolved, bankPlans]);
   const activeId = chat.activeId;
 
   const cockpit: CockpitState = useMemo(() => {
@@ -143,6 +144,13 @@ export function useLiveCockpit(): CockpitSource {
     retry: () => void chat.refresh(),
     async respond(id: string, response: unknown) {
       if (response === 'approve' || response === 'deny') { await chat.approve(id, response); return; }
+      // A bank change card: the panel changes the categories (or not) as the user answered; the card shows the outcome from the cockpit.
+      if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'bankPlan') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/bank-plan`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision });
+        refresh();
+        return;
+      }
       // A dispatch card: the panel dispatches (or not) as the user answered; the card shows the outcome from the cockpit.
       const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string; runner?: string; model?: string; steps?: Record<string, { runner?: string; model?: string }> };
       if (!activeId) throw new Error('Nie ma otwartej rozmowy.');

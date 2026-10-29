@@ -373,6 +373,38 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         file.categories.splice(file.categories.indexOf(from), 1);
         return { ok: true, category: { id: into.id, created: false }, removed: moved };
       }
+      case 'mergeInto': {
+        const sources = [...new Set(action.from)].map(id => categoryOf(file, id));
+        if (sources.some(c => c.move !== 'spend')) throw new BankLabelError(409, 'Scalać można tylko kategorie wydatków.');
+        let target = file.categories.find(c => c.move === 'spend' && same(c.name, action.into));
+        const created = !target;
+        if (!target) {
+          if (file.categories.length >= BANK_LABEL_LIMITS.categories) throw new BankLabelError(409, `Może być najwyżej ${BANK_LABEL_LIMITS.categories} kategorii i źródeł.`);
+          const used = new Set(file.categories.map(c => c.color));
+          target = {
+            id: id('c', file.categories.map(c => c.id)), name: action.into, move: 'spend',
+            color: BANK_COLORS.find(c => !used.has(c)) ?? BANK_COLORS[file.categories.length % BANK_COLORS.length], icon: BANK_ICONS[0],
+          };
+          file.categories.push(target);
+        }
+        const folded = sources.filter(c => c !== target);
+        if (!folded.length) throw new BankLabelError(409, 'Nie ma czego scalić.');
+        let moved = 0;
+        const words = new Set<string>();
+        for (const l of Object.values(file.labels)) {
+          const from = folded.find(c => c.id === l.category);
+          if (!from) continue;
+          l.category = target.id;
+          moved++;
+          if (!action.tags) continue;
+          const word = from.name.replace(/^#+/, '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, BANK_LABEL_LIMITS.tag);
+          const tag = file.tags.find(t => same(t, word)) ?? word;
+          if (word && !l.tags.some(t => same(t, tag)) && l.tags.length < BANK_LABEL_LIMITS.tagsPerMark) { l.tags.push(tag); words.add(tag); }
+        }
+        if (words.size) keepWords(file, [...words]);
+        file.categories = file.categories.filter(c => !folded.includes(c));
+        return { ok: true, category: { id: target.id, created }, removed: moved };
+      }
       case 'renameTag': { renameTag(file, action.tag, action.name); return { ok: true }; }
       case 'deleteTag': {
         const tag = file.tags.find(t => same(t, action.tag)) ?? missing('Nie ma takiej etykiety.');

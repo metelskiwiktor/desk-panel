@@ -155,6 +155,8 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   /** Every mark of `category` goes to `into` (of the same move) and `category` is gone; `tag` is added to those marks to keep what it said. */
   z.object({ action: z.literal('mergeCategory'), category: bankCategoryId, into: bankCategoryId, tag: bankTag.optional() }).strict()
     .refine(a => a.category !== a.into, { message: 'Cannot merge a category into itself' }),
+  /** A whole merge in one write (the consent card): these spending categories go to the one of this name, made when missing. */
+  z.object({ action: z.literal('mergeInto'), from: z.array(bankCategoryId).min(1).max(6), into: categoryName, tags: z.boolean() }).strict(),
   z.object({ action: z.literal('renameTag'), tag: bankTag, name: bankTag }).strict(),
   z.object({ action: z.literal('deleteTag'), tag: bankTag }).strict(),
   z.object({ action: z.literal('createParty'), name: partyName }).strict(),

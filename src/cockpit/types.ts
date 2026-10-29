@@ -53,6 +53,10 @@ export interface WatchArgs { taskId?: string; id?: string; steps?: { label: stri
 export const SHOW = 'bank_show';
 export interface ShowArgs { tytul?: unknown; view?: unknown; kategorie?: unknown; nieoznaczone?: unknown; from?: unknown; to?: unknown; refused?: string }
 
+/** The consent card for a change in the account's categories (`panel_bank_propose`): the arguments as the model wrote them (checked by the card). */
+export const BANK_PLAN = 'bank_plan';
+export interface BankPlanArgs { tytul?: unknown; merge?: unknown; into?: unknown; tags?: unknown; refused?: string }
+
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
 export interface HermesApprovalArgs { tool: string; detail: string; state: 'pending' | 'approved' | 'denied' | 'expired'; at: number }

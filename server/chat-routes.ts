@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
+import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
 import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
@@ -51,7 +52,7 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
 export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch))?)?\/?$/.exec(url.pathname);
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
@@ -112,6 +113,21 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         if (legacy.unresolved) throw new ChatError(409, 'Nie można jednoznacznie przypisać wcześniejszej decyzji do karty. Potrzebna jest diagnostyka tej rozmowy przed zleceniem.');
       }
       return json(res, 200, await cockpit.dispatch(id, input)), true;
+    } else if (action === 'bank-plan' && req.method === 'POST') {
+      // The user's answer on a bank change card: the only way the chat changes the account's categories. Which change it is
+      // comes from the conversation's own tool call, never from the request.
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(bankPlanDecisionSchema, await readBody(req));
+      const conversation = await chat.get(id);
+      const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_bank_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        : []) : [];
+      if (matches.length !== 1) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
+      if (cardRefusal('bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      let plan;
+      try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
+      return json(res, 200, await cockpit.bankPlan(id, input, plan)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;

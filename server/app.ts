@@ -16,6 +16,8 @@ import { todoActionSchema } from '../src/todo-contract';
 import { TodoError } from './todos';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { bankShowQuerySchema } from '../src/bank-show-contract';
+import { bankPlanSchema } from '../src/bank-plan-contract';
+import { planPreview } from './bank-plan';
 import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 
@@ -122,6 +124,18 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         res.writeHead(answer.status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(answer.body);
         return;
       }
+    }
+    if (url.pathname === '/api/bank/plan') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const plan = bankPlanSchema.safeParse({ merge: url.searchParams.getAll('merge'), into: url.searchParams.get('into') ?? '', tags: url.searchParams.get('tags') !== '0' });
+        if (!plan.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(planPreview(await sources.bankLedger(), plan.data)));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać podglądu zmiany.' }));
+      }
+      return;
     }
     if (url.pathname === '/api/bank/show') {
       res.setHeader('Cache-Control', 'no-store');

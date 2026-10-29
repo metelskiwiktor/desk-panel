@@ -468,7 +468,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     { type: 'text', text: 'Plan gotowy.' },
     { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt, workflow: 'analysis', recon: 'r-0123456789ab' }), output: JSON.stringify({ result: `${CARD_SHOWN.dispatch}: decyzja należy do niego.` }), state: 'done' },
   ] };
-  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, ...over });
+  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, bankPlans: {}, ...over });
   const running = {
     id: RUN, title: 'Paski stref', status: 'RUNNING', repo: 'desk-panel', worktree: '.ai/cezar/worktrees/f2c9501e', tokens: 12_345,
     url: 'http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e', steps: [{ label: 'Implement', state: 'running' }, { label: 'Open PR', state: 'pending' }], progress: 0.5,
@@ -483,6 +483,16 @@ describe('the live cockpit (Hermes and the panel)', () => {
       calls.push({ url, method, body });
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
+      if (url.startsWith('/api/bank/plan')) return reply({
+        into: { name: 'Zdrowie', created: true, color: 'teal', before: { count: 0, spent: 0 }, after: { count: 3, spent: 420 } },
+        sources: [{ id: 'c-1', name: 'Psycholog', count: 2, spent: 300, tag: 'psycholog' }, { id: 'c-2', name: 'Podolog', count: 1, spent: 120, tag: 'podolog' }],
+        moved: 3, tagged: 3, problems: [],
+      });
+      if (url === `/api/chats/${H}/bank-plan`) {
+        const outcome = { decision: 'applied', at: NOW, into: 'Zdrowie', created: true, moved: 3 };
+        cockpit = view({ bankPlans: { 'a8:b1': outcome } });
+        return reply(outcome);
+      }
       if (url.startsWith('/api/bank/show')) return reply({
         view: 'tabela', from: '2026-01-01', to: '2026-10-29', unknown: ['lekarz'], hidden: 0, observedAt: NOW, total: { count: 2, spent: 270 }, span: { first: '2026-09-20', last: '2026-10-20' },
         categories: [{ id: 'c-1', name: 'Psycholog', color: 'violet', count: 2, spent: 270 }],
@@ -614,6 +624,28 @@ describe('the live cockpit (Hermes and the panel)', () => {
     // A call with arguments of another shape says so in its place and fetches nothing.
     expect(await screen.findByText('Agent przysłał niepoprawne zapytanie karty.')).toBeTruthy();
     expect(calls.filter(c => c.url.startsWith('/api/bank/show'))).toHaveLength(1);
+  });
+
+  it('shows the consent card with the before and after, changes nothing until Wykonaj, and then shows what was done', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const turnWithCard: ChatMessage = { id: 'a8', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'a8:b1', name: 'mcp__desk_panel__panel_bank_propose', input: JSON.stringify({ tytul: 'Zdrowie', merge: ['Psycholog', 'Podolog'], into: 'Zdrowie', tags: true }), output: JSON.stringify({ result: `${CARD_SHOWN.bankPlan}: 3 operacji przejdzie.` }), state: 'done' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na zmianę kategorii' });
+    expect(within(card).getByText('Wykonać zmianę?')).toBeTruthy();
+    expect(await within(card).findByText('Po zmianie')).toBeTruthy();
+    expect(within(card).getByText(/Kategorie „Psycholog”, „Podolog” znikną\./)).toBeTruthy();
+    expect(within(card).getByText(/Zmieni 3 oznaczeń/)).toBeTruthy();
+    expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
+    await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
+    await waitFor(() => expect(within(card).getByText(/Przeniesiono 3 oznaczeń do „Zdrowie” \(nowa kategoria\)\./)).toBeTruthy());
+    const answer = calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!;
+    expect(answer.method).toBe('POST');
+    expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
   });
 
   it('watches the task the conversation names, and shows the watch card live', async () => {

@@ -97,6 +97,7 @@ for (let run = 1; run <= runs; run++) {
   for (const [i, t] of result.turns.entries()) {
     const usage = t.usage ? `  [${t.usage.calls} wywołań modelu, ${t.usage.input + (t.usage.cached ?? 0)} tok. wejścia, ${t.usage.output} wyjścia, ${t.seconds} s]` : `  [${t.seconds} s]`;
     console.log(`  tura ${i + 1}: ${t.tools.map(x => x.name + (x.error ? '!' : '')).join(' → ') || '(bez narzędzi)'}${usage}`);
+    for (const x of t.tools) if (x.name === 'panel_bank_propose') console.log(`    karta zgody: ${x.input}${x.error ? ' (błąd)' : ''}`);
     for (const c of t.checks) if (!c.ok) console.log(`    ✗ ${c.label}`);
     for (const s of t.soft) console.log(`    ${s.ok ? '+' : '–'} ${s.label}`);
     console.log(`    odpowiedź:\n${t.text.split('\n').map(l => `      ${l}`).join('\n')}`);

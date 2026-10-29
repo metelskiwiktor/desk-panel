@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { todoTaskId } from './todo-contract';
 import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
+import type { BankPlanOutcome } from './bank-plan-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -48,6 +49,8 @@ export interface CockpitView {
   pr: CockpitPrView | null;
   /** The user's answer on each dispatch card of the conversation, by its tool call id. */
   dispatches: Record<string, DispatchOutcome>;
+  /** The user's answer on each bank change card of the conversation, by its tool call id. */
+  bankPlans: Record<string, BankPlanOutcome>;
   /** A historical decision cannot be attributed safely to a single card. */
   legacyUnresolved?: boolean;
 }
@@ -91,7 +94,7 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch' | 'show';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan';
 }
 
 export const COCKPIT_TOOLS = {
@@ -119,6 +122,12 @@ export const COCKPIT_TOOLS = {
     effect: 'użytkownik widzi kartę z wierszami, które panel czyta sam (nie przechodzą przez Ciebie); w odpowiedzi dostajesz tylko podsumowanie i listę innych kategorii wydatków z sumami, żebyś mógł ocenić, czy coś jeszcze pasuje. Karta niczego nie zmienia.',
     card: 'show',
   },
+  panel_bank_propose: {
+    purpose: 'Karta zgody na zmianę kategorii wydatków w koncie: scalenie kilku kategorii w jedną (merge: dokładne nazwy z panel_bank, into: nazwa docelowa, nowa albo istniejąca, tags: czy zostawić nazwy scalanych kategorii jako etykiety).',
+    when: 'tylko gdy użytkownik zgodził się na Twoją propozycję zmiany („tak”, „pokaż kartę”, „daj”) albo od razu wprost prosi o wykonanie konkretnej zmiany („scal to w Zdrowie”). Gdy pyta o radę lub opinię, najpierw zaproponuj zmianę słowami i zapytaj, czy pokazać kartę. Nie wysyłaj jej w tej samej odpowiedzi, w której dopiero proponujesz.',
+    effect: 'użytkownik widzi kartę z podglądem przed i po (ile operacji przejdzie, jakie sumy) i przyciskami „Wykonaj” i „Odrzuć”; panel zmienia kategorie dopiero po jego kliknięciu, a Ty niczego nie zmieniasz. Nie pisz, że zmieniłeś; po decyzji użytkownik sam powie, co wybrał. Zakończ odpowiedź jednym zdaniem.',
+    card: 'bankPlan',
+  },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
     when: 'gdy użytkownik prosi, by przestać obserwować task, albo wyraźnie zmienia temat na coś niezwiązanego z obserwowanym taskiem.',
@@ -133,7 +142,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.
