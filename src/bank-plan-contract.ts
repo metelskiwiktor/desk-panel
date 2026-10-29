@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BankColor } from './bank-labels-contract';
+import type { BankColor, BankIcon } from './bank-labels-contract';
 
 /**
  * A change Wektor proposes to the user's spending categories (`panel_bank_propose`, the consent card). Wektor names it with
@@ -21,11 +21,18 @@ export type BankPlan = z.infer<typeof bankPlanSchema>;
 
 /** What the plan would do now, worked out from the user's marks. `problems` empty: it can be carried out. */
 export interface BankPlanPreview {
-  into: { name: string; created: boolean; color: BankColor; before: { count: number; spent: number }; after: { count: number; spent: number } };
-  sources: { id: string; name: string; count: number; spent: number; tag: string | null }[];
-  /** Marks that change category, and the tags put on them. */
+  into: { name: string; created: boolean; color: BankColor; icon: BankIcon; before: { count: number; spent: number }; after: { count: number; spent: number } };
+  sources: {
+    id: string; name: string; count: number; spent: number; color: BankColor;
+    /** The tag the folded category's name leaves on its marks (null: none asked), and whether the user has that tag already. */
+    tag: string | null; tagState: 'new' | 'exists' | null;
+    /** The tags its marks carry already (most used first, at most 4): they stay. */
+    keeps: string[];
+  }[];
+  /** Marks that change category, the ones that get a new tag, and the ones that cannot (a mark holds only so many). */
   moved: number;
   tagged: number;
+  noTag: number;
   problems: string[];
 }
 

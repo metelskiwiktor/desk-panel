@@ -15,10 +15,10 @@ const entry = (tx: string, day: string, amount: number, name: string, category: 
   label: category ? { move: 'spend' as const, category, tags, party: null, recurring: false, comment: '' } : null,
 });
 const ledger: BankLedger = {
-  observedAt: 1, since: '2026-01-01', parties: [], balances: [],
+  observedAt: 1, since: '2026-01-01', parties: [], balances: [], tags: ['terapia', 'apteka'],
   categories: [
     { id: 'c-1', name: 'Psycholog', move: 'spend', color: 'violet', icon: 'brain' }, { id: 'c-2', name: 'Podolog', move: 'spend', color: 'brown', icon: 'tag' },
-    { id: 'c-3', name: 'Apteka', move: 'spend', color: 'red', icon: 'heartPulse' }, { id: 'c-4', name: 'Zdrowie', move: 'spend', color: 'green', icon: 'heartPulse' },
+    { id: 'c-3', name: 'Apteka', move: 'spend', color: 'red', icon: 'heart' }, { id: 'c-4', name: 'Zdrowie', move: 'spend', color: 'green', icon: 'heart' },
     { id: 'c-5', name: 'Pensja', move: 'income', color: 'green', icon: 'banknote' },
   ] as BankLedger['categories'],
   entries: [
@@ -34,7 +34,21 @@ describe('the preview of a merge', () => {
     expect(preview.problems).toEqual([]);
     expect(preview.sources.map(s => [s.name, s.count, s.spent, s.tag])).toEqual([['Psycholog', 2, 300, 'psycholog'], ['Podolog', 1, 120, 'podolog']]);
     expect(preview.into).toMatchObject({ name: 'Zdrowie', created: false, before: { count: 1, spent: 30 }, after: { count: 4, spent: 450 } });
-    expect(preview).toMatchObject({ moved: 3, tagged: 3 });
+    expect(preview).toMatchObject({ moved: 3, tagged: 3, noTag: 0 });
+    expect(preview.into).toMatchObject({ color: 'green', icon: 'heart' });
+  });
+
+  it('says which tags are new and which the user has, what each folded category keeps, and who cannot take a tag', () => {
+    const withLimit: BankLedger = {
+      ...ledger,
+      entries: [...ledger.entries, entry('f', '2026-10-07', -45.5, 'Apteka T.', 'c-3', Array.from({ length: 10 }, (_, i) => `t${i}`))],
+    };
+    const preview = planPreview(withLimit, plan({ merge: ['Psycholog', 'Apteka'] }));
+    expect(preview.sources.map(s => [s.name, s.tag, s.tagState, s.keeps])).toEqual([['Psycholog', 'psycholog', 'new', ['terapia']], ['Apteka', 'apteka', 'exists', ['t0', 't1', 't2', 't3']]]);
+    expect(preview.sources[0].color).toBe('violet');
+    // two Apteka marks: one with room gets the tag, the one holding ten tags does not; both Psycholog marks get it
+    expect(preview).toMatchObject({ moved: 4, tagged: 3, noTag: 1 });
+    expect(planPreview(ledger, plan({ tags: false })).sources.every(s => s.tag === null && s.tagState === null)).toBe(true);
   });
 
   it('makes a category that is not there, and leaves tags out when asked', () => {

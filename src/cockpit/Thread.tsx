@@ -11,7 +11,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
-import { BankPlanCard, CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
+import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
+import { BankPlanCard } from './consent-card';
 import {
   BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
   type BankPlanArgs, type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type WatchArgs,

@@ -77,6 +77,8 @@ export type BankLabelSeed = z.infer<typeof bankLabelSeedSchema>;
 export interface BankLedger {
   observedAt: number | null; since: string;
   categories: BankCategory[]; parties: { id: string; name: string }[]; balances: BankBalance[];
+  /** The tags the user has (the list a new tag is added to), so a plan can tell a new tag from one that exists. */
+  tags: string[];
   entries: { tx: string; op: OpFeatures; label: BankLabel | null; known: string | null; suggestion: BankSuggestion | null; pending: boolean; inReading: boolean }[];
 }
 
@@ -504,7 +506,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
       }));
       return {
         observedAt: reading?.observedAt ?? null, since: file.since, categories: structuredClone(file.categories),
-        parties: file.parties.map(p => ({ id: p.id, name: p.name })), balances: balancesOf(file), entries,
+        parties: file.parties.map(p => ({ id: p.id, name: p.name })), balances: balancesOf(file), tags: [...file.tags], entries,
       };
     },
     async drain() { await tail; },

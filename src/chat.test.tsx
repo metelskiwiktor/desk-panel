@@ -484,9 +484,13 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
       if (url.startsWith('/api/bank/plan')) return reply({
-        into: { name: 'Zdrowie', created: true, color: 'teal', before: { count: 0, spent: 0 }, after: { count: 3, spent: 420 } },
-        sources: [{ id: 'c-1', name: 'Psycholog', count: 2, spent: 300, tag: 'psycholog' }, { id: 'c-2', name: 'Podolog', count: 1, spent: 120, tag: 'podolog' }],
-        moved: 3, tagged: 3, problems: [],
+        into: { name: 'Zdrowie', created: true, color: 'teal', icon: 'heart', before: { count: 0, spent: 0 }, after: { count: 4, spent: 540 } },
+        sources: [
+          { id: 'c-1', name: 'Psycholog', count: 2, spent: 300, color: 'violet', tag: 'psycholog', tagState: 'new', keeps: ['terapia'] },
+          { id: 'c-2', name: 'Podolog', count: 1, spent: 120, color: 'brown', tag: 'podolog', tagState: 'new', keeps: [] },
+          { id: 'c-3', name: 'Apteka', count: 1, spent: 120, color: 'red', tag: 'apteka', tagState: 'exists', keeps: [] },
+        ],
+        moved: 4, tagged: 3, noTag: 1, problems: [],
       });
       if (url === `/api/chats/${H}/bank-plan`) {
         const outcome = { decision: 'applied', at: NOW, into: 'Zdrowie', created: true, moved: 3 };
@@ -637,9 +641,21 @@ describe('the live cockpit (Hermes and the panel)', () => {
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
     const card = await screen.findByRole('region', { name: 'Zgoda na zmianę kategorii' });
     expect(within(card).getByText('Wykonać zmianę?')).toBeTruthy();
-    expect(await within(card).findByText('Po zmianie')).toBeTruthy();
-    expect(within(card).getByText(/Kategorie „Psycholog”, „Podolog” znikną\./)).toBeTruthy();
-    expect(within(card).getByText(/Zmieni 3 oznaczeń/)).toBeTruthy();
+    // The target and its rows: what each category is now, the tags it has, and what it ends with.
+    expect(await within(card).findByText('Teraz')).toBeTruthy();
+    expect(within(card).getAllByText('Zdrowie').length).toBeGreaterThan(0);
+    expect(within(card).getByText('nowa')).toBeTruthy();
+    const rows = within(card).getByTestId('merge-rows');
+    expect(within(rows).getByText('Psycholog').className).toContain('line-through');
+    expect(within(rows).getByText('2 ×')).toBeTruthy();
+    expect(within(rows).getByText('+ #psycholog')).toBeTruthy();
+    expect(within(rows).getAllByText('#terapia')).toHaveLength(2);
+    expect(within(rows).getByText('#apteka')).toBeTruthy();
+    expect(within(rows).getByText('już istnieje')).toBeTruthy();
+    expect(within(rows).queryByText('+ #apteka')).toBeNull();
+    expect(within(card).getAllByLabelText('kategoria zniknie')).toHaveLength(3);
+    expect(within(card).getByText(/Zmieni 4 oznaczeń/)).toBeTruthy();
+    expect(within(card).getByText(/1 oznaczenie ma już komplet etykiet/)).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
     await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
     await waitFor(() => expect(within(card).getByText(/Przeniesiono 3 oznaczeń do „Zdrowie” \(nowa kategoria\)\./)).toBeTruthy());

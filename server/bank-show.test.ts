@@ -8,10 +8,10 @@ const entry = (tx: string, day: string, amount: number, name: string, category: 
   label: category ? { move: extra.move ?? 'spend' as const, category, tags: extra.tags ?? [], party: null, recurring: false, comment: '' } : null,
 });
 const ledger: BankLedger = {
-  observedAt: 1, since: '2026-01-01', parties: [], balances: [],
+  observedAt: 1, since: '2026-01-01', parties: [], balances: [], tags: [],
   categories: [
     { id: 'c-1', name: 'Psycholog', move: 'spend', color: 'violet', icon: 'brain' }, { id: 'c-2', name: 'Podolog', move: 'spend', color: 'brown', icon: 'tag' },
-    { id: 'c-3', name: 'Apteka', move: 'spend', color: 'red', icon: 'heartPulse' }, { id: 'c-4', name: 'Pensja', move: 'income', color: 'green', icon: 'banknote' },
+    { id: 'c-3', name: 'Apteka', move: 'spend', color: 'red', icon: 'heart' }, { id: 'c-4', name: 'Pensja', move: 'income', color: 'green', icon: 'banknote' },
   ] as BankLedger['categories'],
   entries: [
     entry('a', '2026-10-20', -150, 'Gabinet Anna K. 48123456789', 'c-1', { tags: ['terapia'] }), entry('b', '2026-09-20', -150, 'Gabinet Anna K.', 'c-1'),
