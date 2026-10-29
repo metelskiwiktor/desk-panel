@@ -51,7 +51,9 @@ namespace DeskPanel {
             DESKTOP_IMAGE = 3
         }
 
-        [StructLayout(LayoutKind.Explicit)]
+        // Native union is 48 bytes (target mode is the largest); declaring only the source mode made the whole
+        // DISPLAYCONFIG_MODE_INFO 40 bytes instead of 64, so QueryDisplayConfig overran the array (random 0xC0000005).
+        [StructLayout(LayoutKind.Explicit, Size = 48)]
         public struct DISPLAYCONFIG_MODE_INFO_UNION {
             [FieldOffset(0)]
             public DISPLAYCONFIG_SOURCE_MODE sourceMode;
@@ -217,7 +219,7 @@ function Resolve-DeskPanelScreen([string]$Target = 'P16') {
         $match = $displays | Where-Object { $_.DisplayNumber -eq $num } | Select-Object -First 1
         if ($match) { return $match }
     } elseif ($Target -match '^(\\\\.\\)?DISPLAY\d+$') {
-        $match = $displays | Where-Object { $_.DeviceName -imatch "(^|\\)$Target$" } | Select-Object -First 1
+        $match = $displays | Where-Object { $_.DeviceName -imatch ('(^|\\)' + [regex]::Escape($Target) + '$') } | Select-Object -First 1
         if ($match) { return $match }
     }
 
