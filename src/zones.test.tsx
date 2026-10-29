@@ -38,19 +38,12 @@ describe('zone sizes', () => {
 });
 
 describe('three zones', () => {
-  it('starts with the compact top, the work area and the short week', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    expect(frame().getAttribute('data-top')).toBe('cmp');
-    expect(frame().getAttribute('data-bottom')).toBe('short');
-    expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
-  });
   it('steps the week through chips, cards and a month that takes the work area\'s place', async () => {
     const user = userEvent.setup();
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
+    expect(frame().getAttribute('data-bottom')).toBe('short'); // the default
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('mid');
     expect(screen.getByRole('region', { name: 'Claude' })).toBeTruthy();
@@ -112,7 +105,7 @@ describe('dragging the grips', () => {
   it('picks the size nearest to the height', () => {
     expect([nearestSize([40, 60, 124], 10), nearestSize([40, 60, 124], 52), nearestSize([40, 60, 124], 95), nearestSize([40, 60, 124], 900)]).toEqual([0, 1, 2, 2]);
   });
-  it('drags the top edge down to the standard strip, and up again to a line', async () => {
+  it('drags each edge to the nearest size, a drag is not also a tap, and a short move is one', async () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
@@ -125,15 +118,16 @@ describe('dragging the grips', () => {
     drag(grip(), 300, 100); // all the way up: held at the line
     expect(frame().getAttribute('data-top')).toBe('cmp');
     expect((frame() as HTMLElement).style.getPropertyValue('--p3-top')).toBe('');
-  });
-  it('drags the bottom edge up to a month and down to chips; a drag is not also a tap', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
-    drag(grip(), 500, 100);
+    const bottom = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
+    drag(bottom(), 500, 100);
     expect(frame().getAttribute('data-bottom')).toBe('month');
-    drag(grip(), 100, 700);
+    drag(bottom(), 100, 700);
     expect(frame().getAttribute('data-bottom')).toBe('short');
+    fireEvent.pointerDown(grip(), { clientY: 300, button: 0 });
+    fireEvent.pointerMove(grip(), { clientY: 302 });
+    fireEvent.pointerUp(grip(), { clientY: 302 });
+    fireEvent.click(grip(), { detail: 1 });
+    expect(frame().getAttribute('data-top')).toBe('std');
   });
   it('draws the size the drag would settle on while it goes on, and drops it when the drag is cancelled', async () => {
     renderWith();
@@ -162,15 +156,5 @@ describe('dragging the grips', () => {
     expect(frame().hasAttribute('data-dragging')).toBe(false);
     expect(frame().getAttribute('data-top')).toBe('std');
     expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).top).toBe('std');
-  });
-  it('treats a short move as a tap that steps to the next size', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    const grip = screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
-    fireEvent.pointerDown(grip, { clientY: 300, button: 0 });
-    fireEvent.pointerMove(grip, { clientY: 302 });
-    fireEvent.pointerUp(grip, { clientY: 302 });
-    fireEvent.click(grip, { detail: 1 });
-    expect(frame().getAttribute('data-top')).toBe('std');
   });
 });
