@@ -130,6 +130,9 @@ describe('the answer on the card', () => {
       expect(applied.status).toBe(200);
       const outcome = await applied.json();
       expect(outcome).toMatchObject({ decision: 'applied', into: 'Stałe opłaty', created: true, moved: preview.moved });
+      // what the card showed is kept with the answer: after the merge its categories are gone
+      expect(outcome.preview).toMatchObject({ into: { name: 'Stałe opłaty', created: true }, moved: preview.moved });
+      expect(outcome.preview.sources.map((x: { name: string }) => x.name)).toEqual(['Subskrypcje', 'Rachunki']);
       const after = await sources.bankLedger();
       expect(after.categories.map(c => c.name)).toContain('Stałe opłaty');
       expect(after.categories.map(c => c.name)).not.toContain('Subskrypcje');
@@ -145,7 +148,8 @@ describe('the answer on the card', () => {
   it('a rejection changes nothing and is kept', async () => {
     await withServer(async (base, sources) => {
       const before = (await sources.bankLedger()).categories.map(c => c.name);
-      expect(await (await post(base, { toolCallId: OK, decision: 'reject' })).json()).toMatchObject({ decision: 'rejected' });
+      const rejected = await (await post(base, { toolCallId: OK, decision: 'reject' })).json();
+      expect(rejected).toMatchObject({ decision: 'rejected', preview: { into: { name: 'Stałe opłaty' } } });
       expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
       expect((await (await post(base, { toolCallId: OK, decision: 'apply' })).json())).toMatchObject({ decision: 'rejected' });
     });

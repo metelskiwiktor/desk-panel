@@ -5,7 +5,7 @@ import {
   watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { stepOverridesSchema } from '../src/cezar-contract';
-import { bankPlanSchema, type BankPlan, type BankPlanOutcome } from '../src/bank-plan-contract';
+import { bankPlanSchema, type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { BankPlanError, planPreview } from './bank-plan';
 import { SourceError, type PanelSources } from './sources';
 import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
@@ -26,8 +26,8 @@ const outcomeSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string(), created: z.boolean(), moved: z.number() }),
-  z.object({ decision: z.literal('rejected'), at: z.number() }),
+  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string(), created: z.boolean(), moved: z.number(), preview: z.unknown().optional() }),
+  z.object({ decision: z.literal('rejected'), at: z.number(), preview: z.unknown().optional() }),
 ]);
 const storeSchema = z.object({
   version: z.literal(1),
@@ -162,7 +162,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           }
         }
       }
-      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } };
+      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'] };
     },
 
     async dispatch(chatId, input) {
@@ -205,22 +205,27 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     async bankPlan(chatId, input, plan) {
       const chat = chatOf(chatId);
       const known = chat.bankPlans[input.toolCallId];
-      if (known) return known;
+      if (known) return known as BankPlanOutcome;
       const key = `${chatId}:${input.toolCallId}`;
       const pending = pendingBankPlans.get(key);
       if (pending) return pending;
       const operation = (async (): Promise<BankPlanOutcome> => {
         let outcome: BankPlanOutcome;
-        if (input.decision === 'reject') outcome = { decision: 'rejected', at: now() };
+        if (input.decision === 'reject') {
+          // What was proposed stays on the card: worked out as it was when the user said no (it may not be possible any more).
+          let preview: BankPlanPreview | undefined;
+          try { const worked = planPreview(await sources.bankLedger(), plan); if (!worked.problems.length) preview = worked; } catch { /* the card then works it out anew */ }
+          outcome = { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        }
         else {
           if (!sources.bankLedger || !sources.bankLabelAction) throw new SourceError(503);
           // Worked out again now, from what is kept now: the card's preview may be old.
           const preview = planPreview(await sources.bankLedger(), plan);
           if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
           const result = await sources.bankLabelAction({ action: 'mergeInto', from: preview.sources.map(s => s.id), into: plan.into, tags: plan.tags });
-          outcome = { decision: 'applied', at: now(), into: preview.into.name, created: !!result.category?.created, moved: result.removed ?? preview.moved };
+          outcome = { decision: 'applied', at: now(), into: preview.into.name, created: !!result.category?.created, moved: result.removed ?? preview.moved, preview };
         }
-        chat.bankPlans[input.toolCallId] = outcome;
+        chat.bankPlans[input.toolCallId] = outcome as typeof chat.bankPlans[string];
         chat.updatedAt = now();
         save();
         return outcome;

@@ -36,10 +36,14 @@ export interface BankPlanPreview {
   problems: string[];
 }
 
-/** What the user's answer on the card left behind, kept with the conversation so the card shows it again. */
+/**
+ * What the user's answer on the card left behind, kept with the conversation so the card shows it again. `preview` is what
+ * the card showed when the user answered: after a merge its categories are gone and it could not be worked out again, and
+ * a rejected card should still show what was proposed (older answers have none; a rejected plan is then worked out anew).
+ */
 export type BankPlanOutcome =
-  | { decision: 'applied'; at: number; into: string; created: boolean; moved: number }
-  | { decision: 'rejected'; at: number };
+  | { decision: 'applied'; at: number; into: string; created: boolean; moved: number; preview?: BankPlanPreview }
+  | { decision: 'rejected'; at: number; preview?: BankPlanPreview };
 
 /** The decision the card sends: only which card and yes or no; the plan is read from the conversation, never from the request. */
 export const bankPlanDecisionSchema = z.object({

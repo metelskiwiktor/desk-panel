@@ -62,10 +62,10 @@ const kept = `${chip} tw:bg-ck-surface-2 tw:text-ck-muted`;
  * new category, and the tags its things end with). A thing that goes is struck through with a minus; a new tag is green
  * with a plus; a tag the user has already or that stays is grey.
  */
-export function MergeBody({ preview }: { preview: BankPlanPreview }) {
+export function MergeBody({ preview, state = 'open' }: { preview: BankPlanPreview; state?: 'open' | 'applied' | 'rejected' }) {
   const Icon = ICONS[preview.into.icon] ?? ICONS.tag;
   const rows = preview.sources;
-  return <div className="tw:grid tw:gap-1.5">
+  return <div className={`tw:grid tw:gap-1.5 ${state === 'rejected' ? 'tw:opacity-55' : ''}`} data-state={state}>
     <div style={COLUMNS}>
       <div className="tw:self-end tw:pb-1.5 tw:pl-0.5 tw:text-xs tw:text-ck-muted">Teraz</div>
       <div />
@@ -124,10 +124,12 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const key = plan.success ? JSON.stringify(plan.data) : '';
   const decided = result && typeof result === 'object' && ['applied', 'rejected'].includes((result as { decision?: string }).decision ?? '') ? result as BankPlanOutcome : undefined;
   const [state, setState] = useState<{ key: string; data?: BankPlanPreview; error?: string }>({ key: '' });
+  // A rejected card whose answer kept no preview (an older one) is worked out anew: its categories are still there.
+  const needsPreview = !decided || (decided.decision === 'rejected' && !decided.preview);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
-    if (!plan.success || decided) return;
+    if (!plan.success || !needsPreview) return;
     const params = new URLSearchParams({ into: plan.data.into, tags: plan.data.tags ? '1' : '0' });
     for (const name of plan.data.merge) params.append('merge', name);
     let gone = false;
@@ -138,8 +140,8 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
     }, () => { if (!gone) setState({ key, error: 'Nie udało się pobrać podglądu zmiany.' }); });
     return () => { gone = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the plan
-  }, [key, !!decided]);
-  const preview = state.key === key ? state.data : undefined;
+  }, [key, needsPreview]);
+  const preview = decided?.preview ?? (state.key === key ? state.data : undefined);
   const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Zmiana w kategoriach';
   // Until the card has its stable id (the answer is over and its arguments are in), a decision could not be tied to it.
   const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
@@ -163,7 +165,7 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
       {plan.success && !preview && !state.error && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Liczę podgląd…</p>}
       {preview?.problems.map(p => <p key={p} className={refusedNote} role="alert">{p}</p>)}
     </>}
-    body={open && ok ? <MergeBody preview={preview} /> : undefined}
+    body={ok ? <MergeBody preview={preview} state={decided ? decided.decision : 'open'} /> : undefined}
     footnote={open && ok ? <MergeLegend preview={preview} /> : undefined}
     outcome={decided?.decision === 'applied'
       ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Przeniesiono {decided.moved} oznaczeń do „{decided.into}”{decided.created ? ' (nowa kategoria)' : ''}.</p>

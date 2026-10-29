@@ -473,6 +473,15 @@ describe('the live cockpit (Hermes and the panel)', () => {
     id: RUN, title: 'Paski stref', status: 'RUNNING', repo: 'desk-panel', worktree: '.ai/cezar/worktrees/f2c9501e', tokens: 12_345,
     url: 'http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e', steps: [{ label: 'Implement', state: 'running' }, { label: 'Open PR', state: 'pending' }], progress: 0.5,
   };
+  const planPreviewMock = {
+        into: { name: 'Zdrowie', created: true, color: 'teal', icon: 'heart', before: { count: 0, spent: 0 }, after: { count: 4, spent: 540 } },
+        sources: [
+          { id: 'c-1', name: 'Psycholog', count: 2, spent: 300, color: 'violet', tag: 'psycholog', tagState: 'new', keeps: ['terapia'] },
+          { id: 'c-2', name: 'Podolog', count: 1, spent: 120, color: 'brown', tag: 'podolog', tagState: 'new', keeps: [] },
+          { id: 'c-3', name: 'Apteka', count: 1, spent: 120, color: 'red', tag: 'apteka', tagState: 'exists', keeps: [] },
+        ],
+        moved: 4, tagged: 3, noTag: 1, problems: [],
+      };
   function liveServer() {
     const calls: Call[] = [];
     let cockpit: ReturnType<typeof view> & { dispatches: Record<string, unknown> } = view();
@@ -483,17 +492,9 @@ describe('the live cockpit (Hermes and the panel)', () => {
       calls.push({ url, method, body });
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
-      if (url.startsWith('/api/bank/plan')) return reply({
-        into: { name: 'Zdrowie', created: true, color: 'teal', icon: 'heart', before: { count: 0, spent: 0 }, after: { count: 4, spent: 540 } },
-        sources: [
-          { id: 'c-1', name: 'Psycholog', count: 2, spent: 300, color: 'violet', tag: 'psycholog', tagState: 'new', keeps: ['terapia'] },
-          { id: 'c-2', name: 'Podolog', count: 1, spent: 120, color: 'brown', tag: 'podolog', tagState: 'new', keeps: [] },
-          { id: 'c-3', name: 'Apteka', count: 1, spent: 120, color: 'red', tag: 'apteka', tagState: 'exists', keeps: [] },
-        ],
-        moved: 4, tagged: 3, noTag: 1, problems: [],
-      });
+      if (url.startsWith('/api/bank/plan')) return reply(planPreviewMock);
       if (url === `/api/chats/${H}/bank-plan`) {
-        const outcome = { decision: 'applied', at: NOW, into: 'Zdrowie', created: true, moved: 3 };
+        const outcome = { decision: 'applied', at: NOW, into: 'Zdrowie', created: true, moved: 3, preview: planPreviewMock };
         cockpit = view({ bankPlans: { 'a8:b1': outcome } });
         return reply(outcome);
       }
@@ -659,6 +660,10 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
     await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
     await waitFor(() => expect(within(card).getByText(/Przeniesiono 3 oznaczeń do „Zdrowie” \(nowa kategoria\)\./)).toBeTruthy());
+    // What was proposed stays on the card after the answer (its categories are gone, so it is the preview kept with the answer).
+    const after = within(card).getByTestId('merge-rows');
+    expect(within(after).getByText('+ #psycholog')).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
     const answer = calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!;
     expect(answer.method).toBe('POST');
     expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
