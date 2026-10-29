@@ -11,7 +11,7 @@
         "order": [["panel_guide", "panel_bank_assign"]]
       },
       "soft": [
-        { "name": "nie liczy w terminalu", "text": "^(?![\s\S]*(python|execute_code))" },
+        { "name": "nie liczy w terminalu", "text": "^(?![\\s\\S]*(python|execute_code))" },
         { "name": "krótko (do 5 zdań)", "text": "^(?:[^.!?]*[.!?]){0,5}[^.!?]*$" }
       ]
     }
