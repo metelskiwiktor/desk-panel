@@ -111,16 +111,10 @@ pasujących); etykiety pokazują wybrane i osiem najczęstszych, resztę znajduj
 „to ktoś inny” robi nową o tej samej nazwie. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
 
 Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc salda rozliczeń i przyszłe widoki
-operacji cyklicznych mają całą historię bez migracji. Pliki wcześniejszych wersji są przenoszone same przy odczycie, bez pytania:
+operacji cyklicznych mają całą historię bez migracji. Plik ma wersję 4 (ruch, jedna oś, druga strona bez rodzaju). Kod, który przenosił pliki
+wersji 1–3 przy odczycie, usunięto po przeniesieniu jedynego pliku; starszy plik trafia do kopii obok i oznaczenia zaczynają się od zera
+(historia gita ma ten kod, commit przed `6c9634d`).
 
-| Wcześniej | Teraz |
-| --- | --- |
-| kategoria | jej ruch: kategoria używana wyłącznie przy wpływach staje się źródłem przychodu, każda inna kategorią wydatku |
-| kategoria „Pożyczka” (wersje 1–2), cel pożyczka, zwrot, dług bez kategorii | Rozliczenie z tą osobą |
-| strona „Ja” i wpływ | Przychód ze źródła „Pensja” (tworzonego, gdy go nie ma) |
-| strona „Ja” i wypływ | Przełożenie |
-| inny cel (dokładka, prezent) | etykieta; ruch z kategorii albo, bez niej, Wydatek lub Przychód według znaku |
-| rodzaj strony (osoba, firma, Ja) | znika; identyfikatory zostają |
 ### Druga strona i jej identyfikatory
 
 Druga strona (`k-…`; `p-…` i `m-…` to osoby i sprzedawcy z wcześniejszych wersji) to encja z listą identyfikatorów. Co bank faktycznie
