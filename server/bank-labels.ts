@@ -60,118 +60,6 @@ export const bankLabelFileSchema = z.object({
 });
 export type BankLabelFile = z.infer<typeof bankLabelFileSchema>;
 
-/**
- * Earlier versions. The first had a category, a person, recurring and a comment; the second added tags and merchants; the third
- * made people and merchants one other side with a kind (person, company, the user themself) and gave people a purpose. Each is
- * read into the third's shape and then into moves (`toMoves`).
- */
-const plainCategory = bankCategorySchema.omit({ move: true });
-const ownerSchema = z.object({ id: bankPartyId, name: z.string(), createdAt: z.number(), identifiers: z.array(identifierSchema) });
-const oldLabel = z.object({
-  category: bankCategoryId.nullable(), recurring: z.boolean(), person: bankPartyId.nullable(), comment: z.string(), labeledAt: z.number(), op: opSchema,
-  tags: z.array(tagText).default([]), merchant: bankPartyId.nullable().default(null),
-});
-const thirdSchema = z.object({
-  version: z.literal(3), secret: z.string().min(32), since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), categories: z.array(plainCategory), tags: z.array(tagText),
-  purposes: z.array(tagText), parties: z.array(ownerSchema.extend({ kind: z.enum(['person', 'company', 'self']) })),
-  labels: z.record(z.string().max(200), z.object({
-    category: bankCategoryId.nullable(), tags: z.array(tagText), party: bankPartyId.nullable(), purpose: tagText.nullable(), recurring: z.boolean(), comment: z.string(),
-    labeledAt: z.number(), op: opSchema,
-  })),
-  rejections: z.array(rejectionSchema),
-});
-type Third = z.infer<typeof thirdSchema>;
-/** The first two versions as the third: people and merchants become sides, a "Pożyczka" category the purpose "pożyczka" or "zwrot". */
-const olderSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]), secret: z.string().min(32), since: z.string(), categories: z.array(plainCategory),
-  tags: z.array(tagText).default([]), merchants: z.array(ownerSchema).default([]), people: z.array(ownerSchema), labels: z.record(z.string(), oldLabel),
-}).transform((old): Third => {
-  const loans = new Set(old.categories.filter(c => /po[zż]yczk/i.test(c.name)).map(c => c.id));
-  const labels = Object.fromEntries(Object.entries(old.labels).map(([tx, l]) => {
-    const loan = !!l.category && loans.has(l.category);
-    return [tx, {
-      category: loan ? null : l.category, tags: l.tags, party: l.person ?? l.merchant, purpose: loan ? (l.op.amount < 0 ? 'pożyczka' : 'zwrot') : null,
-      recurring: l.recurring, comment: l.comment, labeledAt: l.labeledAt, op: l.op,
-    }];
-  }));
-  const purposes = [...new Set(Object.values(labels).map(l => l.purpose).filter((p): p is string => !!p))];
-  return {
-    version: 3, secret: old.secret, since: old.since, categories: old.categories.filter(c => !loans.has(c.id)), tags: old.tags, purposes, rejections: [], labels,
-    parties: [...old.people.map(p => ({ ...p, kind: 'person' as const })), ...old.merchants.map(m => ({ ...m, kind: 'company' as const }))],
-  };
-});
-/**
- * The old lists of people and merchants could both hold one name ("pyszne.pl"), and the upgrade kept both. Such twins (ids `p-…`
- * and `m-…` from those lists) that learnt nothing to tell them apart are one side: their marks move to the first of the name,
- * preferring one that already has identifiers. Returns whether anything changed. Sides made since (`k-…`) are never folded, since
- * two of one name are then the user's own choice, and neither is one with identifiers, which is what tells two of a name apart.
- */
-const OLD_SIDE = /^[pm]-/;
-function mergeTwins(file: BankLabelFile): boolean {
-  const keep = new Map<string, StoredParty>();
-  for (const p of file.parties.filter(p => OLD_SIDE.test(p.id))) {
-    const name = p.name.trim().toLowerCase();
-    if (!keep.has(name) || (p.identifiers.length > 0 && keep.get(name)!.identifiers.length === 0)) keep.set(name, p);
-  }
-  const into = new Map<string, string>();
-  for (const p of file.parties.filter(p => OLD_SIDE.test(p.id))) {
-    const target = keep.get(p.name.trim().toLowerCase())!;
-    if (p !== target && p.identifiers.length === 0) into.set(p.id, target.id);
-  }
-  if (!into.size) return false;
-  for (const l of Object.values(file.labels)) if (l.party && into.has(l.party)) l.party = into.get(l.party)!;
-  file.parties = file.parties.filter(p => !into.has(p.id));
-  return true;
-}
-
-/** A purpose that says money is to come back or was given back; any other purpose ("dokładka", "prezent") was what it went on. */
-const SETTLING = /po[zż]ycz|zwrot|d[lł]ug|odda/i;
-/**
- * The third version into moves, without asking. A category used only on money that came in becomes an income source, any other
- * stays a spending category, and a mark with one takes its move. A loan or its return (a settling purpose) is a settlement. The
- * user's own side was their company or another own account: money in from it is income from the source "Pensja" (made when
- * needed, as the user's company pays the salary), money out a move between own accounts. Every other purpose becomes a tag, and
- * the kinds of sides go: the move says what the money did.
- */
-function toMoves(old: Third): BankLabelFile {
-  const marks = Object.values(old.labels);
-  const income = new Set(old.categories.filter(c => {
-    const used = marks.filter(l => l.category === c.id);
-    return used.length > 0 && used.every(l => l.op.amount > 0);
-  }).map(c => c.id));
-  const categories: BankCategory[] = old.categories.map(c => ({ ...c, move: income.has(c.id) ? 'income' : 'spend' }));
-  const kinds = new Map(old.parties.map(p => [p.id, p.kind]));
-  const tags = [...old.tags];
-  const keep = (tag: string) => { if (!tags.some(t => same(t, tag))) tags.push(tag); return tags.find(t => same(t, tag))!; };
-  let salary: string | undefined;
-  const labels = Object.fromEntries(Object.entries(old.labels).map(([tx, l]) => {
-    const settling = !!l.purpose && SETTLING.test(l.purpose) && !l.category && !!l.party;
-    const extra = l.purpose && !settling ? [keep(l.purpose)] : [];
-    let move: BankLabel['move'] = null, category = l.category;
-    if (l.category) move = income.has(l.category) ? 'income' : 'spend';
-    else if (settling) move = 'settle';
-    else if (kinds.get(l.party ?? '') === 'self') {
-      if (l.op.amount > 0) {
-        salary ??= categories.find(c => c.move === 'income' && same(c.name, 'Pensja'))?.id;
-        if (!salary) {
-          salary = `c-${randomUUID().slice(0, 8)}`;
-          const used = new Set(categories.map(c => c.color));
-          categories.push({ id: salary, name: 'Pensja', move: 'income', color: used.has('green') ? BANK_COLORS.find(c => !used.has(c)) ?? 'green' : 'green', icon: 'banknote' });
-        }
-        move = 'income'; category = salary;
-      } else move = 'move';
-    } else if (l.purpose) move = l.op.amount < 0 ? 'spend' : 'income';
-    return [tx, {
-      move, category, tags: [...new Set([...l.tags, ...extra])].slice(0, BANK_LABEL_LIMITS.tagsPerMark), party: l.party, recurring: l.recurring, comment: l.comment,
-      labeledAt: l.labeledAt, op: l.op,
-    }];
-  }));
-  return {
-    version: 4, secret: old.secret, since: old.since, categories: categories.slice(0, BANK_LABEL_LIMITS.categories), tags: tags.slice(0, BANK_LABEL_LIMITS.tags),
-    parties: old.parties.map(({ kind: _, ...p }) => p), labels, rejections: old.rejections,
-  };
-}
-
 /** What a scenario file may start with: no key and no hashes (they are made from the scenario's own numbers). */
 export const bankLabelSeedSchema = z.object({
   since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -266,14 +154,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         }
         if (raw === null) { data = fresh(); await options.persistence.write(data); message = undefined; return data; }
         const parsed = bankLabelFileSchema.safeParse(raw);
-        if (parsed.success) {
-          data = parsed.data; message = undefined;
-          if (mergeTwins(data)) await options.persistence.write(data);
-          return data;
-        }
-        const third = thirdSchema.safeParse(raw);
-        const old = third.success ? third : olderSchema.safeParse(raw);
-        if (old.success) { data = toMoves(old.data); mergeTwins(data); await options.persistence.write(data); message = undefined; return data; }
+        if (parsed.success) { data = parsed.data; message = undefined; return data; }
         // Never write over what cannot be read: keep it aside and start again, and say so.
         const aside = await options.persistence.aside?.().catch(() => null);
         message = `Plik z oznaczeniami operacji był uszkodzony${aside ? ` (zachowany jako ${path.basename(aside)})` : ''}; zaczynasz od pustych oznaczeń.`;
