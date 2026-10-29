@@ -725,7 +725,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(card).getByText(/Zaznaczone: 3 operacji, [-−]69,76/)).toBeTruthy();
     // payments with no shop name that have a lead: nothing is ticked for the user, the lead is written out in full, ticking takes it
     const pool = within(card).getByTestId('assign-pool');
-    expect(within(pool).getAllByTestId('assign-hint').map(h => h.textContent)).toEqual(Array(2).fill('ta sama kwota: Wydatek · Jedzenie · pyszne.pl, 3 razy'));
+    expect(within(pool).getAllByTestId('assign-hint').map(h => h.textContent)).toEqual(Array(2).fill('ta sama kwota: Wydatek · Jedzenie · pyszne.pl (notatka), 3 razy'));
     expect(within(pool).getByText(/Z tej sekcji do zapisu: 0 płatności\. Pominięto 4 bez tropu\./)).toBeTruthy();
     await user.click(within(pool).getByRole('checkbox', { name: /Przyjmij 2026-10-06 [-−]80,59 zł/ }));
     await user.click(within(pool).getByRole('checkbox', { name: /Przyjmij 2026-09-22 [-−]80,59 zł/ }));

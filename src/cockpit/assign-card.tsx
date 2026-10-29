@@ -201,8 +201,8 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
   </div>;
 }
 
-/** A template in words; the other side the user gave it is shown only where the template is not one recipient's own. */
-const templateLabel = (t: BankAssignTemplate, withParty: boolean) => `${markLabel(t.mark)}${withParty && t.party ? ` · ${t.party}` : ''}`;
+/** A template in words; the other side the user gave it is shown only where the template is not one recipient's own, and as what it is: the user's note (the bank did not name it). */
+const templateLabel = (t: BankAssignTemplate, withParty: boolean) => `${markLabel(t.mark)}${withParty && t.party ? ` · ${t.party} (notatka)` : ''}`;
 
 /** How many payments of the pool have a pick (and what they sum to). */
 function poolCounted(pool: BankAssignPool | null, sel: AssignSelection) {
