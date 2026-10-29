@@ -64,8 +64,11 @@ ma jedną oś, a nowe pytanie to etykieta, nie kolejna oś. Do tego druga strona
 to samo imię), etykiety, cykliczne, opis, w `~/.desk-panel/bank-labels.dpapi`;
 metoda płatności idzie z banku. Zapis tylko `POST /api/bank/labels/action` (Origin-checked), lokalny, nic nie idzie do banku. Podpowiedzi
 tylko przez pewne powiązania (tekst sprzedawcy, rachunek, telefon, nazwa z banku; bez nazwy wyłącznie ta sama kwota jako wybór), bez
-przedziałów kwot i zgadywania (`server/bank-suggest.ts`); nigdy nie przypisują same. Agent czatu widzi bank i oznaczenia tylko do odczytu w `/api/agent/bank` (strony po nazwie,
-bez pełnych numerów) i nie zmienia oznaczeń. Nigdy nie proś o dane logowania do banku: zgodę wydaje użytkownik w iPKO/IKO.
+przedziałów kwot i zgadywania (`server/bank-suggest.ts`); nigdy nie przypisują same. Agent czatu widzi bank i oznaczenia do odczytu w `/api/agent/bank` (strony po nazwie,
+bez pełnych numerów) i pokazuje wydatki kartą (`panel_show`, wiersze czyta sama karta z `/api/bank/show`). Zmiany nie robi sam: scalenie
+kategorii wydatków tylko proponuje kartą zgody (`panel_bank_propose`, docs/bank.md), a panel zmienia oznaczenia dopiero po kliknięciu
+użytkownika (`POST /api/chats/:id/bank-plan`, Origin-checked; plan czyta z rozmowy, nie z żądania). Jak dawać Wektorowi nowe
+umiejętności i testować jego rozmowy: `.claude/skills/wektor-capabilities`. Nigdy nie proś o dane logowania do banku: zgodę wydaje użytkownik w iPKO/IKO.
 
 Chat engines (docs/hermes.md): a conversation runs on Hermes Agent (default for new chats, preference in
 `~/.desk-panel/chat-settings.json`) or agy, fixed for its life; old chats without `engine` are agy's. Hermes is reached only

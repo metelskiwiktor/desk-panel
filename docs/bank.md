@@ -190,3 +190,20 @@ zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/ba
 `recurring`, `comment`) to oznaczenia na start; drugie strony uczą się identyfikatorów z nich jak z gestu, a akcje są
 pamiętane w pamięci do restartu. Scenariusz standardowy ma rozliczenie z Anną (saldo „Anna czeka na zwrot 120 zł”), pensję z firmy i sprzedaż
 laptopa jako przychody, pewne podpowiedzi (Biedronka, Claude, Moja firma, Anna) i wybór po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.
+
+## Wektor i bank: karta danych i karta zgody
+
+Czat (Wektor, Hermes) czyta bank narzędziami `panel_bank` (tekst) i `panel_show` (karta z wierszami). Karta danych (`GET /api/bank/show`:
+`view` tabela albo słupki, `kategorie` po nazwie, `nieoznaczone`, `from`/`to`) czyta wiersze sama, a model dostaje tylko podsumowanie:
+sumy, od kiedy są oznaczenia, ile wydatków jest nieoznaczonych i nazwy operacji w pokazanych oraz w innych kategoriach.
+
+Zmianę Wektor może tylko zaproponować: `panel_bank_propose` (`merge` dokładne nazwy kategorii wydatków, `into` nazwa docelowa, nowa albo
+istniejąca, `tags` czy zostawić nazwy scalanych kategorii jako etykiety). Karta zgody pokazuje podgląd liczony przez panel
+(`GET /api/bank/plan`): wiersze „ile × kategoria, jej etykiety” po lewej, wspólną strzałkę, po prawej kategorię docelową z nowymi
+etykietami (zielone, z plusem) i tymi, które już są; kategoria, która znika, jest przekreślona z minusem. Nic się nie zmienia, dopóki
+użytkownik nie kliknie „Wykonaj”: wtedy `POST /api/chats/:id/bank-plan` (tylko id karty i decyzja) bierze plan z rozmowy, liczy go
+jeszcze raz i wykonuje jedną atomową akcją `mergeInto`. Decyzja i podgląd z chwili odpowiedzi zostają przy rozmowie
+(`~/.desk-panel/cockpit.json`), więc karta pokazuje je także później. Wektor nie pokazuje karty z własnej inicjatywy przy samej prośbie o
+radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźnej prośbie o zmianę. Id karty to skrót z planu
+(`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
+(skill „Bank” i część preambuły).
