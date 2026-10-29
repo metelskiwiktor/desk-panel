@@ -18,6 +18,8 @@ import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { bankShowQuerySchema } from '../src/bank-show-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { planPreview } from './bank-plan';
+import { bankAssignSchema } from '../src/bank-assign-contract';
+import { assignPreview } from './bank-assign';
 import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 
@@ -134,6 +136,18 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         res.end(JSON.stringify(planPreview(await sources.bankLedger(), plan.data)));
       } catch (error) {
         res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać podglądu zmiany.' }));
+      }
+      return;
+    }
+    if (url.pathname === '/api/bank/assign') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const plan = bankAssignSchema.safeParse({ from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
+        if (!plan.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(assignPreview(await sources.bankLedger(), plan.data)));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać podglądu oznaczeń.' }));
       }
       return;
     }

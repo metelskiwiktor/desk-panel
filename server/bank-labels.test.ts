@@ -141,6 +141,22 @@ describe('bank label store', () => {
     expect((await store.read()).data!.pending).toEqual([]);
   });
 
+  it('accepts the sure suggestions of many operations in one write, or none', async () => {
+    const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
+    const { store } = setup(ops);
+    const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
+    const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', move: 'income', category: salary, party: mine, recurring: true });
+    // one of them has no sure suggestion: nothing is marked
+    await expect(store.apply({ action: 'acceptMany', txs: ['acc:O;2', 'acc:O;4'] })).rejects.toMatchObject({ status: 409 });
+    expect((await store.read()).data!.pending).toContain('acc:O;2');
+    expect(await store.apply({ action: 'acceptMany', txs: ['acc:O;2', 'acc:O;3'] })).toMatchObject({ ok: true, assigned: 2 });
+    const data = (await store.read()).data!;
+    expect(data.labels['acc:O;3']).toMatchObject({ move: 'income', category: salary, party: mine, recurring: true });
+    expect(data.pending).not.toContain('acc:O;2');
+    await expect(store.apply({ action: 'acceptMany', txs: [] })).rejects.toMatchObject({ status: 400 });
+  });
+
   it('refuses what it cannot do and changes nothing then', async () => {
     const persistence = memory();
     const { store } = setup([map(raw.card('O;1', '2026-10-26', '43.90'))], persistence);

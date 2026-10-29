@@ -14,6 +14,8 @@ import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
 import { bankPlanSchema, BANK_PLAN_LIMITS } from '../src/bank-plan-contract';
 import { GUIDE_TOPICS, PANEL_GUIDES } from '../src/chat-contract';
 import { planPreview } from './bank-plan';
+import { bankAssignSchema } from '../src/bank-assign-contract';
+import { assignPreview } from './bank-assign';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
 import { SourceError, type PanelSources } from './sources';
@@ -361,6 +363,21 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       return `${CARD_SHOWN.bankPlan}: ${preview.moved} operacji z ${preview.sources.map(s => `„${s.name}”`).join(', ')} przejdzie do „${preview.into.name}”${preview.into.created ? ' (nowa kategoria)' : ''}; zmienia dopiero kliknięcie użytkownika. Nie pisz, że zmieniłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
+  panel_bank_assign: {
+    description: cockpitToolDescription('panel_bank_assign'),
+    input: bankAssignSchema.extend({ tytul: text(80).optional() }).strict(),
+    schema: schema({
+      tytul: { type: 'string', description: 'Krótki tytuł karty po polsku' },
+      from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD operacji do oznaczenia (domyślnie wszystkie zapisane)' },
+      to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie' },
+    }),
+    async run(args, { sources }) {
+      const preview = assignPreview(await sources.bankLedger(), bankAssignSchema.parse(args));
+      if (preview.problems.length) throw new AgentViewError(400, preview.problems.join(' '));
+      const count = preview.groups.reduce((sum, g) => sum + g.count, 0);
+      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru i nie wejdzie na kartę. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
+    },
+  },
   panel_cockpit_clear: {
     description: cockpitToolDescription('panel_cockpit_clear'),
     input: z.object({}).strict(), schema: schema(),
@@ -407,7 +424,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };

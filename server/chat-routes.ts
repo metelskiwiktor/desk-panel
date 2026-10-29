@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type ZodType } from 'zod';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
 import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
+import { bankAssignSchema } from '../src/bank-assign-contract';
 import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
@@ -120,14 +121,20 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       const input = parse(bankPlanDecisionSchema, await readBody(req));
       const conversation = await chat.get(id);
       const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
-        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_bank_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && (p.name.includes('panel_bank_propose') || p.name.includes('panel_bank_assign')) && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
         : []) : [];
       // The id comes from the plan, so the same plan twice in one answer is one card.
       if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
       const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
-      if (cardRefusal('bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      if (cardRefusal(card.name.includes('panel_bank_assign') ? 'bankAssign' : 'bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      const bad = () => new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+      if (card.name.includes('panel_bank_assign')) {
+        let plan;
+        try { plan = bankAssignSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
+        return json(res, 200, await cockpit.bankAssign(id, input, plan)), true;
+      }
       let plan;
-      try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
+      try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
       return json(res, 200, await cockpit.bankPlan(id, input, plan)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);

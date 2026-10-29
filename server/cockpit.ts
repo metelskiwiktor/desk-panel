@@ -7,6 +7,8 @@ import {
 import { stepOverridesSchema } from '../src/cezar-contract';
 import { bankPlanSchema, type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { BankPlanError, planPreview } from './bank-plan';
+import { assignPreview, assignTxs } from './bank-assign';
+import type { BankAssign, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
 import { SourceError, type PanelSources } from './sources';
 import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
 
@@ -26,7 +28,7 @@ const outcomeSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string(), created: z.boolean(), moved: z.number(), preview: z.unknown().optional() }),
+  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string().optional(), created: z.boolean().optional(), moved: z.number().optional(), assigned: z.number().optional(), skipped: z.array(z.string()).optional(), preview: z.unknown().optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number(), preview: z.unknown().optional() }),
 ]);
 const storeSchema = z.object({
@@ -108,6 +110,8 @@ export interface Cockpit {
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
   /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. Answered twice: done once. */
   bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
+  /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
+  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject'; skip?: string[] }, plan: BankAssign): Promise<BankAssignOutcome>;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
@@ -128,6 +132,25 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, updatedAt: now() };
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
   const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
+  const pendingAssigns = new Map<string, Promise<BankAssignOutcome>>();
+  /** A bank card is answered once: the kept answer, one still being worked, or the work (kept when it finishes). */
+  async function decideBankCard<T extends BankAssignOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
+    const chat = chatOf(chatId);
+    const known = chat.bankPlans[toolCallId];
+    if (known) return known as unknown as T;
+    const key = `${chatId}:${toolCallId}`;
+    const pending = pendingAssigns.get(key);
+    if (pending) return pending as Promise<T>;
+    const operation = (async () => {
+      const outcome = await work();
+      chat.bankPlans[toolCallId] = outcome as unknown as typeof chat.bankPlans[string];
+      chat.updatedAt = now();
+      save();
+      return outcome;
+    })();
+    pendingAssigns.set(key, operation);
+    try { return await operation; } finally { pendingAssigns.delete(key); }
+  }
 
   const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
   async function prOf(url: string, fallback: { title: string; branch?: string }): Promise<CockpitPrView> {
@@ -200,6 +223,25 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       })();
       pendingDispatches.set(key, operation);
       try { return await operation; } finally { pendingDispatches.delete(key); }
+    },
+
+    async bankAssign(chatId, input, plan) {
+      return decideBankCard<BankAssignOutcome>(chatId, input.toolCallId, async () => {
+        if (input.decision === 'reject') {
+          let preview: BankAssignPreview | undefined;
+          try { const worked = assignPreview(await sources.bankLedger(), plan); if (!worked.problems.length) preview = worked; } catch { /* the card then works it out anew */ }
+          return { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        }
+        if (!sources.bankLedger || !sources.bankLabelAction) throw new SourceError(503);
+        // Worked out again now, from what is kept now: the card's preview may be old, and the request can only untick groups.
+        const ledger = await sources.bankLedger();
+        const preview = assignPreview(ledger, plan);
+        if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
+        const { txs } = assignTxs(ledger, plan, input.skip);
+        if (!txs.length) throw new BankPlanError(409, 'Wszystkie grupy są odznaczone: nie ma czego oznaczyć.');
+        const result = await sources.bankLabelAction({ action: 'acceptMany', txs });
+        return { decision: 'applied', at: now(), assigned: result.assigned ?? txs.length, skipped: input.skip ?? [], preview };
+      });
     },
 
     async bankPlan(chatId, input, plan) {

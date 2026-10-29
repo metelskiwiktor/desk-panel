@@ -482,6 +482,13 @@ describe('the live cockpit (Hermes and the panel)', () => {
         ],
         moved: 4, tagged: 3, noTag: 1, problems: [],
       };
+  const assignPreviewMock = {
+    groups: [
+      { key: 'g-aaaaaaaa', move: 'income', category: { name: 'Pensja', color: 'teal', icon: 'banknote' }, party: null, tags: [], count: 6, total: 6000, why: 'ten sam rachunek', items: [{ day: '2026-10-03', name: 'Firma Informatyczna', amount: 1000 }], hidden: 5 },
+      { key: 'g-bbbbbbbb', move: 'spend', category: { name: 'Sklep spożywczy', color: 'green', icon: 'cart' }, party: null, tags: [], count: 16, total: -484.5, why: 'ten sam sprzedawca', items: [{ day: '2026-10-06', name: 'Biedronka', amount: -28.87 }], hidden: 15 },
+    ],
+    choices: { count: 1, total: -80.59 }, problems: [],
+  };
   function liveServer() {
     const calls: Call[] = [];
     let cockpit: ReturnType<typeof view> & { dispatches: Record<string, unknown> } = view();
@@ -493,6 +500,12 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
       if (url.startsWith('/api/bank/plan')) return reply(planPreviewMock);
+      if (url.startsWith('/api/bank/assign')) return reply(assignPreviewMock);
+      if (url === `/api/chats/${H}/bank-plan` && body?.toolCallId === 'a9:b-1') {
+        const outcome = { decision: 'applied', at: NOW, assigned: 6, skipped: body.skip ?? [], preview: assignPreviewMock };
+        cockpit = view({ bankPlans: { 'a9:b-1': outcome } });
+        return reply(outcome);
+      }
       if (url === `/api/chats/${H}/bank-plan`) {
         const outcome = { decision: 'applied', at: NOW, into: 'Zdrowie', created: true, moved: 3, preview: planPreviewMock };
         cockpit = view({ bankPlans: { 'a8:b1': outcome } });
@@ -667,6 +680,32 @@ describe('the live cockpit (Hermes and the panel)', () => {
     const answer = calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!;
     expect(answer.method).toBe('POST');
     expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
+  });
+
+  it('shows the groups of suggested marks, lets one be unticked, and sends only the unticked keys with Wykonaj', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const turnWithCard: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'a9:b-1', name: 'mcp__desk_panel__panel_bank_assign', input: JSON.stringify({ tytul: 'Podpowiedzi', from: '2026-09-24' }), output: JSON.stringify({ result: `${CARD_SHOWN.bankAssign}: 22 operacji.` }), state: 'done' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na masowe oznaczenie' });
+    const groups = await within(card).findByTestId('assign-groups');
+    expect(within(groups).getByText('Przychód · Pensja')).toBeTruthy();
+    expect(within(groups).getByText('Wydatek · Sklep spożywczy')).toBeTruthy();
+    expect(within(card).getByText(/Zaznaczone: 22 operacji/)).toBeTruthy();
+    expect(within(card).getByText(/1 operacja ma tylko propozycje do wyboru/)).toBeTruthy();
+    await user.click(within(groups).getByText('ten sam rachunek'));
+    expect(within(groups).getByText('… jeszcze 5')).toBeTruthy();
+    await user.click(within(groups).getByRole('checkbox', { name: /Oznacz 16 operacji/ }));
+    expect(within(card).getByText(/Zaznaczone: 6 operacji/)).toBeTruthy();
+    expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
+    await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
+    await waitFor(() => expect(within(card).getByText(/Oznaczono 6 operacji; jedna grupa została bez zmian\./)).toBeTruthy());
+    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({ toolCallId: 'a9:b-1', decision: 'apply', skip: ['g-bbbbbbbb'] });
+    expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
   });
 
   it('watches the task the conversation names, and shows the watch card live', async () => {

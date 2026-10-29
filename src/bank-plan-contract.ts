@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { BankColor, BankIcon } from './bank-labels-contract';
+import { bankGroupKey, BANK_ASSIGN_LIMITS } from './bank-assign-contract';
 
 /**
  * A change Wektor proposes to the user's spending categories (`panel_bank_propose`, the consent card). Wektor names it with
@@ -49,4 +50,6 @@ export type BankPlanOutcome =
 export const bankPlanDecisionSchema = z.object({
   toolCallId: z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/),
   decision: z.enum(['apply', 'reject']),
+  /** Only for a bulk-assign card: the groups the user unticked (keys the panel made). It can only narrow what the panel works out. */
+  skip: z.array(bankGroupKey).max(BANK_ASSIGN_LIMITS.skip).optional(),
 }).strict();

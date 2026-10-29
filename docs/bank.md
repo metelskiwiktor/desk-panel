@@ -208,6 +208,14 @@ radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźne
 (`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
 (skill „Bank”); Wektor czyta ją narzędziem `panel_guide`, gdy rozmowa dochodzi do banku (rejestr `PANEL_GUIDES`), a preambuła ma o niej tylko jedną linijkę.
 
+Masowe oznaczanie podpowiedziami (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`),
+resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Do karty trafiają tylko operacje nieoznaczone z **pewną** podpowiedzią
+(`suggestion.sure`), zgrupowane po tym, co podpowiedź mówi (jedno oznaczenie to jedna grupa, klucz `g-…` ze skrótu oznaczenia); podpowiedzi „do wyboru"
+zostają poza kartą, bo wybiera je użytkownik, i karta mówi ile ich jest. Wiersz grupy: ptaszek, ile i co to za operacje, oznaczenie, jakie dostaną, suma;
+rozwija się do listy operacji. Użytkownik może odznaczyć grupę: `POST /api/chats/:id/bank-plan` bierze wtedy też `skip` (klucze grup), który może
+tylko zawęzić to, co panel liczy na nowo w chwili kliknięcia. Zapis to jedna atomowa akcja `acceptMany` (jedna podpowiedź, która przestała być pewna,
+odrzuca całość), wynik i podgląd zostają w `cockpit.json`. Id karty to skrót zakresu dni, więc ten sam zakres to ta sama karta.
+
 ### Otwarte pomysły (Wektor i bank)
 
 - **Kalendarz wstecz** (`panel_calendar_search`): źródło kalendarza czyta tylko od dziś 42 dni do przodu, więc Wektor nie sprawdzi wizyt z przeszłości (np. czy wizyty u podologa trwają od lipca). Szukanie po słowie w zakresie wstecz.

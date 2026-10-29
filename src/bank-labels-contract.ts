@@ -148,6 +148,8 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('clear'), tx: bankTxId }).strict(),
   z.object({ action: z.literal('accept'), tx: bankTxId, option: z.number().int().min(0).max(2).default(0) }).strict(),
   z.object({ action: z.literal('reject'), tx: bankTxId }).strict(),
+  /** The first (sure) suggestion of each of these operations, all in one write (the bulk card); one that is no longer sure refuses the lot. */
+  z.object({ action: z.literal('acceptMany'), txs: z.array(bankTxId).min(1).max(300) }).strict(),
   z.object({ action: z.literal('createCategory'), name: categoryName, move: z.enum(BANK_CATEGORY_MOVES).default('spend'), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict(),
   z.object({ action: z.literal('updateCategory'), category: bankCategoryId, name: categoryName.optional(), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict()
     .refine(a => a.name !== undefined || a.color !== undefined || a.icon !== undefined, { message: 'Nothing to change' }),
@@ -169,4 +171,4 @@ export type BankLabelAction = z.input<typeof bankLabelActionSchema>;
 export type BankLabelActionParsed = z.infer<typeof bankLabelActionSchema>;
 
 /** What an action answers: the id it made, so the screen can go on (create a category or a side, then mark with it). */
-export interface BankLabelResult { ok: true; category?: { id: string; created: boolean }; party?: { id: string; created: boolean }; removed?: number }
+export interface BankLabelResult { ok: true; category?: { id: string; created: boolean }; party?: { id: string; created: boolean }; removed?: number; assigned?: number }

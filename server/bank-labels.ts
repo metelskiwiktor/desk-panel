@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { BankAccount, BankTransaction } from '../src/bank-contract';
 import {
   BANK_COLORS, BANK_ICONS, BANK_LABEL_LIMITS, BANK_MOVES, bankCategorySchema, bankCategoryId, bankLabelActionSchema, bankPartyId, isDone,
-  type BankBalance, type BankCategory, type BankMove, type BankLabel, type BankLabelAction, type BankLabelActionParsed, type BankLabelResult, type BankLabelsSource, type BankSuggestion,
+  type BankBalance, type BankCategory, type BankMove, type BankLabel, type BankOption, type BankLabelAction, type BankLabelActionParsed, type BankLabelResult, type BankLabelsSource, type BankSuggestion,
 } from '../src/bank-labels-contract';
 import { partiesOf, type Party } from './bank-parties';
 import { featuresOf, suggest, type Marked, type OpFeatures, type Proposal, type Rejection } from './bank-suggest';
@@ -287,6 +287,16 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
     return { ...next, move };
   }
 
+  /** What the option does not say stays as it was, unless the option's move leaves no room for it. */
+  const withOption = (before: StoredLabel | undefined, option: BankOption): MarkFields => {
+    const move = option.move ?? before?.move ?? null;
+    const category = option.category ?? (option.move && option.move !== before?.move ? null : before?.category ?? null);
+    return {
+      move, category, tags: option.tags ?? before?.tags ?? [], party: option.party ?? before?.party ?? null,
+      recurring: option.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
+    };
+  };
+
   /** Validates, then changes; a refusal is thrown before anything is touched. */
   async function mutate(file: BankLabelFile, action: BankLabelActionParsed): Promise<BankLabelResult> {
     switch (action.action) {
@@ -304,14 +314,7 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         const before = file.labels[action.tx];
         let next: MarkFields;
         if (action.action === 'accept') {
-          const option = proposal!.suggestion.options[action.option] ?? missing('Nie ma takiej możliwości.');
-          // What the option does not say stays as it was, unless the option's move leaves no room for it.
-          const move = option.move ?? before?.move ?? null;
-          const category = option.category ?? (option.move && option.move !== before?.move ? null : before?.category ?? null);
-          next = {
-            move, category, tags: option.tags ?? before?.tags ?? [], party: option.party ?? before?.party ?? null,
-            recurring: option.recurring ?? before?.recurring ?? false, comment: before?.comment ?? '',
-          };
+          next = withOption(before, proposal!.suggestion.options[action.option] ?? missing('Nie ma takiej możliwości.'));
         } else {
           next = {
             move: action.move, category: action.category, tags: canonical(file.tags, action.tags), party: action.party,
@@ -331,6 +334,25 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         file.labels[action.tx] = { ...next, labeledAt: now(), op: found!.op };
         learn(file, file.labels[action.tx], found!);
         return { ok: true };
+      }
+      case 'acceptMany': {
+        // Every sure suggestion of these operations as it is now, or none: a suggestion that is gone or became a choice refuses all.
+        const { ops, proposals } = await view(file);
+        let assigned = 0;
+        for (const tx of action.txs) {
+          const found = ops.find(o => o.t.id === tx) ?? missing('Nie ma takiej operacji w ostatnim odczycie banku.');
+          const proposal = proposals.get(tx);
+          if (!proposal?.suggestion.sure) throw new BankLabelError(409, 'Ta operacja nie ma już pewnej podpowiedzi.');
+          const before = file.labels[tx];
+          const next = checked(file, withOption(before, proposal.suggestion.options[0]));
+          if (isEmpty(next)) continue;
+          if (!before && Object.keys(file.labels).length >= MAX_LABELS) throw new BankLabelError(409, `Może być najwyżej ${MAX_LABELS} oznaczeń.`);
+          keepWords(file, next.tags);
+          file.labels[tx] = { ...next, labeledAt: now(), op: found.op };
+          learn(file, file.labels[tx], found);
+          assigned++;
+        }
+        return { ok: true, assigned };
       }
       case 'createCategory': {
         // A spending category and an income source may share a name ("Zwroty"); within one list a name is one.

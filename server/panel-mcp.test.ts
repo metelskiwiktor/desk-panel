@@ -120,7 +120,7 @@ describe('panel MCP for Hermes', () => {
     expect((await call('panel_cockpit_clear', {})).content[0].text).toContain('nie obserwuje');
     const listed = await (await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).json() as any;
     // The cockpit tools describe themselves by the contract: what, when, and what follows.
-    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_bank_propose', 'panel_cockpit_clear']) {
+    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_bank_propose', 'panel_bank_assign', 'panel_cockpit_clear']) {
       expect(listed.result.tools.find((t: { name: string }) => t.name === name).description).toMatch(/Kiedy: .* Skutek: /);
     }
   });
@@ -161,6 +161,13 @@ describe('panel MCP for Hermes', () => {
     expect(await call('panel_guide', {})).toMatchObject({ isError: true });
     const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
     expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_guide').description).toMatch(/Tematy: bank \(rozmowa o koncie/);
+  });
+
+  it('proposes marking by suggestions: it says why there is nothing to mark and takes only a range of days', async () => {
+    const none = await call('panel_bank_assign', { from: '2020-01-01', to: '2020-01-02' });
+    expect(none).toMatchObject({ isError: true });
+    expect(await call('panel_bank_assign', { from: 'wczoraj' })).toMatchObject({ isError: true });
+    expect(await call('panel_bank_assign', { kategoria: 'Zdrowie' })).toMatchObject({ isError: true });
   });
 
   it('proposes a bank change by a card: it checks the names against the categories and changes nothing itself', async () => {

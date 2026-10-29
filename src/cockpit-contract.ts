@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { todoTaskId } from './todo-contract';
 import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
 import type { BankPlanOutcome } from './bank-plan-contract';
+import type { BankAssignOutcome } from './bank-assign-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -50,7 +51,7 @@ export interface CockpitView {
   /** The user's answer on each dispatch card of the conversation, by its tool call id. */
   dispatches: Record<string, DispatchOutcome>;
   /** The user's answer on each bank change card of the conversation, by its tool call id. */
-  bankPlans: Record<string, BankPlanOutcome>;
+  bankPlans: Record<string, BankPlanOutcome | BankAssignOutcome>;
   /** A historical decision cannot be attributed safely to a single card. */
   legacyUnresolved?: boolean;
 }
@@ -94,7 +95,7 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign';
 }
 
 export const COCKPIT_TOOLS = {
@@ -128,6 +129,12 @@ export const COCKPIT_TOOLS = {
     effect: 'użytkownik widzi kartę z podglądem przed i po (ile operacji przejdzie, jakie sumy) i przyciskami „Wykonaj” i „Odrzuć”; panel zmienia kategorie dopiero po jego kliknięciu, a Ty niczego nie zmieniasz. Nie pisz, że zmieniłeś; po decyzji użytkownik sam powie, co wybrał. Zakończ odpowiedź jednym zdaniem.',
     card: 'bankPlan',
   },
+  panel_bank_assign: {
+    purpose: 'Karta zgody na masowe oznaczenie nieoznaczonych operacji tym, co panel sam podpowiada (opcjonalnie from i to: zakres dni RRRR-MM-DD).',
+    when: 'gdy użytkownik chce przypisać nieoznaczone operacje do podpowiedzianych oznaczeń („przypisz te z podpowiedzią”, „oznacz hurtem”), po tym jak zgodził się na Twoją propozycję albo wprost o to prosi. Gdy dopiero pyta, co da się oznaczyć, najpierw powiedz słowami, ile jest takich operacji i jakie grupy, i zapytaj, czy pokazać kartę. Podpowiedzi nie wybierasz Ty: panel bierze własne.',
+    effect: 'użytkownik widzi karty z grupami (ile operacji, na jakie oznaczenie, jaka suma; grupę można odznaczyć) i przyciskami „Wykonaj” i „Odrzuć”; panel oznacza dopiero po jego kliknięciu, a tylko pewne podpowiedzi, nigdy „do wyboru”. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.',
+    card: 'bankAssign',
+  },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
     when: 'gdy użytkownik prosi, by przestać obserwować task, albo wyraźnie zmienia temat na coś niezwiązanego z obserwowanym taskiem.',
@@ -142,7 +149,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.

@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import { PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
+import { bankAssignSchema } from '../src/bank-assign-contract';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
@@ -193,8 +194,13 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  * a hash of the plan (the names, the target, the tags flag; the title is only a label). The same answer read live, kept, or
  * from Hermes's history gives the same id, so the user's decision stays with the card, and two different plans never share one.
  */
-export const isBankCard = (name: string) => name.includes('panel_bank_propose');
-export function stableBankCardId(messageId: string, input: string): string | null {
+export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign');
+export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
+  if (name.includes('panel_bank_assign')) {
+    let assign;
+    try { assign = bankAssignSchema.parse(JSON.parse(input)); } catch { return null; }
+    return `${messageId}:b-${createHash('sha256').update(JSON.stringify({ assign: true, from: assign.from ?? null, to: assign.to ?? null })).digest('hex').slice(0, 16)}`;
+  }
   let plan;
   try { plan = bankPlanSchema.parse(JSON.parse(input)); } catch { return null; }
   const key = JSON.stringify({ merge: plan.merge.map(n => n.toLowerCase()), into: plan.into.toLowerCase(), tags: plan.tags });
@@ -205,7 +211,7 @@ export function stabilizeBankCards(message: ChatMessage): boolean {
   let changed = false;
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool' || !isBankCard(p.name)) continue;
-    const id = stableBankCardId(message.id, p.input);
+    const id = stableBankCardId(message.id, p.input, p.name);
     if (id && p.id !== id) { p.id = id; changed = true; }
   }
   return changed;
@@ -336,7 +342,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
         const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` }
-          : p.type === 'tool' && isBankCard(p.name) ? { ...p, id: stableBankCardId(turn.agent, p.input) ?? p.id } : p);
+          : p.type === 'tool' && isBankCard(p.name) ? { ...p, id: stableBankCardId(turn.agent, p.input, p.name) ?? p.id } : p);
         out.push({ id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
