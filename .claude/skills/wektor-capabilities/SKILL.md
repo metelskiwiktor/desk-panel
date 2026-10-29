@@ -12,7 +12,7 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
 2. **Deliver in code** (below), with tests. Commit and push to main (user's standing rule), `just update` to deploy.
 3. **Restart Hermes** after any change to a tool or its schema: `just hermes RESTART`. Hermes caches the tool list from its start (a new tool is invisible until then). Standing permission, given 2026-10-29, only for this workflow. A change to the skill text or a tool's *answer* needs only the deploy.
-4. **Run test conversations yourself** with the harness (see "The harness" below): `node scripts/wektor-test.mjs <case> --runs 1`. The chats are kept, titled `[test] <case> #n`; never delete them.
+4. **Run test conversations yourself** with the harness (see "The evaluation harness" below): `node scripts/wektor-test.mjs <case> --runs 1`. The chats are kept, titled `[test] <case> #n`; never delete them.
 5. **Show the user Wektor's answers verbatim and judge together.** Do NOT loop run -> fix -> rerun on your own. One run per case, present, discuss, then change. Check his factual claims against the data (`curl http://127.0.0.1:5174/api/agent/bank?...`): his specific claims were true so far, but verify.
 6. Improve the skill/tool from what the user says, then back to 3.
 
@@ -34,7 +34,25 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 - The consent card is **not proactive**: on a request for advice he first suggests the change in words and asks whether to show the card; the card comes after the user agrees, or at once when the user explicitly asks for a concrete change. Not every bank conversation means the user wants a change.
 - What the user judged good: verdict first with a reason from the numbers, <= 6 sentences without lists, says since when marks exist and how much is unmarked, "trudno ocenic" instead of a forecast when the sample is small, names of services allowed but no table of rows, proposes only steps his tools can do, no `execute_code`, ends with one concrete next step, never says he changed something.
 
-## The harness (`scripts/wektor-test.mjs`)
+## Wektor's agent harness (what "harness" means here)
+
+An **agent harness** is everything around the model except its reasoning: the loop, tools and their execution, context and memory, permissions and guardrails, state, observability (agent = model + harness; see [Thoughtworks](https://www.thoughtworks.com/en-us/insights/blog/machine-learning-and-ai/ai-agent-harness), [Google Cloud](https://cloud.google.com/discover/agent-harness)). **Harness engineering** is improving that layer: every failure of the agent is treated as a system problem to fix permanently (a tool, a field, a rule, a test), not as a prompt to retry. The **evaluation harness** (below, `scripts/wektor-test.mjs`) is a different thing: it measures the agent, it does not shape him. Both matter; do not mix the words up with the user.
+
+| Part of the harness | In our system |
+| --- | --- |
+| Model | DeepSeek V4.1 Flash via OpenRouter |
+| Loop, tool calls, context, history | Hermes Agent (service `Desk-Panel-Hermes`) |
+| Instructions | preamble: `hermesPreamble()` + `BANK_GUIDE` (`src/chat-contract.ts`), `@` skills |
+| Tools (actions) | MCP tools of the panel (`server/panel-mcp.ts`), narrow, enumerated fields |
+| Human in the loop | cards: data card, consent card (the tool only proposes) |
+| Guardrails | no write tools for the agent; plan read from the conversation, re-checked, applied atomically on the user's click |
+| State / memory | `cockpit.json` (decisions and previews), Hermes sessions |
+| Observability | `~/.desk-panel/chat-logs`, the card's own preview |
+| Evaluation | `scripts/wektor-test.mjs` and the cases, judged with the user |
+
+Failures we fixed in the harness, not in a prompt: the tool's field name he kept guessing (`view`), a limit he read from the wrong tool (42 days), sums he could not see (coverage line in the card summary), a card he could not show (unmarked spending), names of what a category holds (he guessed from the category name), card ids from the stream, a decided card that lost its content. Next time start from the same question: **what in the system made him do that?**
+
+## The evaluation harness (`scripts/wektor-test.mjs`)
 
 `node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174]`
 
