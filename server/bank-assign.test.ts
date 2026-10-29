@@ -13,6 +13,7 @@ const op = (day: string, amount: number, name: string) => ({ at: Date.parse(`${d
 const mark = (party: string | null, move: 'spend' | 'income' | 'settle', category: string | null, tags: string[] = []) => ({ move, category, tags, party, recurring: false, comment: '' });
 const entry = (tx: string, day: string, amount: number, name: string, over: { known?: string; label?: unknown; suggestion?: unknown } = {}) =>
   ({ tx, op: op(day, amount, name), known: over.known ?? null, suggestion: over.suggestion ?? null, pending: !over.label, inReading: true, label: over.label ?? null }) as BankLedger['entries'][number];
+const phone = (tx: string, day: string, amount: number, over: { label?: unknown } = {}) => ({ ...entry(tx, day, amount, 'Płatność telefonem', over), op: { ...op(day, amount, 'Płatność telefonem'), method: 'phone' as const } }) as BankLedger['entries'][number];
 const ledger: BankLedger = {
   observedAt: 1, since: '2026-10-26', balances: [], tags: [],
   parties: [{ id: 'p-orlen', name: 'Orlen' }, { id: 'p-spolem', name: 'Społem' }, { id: 'p-alicja', name: 'Alicja' }, { id: 'p-nowy', name: 'Nowy' }],
@@ -32,8 +33,10 @@ const ledger: BankLedger = {
     entry('a1', '2026-10-01', -200, 'Alicja', { known: 'p-alicja' }), entry('a2', '2026-09-30', -150, 'Alicja', { known: 'p-alicja' }),
     // known, but nothing to offer: no earlier operation of this side was marked
     entry('n1', '2026-10-06', -9, 'Nowy', { known: 'p-nowy' }),
-    // not known by name: the panel's own suggestion for a payment without a shop name
-    entry('t1', '2026-10-06', -80.59, 'Płatność telefonem', { suggestion: { sure: false, options: [{ move: 'spend', category: 'c-2', reasons: ['ta sama kwota 80,59 zł, bez nazwy sklepu', 'Jedzenie: 3 z 3 razy'] }] } }),
+    // a payment the bank gives no name for: linked only by the same amount to earlier ones (80,59 was food twice, 25 never marked)
+    ...[1, 2].map(n => phone(`h-t${n}`, `2026-09-0${n}`, -80.59, { label: mark(null, 'spend', 'c-2') })),
+    phone('t1', '2026-10-06', -80.59), phone('t2', '2026-10-07', -25),
+    phone('h-t3', '2026-09-05', -80.59, { label: mark(null, 'spend', 'c-2') }),
   ],
 };
 const plan = (over: Record<string, unknown> = {}) => bankAssignSchema.parse(over);
@@ -43,15 +46,16 @@ describe('recipients and their templates', () => {
   it('groups unmarked operations by recipient, with the marks its earlier operations got, certain ones first', () => {
     const preview = assignPreview(ledger, plan());
     expect(preview.problems).toEqual([]);
-    expect(preview.recipients.map(r => [r.name, r.count, r.certain])).toEqual([['Społem', 2, true], ['Orlen', 2, false], ['Alicja', 2, false], ['Płatność telefonem', 1, false]]);
+    expect(preview.recipients.map(r => [r.name, r.count, r.certain])).toEqual([['Społem', 2, true], ['Płatność telefonem', 1, true], ['Orlen', 2, false], ['Alicja', 2, false]]);
     // the fuel station: most frequent first, each with how many times
     expect(byName('Orlen').templates.map(t => [t.mark.category?.name, t.count])).toEqual([['Paliwo', 4], ['Jedzenie', 1]]);
     expect(byName('Orlen')).toMatchObject({ total: -218.55, items: [{ tx: 'o1', day: '2026-10-05' }, { tx: 'o2' }], hidden: 0 });
     // one earlier mark is a sample, not a habit: Alicja is not certain, and her one settlement is only a template
     expect(byName('Alicja')).toMatchObject({ certain: false, templates: [{ mark: { move: 'settle', category: null }, count: 1 }] });
-    // a side with nothing marked before is not listed; a nameless payment offers only the panel's suggestion, with no count
+    // a side with nothing marked before is not listed; a payment with no name is one recipient per amount, with the earlier ones of that amount
     expect(preview.recipients.map(r => r.name)).not.toContain('Nowy');
-    expect(byName('Płatność telefonem').templates).toMatchObject([{ mark: { category: { name: 'Jedzenie' } }, count: 0 }]);
+    expect(preview.recipients.filter(r => r.name === 'Płatność telefonem').map(r => [r.amount, r.templates.map(t => [t.mark.category?.name, t.count])])).toEqual([[-80.59, [['Jedzenie', 3]]]]);
+    // 25 zł has no earlier payment of that amount, so it offers nothing and is not listed
     expect(preview.categories.map(c => c.name)).toEqual(['Paliwo', 'Jedzenie', 'Sklep spożywczy', 'Pensja']);
     expect(JSON.stringify(preview)).not.toContain('"party"');
   });
@@ -69,25 +73,28 @@ describe('what would be marked', () => {
   const t = (name: string, i: number) => byName(name).templates[i].key;
   const orlen = () => byName('Orlen').key;
 
-  it('marks only the certain recipient by default, with its own template, and not the others', () => {
+  const phoneKey = () => assignPreview(ledger, plan()).recipients.find(r => r.name === 'Płatność telefonem')!.key;
+
+  it('marks only the certain recipients by default, each with its own template, and not the others', () => {
     expect(assignMarks(ledger, plan())).toEqual([
       { tx: 's1', move: 'spend', category: 'c-3', tags: [], party: 'p-spolem', recurring: false }, { tx: 's2', move: 'spend', category: 'c-3', tags: [], party: 'p-spolem', recurring: false },
+      { tx: 't1', move: 'spend', category: 'c-2', tags: [], party: null, recurring: false },
     ]);
   });
 
   it('takes a template for a whole recipient, and for one operation a template or any category', () => {
     const marks = assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }], picks: [{ tx: 'o2', template: t('Orlen', 1) }, { tx: 's1', category: 'c-2' }] });
-    expect(Object.fromEntries(marks.map(m => [m.tx, m.category]))).toEqual({ s1: 'c-2', s2: 'c-3', o1: 'c-1', o2: 'c-2' });
+    expect(Object.fromEntries(marks.map(m => [m.tx, m.category]))).toEqual({ s1: 'c-2', s2: 'c-3', t1: 'c-2', o1: 'c-1', o2: 'c-2' });
     // a category of another move sets that move (a source of income is an income), and the recipient stays
     expect(assignMarks(ledger, plan(), { picks: [{ tx: 'a1', category: 'c-4' }] })).toContainEqual({ tx: 'a1', move: 'income', category: 'c-4', tags: [], party: 'p-alicja', recurring: false });
   });
 
   it('leaves out the recipients and operations the user unticked, and drops what is no longer there', () => {
-    expect(assignMarks(ledger, plan(), { skip: [byName('Społem').key] })).toEqual([]);
-    expect(assignMarks(ledger, plan(), { skipOps: ['s1'] }).map(m => m.tx)).toEqual(['s2']);
+    expect(assignMarks(ledger, plan(), { skip: [byName('Społem').key, phoneKey()] })).toEqual([]);
+    expect(assignMarks(ledger, plan(), { skipOps: ['s1'] }).map(m => m.tx)).toEqual(['s2', 't1']);
     // a template that is not this recipient's, a deleted category and an unknown key are dropped, never guessed
-    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'o1', template: t('Społem', 0) }, { tx: 'o2', category: 'c-99' }, { tx: 'nope', category: 'c-1' }] }).map(m => m.tx)).toEqual(['s1', 's2']);
-    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: 'r-00000000', template: t('Orlen', 0) }] }).map(m => m.tx)).toEqual(['s1', 's2']);
+    expect(assignMarks(ledger, plan(), { picks: [{ tx: 'o1', template: t('Społem', 0) }, { tx: 'o2', category: 'c-99' }, { tx: 'nope', category: 'c-1' }] }).map(m => m.tx)).toEqual(['s1', 's2', 't1']);
+    expect(assignMarks(ledger, plan(), { groupPicks: [{ group: 'r-00000000', template: t('Orlen', 0) }] }).map(m => m.tx)).toEqual(['s1', 's2', 't1']);
   });
 });
 
@@ -95,21 +102,22 @@ describe('the answer on the card', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bank-assign-'));
   const calls: { action: string; items: { tx: string; category: string | null }[] }[] = [];
   const sources = { bankLedger: async () => ledger, bankLabelAction: async (a: never) => { calls.push(a); return { ok: true as const, assigned: (a as { items: unknown[] }).items.length }; } } as never;
+  const phoneKeyOf = () => assignPreview(ledger, plan()).recipients.find(r => r.name === 'Płatność telefonem')!.key;
   const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:1/', gh: async () => '{}' });
 
   it('marks what is ticked and chosen in one write, once, and keeps the choice', async () => {
     const choice = { groupPicks: [{ group: byName('Orlen').key, template: byName('Orlen').templates[0].key }], skipOps: ['o2'], picks: [{ tx: 'a1', category: 'c-2' }] };
     const first = await cockpit.bankAssign('chat', { toolCallId: 'm1:b-1', decision: 'apply', ...choice }, plan());
-    expect(first).toMatchObject({ decision: 'applied', assigned: 4, choice });
+    expect(first).toMatchObject({ decision: 'applied', assigned: 5, choice });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ action: 'markMany' });
-    expect(calls[0].items.map(i => [i.tx, i.category])).toEqual([['s1', 'c-3'], ['s2', 'c-3'], ['o1', 'c-1'], ['a1', 'c-2']]);
+    expect(calls[0].items.map(i => [i.tx, i.category])).toEqual([['s1', 'c-3'], ['s2', 'c-3'], ['t1', 'c-2'], ['o1', 'c-1'], ['a1', 'c-2']]);
     expect(await cockpit.bankAssign('chat', { toolCallId: 'm1:b-1', decision: 'apply' }, plan())).toEqual(first);
     expect(calls).toHaveLength(1);
   });
 
   it('refuses when nothing is ticked, and a rejection changes nothing but keeps what was proposed', async () => {
-    await expect(cockpit.bankAssign('chat', { toolCallId: 'm1:b-2', decision: 'apply', skip: [byName('Społem').key] }, plan())).rejects.toMatchObject({ status: 409 });
+    await expect(cockpit.bankAssign('chat', { toolCallId: 'm1:b-2', decision: 'apply', skip: [byName('Społem').key, phoneKeyOf()] }, plan())).rejects.toMatchObject({ status: 409 });
     const rejected = await cockpit.bankAssign('chat', { toolCallId: 'm1:b-3', decision: 'reject' }, plan());
     expect(rejected).toMatchObject({ decision: 'rejected', preview: { recipients: [{}, {}, {}, {}] } });
     expect(calls).toHaveLength(1);

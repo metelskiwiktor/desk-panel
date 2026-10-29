@@ -486,10 +486,10 @@ describe('the live cockpit (Hermes and the panel)', () => {
   const assignPreviewMock = {
     range: { from: '2026-09-24', to: null, first: '2026-10-02', last: '2026-10-05' },
     recipients: [
-      { key: 'r-11111111', name: 'Społem', count: 2, total: -51.36, certain: true, hidden: 0,
+      { key: 'r-11111111', name: 'Społem', amount: null, count: 2, total: -51.36, certain: true, hidden: 0,
         templates: [{ key: 't-11111111', mark: mark('c-3', 'Sklep spożywczy', 'blue', 'cart'), count: 3 }],
         items: [{ tx: 's1', day: '2026-10-03', name: 'Społem', amount: -28.87 }, { tx: 's2', day: '2026-10-02', name: 'Społem', amount: -22.49 }] },
-      { key: 'r-22222222', name: 'Orlen', count: 2, total: -218.55, certain: false, hidden: 0,
+      { key: 'r-22222222', name: 'Orlen', amount: null, count: 2, total: -218.55, certain: false, hidden: 0,
         templates: [{ key: 't-22222222', mark: mark('c-1', 'Paliwo', 'orange', 'fuel'), count: 4 }, { key: 't-33333333', mark: mark('c-2', 'Jedzenie', 'green', 'utensils'), count: 1 }],
         items: [{ tx: 'o1', day: '2026-10-05', name: 'Orlen', amount: -200.15 }, { tx: 'o2', day: '2026-10-04', name: 'Orlen', amount: -18.4 }] },
     ],
@@ -713,6 +713,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(within(card).getByText(/Zaznaczone: 4 operacji, [-−]269,91/)).toBeTruthy();
     // one operation takes any category of the user's, another is unticked
     await user.click(within(mixed).getByText('wcześniej: Wydatek · Paliwo 4 razy, Wydatek · Jedzenie 1 raz'));
+    expect(within(mixed).getByText('oznacz jako')).toBeTruthy();
     await user.selectOptions(within(mixed).getByLabelText('Oznaczenie: 2026-10-04 Orlen'), 'c:c-2');
     await user.click(within(mixed).getByRole('checkbox', { name: 'Oznacz 2026-10-05 Orlen' }));
     expect(within(card).getByText(/Zaznaczone: 3 operacji, [-−]69,76/)).toBeTruthy();

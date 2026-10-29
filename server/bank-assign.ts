@@ -12,15 +12,19 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 type Entry = BankLedger['entries'][number];
 /** A mark as the panel keeps it: ids, and the other side the template belongs to. */
 interface Template { key: string; move: BankMove; category: string | null; tags: string[]; recurring: boolean; party: string | null; count: number; last: number }
-interface Recipient { key: string; name: string; party: string | null; certain: boolean; templates: Template[]; entries: Entry[] }
+interface Recipient { key: string; name: string; party: string | null; amount: number | null; certain: boolean; templates: Template[]; entries: Entry[] }
 
 /** One mark's identity: the same kind, category, tags and repeat are the same template, however many earlier operations carry it. */
 const templateKey = (t: Pick<Template, 'move' | 'category' | 'tags' | 'recurring'>) => `t-${hash([t.move, t.category, [...t.tags].map(x => x.toLowerCase()).sort(), t.recurring])}`;
 
+/** A phone or BLIK payment names no shop: only the same amount links it to earlier ones (as in the panel's suggestions). */
+const nameless = (e: Entry) => e.op.merchant === null && (e.op.method === 'phone' || e.op.method === 'blik');
+const cents = (amount: number) => Math.round(amount * 100);
+
 /**
  * The unmarked operations of the range grouped by recipient: whom the bank text, account, phone or name says it is (the same
- * side the user already named), or, when the panel does not know, the operation's own name. A recipient is listed only when it
- * has something to offer: the marks its earlier operations got, most frequent first.
+ * side the user already named). A payment with no name from the bank is grouped by its amount instead, with the earlier payments of
+ * the same amount. A recipient is listed only when it has something to offer: the marks its earlier operations got, most frequent first.
  */
 function recipients(ledger: BankLedger, plan: BankAssign): Recipient[] {
   const inRange = (at: number) => { const d = dayIn(at, ZONE); return (!plan.from || d >= plan.from) && (!plan.to || d <= plan.to); };
@@ -30,11 +34,11 @@ function recipients(ledger: BankLedger, plan: BankAssign): Recipient[] {
     if (isDone(e.label) || !inRange(e.op.at)) continue;
     const sign = Math.sign(e.op.amount);
     const party = e.known ?? null;
-    if (!party && !e.suggestion) continue;
+    if (!party && !nameless(e)) continue;
     const name = party ? ledger.parties.find(p => p.id === party)?.name ?? e.op.name : e.op.name;
-    const key = `r-${hash(party ? ['p', party, sign] : ['n', e.op.name.toLowerCase(), sign])}`;
+    const key = `r-${hash(party ? ['p', party, sign] : ['n', e.op.name.toLowerCase(), cents(e.op.amount)])}`;
     let r = byKey.get(key);
-    if (!r) { r = { key, name, party, certain: false, templates: [], entries: [] }; byKey.set(key, r); }
+    if (!r) { r = { key, name, party, amount: party ? null : e.op.amount, certain: false, templates: [], entries: [] }; byKey.set(key, r); }
     r.entries.push(e);
   }
   const out: Recipient[] = [];
@@ -50,13 +54,14 @@ function recipients(ledger: BankLedger, plan: BankAssign): Recipient[] {
       for (const h of history) if (h.label!.party === r.party && Math.sign(h.op.amount) === sign && h.label!.move)
         add({ move: h.label!.move, category: h.label!.category, tags: h.label!.tags, recurring: h.label!.recurring, party: r.party }, h.op.at);
     } else {
-      // Not known by name: only what the panel suggests for these operations (a same-amount payment without a shop name).
-      for (const e of r.entries) for (const o of e.suggestion?.options ?? []) if (o.move)
-        add({ move: o.move, category: o.category ?? null, tags: o.tags ?? [], recurring: !!o.recurring, party: o.party ?? null }, 0, 0);
+      // No name from the bank: the earlier payments of the same kind and the very same amount, with the side the user gave them.
+      for (const h of history) if (nameless(h) && h.label!.move && cents(h.op.amount) === cents(r.amount!))
+        add({ move: h.label!.move, category: h.label!.category, tags: h.label!.tags, recurring: h.label!.recurring, party: h.label!.party }, h.op.at);
     }
     r.templates = [...counts.values()].sort((a, b) => b.count - a.count || b.last - a.last).slice(0, BANK_ASSIGN_LIMITS.templates);
     if (!r.templates.length) continue;
-    r.certain = !!r.party && r.templates.length === 1 && r.templates[0].count >= 2;
+    // Certain also for a same-amount payment: the very same amount, always the same mark (at least twice).
+    r.certain = r.templates.length === 1 && r.templates[0].count >= 2;
     out.push(r);
   }
   // Certain ones first, then the biggest.
@@ -73,7 +78,7 @@ export function assignPreview(ledger: BankLedger, plan: BankAssign): BankAssignP
   const found = recipients(ledger, plan);
   const days = found.flatMap(r => r.entries.map(e => dayIn(e.op.at, ZONE))).sort();
   const list: BankAssignRecipient[] = found.map(r => ({
-    key: r.key, name: r.name, count: r.entries.length, certain: r.certain,
+    key: r.key, name: r.name, amount: r.amount, count: r.entries.length, certain: r.certain,
     total: Math.round(r.entries.reduce((sum, e) => sum + (e.op.currency === 'PLN' ? e.op.amount : 0), 0) * 100) / 100,
     templates: r.templates.map((t): BankAssignTemplate => ({ key: t.key, mark: markOf(ledger, t), count: t.count })),
     items: r.entries.slice(0, BANK_ASSIGN_LIMITS.items).map(e => ({ tx: e.tx, day: dayIn(e.op.at, ZONE), name: e.op.name, amount: e.op.amount })),

@@ -47,6 +47,8 @@ export interface BankAssignRecipient {
   count: number;
   /** Signed sum in PLN: money in is positive. */
   total: number;
+  /** Set when the bank gives no name for these payments (a phone or BLIK payment): they are one recipient only by the same amount (signed). */
+  amount: number | null;
   /** The earlier operations of this recipient all got one mark (at least two of them): its template is ticked by default. */
   certain: boolean;
   /** Most frequent first. */

@@ -14,6 +14,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const times = (n: number) => n === 1 ? 'raz' : 'razy';
 
 const markLabel = (m: BankAssignMark) => `${m.category ? `${MOVE_WORDS[m.move]} · ${m.category.name}` : MOVE_WORDS[m.move]}${m.tags.map(t => ` #${t}`).join('')}`;
+/** A mark without its kind when it is a spend (the common case): „Paliwo”, but „Przychód · Pensja”. */
+const shortLabel = (m: BankAssignMark) => m.category ? (m.move === 'spend' ? m.category.name : `${MOVE_WORDS[m.move]} · ${m.category.name}`) : MOVE_WORDS[m.move];
 const categoryLabel = (c: BankAssignCategory) => `${c.move === 'spend' ? 'Wydatek' : c.move === 'income' ? 'Przychód' : 'Przełożenie'} · ${c.name}`;
 
 /** What the user chose on the card, as the request will carry it (and as the answer keeps it). */
@@ -46,12 +48,11 @@ function counted(r: BankAssignRecipient, sel: AssignSelection, categories: BankA
   const total = rest ? r.total - r.items.filter(i => !listed.includes(i)).reduce((s, i) => s + i.amount, 0) : listed.reduce((s, i) => s + i.amount, 0);
   return { count: listed.length + rest, total: Math.round(total * 100) / 100 };
 }
-const historyText = (r: BankAssignRecipient) => r.templates.some(t => t.count > 0)
-  ? `wcześniej: ${r.templates.filter(t => t.count > 0).map(t => `${markLabel(t.mark)} ${t.count} ${times(t.count)}`).join(', ')}`
-  : 'propozycje panelu dla takich płatności';
+const historyText = (r: BankAssignRecipient) => `wcześniej: ${r.templates.map(t => `${markLabel(t.mark)} ${t.count} ${times(t.count)}`).join(', ')}`;
 
 const checkbox = 'tw:size-4 tw:accent-[#7ca9ff]';
-const selectClass = 'tw:max-w-[190px] tw:rounded-md tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-1.5 tw:py-0.5 tw:text-xs tw:text-ck-text tw:disabled:opacity-60';
+const selectOn = 'tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-text';
+const selectOff = 'tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-muted';
 
 /** One recipient: a tick, who and how many, what it was marked with before, templates for the whole group; opens to its operations. */
 function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }: {
@@ -85,16 +86,17 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
     set({ skipOps, ...(markOf(r, tx, sel, categories) ? {} : { picks: { ...sel.picks, [tx]: { template: r.templates[0].key } } }), skip: new Set([...sel.skip].filter(k => k !== r.key)) });
   };
   return <div className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-recipient={r.key}>
-    <div className={`tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2 ${t.count ? '' : 'tw:opacity-70'}`}>
+    <div className="tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2">
       <input type="checkbox" className={checkbox} checked={t.count > 0} ref={el => { if (el) el.indeterminate = partial; }} disabled={locked} onChange={toggleGroup}
         aria-label={`Oznacz ${r.count} operacji: ${r.name}`} />
       <div className="tw:min-w-0">
-        <div className="tw:truncate tw:text-sm tw:text-ck-text">{r.name} <span className="tw:text-ck-muted">· {partial ? `${t.count} z ${r.count}` : r.count} {r.count === 1 ? 'operacja' : 'operacji'} · {signed(t.count ? t.total : r.total)}</span></div>
+        <div className="tw:truncate tw:text-sm tw:text-ck-text">{r.amount !== null ? pln(Math.abs(r.amount)) : r.name} <span className="tw:text-ck-muted">· {partial ? `${t.count} z ${r.count}` : r.count} {r.amount !== null ? times(r.count) : r.count === 1 ? 'operacja' : 'operacji'} · {signed(t.count ? t.total : r.total)}</span></div>
         <button type="button" className="tw:flex tw:max-w-full tw:items-center tw:gap-1 tw:text-left tw:text-xs tw:text-ck-muted tw:hover:text-ck-text" aria-expanded={expanded} onClick={onFlip}>
           {expanded ? <ChevronUp size={13} className="tw:flex-none" aria-hidden="true" /> : <ChevronDown size={13} className="tw:flex-none" aria-hidden="true" />}<span className="tw:truncate">{historyText(r)}</span>
         </button>
       </div>
-      <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}`}>
+      <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}${r.amount !== null ? ` ${pln(Math.abs(r.amount))}` : ''}`}>
+        <span className="tw:text-xs tw:text-ck-muted">oznacz jako</span>
         {r.templates.map(tpl => {
           const on = group?.key === tpl.key;
           return <button key={tpl.key} type="button" disabled={locked} aria-pressed={on} onClick={() => pickGroup(tpl)}
@@ -104,17 +106,19 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
         })}
       </div>
     </div>
-    {expanded && <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:px-3 tw:pb-2 tw:pl-[44px] tw:text-xs tw:text-ck-muted">
+    {expanded && <ul className="tw:m-0 tw:mb-1 tw:grid tw:list-none tw:gap-1 tw:px-3 tw:pb-2 tw:pl-[44px] tw:text-xs">
       {r.items.map(i => {
         const pick = sel.picks[i.tx];
         const has = !sel.skip.has(r.key) && !sel.skipOps.has(i.tx) && !!markOf(r, i.tx, sel, categories);
-        const value = pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
-        return <li key={i.tx} className={`tw:flex tw:items-center tw:gap-2 ${has ? '' : 'tw:opacity-60'}`}>
+        const value = !has ? '__off' : pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
+        return <li key={i.tx} className="tw:flex tw:items-center tw:gap-2">
           <input type="checkbox" className={checkbox} checked={has} disabled={locked} onChange={() => toggleOp(i.tx, has)} aria-label={`Oznacz ${i.day} ${i.name}`} />
-          <span className="tw:min-w-0 tw:flex-1 tw:truncate">{i.day} · {i.name} · {signed(i.amount)}</span>
-          <select className={selectClass} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`} onChange={e => setOp(i.tx, e.target.value)}>
-            <option value="">{group ? `jak grupa: ${markLabel(group.mark)}` : 'bez oznaczenia'}</option>
-            <optgroup label="Z historii odbiorcy">{r.templates.map(tpl => <option key={tpl.key} value={`t:${tpl.key}`}>{markLabel(tpl.mark)}</option>)}</optgroup>
+          <span className={`tw:min-w-0 tw:flex-1 tw:truncate ${has ? 'tw:text-ck-text' : 'tw:text-ck-muted'}`}>{i.day} · {i.name} · {signed(i.amount)}</span>
+          <select className={has ? selectOn : selectOff} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`}
+            onChange={e => e.target.value === '__off' ? set({ skipOps: new Set(sel.skipOps).add(i.tx) }) : setOp(i.tx, e.target.value)}>
+            <option value="__off">nie oznaczaj</option>
+            {group && <option value="">{shortLabel(group.mark)}</option>}
+            <optgroup label="Z historii odbiorcy">{r.templates.filter(tpl => tpl.key !== group?.key).map(tpl => <option key={tpl.key} value={`t:${tpl.key}`}>{shortLabel(tpl.mark)}</option>)}</optgroup>
             <optgroup label="Wszystkie kategorie">{categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
           </select>
         </li>;
@@ -131,7 +135,8 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
 export function AssignBody({ preview, sel, onChange, locked = false, state = 'open' }: {
   preview: BankAssignPreview; sel: AssignSelection; onChange: (next: AssignSelection) => void; locked?: boolean; state?: 'open' | 'applied' | 'rejected';
 }) {
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  // Payments the bank gives no name for are split by amount; there are few of each, so they start open.
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(preview.recipients.filter(r => r.amount !== null && r.count <= 8).map(r => r.key)));
   const flip = (key: string) => setOpen(prev => { const next = new Set(prev); if (!next.delete(key)) next.add(key); return next; });
   const sections = [
     { title: 'Zawsze to samo: zaznaczone', rows: preview.recipients.filter(r => r.certain), id: 'assign-certain' },
@@ -140,7 +145,17 @@ export function AssignBody({ preview, sel, onChange, locked = false, state = 'op
   return <div className={`tw:grid tw:gap-3 ${state === 'rejected' ? 'tw:opacity-55' : ''}`} data-state={state}>
     {sections.map(s => <div key={s.id} className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid={s.id}>
       <div className="tw:flex tw:justify-between tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted"><span>{s.title}</span><span>{plural(s.rows.length, 'odbiorca', 'odbiorców')} · {plural(s.rows.reduce((n, r) => n + r.count, 0), 'operacja', 'operacji')}</span></div>
-      {s.rows.map(r => <RecipientRow key={r.key} r={r} sel={sel} categories={preview.categories} onChange={onChange} locked={locked} expanded={open.has(r.key)} onFlip={() => flip(r.key)} />)}
+      {s.rows.filter((r, i) => r.amount === null || s.rows.findIndex(x => x.amount !== null && x.name === r.name) === i).map(r => {
+        const row = (x: BankAssignRecipient) => <RecipientRow key={x.key} r={x} sel={sel} categories={preview.categories} onChange={onChange} locked={locked} expanded={open.has(x.key)} onFlip={() => flip(x.key)} />;
+        if (r.amount === null) return row(r);
+        // One block for all the same-named payments: they are one recipient only by amount, and the block says so.
+        const same = s.rows.filter(x => x.amount !== null && x.name === r.name);
+        return <div key={`n-${r.key}`} className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-nameless={r.name}>
+          <div className="tw:px-3 tw:pt-2 tw:text-sm tw:text-ck-text">{r.name} <span className="tw:text-ck-muted">· {plural(same.reduce((n, x) => n + x.count, 0), 'operacja', 'operacji')}</span></div>
+          <p className="tw:m-0 tw:px-3 tw:text-xs tw:text-ck-muted">Bank nie podaje tu sklepu, więc panel łączy takie płatności tylko po tej samej kwocie.</p>
+          <div className="tw:ml-3 tw:border-l tw:border-ck-line">{same.map(row)}</div>
+        </div>;
+      })}
     </div>)}
   </div>;
 }
