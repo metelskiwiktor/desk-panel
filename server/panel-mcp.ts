@@ -221,7 +221,11 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       etykieta: { type: 'string' }, strona: { type: 'string', description: 'Fragment nazwy drugiej strony' },
       nieprzypisane: { type: 'boolean', description: 'Tylko operacje do przypisania' },
     }),
-    run: view('bank', a => ({ from: a.from, to: a.to, ruch: a.ruch, kategoria: a.kategoria, etykieta: a.etykieta, strona: a.strona, nieprzypisane: a.nieprzypisane ? '1' : undefined })),
+    // The guide is read with panel_guide; a small model sometimes talks about the account before reading it.
+    async run(args, ctx) {
+      const answer = await view('bank', a => ({ from: a.from, to: a.to, ruch: a.ruch, kategoria: a.kategoria, etykieta: a.etykieta, strona: a.strona, nieprzypisane: a.nieprzypisane ? '1' : undefined }))(args, ctx);
+      return `Rozmowa o koncie: jeśli nie czytałeś jeszcze w tej rozmowie przewodnika, wywołaj panel_guide z tematem bank.\n${answer}`;
+    },
   },
   panel_time: {
     description: 'Bieżąca data i godzina użytkownika (Europe/Warsaw).',

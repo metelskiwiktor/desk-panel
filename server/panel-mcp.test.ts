@@ -145,6 +145,13 @@ describe('panel MCP for Hermes', () => {
     expect((await fetch(`${base}/api/bank/show?kategorie=lekarz`)).status).toBe(404);
   });
 
+  it('reminds, at the top of the bank answer, to read the guide', async () => {
+    const answer = await call('panel_bank', {});
+    expect(answer.isError).toBeUndefined();
+    expect(answer.content[0].text.split('\n')[0]).toContain('panel_guide z tematem bank');
+    expect(answer.content[0].text).toContain('Konto PKO BP');
+  });
+
   it('gives the guide of an area on request, and says in its description which areas have one', async () => {
     const guide = await call('panel_guide', { topic: 'bank' });
     expect(guide.isError).toBeUndefined();
