@@ -47,10 +47,7 @@
           "panel_cezar_propose",
           "panel_recon_report"
         ],
-        "maxTools": 6,
-        "textNot": [
-          "nie da się"
-        ]
+        "maxTools": 6
       },
       "soft": [
         {

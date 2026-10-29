@@ -206,4 +206,4 @@ jeszcze raz i wykonuje jedną atomową akcją `mergeInto`. Decyzja i podgląd z 
 (`~/.desk-panel/cockpit.json`), więc karta pokazuje je także później. Wektor nie pokazuje karty z własnej inicjatywy przy samej prośbie o
 radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźnej prośbie o zmianę. Id karty to skrót z planu
 (`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
-(skill „Bank” i część preambuły).
+(skill „Bank”); Wektor czyta ją narzędziem `panel_guide`, gdy rozmowa dochodzi do banku (rejestr `PANEL_GUIDES`), a preambuła ma o niej tylko jedną linijkę.

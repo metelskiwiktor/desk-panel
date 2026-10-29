@@ -24,7 +24,7 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 - **Card** in `src/cockpit/`: `cards.tsx` (data card `ShowCard`), `consent-card.tsx` (`ConsentShell` + `MergeBody`; a new shape of change = a new body in the same shell). Register in `Thread.tsx` (`makeAssistantToolUI`), map the tool name in `live.ts` (`CARDS`, `cockpitMessage`, `respond`), constants in `types.ts`. Add the key to `CARD_SHOWN`.
 - **Consent for writes**: the tool only proposes. The card shows a before/after the panel works out; nothing changes until the user clicks. `POST /api/chats/:id/bank-plan` (Origin-checked) takes only `{toolCallId, decision}`; the plan is read from the conversation's own tool call, re-checked against current data, applied once (idempotent, kept in `cockpit.json`). The answer keeps the preview, so a decided card still shows what it was.
 - **Card ids** come from content, not from Hermes: `stableBankCardId` (message + hash of the plan, `server/hermes-chat.ts`). Hermes gives no usable call id (two cards in one answer stayed `pending:` and a click was refused with 409). Test with the ids the chat really makes, never `m1:x`.
-- **Docs**: `AGENTS.md`, `docs/bank.md`. Update the skill lines (`BANK_GUIDE` in `src/chat-contract.ts`; it is both the `@Bank` skill and part of Hermes's preamble, so it works without picking the skill).
+- **Docs**: `AGENTS.md`, `docs/bank.md`. Update the guide lines (`BANK_GUIDE` in `src/chat-contract.ts`). A guide is registered in `PANEL_GUIDES` (area, `when`, lines): Wektor reads it with `panel_guide` when a conversation reaches the area, and the same lines are the `@Bank` skill. The preamble only has one line per guide (`guideRules()`). A new area (calendar, to-dos) = a new entry, not more preamble.
 
 ## The skill text (`BANK_GUIDE`) - rules we hold
 
@@ -42,7 +42,7 @@ An **agent harness** is everything around the model except its reasoning: the lo
 | --- | --- |
 | Model | DeepSeek V4.1 Flash via OpenRouter |
 | Loop, tool calls, context, history | Hermes Agent (service `Desk-Panel-Hermes`) |
-| Instructions | preamble: `hermesPreamble()` + `BANK_GUIDE` (`src/chat-contract.ts`), `@` skills |
+| Instructions | short preamble (`hermesPreamble()`: identity, evidence rules, tool table, one line per guide) + area guides read on demand (`panel_guide`, `PANEL_GUIDES`), `@` skills |
 | Tools (actions) | MCP tools of the panel (`server/panel-mcp.ts`), narrow, enumerated fields |
 | Human in the loop | cards: data card, consent card (the tool only proposes) |
 | Guardrails | no write tools for the agent; plan read from the conversation, re-checked, applied atomically on the user's click |
@@ -78,6 +78,8 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 - **Multi-turn cases** model the user's replies ("Tak", "Okej, daj"); the second turn's `expect` is checked on the second answer only.
 - **New case = new topic.** Keep the cases held out from the examples in `BANK_GUIDE` (other categories, other wording); when a real conversation of the user's goes wrong, turn it into a case.
 - Real categories matter: a case that names categories must use ones the user really has (check `panel_bank` / the agent view), or Wektor will ask instead of proposing.
+- **Live data drifts.** The cases run on the user's real account: he keeps marking and may press "Wykonaj" in a kept test chat, so a case built on "Psycholog, Podolog, Gry are separate" stops meaning that (it happened: the merge was applied, and `porzadki-kategorie` then saw one category Zdrowie). Before judging a run, check the current state (`panel_bank` / the agent view) and say when a case's premise is gone. Do not read an answer as bad when the data changed under it.
+- A `textNot` aimed at one phrase catches innocent uses of it ("nie da sie ich przypisac"); keep those checks narrow.
 
 ### Reading the result
 
@@ -101,7 +103,7 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 - Docs: `docs/hermes.md` (config, model, service), `docs/czat.md`, `docs/diagnostyka-czatu-wektora.md`. Service `Desk-Panel-Hermes` (Servy): `just hermes STATUS|RESTART|CHECK`; config `~/.hermes/config.yaml`, key in `~/.hermes/.env` and `%LOCALAPPDATA%\hermes\.env`; panel tools are registered once by `just hermes-setup` (MCP server `desk-panel`, token `~/.desk-panel/mcp-token`). Never start or register it without the user (standing exception: the restart in this workflow). It runs DeepSeek V4.1 Flash through OpenRouter.
 - **Tool list is cached from Hermes's start**: a new tool or a changed schema is invisible until `just hermes RESTART` (the first run after adding `panel_show` answered "no such tool in this session"). Changes to a tool's *answer text* or to the panel's code need only `just update`.
 - **Schemas are enforced by Hermes before the call** (`additionalProperties: false`): a wrong field name returns a validation error and he retries. He first loads schemas with `tool_describe`, so a tool's description and field names are what he sees.
-- **The preamble** (`hermesPreamble()` in `server/hermes-chat.ts`, with `BANK_GUIDE` and the cockpit tool table) goes only in the first message of a session. A change to it affects new chats, not running ones.
+- **The preamble** (`hermesPreamble()` in `server/hermes-chat.ts`: who he is, evidence rules, the cockpit tool table, one line per area guide) goes only in the first message of a session. A change to it affects new chats, not running ones. It is kept short on purpose: a long preamble dilutes the rules for a small model and grows with every area. Area rules are read when needed with `panel_guide`; Flash calls it first most of the time but not always (1 miss in the first 4 runs), so if it matters more, put a one-line reminder at the top of the area's main tool answer (e.g. `panel_bank`).
 - **Tool call ids are unreliable**: the stream often gives only the tool's name (`pending:` ids in our store), the history gives `call_...`. That is why a card's identity is made from its content (`stableBankCardId`), and why the Cezar dispatch card has its own binding rules (`fillFromHistory`; it refuses to guess among several same-named cards).
 - Hermes has its own tools (shell, files, `execute_code`, `tool_search`); `execute_code` is blocked for approval, and he sometimes tries it to add numbers: the tool summaries should already carry the sums, and the skill says not to compute.
 - A Hermes turn ends after 40 model calls; the usage counters in our logs (`0 wywolan modelu`) are not reliable for cost. `skills.creation_nudge_interval: 0` is set so Hermes does not write skills on his own; the skills live in `src/chat-contract.ts`.
