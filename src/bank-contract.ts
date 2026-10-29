@@ -43,7 +43,7 @@ export const bankSourceSchema = z.object({
   consentUntil: z.number().finite().nullable().optional(),
   data: z.object({
     accounts: z.array(bankAccountSchema).max(10),
-    transactions: z.array(bankTransactionSchema).max(200),
+    transactions: z.array(bankTransactionSchema).max(700),
   }).nullable(),
 });
 export type BankSource = z.infer<typeof bankSourceSchema>;
