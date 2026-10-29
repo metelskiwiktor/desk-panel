@@ -202,7 +202,8 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       kategoria: text(100).optional(), etykieta: text(100).optional(), strona: text(100).optional(), nieprzypisane: flag,
     }).strict(),
     schema: schema({
-      ...range,
+      from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie 30 dni wstecz)' },
+      to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD, włącznie (domyślnie dziś); zakres do 400 dni, więc cała zapisana historia mieści się w jednym zapytaniu' },
       ruch: { type: 'string', enum: ['wydatek', 'przychód', 'rozliczenie', 'przełożenie'] },
       kategoria: { type: 'string', description: 'Fragment nazwy kategorii albo źródła' },
       etykieta: { type: 'string' }, strona: { type: 'string', description: 'Fragment nazwy drugiej strony' },
