@@ -6,7 +6,7 @@
       "calls": ["panel_guide", "panel_znanylekarz"],
       "notCalls": ["panel_calendar_propose", "panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_bank_propose", "panel_bank_assign", "browser_exec", "execute_code", "terminal"],
       "order": [["panel_guide", "panel_znanylekarz"]],
-      "textNot": ["(?:zarezerwowałem|zapisałem (?:wizytę|wydarzenie)|opłaciłem)"],
+      "textNot": ["(?:^|[.!?]\\s+)(?:zarezerwowałem|opłaciłem)\\s+(?:ci\\b|twoj|wizyt)|(?:^|[.!?]\\s+)zapisałem\\s+(?:wizytę|wydarzenie)"],
       "maxTools": 10, "maxSeconds": 120
     },
     "soft": [{"name": "krótko odsyła do wyboru na karcie", "text": "kart|wybierz|wybor"}]
