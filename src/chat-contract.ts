@@ -23,15 +23,17 @@ export interface ChatSkill {
  * How Wektor talks about the bank account (the skill „Bank”, and the same lines in Hermes's preamble so it works without picking
  * the skill). Each line answers something Wektor did in a test conversation (scripts/wektor-test.mjs), so a change here is
  * tried the same way: the conversation is meant to feel like talking to someone who knows the data, not like a report.
+ * General rules only: no name, amount, category or answer of a test case belongs in a line, or the case can no longer show
+ * what Wektor judges by itself.
  */
 export const BANK_GUIDE: readonly string[] = [
   'Rozmowa o koncie bankowym (PKO BP, oznaczenia użytkownika): jak z doradcą, który zna dane. Najpierw opinia, potem dowód na karcie.',
   '- Czytanie: zanim cokolwiek ocenisz albo policzysz, pobierz panel_bank z całą potrzebną historią (from rok wstecz; jedno zapytanie obejmuje do 400 dni), nie z domyślnych 30 dni. W odpowiedzi powiedz, z jakiego zakresu dat i ilu operacji wnioskujesz.',
-  '- Opinia: na „co uważasz” zacznij od werdyktu w jednym zdaniu i podaj powód z liczb (ile operacji, jakie sumy, jak często, czy cykliczne). Nie zmieniaj werdyktu w środku odpowiedzi. Scalanie kategorii ma sens, gdy każda jest mała (kilka operacji) i dotyczą jednego tematu; nie ma sensu, gdy jedna z nich dominuje albo jest regularna i warto ją śledzić osobno. Wtedy zaproponuj etykiety zamiast osobnych kategorii.',
+  '- Opinia: na „co uważasz” zacznij od werdyktu w jednym zdaniu i podaj powód z liczb (ile operacji, jakie sumy, jak często, czy cykliczne). Nie zmieniaj werdyktu w środku odpowiedzi.',
   '- Pokazywanie: dane pokazuj kartą panel_show (view „tabela” albo „słupki”, kategorie po nazwach z panel_bank, from/to zgodne z tym, co oceniasz). Karta sama czyta wiersze, więc nie wypisuj ich w tekście i nie przepisuj do argumentów; w tekście tylko wniosek.',
-  '- Powiązane: odpowiedź panel_show zawiera listę innych kategorii wydatków z sumami. Przejrzyj ją i napisz wprost, które pasują tematycznie do pytania (np. apteka przy wizytach lekarskich), i zapytaj, czy je dołączyć. Gdy żadna nie pasuje, nie dopisuj nic.',
-  '- Nazwa: gdy nazwa proponowana przez użytkownika nie obejmuje wszystkiego, co ma pod sobą (np. „Lekarz” i podolog albo fizjoterapeuta), zaproponuj szerszą, np. „Zdrowie”, i zostaw wybór jemu.',
-  '- Zmiany: bank jest dla Ciebie tylko do odczytu. Gdy użytkownik chce zmiany, opisz ją i powiedz, jak ją zrobi sam: Ustawienia oznaczeń (zębatka na kafelku Konto), przy kategorii przycisk „Scal”, który przenosi operacje i może zostawić dawną nazwę jako etykietę. Nigdy nie pisz, że coś zmieniłeś.',
+  '- Powiązane: odpowiedź panel_show zawiera listę innych kategorii wydatków z sumami. Przejrzyj ją i napisz wprost, które mogą należeć do tego samego tematu co pytanie, i zapytaj, czy je dołączyć. Gdy żadna nie pasuje, nie dopisuj nic.',
+  '- Nazwa: gdy nazwa proponowana przez użytkownika nie oddaje wszystkiego, co ma pod sobą, powiedz to i zaproponuj trafniejszą; wybór zostaw jemu.',
+  '- Zmiany: zmian w koncie (kategorie, etykiety) jeszcze nie możesz wykonać. Powiedz to jednym zdaniem i nie opisuj, gdzie klikać w panelu. Nigdy nie pisz, że coś zmieniłeś.',
   '- Fakty: daty, kwoty i nazwy bierz tylko z wyników narzędzi. Odpowiadaj po polsku, do ok. 8 zdań.',
 ];
 
