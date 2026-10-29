@@ -225,6 +225,12 @@ zgodnych wcześniejszych oznaczeń, nie od jednego.
 
 ### Otwarte pomysły (Wektor i bank)
 
+- **Potwierdzenia zamówień z Gmaila jako wskazówka sklepu** (nie teraz): płatność telefonem lub BLIK-iem nie niesie nazwy sklepu, ale sklepy (np. pyszne.pl) wysyłają
+  mail z potwierdzeniem; data (i godzina) maila z nazwą nadawcy mogłaby wskazać, jaki to sklep, bez zgadywania po kwocie (kwoty się zmieniają: napiwek, podatek, dodatki).
+  Panel już czyta Gmail tylko do odczytu (docs/gmail.md). Do rozważenia, gdy płatności bez nazwy dalej będą problemem.
+- **Zasada podpowiedzi** (ustalona z użytkownikiem): pewność bierze się z tego, co pokazuje bank (tekst sklepu, rachunek, numer, nazwa), a wiedza użytkownika jest
+  oznaczeniem, nigdy tożsamością. Płatność bez nazwy z banku nie ma „odbiorcy” i nie dostaje podpowiedzi z kwoty; użytkownik wybiera dla niej szablon (kategoria i etykiety
+  z jego wcześniejszych oznaczeń), a sklep, jeśli go zna, wpisuje jako etykietę, nie jako drugą stronę.
 - **Kalendarz wstecz** (`panel_calendar_search`): źródło kalendarza czyta tylko od dziś 42 dni do przodu, więc Wektor nie sprawdzi wizyt z przeszłości (np. czy wizyty u podologa trwają od lipca). Szukanie po słowie w zakresie wstecz.
 - **Karta zgody z kilkoma grupami** i jednym „Wykonaj”: dziś jedna karta to jedna kategoria docelowa, dwie zmiany to dwie karty.
 - **Kolejne dziedziny** (kalendarz, zadania) jako wpisy w `PANEL_GUIDES` oraz kolejne kształty zmian (przeniesienie, usunięcie) jako ciała karty zgody.
