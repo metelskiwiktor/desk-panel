@@ -130,6 +130,7 @@ describe('panel MCP for Hermes', () => {
     expect(shown.isError).toBeUndefined();
     expect(shown.content[0].text).toContain('Karta z danymi jest u użytkownika');
     expect(shown.content[0].text).toMatch(/Inne kategorie wydatków w tym zakresie:/);
+    expect((await call('panel_show', { nieoznaczone: true, view: 'tabela' })).isError).toBeUndefined();
     const unknown = await call('panel_show', { kategorie: ['lekarz'] });
     expect(unknown).toMatchObject({ isError: true });
     expect(unknown.content[0].text).toMatch(/Kategorie wydatków:.*Zdrowie/);

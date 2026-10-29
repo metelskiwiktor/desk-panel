@@ -11,12 +11,15 @@ export const BANK_SHOW_LIMITS = { categories: 8, rows: 60, days: 400, defaultDay
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** What is shown: spending categories of the user's marks, by name (a part of it is enough), in a range of days. */
-export const bankShowQuerySchema = z.object({
+export const bankShowObject = z.object({
   view: z.enum(BANK_SHOW_VIEWS).default('tabela'),
-  kategorie: z.array(z.string().trim().min(1).max(60)).min(1).max(BANK_SHOW_LIMITS.categories),
+  kategorie: z.array(z.string().trim().min(1).max(60)).max(BANK_SHOW_LIMITS.categories).default([]),
+  /** The spending nothing has marked yet, as one more row: what is left to sort. */
+  nieoznaczone: z.boolean().default(false),
   from: day.optional(),
   to: day.optional(),
 });
+export const bankShowQuerySchema = bankShowObject.refine(q => q.kategorie.length > 0 || q.nieoznaczone, { message: 'Podaj kategorie albo nieoznaczone' });
 export type BankShowQuery = z.infer<typeof bankShowQuerySchema>;
 
 export interface BankShowData {

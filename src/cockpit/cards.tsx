@@ -292,6 +292,7 @@ export function ShowCard({ args }: ToolCallMessagePartProps<ShowArgs>) {
     if (!query.success) return;
     const params = new URLSearchParams({ view: query.data.view });
     for (const name of query.data.kategorie) params.append('kategorie', name);
+    if (query.data.nieoznaczone) params.set('nieoznaczone', '1');
     if (query.data.from) params.set('from', query.data.from);
     if (query.data.to) params.set('to', query.data.to);
     let gone = false;

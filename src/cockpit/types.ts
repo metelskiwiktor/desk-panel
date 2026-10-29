@@ -51,7 +51,7 @@ export interface WatchArgs { taskId?: string; id?: string; steps?: { label: stri
 
 /** The data card (`panel_show`): the arguments as the model wrote them (the card checks them); the rows the card reads itself. */
 export const SHOW = 'bank_show';
-export interface ShowArgs { tytul?: unknown; view?: unknown; kategorie?: unknown; from?: unknown; to?: unknown; refused?: string }
+export interface ShowArgs { tytul?: unknown; view?: unknown; kategorie?: unknown; nieoznaczone?: unknown; from?: unknown; to?: unknown; refused?: string }
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';

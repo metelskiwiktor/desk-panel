@@ -21,9 +21,16 @@ function spending(ledger: BankLedger, from: string, to: string) {
     && (e.label?.move === 'spend'));
 }
 
+const UNMARKED = 'unmarked';
+/** Outflows with no mark yet in the range, PLN only: the agent's view counts them as spending too. */
+function unmarkedSpending(ledger: BankLedger, from: string, to: string) {
+  return ledger.entries.filter(e => e.op.currency === 'PLN' && bookedOn(e.op.at) >= from && bookedOn(e.op.at) <= to && !e.label?.move && e.op.amount < 0);
+}
+
 /**
  * The card's data from the ledger. A name matches a category by id or by a part of its name, among the spending categories
  * only; a name that matches none comes back in `unknown`, and no match at all is refused with the names there are.
+ * `nieoznaczone` adds the outflows nothing has marked yet as one more row of the card.
  */
 export function bankShow(ledger: BankLedger, query: BankShowQuery, today: string): BankShowData {
   const to = query.to ?? today;
@@ -41,16 +48,21 @@ export function bankShow(ledger: BankLedger, query: BankShowQuery, today: string
     if (!found.length) unknown.push(wanted);
     for (const c of found) matched.set(c.id, c);
   }
-  if (!matched.size) throw new BankShowError(404, `Żadna kategoria wydatków nie pasuje do: ${query.kategorie.join(', ')}. Kategorie wydatków: ${spend.map(c => c.name).join(', ') || '(brak)'}.`);
+  if (!matched.size && !query.nieoznaczone) throw new BankShowError(404, `Żadna kategoria wydatków nie pasuje do: ${query.kategorie.join(', ')}. Kategorie wydatków: ${spend.map(c => c.name).join(', ') || '(brak)'}.`);
 
-  const entries = spending(ledger, from, to).filter(e => e.label?.category && matched.has(e.label.category));
-  const categories = [...matched.values()].map(c => {
-    const own = entries.filter(e => e.label?.category === c.id);
-    return { id: c.id, name: c.name, color: c.color, count: own.length, spent: -own.reduce((sum, e) => sum + e.op.amount, 0) };
-  }).sort((a, b) => b.spent - a.spent);
+  const marked = spending(ledger, from, to).filter(e => e.label?.category && matched.has(e.label.category));
+  const unmarked = query.nieoznaczone ? unmarkedSpending(ledger, from, to) : [];
+  const entries = [...marked, ...unmarked].sort((a, b) => b.op.at - a.op.at);
+  const categories = [
+    ...[...matched.values()].map(c => {
+      const own = marked.filter(e => e.label?.category === c.id);
+      return { id: c.id, name: c.name, color: c.color, count: own.length, spent: -own.reduce((sum, e) => sum + e.op.amount, 0) };
+    }),
+    ...(query.nieoznaczone ? [{ id: UNMARKED, name: 'Nieoznaczone', color: 'slate' as const, count: unmarked.length, spent: -unmarked.reduce((sum, e) => sum + e.op.amount, 0) }] : []),
+  ].sort((a, b) => b.spent - a.spent);
   const rows = entries.slice(0, BANK_SHOW_LIMITS.rows).map(e => ({
     day: bookedOn(e.op.at), amount: e.op.amount, name: masked(clip(e.op.name, 60)),
-    category: matched.get(e.label!.category!)!.name, tags: e.label!.tags.map(t => masked(clip(t, 30))),
+    category: e.label?.category ? matched.get(e.label.category)!.name : 'Nieoznaczone', tags: (e.label?.tags ?? []).map(t => masked(clip(t, 30))),
   }));
   return {
     view: query.view, from, to, unknown, categories, rows,
@@ -79,16 +91,19 @@ function coverage(ledger: BankLedger, data: BankShowData): string {
  */
 export function bankShowSummary(ledger: BankLedger, data: BankShowData): string {
   const shown = new Set(data.categories.map(c => c.id));
-  const others = new Map<string, { count: number; spent: number }>();
+  const others = new Map<string, { count: number; spent: number; names: string[] }>();
   for (const e of spending(ledger, data.from, data.to)) {
     const id = e.label?.category;
     if (!id || shown.has(id)) continue;
-    const entry = others.get(id) ?? { count: 0, spent: 0 };
+    const entry = others.get(id) ?? { count: 0, spent: 0, names: [] };
     entry.count++; entry.spent -= e.op.amount;
+    const name = masked(clip(e.op.name, 24));
+    if (entry.names.length < 3 && !entry.names.includes(name)) entry.names.push(name);
     others.set(id, entry);
   }
   const names = new Map(ledger.categories.map(c => [c.id, c.name]));
-  const rest = [...others].sort((a, b) => b[1].spent - a[1].spent).map(([id, o]) => `${names.get(id) ?? '?'} ${o.count} op. ${money(o.spent)}`);
+  // The operations' names say what a category holds: without them the model guesses from the category's name.
+  const rest = [...others].sort((a, b) => b[1].spent - a[1].spent).map(([id, o]) => `${names.get(id) ?? '?'} ${o.count} op. ${money(o.spent)} (${o.names.join(', ')})`);
   return [
     `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)}; zakres ${data.from} – ${data.to}${data.span ? `, same operacje od ${data.span.first} do ${data.span.last}` : ''}.`,
     coverage(ledger, data),

@@ -4,14 +4,56 @@
     {
       "say": "Czy ma sens scalić Jedzenie ze Sklepem spożywczym? Co uważasz?",
       "expect": {
-        "calls": ["panel_bank", "panel_show"],
-        "notCalls": ["panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_recon_report"],
+        "calls": [
+          "panel_bank",
+          "panel_show"
+        ],
+        "notCalls": [
+          "panel_todo_action",
+          "panel_cezar_action",
+          "panel_cezar_propose",
+          "panel_recon_report"
+        ],
         "maxTools": 8
       },
       "soft": [
-        { "name": "zaczyna od werdyktu", "text": "^[^\\n]{0,200}(tak|nie|raczej|trudno|warto|nie warto)" },
-        { "name": "podaje liczby operacji lub sum", "text": "\\d+ (op|zł)" },
-        { "name": "mówi o zakresie lub pokryciu danych", "text": "oznacza|nieoznaczon|od \\d|zakres|mało|krótk" }
+        {
+          "name": "zaczyna od werdyktu",
+          "text": "^[^\\n]{0,200}(tak|nie|raczej|trudno|warto|nie warto)"
+        },
+        {
+          "name": "podaje liczby operacji lub sum",
+          "text": "\\d+ (op|zł)"
+        },
+        {
+          "name": "mówi o zakresie lub pokryciu danych",
+          "text": "oznacza|nieoznaczon|od \\d|zakres|mało|krótk"
+        }
+      ]
+    },
+    {
+      "say": "Tak",
+      "expect": {
+        "notCalls": [
+          "panel_todo_action",
+          "panel_cezar_action",
+          "panel_cezar_propose",
+          "panel_recon_report"
+        ],
+        "maxTools": 6,
+        "textNot": [
+          "nie da się"
+        ]
+      },
+      "soft": [
+        {
+          "name": "nie wymienia operacji z karty (nie więcej niż 2 daty w tekście)",
+          "text": "^(?![\\s\\S]*\\d{1,2}\\.\\d{2}[\\s\\S]*\\d{1,2}\\.\\d{2}[\\s\\S]*\\d{1,2}\\.\\d{2})"
+        },
+        {
+          "name": "nie obiecuje zmian w koncie (dopisanie do kategorii)",
+          "text": "^(?![\\s\\S]*(dopisać|dopiszę|przypisać|przypiszę)[\\s\\S]*kategori)"
+        }
       ]
     }
   ]

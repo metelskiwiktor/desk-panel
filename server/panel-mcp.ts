@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
 import { CARD_SHOWN, CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
 import { todoActionSchema } from '../src/todo-contract';
-import { bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
+import { bankShowObject, bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
 import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
@@ -308,14 +308,15 @@ export const PANEL_TOOLS: Record<string, Tool> = {
   },
   panel_show: {
     description: cockpitToolDescription('panel_show'),
-    input: bankShowQuerySchema.extend({ tytul: text(80).optional() }).strict(),
+    input: bankShowObject.extend({ tytul: text(80).optional() }).strict().refine(q => q.kategorie.length > 0 || q.nieoznaczone, { message: 'Podaj kategorie albo nieoznaczone' }),
     schema: schema({
       tytul: { type: 'string', description: 'Krótki tytuł karty po polsku, np. „Psycholog, fizjoterapeuta, podolog”' },
       view: { type: 'string', enum: [...BANK_SHOW_VIEWS], description: '"tabela": operacje z sumami kategorii; "słupki": porównanie sum kategorii' },
       kategorie: { type: 'array', maxItems: BANK_SHOW_LIMITS.categories, items: { type: 'string' }, description: 'Nazwy kategorii wydatków (wystarczy ich część), z panel_bank' },
+      nieoznaczone: { type: 'boolean', description: 'true: dodaj wydatki, których użytkownik jeszcze nie oznaczył (jako jeden wiersz „Nieoznaczone”); wymagane, gdy nie podajesz kategorii' },
       from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD (domyślnie 365 dni wstecz)' },
       to: { type: 'string', description: 'Ostatni dzień RRRR-MM-DD (domyślnie dziś)' },
-    }, ['kategorie']),
+    }),
     async run(args, { sources, now }) {
       try {
         const query = bankShowQuerySchema.parse(args);

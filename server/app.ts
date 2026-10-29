@@ -127,7 +127,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
       try {
-        const query = bankShowQuerySchema.safeParse({ view: url.searchParams.get('view') ?? undefined, kategorie: url.searchParams.getAll('kategorie'), from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
+        const query = bankShowQuerySchema.safeParse({ view: url.searchParams.get('view') ?? undefined, kategorie: url.searchParams.getAll('kategorie'), nieoznaczone: url.searchParams.get('nieoznaczone') === '1', from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
         if (!query.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
         res.end(JSON.stringify(bankShow(await sources.bankLedger(), query.data, dayIn(Date.now(), 'Europe/Warsaw'))));
       } catch (error) {
