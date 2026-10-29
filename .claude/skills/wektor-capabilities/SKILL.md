@@ -12,7 +12,7 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
 2. **Deliver in code** (below), with tests. Commit and push to main (user's standing rule), `just update` to deploy.
 3. **Restart Hermes** after any change to a tool or its schema: `just hermes RESTART`. Hermes caches the tool list from its start (a new tool is invisible until then). Standing permission, given 2026-10-29, only for this workflow. A change to the skill text or a tool's *answer* needs only the deploy.
-4. **Run test conversations yourself**: `node scripts/wektor-test.mjs <case> --runs 1` (cases: `scripts/wektor-cases/*.json`; `expect` fails a run, `soft` is only reported). The chats are kept, titled `[test] <case> #n`; never delete them.
+4. **Run test conversations yourself** with the harness (see "The harness" below): `node scripts/wektor-test.mjs <case> --runs 1`. The chats are kept, titled `[test] <case> #n`; never delete them.
 5. **Show the user Wektor's answers verbatim and judge together.** Do NOT loop run -> fix -> rerun on your own. One run per case, present, discuss, then change. Check his factual claims against the data (`curl http://127.0.0.1:5174/api/agent/bank?...`): his specific claims were true so far, but verify.
 6. Improve the skill/tool from what the user says, then back to 3.
 
@@ -33,6 +33,39 @@ The user asks for an action that is hard in the panel UI (e.g. "merge these bank
 - Policy (e.g. "when to merge") is the user's, in his words, added when a real preference appears. Wektor may propose a skill update when he hears one ("Warto dopisać do skilla Bank: ...").
 - The consent card is **not proactive**: on a request for advice he first suggests the change in words and asks whether to show the card; the card comes after the user agrees, or at once when the user explicitly asks for a concrete change. Not every bank conversation means the user wants a change.
 - What the user judged good: verdict first with a reason from the numbers, <= 6 sentences without lists, says since when marks exist and how much is unmarked, "trudno ocenic" instead of a forecast when the sample is small, names of services allowed but no table of rows, proposes only steps his tools can do, no `execute_code`, ends with one concrete next step, never says he changed something.
+
+## The harness (`scripts/wektor-test.mjs`)
+
+`node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174]`
+
+- **What it does**: for each run it opens a new Hermes chat through the panel's own API (`POST /api/chats` with `engine: hermes`, an `Origin` header like the page's), sends the case's turns one by one (`POST .../messages`), polls until the agent's answer is no longer streaming (300 s limit), then reads the tools he called and his text. It talks to the **live service on port 5174, real Hermes, real data**; it needs the service and Hermes running.
+- **What he sees is a natural conversation**: the harness sends plain text, never picks `@Bank`, so it tests what a user really gets (skill text arrives through the preamble).
+- **Output**: per run, the tool chain (`panel_bank -> panel_show`, `!` marks an error), model-call/token/seconds line (the counters are unreliable), failed `expect` checks (`x`), `soft` results (`+`/`-`), the proposals of `panel_bank_propose` (printed as `karta zgody: {...}`), and **his answer in full**. A JSON report goes to `output/wektor/<case>-<timestamp>.json` (git-ignored): all tools with inputs and outputs, useful to check what a tool really answered.
+- **Chats stay** in the panel, renamed `[test] <case> #<run> <time>`, so the user can read them and see the cards. `--delete` removes them (only when the user asks). The harness never clicks a card.
+- **Exit code** 0 when every run passed its `expect` checks, 1 otherwise, 2 on bad usage.
+
+### Writing a case (`scripts/wektor-cases/<name>.json`)
+
+```
+{ "description": "...", "turns": [
+  { "say": "what the user types",
+    "expect": { "calls": ["panel_bank"], "notCalls": ["panel_todo_action", "panel_bank_propose"],
+                "text": ["regex"], "textNot": ["zmieni\u0142em"], "maxTools": 8, "maxSeconds": 90 },
+    "soft": [ { "name": "what we watch", "text": "regex" } ] } ] }
+```
+
+- Tool names are matched without the `mcp__desk_panel__` prefix. Regexes are case-insensitive, matched on his whole text, written as JSON (double backslashes).
+- **`expect` is for rules that must hold** (a write tool must not be called; the card appears or does not; no "I changed it"). **`soft` is for judgement we are still forming** (mentions a related category, notes the data is short, does not list rows). A `soft` regex is crude: Polish inflection breaks it (`Gadzety` vs `Gadzetow`), so a `-` means "look", not "bad".
+- **Every case that must not write needs the write/card tools in `notCalls`**; the advice case lists `panel_bank_propose` there (the card is not proactive).
+- **Multi-turn cases** model the user's replies ("Tak", "Okej, daj"); the second turn's `expect` is checked on the second answer only.
+- **New case = new topic.** Keep the cases held out from the examples in `BANK_GUIDE` (other categories, other wording); when a real conversation of the user's goes wrong, turn it into a case.
+- Real categories matter: a case that names categories must use ones the user really has (check `panel_bank` / the agent view), or Wektor will ask instead of proposing.
+
+### Reading the result
+
+- Variance is real (one model, temperature): a single run is a sample, not a verdict. Early runs of the same case disagreed on the advice itself. Use `--runs 3` when a rule is in doubt, and still show the user the answers, not just pass counts.
+- Compare his claims with the data: `curl "http://127.0.0.1:5174/api/agent/bank?kategoria=...&from=...&to=..."` (read-only), and `~/.desk-panel/chat-logs/turns.jsonl` for the turn's tools and endings.
+- A test chat that already has a card is **live**: do not press "Wykonaj" in it unless the user wants that change. To test the decision path without changing data, POST `reject` to `/api/chats/:id/bank-plan` with an `Origin` header (see Gotchas).
 
 ## Designing a card (we decide it with the user, visually)
 
