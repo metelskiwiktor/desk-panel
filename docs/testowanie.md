@@ -81,6 +81,10 @@ testy z `vi.mock`. Szybciej będzie tylko przy mniejszej liczbie testów renderu
 - Zmiana zachowania przepisuje istniejący test. Nowy test jest dla nowego niezmiennika; test, który sprawdza to samo co inny,
   się scala albo usuwa (w opisie commita: co pilnuje tego dalej).
 - Czysta logika ma test na funkcji. `render(<App />)` jest dla przepływu przez kilka elementów panelu: kosztuje ok. 1 s CPU.
+  Kafelek testuje się na nim samym, z tym samym hookiem i API scenariusza (`renderTiles` w `src/todos.test.tsx`,
+  `renderFeed` w `src/mail.test.tsx`); panel zostaje dla siatki i tego, co kafelek otwiera poza sobą. Co widać na
+  standardowym ekranie przed dotknięciem, sprawdza jeden render w `src/App.test.tsx`, a stan zasiewa się w `localStorage`
+  zamiast go wyklikiwać.
 - Nie dopisuje się kodu ani eksportów po to, żeby test przeszedł. Kod, którego używa tylko test, jest martwy (knip go zgłosi).
 - Czas: wstrzykiwany zegar (`now`) albo `vi.useFakeTimers`, nie czekanie na `setTimeout` w teście.
 
