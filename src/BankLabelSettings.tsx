@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Merge, Pencil, Trash2, X } from 'lucide-react';
 import { BANK_LABEL_LIMITS, type BankCategoryMove, type BankLabelsData } from './bank-labels-contract';
 import { COLOR_VALUES, ICONS } from './bank-look';
 import { BankCategoryEditor } from './BankCategoryEditor';
@@ -16,6 +16,7 @@ const KIND_NAMES = { account: 'rachunek', phone: 'telefon', phoneTail: 'końców
 export function BankLabelSettings({ data, act, error, close }: { data: BankLabelsData; act: BankLabelsHook['act']; error: string; close: () => void }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [merging, setMerging] = useState<{ id: string; into: string; keepName: boolean } | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const keys = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); close(); } };
   const rename = (key: string, current: string) => {
@@ -37,8 +38,17 @@ export function BankLabelSettings({ data, act, error, close }: { data: BankLabel
           <span className="bank-avatar small" aria-hidden="true"><Icon size={15} /></span>
           <span className="bank-set-name">{c.name}</span>
           <button type="button" aria-label={`Zmień ${word} ${c.name}`} onClick={() => setEditing(c.id)}><Pencil size={15} aria-hidden="true" /></button>
+          {own.length > 1 && <button type="button" aria-label={`Scal ${word} ${c.name} z inną`} onClick={() => setMerging({ id: c.id, into: own.find(o => o.id !== c.id)!.id, keepName: true })}><Merge size={15} aria-hidden="true" /></button>}
           {remove(c.id, `${word} ${c.name}`, () => void act({ action: 'deleteCategory', category: c.id }))}
         </>}
+        {merging?.id === c.id && <span className="bank-merge">
+          <select aria-label={`Scal ${c.name} z`} value={merging.into} onChange={e => setMerging({ ...merging, into: e.target.value })}>
+            {own.filter(o => o.id !== c.id).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+          <label><input type="checkbox" checked={merging.keepName} onChange={e => setMerging({ ...merging, keepName: e.target.checked })} /> zostaw „{c.name}” jako etykietę</label>
+          <button type="button" className="danger" onClick={() => { void act({ action: 'mergeCategory', category: c.id, into: merging.into, ...(merging.keepName ? { tag: c.name.toLowerCase() } : {}) }); setMerging(null); }}>Scal</button>
+          <button type="button" onClick={() => setMerging(null)}>Anuluj</button>
+        </span>}
       </li>; })}
     </ul> : <p className="p2-note">{empty}</p>;
   };

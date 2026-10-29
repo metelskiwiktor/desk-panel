@@ -358,6 +358,21 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         dropEmpty(file);
         return { ok: true, removed };
       }
+      case 'mergeCategory': {
+        const from = categoryOf(file, action.category), into = categoryOf(file, action.into);
+        if (from.move !== into.move) throw new BankLabelError(409, 'Można scalić tylko z pozycją tej samej listy.');
+        const tag = action.tag ? file.tags.find(t => same(t, action.tag!)) ?? action.tag : undefined;
+        let moved = 0;
+        for (const l of Object.values(file.labels)) {
+          if (l.category !== from.id) continue;
+          l.category = into.id;
+          if (tag && !l.tags.some(t => same(t, tag)) && l.tags.length < BANK_LABEL_LIMITS.tagsPerMark) l.tags.push(tag);
+          moved++;
+        }
+        if (tag && moved) keepWords(file, [tag]);
+        file.categories.splice(file.categories.indexOf(from), 1);
+        return { ok: true, category: { id: into.id, created: false }, removed: moved };
+      }
       case 'renameTag': { renameTag(file, action.tag, action.name); return { ok: true }; }
       case 'deleteTag': {
         const tag = file.tags.find(t => same(t, action.tag)) ?? missing('Nie ma takiej etykiety.');

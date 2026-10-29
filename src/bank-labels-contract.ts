@@ -152,6 +152,9 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('updateCategory'), category: bankCategoryId, name: categoryName.optional(), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict()
     .refine(a => a.name !== undefined || a.color !== undefined || a.icon !== undefined, { message: 'Nothing to change' }),
   z.object({ action: z.literal('deleteCategory'), category: bankCategoryId }).strict(),
+  /** Every mark of `category` goes to `into` (of the same move) and `category` is gone; `tag` is added to those marks to keep what it said. */
+  z.object({ action: z.literal('mergeCategory'), category: bankCategoryId, into: bankCategoryId, tag: bankTag.optional() }).strict()
+    .refine(a => a.category !== a.into, { message: 'Cannot merge a category into itself' }),
   z.object({ action: z.literal('renameTag'), tag: bankTag, name: bankTag }).strict(),
   z.object({ action: z.literal('deleteTag'), tag: bankTag }).strict(),
   z.object({ action: z.literal('createParty'), name: partyName }).strict(),

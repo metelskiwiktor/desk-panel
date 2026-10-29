@@ -231,6 +231,23 @@ describe('bank label store', () => {
     expect((await store.read()).data!.labels['acc:O;3']).toMatchObject({ move: 'spend', category: a, party: cafe });
   });
 
+  it('merges a category into another of its list: marks move, the name may stay as a tag, lists of other moves are refused', async () => {
+    const ops = [map(raw.card('O;1', '2026-10-26', '43.90')), map(raw.card('O;2', '2026-10-25', '80.00'))];
+    const { store } = setup(ops);
+    const health = (await store.apply({ action: 'createCategory', name: 'Zdrowie', move: 'spend' })).category!.id;
+    const psy = (await store.apply({ action: 'createCategory', name: 'Psycholog', move: 'spend' })).category!.id;
+    const pocket = (await store.apply({ action: 'createCategory', name: 'Revolut', move: 'move' })).category!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: psy, recurring: false });
+    await store.apply({ action: 'label', tx: 'acc:O;2', category: psy, tags: ['psycholog'], recurring: false });
+    await expect(store.apply({ action: 'mergeCategory', category: psy, into: pocket })).rejects.toMatchObject({ status: 409 });
+    expect((await store.apply({ action: 'mergeCategory', category: psy, into: health, tag: 'Psycholog' })).removed).toBe(2);
+    const data = (await store.read()).data!;
+    expect(data.categories.map(c => c.name)).not.toContain('Psycholog');
+    expect(data.labels['acc:O;1']).toMatchObject({ category: health, tags: ['psycholog'] });
+    expect(data.labels['acc:O;2']).toMatchObject({ category: health, tags: ['psycholog'] });
+    expect(data.tags).toEqual(['psycholog']);
+  });
+
   it('renames and deletes tags everywhere, and deleting a category or a side unmarks only that part', async () => {
     const ops = ['O;1', 'O;2'].map((ref, i) => map(raw.card(ref, `2026-10-2${i}`, '10.00', 'LESZNOKAWIARNIA 7PL')));
     const { store } = setup(ops);
