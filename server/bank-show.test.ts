@@ -45,6 +45,7 @@ describe('bank card data', () => {
     const data = bankShow(ledger, { view: 'tabela', kategorie: ['psych', 'podo'] }, '2026-10-29');
     const summary = bankShowSummary(ledger, data);
     expect(summary).toContain('Razem 4 operacji');
+    expect(summary).toContain('Oznaczenia w tym zakresie zaczynają się 2026-09-20; nieoznaczonych wydatków: 0 op.');
     expect(summary).toContain('same operacje od 2026-09-20 do 2026-10-20');
     expect(summary).toContain('Inne kategorie wydatków w tym zakresie: Apteka 1 op. 45,50 zł');
     expect(summary).not.toContain('Gabinet');

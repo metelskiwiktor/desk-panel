@@ -10,6 +10,7 @@
       },
       "soft": [
         { "name": "wspomina aptekę", "text": "aptek" },
+        { "name": "zauważa, że oznaczenia są krótkie / danych mało", "text": "oznacza|nieoznaczon|mało|krótk|trudno|od kiedy|jak długo" },
         { "name": "ocenia pomysł (zdrowie / lekarz / etykiety)", "text": "zdrowi|lekarz|etykiet|tag" },
         { "name": "nie wypisuje wierszy z karty ponownie", "text": "^(?![\\s\\S]*(Gabinet|\\d{4}-\\d{2}-\\d{2}))" }
       ]
