@@ -162,6 +162,23 @@ describe('bank label store', () => {
     expect(data.balances).toEqual([{ party: 'p-00000001', currency: 'PLN', amount: 250 }]);
   });
 
+  it('folds old twin sides (people and merchants of one name) that learnt nothing apart into the first, keeping their marks; newer ones stay', async () => {
+    const op = { at: Date.parse('2026-10-26T12:00:00Z'), amount: -70, currency: 'PLN', name: 'x', method: 'transfer', merchant: 'X', keys: [] };
+    const mark = (party: string) => ({ move: 'spend', category: null, tags: [], party, recurring: false, comment: '', labeledAt: 1, op });
+    const side = (id: string, name: string, identifiers: object[] = []) => ({ id, name, createdAt: 1, identifiers });
+    const known = { key: 'name:abc', kind: 'name', hint: 'DANIEL', addedAt: 1 };
+    const v4 = {
+      version: 4, secret: 'x'.repeat(43), since: '2026-10-26', categories: [], tags: [], rejections: [],
+      parties: [side('p-00000001', 'pyszne.pl'), side('m-00000001', 'Pyszne.pl'), side('p-00000002', 'Daniel'), side('p-00000003', 'Daniel', [known]), side('k-00000001', 'Anna'), side('k-00000002', 'Anna')],
+      labels: { 'acc:O;1': mark('p-00000001'), 'acc:O;2': mark('m-00000001') },
+    };
+    const persistence = memory(v4);
+    await setup([], persistence).store.read();
+    const file = persistence.file as BankLabelFile;
+    expect(file.parties.map(p => p.id)).toEqual(['p-00000001', 'p-00000003', 'k-00000001', 'k-00000002']);
+    expect(file.labels['acc:O;2'].party).toBe('p-00000001');
+  });
+
   it('upgrades the third version into moves: the own side’s money in is income from “Pensja”, any other purpose a tag', async () => {
     const op = (amount: number) => ({ at: Date.parse('2026-10-26T12:00:00Z'), amount, currency: 'PLN', name: 'x', method: 'transfer', merchant: 'X', keys: [] });
     const mark = (party: string | null, amount: number, more: object = {}) => ({ category: null, tags: [], party, purpose: null, recurring: false, comment: '', labeledAt: 1, op: op(amount), ...more });

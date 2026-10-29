@@ -100,6 +100,30 @@ const olderSchema = z.object({
     parties: [...old.people.map(p => ({ ...p, kind: 'person' as const })), ...old.merchants.map(m => ({ ...m, kind: 'company' as const }))],
   };
 });
+/**
+ * The old lists of people and merchants could both hold one name ("pyszne.pl"), and the upgrade kept both. Such twins (ids `p-…`
+ * and `m-…` from those lists) that learnt nothing to tell them apart are one side: their marks move to the first of the name,
+ * preferring one that already has identifiers. Returns whether anything changed. Sides made since (`k-…`) are never folded, since
+ * two of one name are then the user's own choice, and neither is one with identifiers, which is what tells two of a name apart.
+ */
+const OLD_SIDE = /^[pm]-/;
+function mergeTwins(file: BankLabelFile): boolean {
+  const keep = new Map<string, StoredParty>();
+  for (const p of file.parties.filter(p => OLD_SIDE.test(p.id))) {
+    const name = p.name.trim().toLowerCase();
+    if (!keep.has(name) || (p.identifiers.length > 0 && keep.get(name)!.identifiers.length === 0)) keep.set(name, p);
+  }
+  const into = new Map<string, string>();
+  for (const p of file.parties.filter(p => OLD_SIDE.test(p.id))) {
+    const target = keep.get(p.name.trim().toLowerCase())!;
+    if (p !== target && p.identifiers.length === 0) into.set(p.id, target.id);
+  }
+  if (!into.size) return false;
+  for (const l of Object.values(file.labels)) if (l.party && into.has(l.party)) l.party = into.get(l.party)!;
+  file.parties = file.parties.filter(p => !into.has(p.id));
+  return true;
+}
+
 /** A purpose that says money is to come back or was given back; any other purpose ("dokładka", "prezent") was what it went on. */
 const SETTLING = /po[zż]ycz|zwrot|d[lł]ug|odda/i;
 /**
@@ -242,10 +266,14 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         }
         if (raw === null) { data = fresh(); await options.persistence.write(data); message = undefined; return data; }
         const parsed = bankLabelFileSchema.safeParse(raw);
-        if (parsed.success) { data = parsed.data; message = undefined; return data; }
+        if (parsed.success) {
+          data = parsed.data; message = undefined;
+          if (mergeTwins(data)) await options.persistence.write(data);
+          return data;
+        }
         const third = thirdSchema.safeParse(raw);
         const old = third.success ? third : olderSchema.safeParse(raw);
-        if (old.success) { data = toMoves(old.data); await options.persistence.write(data); message = undefined; return data; }
+        if (old.success) { data = toMoves(old.data); mergeTwins(data); await options.persistence.write(data); message = undefined; return data; }
         // Never write over what cannot be read: keep it aside and start again, and say so.
         const aside = await options.persistence.aside?.().catch(() => null);
         message = `Plik z oznaczeniami operacji był uszkodzony${aside ? ` (zachowany jako ${path.basename(aside)})` : ''}; zaczynasz od pustych oznaczeń.`;
