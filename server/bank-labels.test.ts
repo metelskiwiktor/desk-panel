@@ -152,23 +152,25 @@ describe('bank label store', () => {
     expect((await store.read()).data!.suggestions['acc:O;2']).toMatchObject({ sure: true });
   });
 
-  it('accepts the sure suggestions and the picked options of many operations in one write, or none', async () => {
-    const ops = [map(raw.transferIn('O;0', '2026-10-19', '1000.00')), map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
+  it('marks many operations in one write with the whole mark of each, or none', async () => {
+    const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.card('O;3', '2026-10-27', '12.00')), map(raw.card('O;4', '2026-10-27', '13.00'))];
     const { store } = setup(ops);
     const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
     const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
-    for (const tx of ['acc:O;0', 'acc:O;1']) await store.apply({ action: 'label', tx, move: 'income', category: salary, party: mine, recurring: true });
-    // one of them has no suggestion at all: nothing is marked
-    await expect(store.apply({ action: 'acceptMany', txs: ['acc:O;2', 'acc:O;4'] })).rejects.toMatchObject({ status: 409 });
-    expect((await store.read()).data!.pending).toContain('acc:O;2');
-    expect(await store.apply({ action: 'acceptMany', txs: ['acc:O;2'], picks: [{ tx: 'acc:O;3', option: 0 }] })).toMatchObject({ ok: true, assigned: 2 });
+    const food = (await store.apply({ action: 'createCategory', name: 'Jedzenie' })).category!.id;
+    const item = (tx: string, over: Record<string, unknown> = {}) => ({ tx, move: 'income', category: salary, tags: [], party: mine, recurring: false, ...over });
+    // an operation of a kind that does not fit its category refuses the lot
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;1'), item('acc:O;3', { move: 'spend' })] } as never)).rejects.toMatchObject({ status: 409 });
+    expect((await store.read()).data!.labels['acc:O;1']).toBeUndefined();
+    expect(await store.apply({ action: 'markMany', items: [item('acc:O;1', { recurring: true }), item('acc:O;3', { move: 'spend', category: food, tags: ['kfc'], party: null })] } as never)).toMatchObject({ ok: true, assigned: 2 });
     const data = (await store.read()).data!;
-    expect(data.labels['acc:O;3']).toMatchObject({ move: 'income', category: salary, party: mine, recurring: true });
-    expect(data.pending).not.toContain('acc:O;2');
-    // a pick of an option that is not there, the same operation twice, and nothing at all are refused
-    await expect(store.apply({ action: 'acceptMany', txs: [], picks: [{ tx: 'acc:O;4', option: 2 }] })).rejects.toMatchObject({ status: 409 });
-    await expect(store.apply({ action: 'acceptMany', txs: ['acc:O;4'], picks: [{ tx: 'acc:O;4', option: 0 }] })).rejects.toMatchObject({ status: 400 });
-    await expect(store.apply({ action: 'acceptMany', txs: [] })).rejects.toMatchObject({ status: 400 });
+    expect(data.labels['acc:O;1']).toMatchObject({ move: 'income', category: salary, party: mine, recurring: true });
+    expect(data.labels['acc:O;3']).toMatchObject({ move: 'spend', category: food, tags: ['kfc'], party: null });
+    // an operation already done, one that is not there, one twice, and nothing at all are refused
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;1')] } as never)).rejects.toMatchObject({ status: 409 });
+    await expect(store.apply({ action: 'markMany', items: [item('acc:nope')] } as never)).rejects.toMatchObject({ status: 404 });
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;2'), item('acc:O;2')] } as never)).rejects.toMatchObject({ status: 400 });
+    await expect(store.apply({ action: 'markMany', items: [] } as never)).rejects.toMatchObject({ status: 400 });
   });
 
   it('refuses what it cannot do and changes nothing then', async () => {

@@ -335,24 +335,24 @@ export function createBankLabelStore(options: BankLabelStoreOptions): BankLabelS
         learn(file, file.labels[action.tx], found!);
         return { ok: true };
       }
-      case 'acceptMany': {
-        // Every sure suggestion of these operations as it is now, or none: a suggestion that is gone or became a choice refuses all.
-        const { ops, proposals } = await view(file);
+      case 'markMany': {
+        // All or none: an operation that is gone or already done (marked meanwhile) refuses the lot.
+        const { ops } = await view(file);
+        if (new Set(action.items.map(i => i.tx)).size !== action.items.length) throw new BankLabelError(400, 'Operacja jest na liście dwa razy.');
         let assigned = 0;
-        const wanted = [...action.txs.map(tx => ({ tx, option: 0, sure: true })), ...action.picks.map(p => ({ ...p, sure: false }))];
-        if (new Set(wanted.map(w => w.tx)).size !== wanted.length) throw new BankLabelError(400, 'Operacja jest na liście dwa razy.');
-        for (const { tx, option, sure } of wanted) {
-          const found = ops.find(o => o.t.id === tx) ?? missing('Nie ma takiej operacji w ostatnim odczycie banku.');
-          const proposal = proposals.get(tx);
-          if (!proposal || (sure && !proposal.suggestion.sure)) throw new BankLabelError(409, 'Ta operacja nie ma już pewnej podpowiedzi.');
-          const chosen = proposal.suggestion.options[option] ?? missing('Nie ma takiej możliwości.');
-          const before = file.labels[tx];
-          const next = checked(file, withOption(before, chosen));
-          if (isEmpty(next)) continue;
+        for (const item of action.items) {
+          const found = ops.find(o => o.t.id === item.tx) ?? missing('Nie ma takiej operacji w ostatnim odczycie banku.');
+          const before = file.labels[item.tx];
+          if (isDone(before)) throw new BankLabelError(409, 'Ta operacja jest już oznaczona.');
+          // What the mark does not say stays as it was (tags, repeat, description of a mark that only said who).
+          const next = checked(file, {
+            move: item.move, category: item.category, tags: item.tags.length ? canonical(file.tags, item.tags) : before?.tags ?? [], party: item.party ?? before?.party ?? null,
+            recurring: item.recurring || (before?.recurring ?? false), comment: before?.comment ?? '',
+          });
           if (!before && Object.keys(file.labels).length >= MAX_LABELS) throw new BankLabelError(409, `Może być najwyżej ${MAX_LABELS} oznaczeń.`);
           keepWords(file, next.tags);
-          file.labels[tx] = { ...next, labeledAt: now(), op: found.op };
-          learn(file, file.labels[tx], found);
+          file.labels[item.tx] = { ...next, labeledAt: now(), op: found.op };
+          learn(file, file.labels[item.tx], found);
           assigned++;
         }
         return { ok: true, assigned };

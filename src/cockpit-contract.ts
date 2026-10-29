@@ -132,7 +132,7 @@ export const COCKPIT_TOOLS = {
   panel_bank_assign: {
     purpose: 'Karta zgody na masowe oznaczenie nieoznaczonych operacji tym, co panel sam podpowiada (opcjonalnie from i to: zakres dni RRRR-MM-DD).',
     when: 'gdy użytkownik chce przypisać nieoznaczone operacje do podpowiedzianych oznaczeń („przypisz te z podpowiedzią”, „oznacz hurtem”), po tym jak zgodził się na Twoją propozycję albo wprost o to prosi. Gdy dopiero pyta, co da się oznaczyć, najpierw powiedz słowami, ile jest takich operacji i jakie grupy, i zapytaj, czy pokazać kartę. Podpowiedzi nie wybierasz Ty: panel bierze własne. Zakresu dat (from, to) nie wymyślaj: podaj go tylko, gdy użytkownik wskazał okres; bez niego panel bierze wszystkie zapisane operacje. W odpowiedzi powiedz, z jakich dni są operacje na karcie.',
-    effect: 'użytkownik widzi karty z grupami (ile operacji, na jakie oznaczenie, jaka suma; grupę można odznaczyć) i przyciskami „Wykonaj” i „Odrzuć”; panel oznacza dopiero po jego kliknięciu: pewne podpowiedzi (od dwóch zgodnych wcześniejszych oznaczeń) jako grupy, a „do wyboru” w osobnej sekcji, tylko gdy użytkownik sam kliknie opcję. Użytkownik odznacza grupy i pojedyncze operacje. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.',
+    effect: 'użytkownik widzi kartę z odbiorcami (ile operacji, jaka suma, szablony oznaczeń z ich wcześniejszych operacji; odbiorca, którego operacje zawsze dostawały to samo, jest zaznaczony, pozostałych użytkownik oznacza szablonem albo dowolną kategorią, także pojedynczą operację) i przyciskami „Wykonaj” i „Odrzuć”; panel oznacza dopiero po jego kliknięciu, i tylko to, co jest zaznaczone lub wybrane. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.',
     card: 'bankAssign',
   },
   panel_cockpit_clear: {

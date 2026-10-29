@@ -374,8 +374,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     async run(args, { sources }) {
       const preview = assignPreview(await sources.bankLedger(), bankAssignSchema.parse(args));
       if (preview.problems.length) throw new AgentViewError(400, preview.problems.join(' '));
-      const count = preview.groups.reduce((sum, g) => sum + g.count, 0);
-      return `${CARD_SHOWN.bankAssign}: ${count} operacji w ${preview.groups.length} grupach (${preview.groups.map(g => `${g.count} × ${g.category?.name ?? g.move}`).join(', ')}); ${preview.choices.count} ma tylko propozycje do wyboru: są na karcie osobno i zostają nieoznaczone, dopóki użytkownik nie kliknie opcji. Zakres: ${preview.range.from || preview.range.to ? `${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}` : 'wszystkie zapisane operacje'}${preview.range.first ? `, z dni ${preview.range.first} – ${preview.range.last}` : ''}; powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
+      const certain = preview.recipients.filter(r => r.certain), mixed = preview.recipients.filter(r => !r.certain);
+      const ops = (list: typeof certain) => list.reduce((sum, r) => sum + r.count, 0);
+      const range = preview.range.from || preview.range.to ? `${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}` : 'wszystkie zapisane operacje';
+      return `${CARD_SHOWN.bankAssign}: ${certain.length} odbiorców (${ops(certain)} operacji) ma zawsze to samo oznaczenie i jest zaznaczonych na karcie; ${mixed.length} odbiorców (${ops(mixed)} operacji) miało różne oznaczenia albo jedno, więc użytkownik wybiera szablon sam. Zakres: ${range}${preview.range.first ? `, z dni ${preview.range.first} – ${preview.range.last}` : ''}; powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
   panel_cockpit_clear: {

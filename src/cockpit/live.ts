@@ -66,7 +66,7 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
 }
 
 /** What a bulk-assign card adds to its answer: the groups and operations unticked and the options picked (empty ones left out). */
-const pickAssign = (r: Record<string, unknown>) => Object.fromEntries(['skip', 'skipOps', 'picks'].filter(k => Array.isArray(r[k]) && (r[k] as unknown[]).length).map(k => [k, r[k]]));
+const pickAssign = (r: Record<string, unknown>) => Object.fromEntries(['skip', 'skipOps', 'groupPicks', 'picks'].filter(k => Array.isArray(r[k]) && (r[k] as unknown[]).length).map(k => [k, r[k]]));
 
 async function call(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000) });

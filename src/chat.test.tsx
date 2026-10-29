@@ -482,17 +482,18 @@ describe('the live cockpit (Hermes and the panel)', () => {
         ],
         moved: 4, tagged: 3, noTag: 1, problems: [],
       };
-  const shop = { name: 'Sklep spożywczy', color: 'green', icon: 'cart' };
-  const food = { name: 'Jedzenie', color: 'orange', icon: 'utensils' };
+  const mark = (id: string, name: string, color: string, icon: string) => ({ move: 'spend', category: { id, name, color, icon }, tags: [], recurring: false });
   const assignPreviewMock = {
-    range: { from: '2026-09-24', to: null, first: '2026-09-24', last: '2026-10-06' },
-    groups: [
-      { key: 'g-aaaaaaaa', move: 'income', category: { name: 'Pensja', color: 'teal', icon: 'banknote' }, party: 'Firma', tags: [], count: 2, total: 2000, why: 'ten sam rachunek', hidden: 0,
-        items: [{ tx: 't1', day: '2026-10-03', name: 'Firma Informatyczna', amount: 1000 }, { tx: 't2', day: '2026-09-25', name: 'Firma Informatyczna', amount: 1000 }] },
-      { key: 'g-bbbbbbbb', move: 'spend', category: shop, party: null, tags: [], count: 2, total: -50, why: 'ten sam sprzedawca', hidden: 0,
-        items: [{ tx: 't3', day: '2026-10-06', name: 'Biedronka', amount: -30 }, { tx: 't4', day: '2026-10-05', name: 'Spar', amount: -20 }] },
+    range: { from: '2026-09-24', to: null, first: '2026-10-02', last: '2026-10-05' },
+    recipients: [
+      { key: 'r-11111111', name: 'Społem', count: 2, total: -51.36, certain: true, hidden: 0,
+        templates: [{ key: 't-11111111', mark: mark('c-3', 'Sklep spożywczy', 'blue', 'cart'), count: 3 }],
+        items: [{ tx: 's1', day: '2026-10-03', name: 'Społem', amount: -28.87 }, { tx: 's2', day: '2026-10-02', name: 'Społem', amount: -22.49 }] },
+      { key: 'r-22222222', name: 'Orlen', count: 2, total: -218.55, certain: false, hidden: 0,
+        templates: [{ key: 't-22222222', mark: mark('c-1', 'Paliwo', 'orange', 'fuel'), count: 4 }, { key: 't-33333333', mark: mark('c-2', 'Jedzenie', 'green', 'utensils'), count: 1 }],
+        items: [{ tx: 'o1', day: '2026-10-05', name: 'Orlen', amount: -200.15 }, { tx: 'o2', day: '2026-10-04', name: 'Orlen', amount: -18.4 }] },
     ],
-    choices: { count: 1, total: -200.15, items: [{ tx: 't5', day: '2026-10-05', name: 'Stacja paliw', amount: -200.15, why: 'Jedzenie: 1 z 1 raz', options: [{ move: 'spend', category: food, party: null, tags: [] }] }] },
+    categories: [{ id: 'c-1', name: 'Paliwo', move: 'spend', color: 'orange', icon: 'fuel' }, { id: 'c-2', name: 'Jedzenie', move: 'spend', color: 'green', icon: 'utensils' }, { id: 'c-3', name: 'Sklep spożywczy', move: 'spend', color: 'blue', icon: 'cart' }],
     problems: [],
   };
   function liveServer() {
@@ -508,7 +509,8 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url.startsWith('/api/bank/plan')) return reply(planPreviewMock);
       if (url.startsWith('/api/bank/assign')) return reply(assignPreviewMock);
       if (url === `/api/chats/${H}/bank-plan` && body?.toolCallId === 'a9:b-1') {
-        const outcome = { decision: 'applied', at: NOW, assigned: 4, skipped: body.skip ?? [], skippedOps: body.skipOps ?? [], picked: body.picks ?? [], preview: assignPreviewMock };
+        const { toolCallId: _id, decision: _decision, ...choice } = body;
+        const outcome = { decision: 'applied', at: NOW, assigned: 3, choice, preview: assignPreviewMock };
         cockpit = view({ bankPlans: { 'a9:b-1': outcome } });
         return reply(outcome);
       }
@@ -688,7 +690,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
     expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
   });
 
-  it('shows the range, groups with ticks per operation and the choices; sends only what was unticked or picked with Wykonaj', async () => {
+  it('lists recipients with templates, lets a group or one operation take a template or any category, and sends only the choice with Wykonaj', async () => {
     const calls = liveServer();
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
@@ -698,27 +700,28 @@ describe('the live cockpit (Hermes and the panel)', () => {
     ] };
     FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
     const card = await screen.findByRole('region', { name: 'Zgoda na masowe oznaczenie' });
-    const groups = await within(card).findByTestId('assign-groups');
-    expect(within(card).getByTestId('assign-range').textContent).toBe('Zakres: 2026-09-24 – do dziś · operacje z 2026-09-24 do 2026-10-06');
-    expect(within(groups).getByText('Przychód · Pensja')).toBeTruthy();
-    expect(within(groups).getByText('Wydatek · Sklep spożywczy')).toBeTruthy();
-    expect(within(card).getByText(/Zaznaczone: 4 operacji, \+1\s?950,00 zł/)).toBeTruthy();
-    // the choice is listed with its option and nothing is picked yet
-    const choices = within(card).getByTestId('assign-choices');
-    expect(within(choices).getByText('Stacja paliw')).toBeTruthy();
-    const option = within(choices).getByRole('button', { name: 'Wydatek · Jedzenie' });
-    expect(option.getAttribute('aria-pressed')).toBe('false');
-    // one operation of a group is unticked: the group is partly ticked and the sum follows
-    await user.click(within(groups).getAllByText('ten sam sprzedawca')[0]);
-    await user.click(within(groups).getByRole('checkbox', { name: 'Oznacz 2026-10-05 Spar' }));
-    expect(within(groups).getByText('1 z 2 ×')).toBeTruthy();
-    expect(within(card).getByText(/Zaznaczone: 3 operacji, \+1\s?970,00 zł/)).toBeTruthy();
-    await user.click(option);
-    expect(within(card).getByText(/Zaznaczone: 3 operacji i 1 wybrana, \+1\s?769,85 zł/)).toBeTruthy();
+    const certain = await within(card).findByTestId('assign-certain');
+    const mixed = within(card).getByTestId('assign-mixed');
+    expect(within(card).getByTestId('assign-range').textContent).toBe('Zakres: 2026-09-24 – do dziś · operacje z 2026-10-02 do 2026-10-05');
+    // the recipient that always got one mark is ticked with it; the one that varied waits, with the history in words
+    expect(within(certain).getByRole('button', { name: 'Wydatek · Sklep spożywczy' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(mixed).getByText('wcześniej: Wydatek · Paliwo 4 razy, Wydatek · Jedzenie 1 raz')).toBeTruthy();
+    expect(within(mixed).getByRole('button', { name: 'Wydatek · Paliwo ×4' }).getAttribute('aria-pressed')).toBe('false');
+    expect(within(card).getByText(/Zaznaczone: 2 operacji, [-−]51,36/)).toBeTruthy();
+    // a template for the whole recipient
+    await user.click(within(mixed).getByRole('button', { name: 'Wydatek · Paliwo ×4' }));
+    expect(within(card).getByText(/Zaznaczone: 4 operacji, [-−]269,91/)).toBeTruthy();
+    // one operation takes any category of the user's, another is unticked
+    await user.click(within(mixed).getByText('wcześniej: Wydatek · Paliwo 4 razy, Wydatek · Jedzenie 1 raz'));
+    await user.selectOptions(within(mixed).getByLabelText('Oznaczenie: 2026-10-04 Orlen'), 'c:c-2');
+    await user.click(within(mixed).getByRole('checkbox', { name: 'Oznacz 2026-10-05 Orlen' }));
+    expect(within(card).getByText(/Zaznaczone: 3 operacji, [-−]69,76/)).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
     await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
-    await waitFor(() => expect(within(card).getByText(/Oznaczono 4 operacji; część \(jedna pozycja lub grupa\) została bez zmian\./)).toBeTruthy());
-    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({ toolCallId: 'a9:b-1', decision: 'apply', skipOps: ['t4'], picks: [{ tx: 't5', option: 0 }] });
+    await waitFor(() => expect(within(card).getByText('Oznaczono 3 operacji.')).toBeTruthy());
+    expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({
+      toolCallId: 'a9:b-1', decision: 'apply', skipOps: ['o1'], groupPicks: [{ group: 'r-22222222', template: 't-22222222' }], picks: [{ tx: 'o2', category: 'c-2' }],
+    });
     expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
   });
 

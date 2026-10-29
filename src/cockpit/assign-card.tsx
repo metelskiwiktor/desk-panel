@@ -1,8 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { bankAssignSchema, type BankAssignGroup, type BankAssignMark, type BankAssignOutcome, type BankAssignPreview } from '../bank-assign-contract';
-import { COLOR_VALUES, ICONS } from '../bank-look';
+import { bankAssignSchema, type BankAssignCategory, type BankAssignChoice, type BankAssignMark, type BankAssignOutcome, type BankAssignPreview, type BankAssignRecipient, type BankAssignTemplate } from '../bank-assign-contract';
 import { CardActions, refusedNote } from './cards';
 import { ConsentShell } from './consent-card';
 import type { BankAssignArgs } from './types';
@@ -12,102 +11,137 @@ const signed = (amount: number) => `${amount > 0 ? '+' : ''}${pln(amount)}`;
 const MOVE_WORDS = { spend: 'Wydatek', income: 'Przychód', settle: 'Rozliczenie', move: 'Przełożenie' } as const;
 const chip = 'tw:inline-flex tw:items-center tw:gap-1 tw:rounded-md tw:px-2 tw:py-0.5 tw:text-xs';
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const times = (n: number) => n === 1 ? 'raz' : 'razy';
 
-/** What the group's operations are called, from the few the card lists: a handful of distinct names. */
-const namesOf = (g: BankAssignGroup) => {
-  const names = [...new Set(g.items.map(i => i.name))];
-  return names.slice(0, 3).join(', ') + (names.length > 3 || g.hidden ? '…' : '');
-};
+const markLabel = (m: BankAssignMark) => `${m.category ? `${MOVE_WORDS[m.move]} · ${m.category.name}` : MOVE_WORDS[m.move]}${m.tags.map(t => ` #${t}`).join('')}`;
+const categoryLabel = (c: BankAssignCategory) => `${c.move === 'spend' ? 'Wydatek' : c.move === 'income' ? 'Przychód' : 'Przełożenie'} · ${c.name}`;
 
-/** A mark in words: its kind and category in the category's colour, then the other side and the tags. */
-function MarkChips({ mark, hideParty = '' }: { mark: BankAssignMark; hideParty?: string }) {
-  const Icon = mark.category ? ICONS[mark.category.icon] ?? ICONS.tag : null;
-  return <>
-    <span className={`${chip} tw:bg-ck-cal/15 tw:text-ck-text`}>
-      {Icon && mark.category && <Icon size={13} style={{ color: COLOR_VALUES[mark.category.color] }} aria-hidden="true" />}
-      {mark.category ? `${MOVE_WORDS[mark.move]} · ${mark.category.name}` : MOVE_WORDS[mark.move]}
-    </span>
-    {mark.party && !hideParty.toLowerCase().includes(mark.party.toLowerCase()) && <span className={`${chip} tw:bg-ck-surface-2 tw:text-ck-muted`}>{mark.party}</span>}
-    {mark.tags.map(t => <span key={t} className={`${chip} tw:bg-ck-surface-2 tw:text-ck-muted`}>#{t}</span>)}
-  </>;
-}
-
-/** What the user has ticked and picked; the card owns it, the body only shows it. */
+/** What the user chose on the card, as the request will carry it (and as the answer keeps it). */
 export interface AssignSelection {
-  /** Groups unticked, single operations unticked, and the option picked for each choice (by operation id). */
-  groups: ReadonlySet<string>;
-  ops: ReadonlySet<string>;
-  picks: Readonly<Record<string, number>>;
+  skip: ReadonlySet<string>;
+  skipOps: ReadonlySet<string>;
+  groupPicks: Readonly<Record<string, string>>;
+  picks: Readonly<Record<string, { template?: string; category?: string }>>;
 }
-/** How many operations a group has ticked and what they sum to; the ones beyond those listed are always in. */
-function ticked(g: BankAssignGroup, sel: AssignSelection) {
-  if (sel.groups.has(g.key)) return { count: 0, total: 0 };
-  const off = g.items.filter(i => sel.ops.has(i.tx));
-  return { count: g.count - off.length, total: Math.round((g.total - off.reduce((s, i) => s + i.amount, 0)) * 100) / 100 };
+const EMPTY: AssignSelection = { skip: new Set(), skipOps: new Set(), groupPicks: {}, picks: {} };
+const fromChoice = (c: BankAssignChoice): AssignSelection => ({
+  skip: new Set(c.skip), skipOps: new Set(c.skipOps), groupPicks: Object.fromEntries((c.groupPicks ?? []).map(g => [g.group, g.template])),
+  picks: Object.fromEntries((c.picks ?? []).map(p => [p.tx, { template: p.template, category: p.category }])),
+});
+
+/** The template a recipient's operations follow: the one picked for it, else (when its earlier operations all agree) the only one. */
+const groupTemplate = (r: BankAssignRecipient, sel: AssignSelection) => r.templates.find(t => t.key === sel.groupPicks[r.key]) ?? (r.certain ? r.templates[0] : undefined);
+/** What one operation would be marked with now: its own pick, else its recipient's template; none when nothing is chosen. */
+function markOf(r: BankAssignRecipient, tx: string, sel: AssignSelection, categories: BankAssignCategory[]): string | null {
+  const pick = sel.picks[tx];
+  if (pick?.category) { const c = categories.find(x => x.id === pick.category); return c ? categoryLabel(c) : null; }
+  const t = pick?.template ? r.templates.find(x => x.key === pick.template) : groupTemplate(r, sel);
+  return t ? markLabel(t.mark) : null;
 }
+/** How many of a recipient's operations get a mark and what they sum to; the ones beyond those listed follow the recipient's template. */
+function counted(r: BankAssignRecipient, sel: AssignSelection, categories: BankAssignCategory[]) {
+  if (sel.skip.has(r.key)) return { count: 0, total: 0 };
+  const listed = r.items.filter(i => !sel.skipOps.has(i.tx) && markOf(r, i.tx, sel, categories));
+  const rest = groupTemplate(r, sel) ? r.hidden : 0;
+  const total = rest ? r.total - r.items.filter(i => !listed.includes(i)).reduce((s, i) => s + i.amount, 0) : listed.reduce((s, i) => s + i.amount, 0);
+  return { count: listed.length + rest, total: Math.round(total * 100) / 100 };
+}
+const historyText = (r: BankAssignRecipient) => r.templates.some(t => t.count > 0)
+  ? `wcześniej: ${r.templates.filter(t => t.count > 0).map(t => `${markLabel(t.mark)} ${t.count} ${times(t.count)}`).join(', ')}`
+  : 'propozycje panelu dla takich płatności';
 
 const checkbox = 'tw:size-4 tw:accent-[#7ca9ff]';
+const selectClass = 'tw:max-w-[190px] tw:rounded-md tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-1.5 tw:py-0.5 tw:text-xs tw:text-ck-text tw:disabled:opacity-60';
+
+/** One recipient: a tick, who and how many, what it was marked with before, templates for the whole group; opens to its operations. */
+function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }: {
+  r: BankAssignRecipient; sel: AssignSelection; categories: BankAssignCategory[]; onChange: (next: AssignSelection) => void; locked: boolean; expanded: boolean; onFlip: () => void;
+}) {
+  const t = counted(r, sel, categories), partial = t.count > 0 && t.count < r.count;
+  const group = groupTemplate(r, sel);
+  const set = (patch: Partial<AssignSelection>) => onChange({ ...sel, ...patch });
+  const toggleGroup = () => {
+    if (t.count > 0) { set({ skip: new Set(sel.skip).add(r.key) }); return; }
+    const skip = new Set(sel.skip); skip.delete(r.key);
+    const skipOps = new Set([...sel.skipOps].filter(tx => !r.items.some(i => i.tx === tx)));
+    set({ skip, skipOps, ...(group ? {} : { groupPicks: { ...sel.groupPicks, [r.key]: r.templates[0].key } }) });
+  };
+  const pickGroup = (tpl: BankAssignTemplate) => {
+    const groupPicks = { ...sel.groupPicks };
+    if (groupPicks[r.key] === tpl.key && !r.certain) delete groupPicks[r.key]; else groupPicks[r.key] = tpl.key;
+    const skip = new Set(sel.skip); skip.delete(r.key);
+    set({ groupPicks, skip });
+  };
+  const setOp = (tx: string, value: string) => {
+    const picks = { ...sel.picks };
+    if (!value) delete picks[tx]; else if (value.startsWith('t:')) picks[tx] = { template: value.slice(2) }; else picks[tx] = { category: value.slice(2) };
+    const skipOps = new Set(sel.skipOps); skipOps.delete(tx);
+    set({ picks, skipOps });
+  };
+  const toggleOp = (tx: string, has: boolean) => {
+    if (has) { set({ skipOps: new Set(sel.skipOps).add(tx) }); return; }
+    const skipOps = new Set(sel.skipOps); skipOps.delete(tx);
+    // An operation with no mark yet gets the recipient's most frequent one when it is ticked.
+    set({ skipOps, ...(markOf(r, tx, sel, categories) ? {} : { picks: { ...sel.picks, [tx]: { template: r.templates[0].key } } }), skip: new Set([...sel.skip].filter(k => k !== r.key)) });
+  };
+  return <div className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-recipient={r.key}>
+    <div className={`tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2 ${t.count ? '' : 'tw:opacity-70'}`}>
+      <input type="checkbox" className={checkbox} checked={t.count > 0} ref={el => { if (el) el.indeterminate = partial; }} disabled={locked} onChange={toggleGroup}
+        aria-label={`Oznacz ${r.count} operacji: ${r.name}`} />
+      <div className="tw:min-w-0">
+        <div className="tw:truncate tw:text-sm tw:text-ck-text">{r.name} <span className="tw:text-ck-muted">· {partial ? `${t.count} z ${r.count}` : r.count} {r.count === 1 ? 'operacja' : 'operacji'} · {signed(t.count ? t.total : r.total)}</span></div>
+        <button type="button" className="tw:flex tw:max-w-full tw:items-center tw:gap-1 tw:text-left tw:text-xs tw:text-ck-muted tw:hover:text-ck-text" aria-expanded={expanded} onClick={onFlip}>
+          {expanded ? <ChevronUp size={13} className="tw:flex-none" aria-hidden="true" /> : <ChevronDown size={13} className="tw:flex-none" aria-hidden="true" />}<span className="tw:truncate">{historyText(r)}</span>
+        </button>
+      </div>
+      <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1.5" role="group" aria-label={`Szablon dla ${r.name}`}>
+        {r.templates.map(tpl => {
+          const on = group?.key === tpl.key;
+          return <button key={tpl.key} type="button" disabled={locked} aria-pressed={on} onClick={() => pickGroup(tpl)}
+            className={`${chip} tw:border ${on ? 'tw:border-ck-cal tw:bg-ck-cal/25 tw:text-ck-text' : 'tw:border-ck-line tw:bg-ck-surface-2 tw:text-ck-muted tw:hover:text-ck-text'}`}>
+            {on && <Check size={12} aria-hidden="true" />}{markLabel(tpl.mark)}{tpl.count > 0 && r.templates.length > 1 ? ` ×${tpl.count}` : ''}
+          </button>;
+        })}
+      </div>
+    </div>
+    {expanded && <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:px-3 tw:pb-2 tw:pl-[44px] tw:text-xs tw:text-ck-muted">
+      {r.items.map(i => {
+        const pick = sel.picks[i.tx];
+        const has = !sel.skip.has(r.key) && !sel.skipOps.has(i.tx) && !!markOf(r, i.tx, sel, categories);
+        const value = pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
+        return <li key={i.tx} className={`tw:flex tw:items-center tw:gap-2 ${has ? '' : 'tw:opacity-60'}`}>
+          <input type="checkbox" className={checkbox} checked={has} disabled={locked} onChange={() => toggleOp(i.tx, has)} aria-label={`Oznacz ${i.day} ${i.name}`} />
+          <span className="tw:min-w-0 tw:flex-1 tw:truncate">{i.day} · {i.name} · {signed(i.amount)}</span>
+          <select className={selectClass} value={value} disabled={locked} aria-label={`Oznaczenie: ${i.day} ${i.name}`} onChange={e => setOp(i.tx, e.target.value)}>
+            <option value="">{group ? `jak grupa: ${markLabel(group.mark)}` : 'bez oznaczenia'}</option>
+            <optgroup label="Z historii odbiorcy">{r.templates.map(tpl => <option key={tpl.key} value={`t:${tpl.key}`}>{markLabel(tpl.mark)}</option>)}</optgroup>
+            <optgroup label="Wszystkie kategorie">{categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
+          </select>
+        </li>;
+      })}
+      {r.hidden > 0 && <li>… jeszcze {r.hidden} (według szablonu grupy)</li>}
+    </ul>}
+  </div>;
+}
 
 /**
- * The groups of operations that would get the same mark, one row each: a tick, how many and what they are, what mark they get
- * and the sum; a row opens to list its operations, each with its own tick. Below, the operations the panel has only a choice
- * for, each with its options to pick from; nothing is picked until the user clicks one.
+ * The recipients with unmarked operations. Those whose earlier operations always got the same mark come first, ticked; the others
+ * ("różnie") wait for a template or a category. Both can be changed for the whole group or for one operation.
  */
-export function AssignBody({ preview, sel, onGroup, onOp, onPick, locked = false, state = 'open' }: {
-  preview: BankAssignPreview; sel: AssignSelection; onGroup?: (g: BankAssignGroup) => void; onOp?: (tx: string) => void; onPick?: (tx: string, option: number) => void;
-  locked?: boolean; state?: 'open' | 'applied' | 'rejected';
+export function AssignBody({ preview, sel, onChange, locked = false, state = 'open' }: {
+  preview: BankAssignPreview; sel: AssignSelection; onChange: (next: AssignSelection) => void; locked?: boolean; state?: 'open' | 'applied' | 'rejected';
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const flip = (key: string) => setOpen(prev => { const next = new Set(prev); if (!next.delete(key)) next.add(key); return next; });
+  const sections = [
+    { title: 'Zawsze to samo: zaznaczone', rows: preview.recipients.filter(r => r.certain), id: 'assign-certain' },
+    { title: 'Różnie: wybierz szablon dla grupy albo operacji', rows: preview.recipients.filter(r => !r.certain), id: 'assign-mixed' },
+  ].filter(s => s.rows.length);
   return <div className={`tw:grid tw:gap-3 ${state === 'rejected' ? 'tw:opacity-55' : ''}`} data-state={state}>
-    {preview.groups.length > 0 && <div className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid="assign-groups">
-      {preview.groups.map(g => {
-        const t = ticked(g, sel), expanded = open.has(g.key), partial = t.count > 0 && t.count < g.count;
-        return <div key={g.key} className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-group={g.key}>
-          <div className={`tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2 ${t.count ? '' : 'tw:opacity-55'}`}>
-            <input type="checkbox" className={checkbox} checked={t.count > 0} ref={el => { if (el) el.indeterminate = partial; }} disabled={locked} onChange={() => onGroup?.(g)}
-              aria-label={`Oznacz ${g.count} operacji: ${namesOf(g)}`} />
-            <div className="tw:min-w-0">
-              <div className="tw:truncate tw:text-sm tw:text-ck-text"><span className="tw:text-ck-muted">{partial ? `${t.count} z ${g.count}` : `${g.count}`} ×</span> {namesOf(g)}</div>
-              <button type="button" className="tw:flex tw:max-w-full tw:items-center tw:gap-1 tw:text-left tw:text-xs tw:text-ck-muted tw:hover:text-ck-text" aria-expanded={expanded} onClick={() => flip(g.key)}>
-                {expanded ? <ChevronUp size={13} className="tw:flex-none" aria-hidden="true" /> : <ChevronDown size={13} className="tw:flex-none" aria-hidden="true" />}<span className="tw:truncate">{g.why || 'pokaż operacje'}</span>
-              </button>
-            </div>
-            <div className="tw:grid tw:justify-items-end tw:gap-0.5"><div className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5"><MarkChips mark={g} hideParty={namesOf(g)} /></div><span className="tw:text-xs tw:text-ck-muted">{signed(t.count ? t.total : g.total)}</span></div>
-          </div>
-          {expanded && <ul className="tw:m-0 tw:grid tw:list-none tw:gap-0.5 tw:px-3 tw:pb-2 tw:pl-[44px] tw:text-xs tw:text-ck-muted">
-            {g.items.map(i => {
-              const on = !sel.groups.has(g.key) && !sel.ops.has(i.tx);
-              return <li key={i.tx} className={`tw:flex tw:items-center tw:gap-2 ${on ? '' : 'tw:opacity-55'}`}>
-                <input type="checkbox" className={checkbox} checked={on} disabled={locked} onChange={() => onOp?.(i.tx)} aria-label={`Oznacz ${i.day} ${i.name}`} />
-                <span className="tw:min-w-0 tw:flex-1 tw:truncate">{i.day} · {i.name}</span><span className="tw:flex-none">{signed(i.amount)}</span>
-              </li>;
-            })}
-            {g.hidden > 0 && <li>… jeszcze {g.hidden} (zawsze razem z grupą)</li>}
-          </ul>}
-        </div>;
-      })}
-    </div>}
-    {preview.choices.items.length > 0 && <div className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid="assign-choices">
-      <div className="tw:flex tw:justify-between tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted"><span>Do wyboru: kliknij oznaczenie, inaczej zostaje bez zmian</span><span>{plural(preview.choices.count, 'operacja', 'operacji')}</span></div>
-      {preview.choices.items.map(c => <div key={c.tx} className="tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:border-t tw:border-ck-line tw:px-3 tw:py-2">
-        <div className="tw:min-w-0">
-          <div className="tw:truncate tw:text-sm tw:text-ck-text">{c.name}</div>
-          <div className="tw:truncate tw:text-xs tw:text-ck-muted">{c.day} · {signed(c.amount)} · {c.why}</div>
-        </div>
-        <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1.5" role="group" aria-label={`Oznaczenie dla ${c.day} ${c.name}`}>
-          {c.options.map((o, n) => {
-            const label = o.category ? `${MOVE_WORDS[o.move]} · ${o.category.name}` : MOVE_WORDS[o.move];
-            const picked = sel.picks[c.tx] === n;
-            return <button key={n} type="button" disabled={locked} aria-pressed={picked} onClick={() => onPick?.(c.tx, n)}
-              className={`${chip} tw:border ${picked ? 'tw:border-ck-cal tw:bg-ck-cal/25 tw:text-ck-text' : 'tw:border-ck-line tw:bg-ck-surface-2 tw:text-ck-muted tw:hover:text-ck-text'}`}>
-              {picked && <Check size={12} aria-hidden="true" />}{label}{o.party ? ` · ${o.party}` : ''}{o.tags.map(t => ` #${t}`).join('')}
-            </button>;
-          })}
-        </div>
-      </div>)}
-      {preview.choices.count > preview.choices.items.length && <div className="tw:border-t tw:border-ck-line tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted">… i {preview.choices.count - preview.choices.items.length} kolejnych: oznaczysz je sam później.</div>}
-    </div>}
+    {sections.map(s => <div key={s.id} className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid={s.id}>
+      <div className="tw:flex tw:justify-between tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted"><span>{s.title}</span><span>{plural(s.rows.length, 'odbiorca', 'odbiorców')} · {plural(s.rows.reduce((n, r) => n + r.count, 0), 'operacja', 'operacji')}</span></div>
+      {s.rows.map(r => <RecipientRow key={r.key} r={r} sel={sel} categories={preview.categories} onChange={onChange} locked={locked} expanded={open.has(r.key)} onFlip={() => flip(r.key)} />)}
+    </div>)}
   </div>;
 }
 
@@ -118,12 +152,10 @@ function rangeText(p: BankAssignPreview) {
   return `Zakres: ${p.range.from ?? 'od początku'} – ${p.range.to ?? 'do dziś'}${span ? ` · operacje z ${span}` : ''}`;
 }
 
-const toggled = (set: ReadonlySet<string>, id: string) => { const next = new Set(set); if (!next.delete(id)) next.add(id); return next; };
-
 /**
- * `panel_bank_assign`: the consent card for marking many operations with the panel's own suggestions. Wektor only named a
- * range of days; the groups and choices are worked out here by the panel (`GET /api/bank/assign`), the user may untick a group
- * or one operation and pick an option for a choice, and nothing is marked until „Wykonaj”.
+ * `panel_bank_assign`: the consent card for marking many operations. Wektor only named a range of days; the recipients and their
+ * templates are worked out here by the panel (`GET /api/bank/assign`), the user ticks, picks a template or a category for a
+ * group or one operation, and nothing is marked until „Wykonaj”.
  */
 export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePartProps<BankAssignArgs>) {
   const { respond, running } = useContext(CardActions);
@@ -132,7 +164,7 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
   const decided = result && typeof result === 'object' && ['applied', 'rejected'].includes((result as { decision?: string }).decision ?? '') ? result as BankAssignOutcome : undefined;
   const [state, setState] = useState<{ key: string; data?: BankAssignPreview; error?: string }>({ key: '' });
   const needsPreview = !decided || (decided.decision === 'rejected' && !decided.preview);
-  const [mine, setMine] = useState<AssignSelection>({ groups: new Set(), ops: new Set(), picks: {} });
+  const [mine, setMine] = useState<AssignSelection>(EMPTY);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -151,28 +183,28 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
   }, [key, needsPreview]);
   const preview = decided?.preview ?? (state.key === key ? state.data : undefined);
   // After an answer the card shows what was decided; before, what the user has ticked and picked so far.
-  const sel: AssignSelection = decided?.decision === 'applied'
-    ? { groups: new Set(decided.skipped), ops: new Set(decided.skippedOps ?? []), picks: Object.fromEntries((decided.picked ?? []).map(p => [p.tx, p.option])) }
-    : mine;
-  const groups = preview?.groups ?? [];
-  const sums = groups.map(g => ticked(g, sel));
+  const sel = decided?.decision === 'applied' ? fromChoice(decided.choice) : mine;
+  const rows = preview?.recipients ?? [];
+  const sums = rows.map(r => counted(r, sel, preview?.categories ?? []));
   const count = sums.reduce((n, t) => n + t.count, 0);
-  const pickedItems = (preview?.choices.items ?? []).filter(c => c.tx in sel.picks);
-  const total = sums.reduce((n, t) => n + t.total, 0) + pickedItems.reduce((n, c) => n + c.amount, 0);
+  const total = sums.reduce((n, t) => n + t.total, 0);
   const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Oznaczenia z podpowiedzi';
   const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
   const ok = !!preview && !preview.problems.length;
   const answer = async (decision: 'apply' | 'reject') => {
     setSending(true); setError('');
-    // Unticked single operations only matter inside a group that stays ticked.
-    const skipOps = groups.filter(g => !mine.groups.has(g.key)).flatMap(g => g.items.filter(i => mine.ops.has(i.tx)).map(i => i.tx));
-    const picks = pickedItems.map(c => ({ tx: c.tx, option: mine.picks[c.tx] }));
-    const extra = { ...(mine.groups.size ? { skip: [...mine.groups] } : {}), ...(skipOps.length ? { skipOps } : {}), ...(picks.length ? { picks } : {}) };
+    const live = new Set(rows.map(r => r.key));
+    const opsOf = new Map(rows.flatMap(r => r.items.map(i => [i.tx, r.key] as const)));
+    const extra: BankAssignChoice = {
+      ...(mine.skip.size ? { skip: [...mine.skip].filter(k => live.has(k)) } : {}),
+      ...([...mine.skipOps].some(tx => opsOf.has(tx)) ? { skipOps: [...mine.skipOps].filter(tx => opsOf.has(tx)) } : {}),
+      ...(Object.keys(mine.groupPicks).some(g => live.has(g)) ? { groupPicks: Object.entries(mine.groupPicks).filter(([g]) => live.has(g)).map(([group, template]) => ({ group, template })) } : {}),
+      ...(Object.keys(mine.picks).some(tx => opsOf.has(tx)) ? { picks: Object.entries(mine.picks).filter(([tx]) => opsOf.has(tx)).map(([tx, p]) => ({ tx, ...(p.category ? { category: p.category } : { template: p.template }) })) as BankAssignChoice['picks'] } : {}),
+    };
     try { await respond(toolCallId, { kind: 'bankPlan', decision, ...(decision === 'apply' ? extra : {}) }); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };
-  const left = decided?.decision === 'applied' ? decided.skipped.length + (decided.skippedOps ?? []).length : 0;
   return <ConsentShell
     label="Zgoda na masowe oznaczenie"
     heading={!decided ? 'Oznaczyć z podpowiedzi?' : decided.decision === 'applied' ? 'Oznaczono' : 'Odrzucono'}
@@ -186,21 +218,16 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
     </>}
     body={ok ? <>
       <p className="tw:m-0 tw:text-xs tw:text-ck-muted" data-testid="assign-range">{rangeText(preview)}</p>
-      <AssignBody preview={preview} sel={sel} locked={!!decided} state={decided ? decided.decision : 'open'}
-        onGroup={g => setMine(prev => ticked(g, prev).count
-          ? { ...prev, groups: new Set(prev.groups).add(g.key) }
-          : { ...prev, groups: toggled(prev.groups, g.key), ops: new Set([...prev.ops].filter(tx => !g.items.some(i => i.tx === tx))) })}
-        onOp={tx => setMine(prev => ({ ...prev, ops: toggled(prev.ops, tx) }))}
-        onPick={(tx, option) => setMine(prev => { const picks = { ...prev.picks }; if (picks[tx] === option) delete picks[tx]; else picks[tx] = option; return { ...prev, picks }; })} />
+      <AssignBody preview={preview} sel={sel} locked={!!decided} state={decided ? decided.decision : 'open'} onChange={setMine} />
     </> : undefined}
     footnote={!decided && ok ? <div className="tw:grid tw:gap-1 tw:text-xs tw:text-ck-muted">
-      <p className="tw:m-0 tw:text-ck-text">Zaznaczone: {plural(count, 'operacja', 'operacji')}{pickedItems.length ? ` i ${plural(pickedItems.length, 'wybrana', 'wybranych')}` : ''}{count + pickedItems.length ? `, ${signed(Math.round(total * 100) / 100)}` : ''}.</p>
-      <p className="tw:m-0">Kwoty, daty i strony zostają, a nic nie idzie do banku.</p>
+      <p className="tw:m-0 tw:text-ck-text">Zaznaczone: {plural(count, 'operacja', 'operacji')}{count ? `, ${signed(Math.round(total * 100) / 100)}` : ''}.</p>
+      <p className="tw:m-0">Operacje jednego odbiorcy nie muszą mieć tego samego oznaczenia. Kwoty, daty i strony zostają, a nic nie idzie do banku.</p>
     </div> : undefined}
     outcome={decided?.decision === 'applied'
-      ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Oznaczono {plural(decided.assigned, 'operację', 'operacji')}{left ? `; część (${left === 1 ? 'jedna pozycja lub grupa' : `${left} pozycji lub grup`}) została bez zmian` : ''}.</p>
+      ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Oznaczono {plural(decided.assigned, 'operację', 'operacji')}.</p>
       : decided?.decision === 'rejected' ? <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Nic nie zostało zmienione.</p> : undefined}
-    canApply={!running && !unidentified && ok && !args.refused && count + pickedItems.length > 0}
+    canApply={!running && !unidentified && ok && !args.refused && count > 0}
     canReject={!running && !unidentified}
     onApply={() => void answer('apply')}
     onReject={() => void answer('reject')}

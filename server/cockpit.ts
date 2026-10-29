@@ -7,8 +7,8 @@ import {
 import { stepOverridesSchema } from '../src/cezar-contract';
 import { bankPlanSchema, type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { BankPlanError, planPreview } from './bank-plan';
-import { assignPreview, assignTxs } from './bank-assign';
-import type { BankAssign, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
+import { assignMarks, assignPreview } from './bank-assign';
+import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
 import { SourceError, type PanelSources } from './sources';
 import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
 
@@ -28,7 +28,7 @@ const outcomeSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string().optional(), created: z.boolean().optional(), moved: z.number().optional(), assigned: z.number().optional(), skipped: z.array(z.string()).optional(), skippedOps: z.array(z.string()).optional(), picked: z.array(z.object({ tx: z.string(), option: z.number() })).optional(), preview: z.unknown().optional() }),
+  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string().optional(), created: z.boolean().optional(), moved: z.number().optional(), assigned: z.number().optional(), choice: z.unknown().optional(), preview: z.unknown().optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number(), preview: z.unknown().optional() }),
 ]);
 const storeSchema = z.object({
@@ -111,7 +111,7 @@ export interface Cockpit {
   /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. Answered twice: done once. */
   bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
   /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
-  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject'; skip?: string[]; skipOps?: string[]; picks?: { tx: string; option: number }[] }, plan: BankAssign): Promise<BankAssignOutcome>;
+  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign): Promise<BankAssignOutcome>;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
@@ -237,10 +237,11 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         const ledger = await sources.bankLedger();
         const preview = assignPreview(ledger, plan);
         if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
-        const { txs, picks } = assignTxs(ledger, plan, input);
-        if (!txs.length && !picks.length) throw new BankPlanError(409, 'Wszystko jest odznaczone: nie ma czego oznaczyć.');
-        const result = await sources.bankLabelAction({ action: 'acceptMany', txs, picks });
-        return { decision: 'applied', at: now(), assigned: result.assigned ?? txs.length + picks.length, skipped: input.skip ?? [], skippedOps: input.skipOps ?? [], picked: picks, preview };
+        const { toolCallId: _id, decision: _decision, ...choice } = input;
+        const items = assignMarks(ledger, plan, choice);
+        if (!items.length) throw new BankPlanError(409, 'Nic nie jest zaznaczone ani wybrane: nie ma czego oznaczyć.');
+        const result = await sources.bankLabelAction({ action: 'markMany', items });
+        return { decision: 'applied', at: now(), assigned: result.assigned ?? items.length, choice, preview };
       });
     },
 

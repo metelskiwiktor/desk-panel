@@ -208,14 +208,20 @@ radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźne
 (`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
 (skill „Bank”); Wektor czyta ją narzędziem `panel_guide`, gdy rozmowa dochodzi do banku (rejestr `PANEL_GUIDES`), a preambuła ma o niej tylko jedną linijkę.
 
-Masowe oznaczanie podpowiedziami (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`),
-resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Do karty trafiają tylko operacje nieoznaczone z **pewną** podpowiedzią
-(`suggestion.sure`), zgrupowane po tym, co podpowiedź mówi (jedno oznaczenie to jedna grupa, klucz `g-…` ze skrótu oznaczenia); podpowiedzi „do wyboru"
-(też te oparte na jednym wcześniejszym oznaczeniu: pewność zaczyna się od dwóch zgodnych) są w osobnej sekcji z opcjami do kliknięcia i nic z nich nie wchodzi
-do zapisu bez kliknięcia. Karta zaczyna od zakresu dat (o co pytano i jakie dni obejmują operacje). Wiersz grupy: ptaszek, ile i co to za operacje, oznaczenie,
-jakie dostaną, suma; rozwija się do listy operacji, każda z własnym ptaszkiem. `POST /api/chats/:id/bank-plan` bierze wtedy też `skip` (klucze grup) i `skipOps`
-(operacje), które mogą tylko zawęzić to, co panel liczy na nowo w chwili kliknięcia, oraz `picks` (operacja i numer opcji z tych, które panel sam liczy). Zapis to jedna atomowa akcja `acceptMany` (jedna podpowiedź, która przestała być pewna,
-odrzuca całość), wynik i podgląd zostają w `cockpit.json`. Id karty to skrót zakresu dni, więc ten sam zakres to ta sama karta.
+Masowe oznaczanie (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`, tylko gdy
+użytkownik go wskazał), resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Karta grupuje nieoznaczone operacje **według odbiorcy**
+(ten sam sklep lub osoba, po tekście w banku, rachunku, telefonie albo nazwie; kto nie jest rozpoznany, jest grupowany po nazwie operacji), a nie według
+oznaczenia: operacje jednego odbiorcy nie muszą mieć tego samego oznaczenia (stacja paliw: paliwo albo jedzenie). Dla odbiorcy panel pokazuje **szablony**,
+czyli oznaczenia, które dostały jego wcześniejsze operacje (ruch, kategoria, etykiety, cykliczność), od najczęstszego, z liczbą. Gdy wszystkie wcześniejsze
+operacje odbiorcy dostały to samo (co najmniej dwie), jego szablon jest domyślnie zaznaczony na karcie („zawsze to samo”); w pozostałych grupach
+(„różnie”, albo tylko jedna wcześniejsza operacja) użytkownik wybiera szablon dla całej grupy. Każdą operację można zmienić osobno: szablon z historii
+odbiorcy albo dowolna kategoria użytkownika (kategoria przychodu ustawia przychód). Karta zaczyna od zakresu dat (o co pytano i jakie dni obejmują operacje).
+Nic nie wchodzi do zapisu bez zaznaczenia lub wyboru, a zaznaczenie na karcie nie jest zapisem: oznacza dopiero „Wykonaj”.
+`POST /api/chats/:id/bank-plan` bierze wtedy tylko wybór (`skip` odbiorców, `skipOps` operacji, `groupPicks` szablon grupy, `picks` szablon albo kategoria
+operacji; klucze `r-…`, `t-…`, id kategorii), który panel rozwiązuje jeszcze raz na tym, co trzyma w chwili kliknięcia i odrzuca to, czego już nie ma.
+Zapis to jedna atomowa akcja `markMany` (każda operacja z całym oznaczeniem; operacja już oznaczona w międzyczasie odrzuca całość), wynik, wybór i podgląd
+zostają w `cockpit.json`. Id karty to skrót zakresu dni, więc ten sam zakres to ta sama karta. Pewność podpowiedzi w oknie oznaczania zaczyna się od dwóch
+zgodnych wcześniejszych oznaczeń, nie od jednego.
 
 ### Otwarte pomysły (Wektor i bank)
 
