@@ -1,0 +1,17 @@
+{
+  "description": "Prośba o dwie zmiany naraz (dwie kategorie docelowe): sprawdza, czy Wektor radzi sobie z planem o więcej niż jednym celu. Kart nie klikamy (dane prawdziwe).",
+  "turns": [
+    {
+      "say": "Scal Psychologa, Fizjoterapeutę i Podologa w jedną kategorię Zdrowie, a Gry i Elektronikę w jedną kategorię Gadżety",
+      "expect": {
+        "calls": ["panel_bank_propose"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_recon_report"],
+        "maxTools": 8,
+        "textNot": ["zmieniłem", "scaliłem", "przeniosłem"]
+      },
+      "soft": [
+        { "name": "wspomina obie nazwy docelowe", "text": "(?=[\\s\\S]*Zdrowie)(?=[\\s\\S]*Gadżety)" }
+      ]
+    }
+  ]
+}
