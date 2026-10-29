@@ -39,27 +39,56 @@ describe('interaktywny panel', () => {
     expect(screen.getByRole('button', { name: 'Zdarzenia panelu: 0' })).toBeTruthy();
     expect(screen.queryByText(/^0 w toku/)).toBeNull();
   });
-  it('nie oznacza danych jako demonstracyjne ani rzeczywiste', async () => {
-    renderWith();
-    await loaded();
-    expect(screen.queryByText(/DEMO|demonstracyjn|DANE RZECZYWISTE/)).toBeNull();
-    expect(screen.getByRole('button', { name: /^Cezar · / })).toBeTruthy();
-  });
-  it('pokazuje dzisiejsze spotkania na osi i kolejne dni', async () => {
+  // One render of the standard screen for what it shows before any tap; each test below taps through one flow.
+  it('standardowy pulpit: oś dnia, tydzień, Cezar, limity w osobnych kafelkach i pełna siatka 4×2', async () => {
     const user = userEvent.setup();
     renderWith();
     const today = await screen.findByRole('region', { name: 'Dziś' });
     expect(within(today).getByRole('button', { name: /^Trening: Długa jazda/ })).toBeTruthy();
-    const week = screen.getByRole('region', { name: 'Najbliższe dni' });
-    expect(within(week).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
+    expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
+    const cezar = await screen.findByRole('region', { name: 'Cezar' });
+    expect(within(cezar).getByRole('button', { name: /Potwierdź zakres testów kalendarza/ })).toBeTruthy();
+    expect(within(cezar).getByRole('button', { name: /Widok notatki gotowy do przeglądu/ })).toBeTruthy();
+    expect(within(cezar).queryByRole('button', { name: /więcej$/ })).toBeNull();
+    expect(screen.queryByText('KOMPUTER')).toBeNull();
+    expect(screen.queryByText(/DEMO|demonstracyjn|DANE RZECZYWISTE/)).toBeNull();
+    for (const name of ['Claude', 'Codex', 'Gemini']) {
+      const limit = await screen.findByRole('button', { name: new RegExp(`^${name}: 5h \\d`) });
+      expect(limit.closest('section')!.getAttribute('aria-label')).toBe(name);
+    }
+    const claude = screen.getByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
+    // Two bars (5h thick, 7d thin), each with the tick of how far its window has run; 92% used at 58% of the time is red.
+    expect(claude.querySelectorAll('.p3-lbar')).toHaveLength(2);
+    expect(claude.querySelectorAll('.p3-lbar u')).toHaveLength(2);
+    expect(claude.querySelector('.p3-lrow.lead .p3-lbar[data-tone="red"]')).toBeTruthy();
+    expect(claude.querySelectorAll('.p3-lrow.thin')).toHaveLength(1);
+    expect(within(claude).getByText(/reset za/)).toBeTruthy();
+    // Three limits and mail beside Cezar over the right half: nothing is left empty, and nothing is cut.
+    const grid = document.querySelector('.wk-grid')!;
+    expect(grid.querySelectorAll('.wk-cell')).toHaveLength(5);
+    expect(grid.querySelectorAll('.wk-empty')).toHaveLength(0);
+    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--w: 2');
+    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--h: 2');
     await user.click(within(today).getByRole('button', { name: /Planowanie Tabnote/ }));
     expect(screen.getByRole('heading', { name: 'Planowanie Tabnote' })).toBeTruthy();
   });
-  it('otwiera zadanie ze zdarzeń panelu i wraca do pulpitu', async () => {
+  it('przy przeciążeniu Cezar się zwija, a komputer jest czerwonym chipem, nie kartą', async () => {
+    renderWith('high-ram');
+    expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
+    // Overload is a red chip (it opens the details) and, when it lasts, a panel event; never a card of its own.
+    expect(screen.queryByText('KOMPUTER')).toBeNull();
+    expect(screen.getByRole('button', { name: /^PC · RAM \d+%$/ })).toBeTruthy();
+  });
+  it('zdarzenia panelu: każde ze źródłem, lista się zwija, a zadanie otwiera się i wraca do pulpitu', async () => {
     const user = userEvent.setup();
     renderWith();
     await openEvents(user);
-    const events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
+    let events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
+    expect(within(events).getAllByText('Kalendarz').length).toBeGreaterThan(0);
+    expect(within(events).getAllByText('Limity AI').length).toBeGreaterThan(0);
+    await user.click(within(events).getByRole('button', { name: 'Zwiń zdarzenia panelu' }));
+    await openEvents(user);
+    events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
     await user.click(within(events).getByRole('button', { name: 'Cezar: Cezar czeka na odpowiedź' }));
     expect(screen.getByRole('heading', { name: 'Potwierdź zakres testów kalendarza' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Otwórz źródło/ }).getAttribute('href')).toBe(
@@ -68,31 +97,7 @@ describe('interaktywny panel', () => {
     await user.click(screen.getByRole('button', { name: /Wróć/ }));
     expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
   });
-  it('podpisuje każde zdarzenie jego źródłem i zwija listę', async () => {
-    const user = userEvent.setup();
-    renderWith();
-    await openEvents(user);
-    const events = screen.getByRole('region', { name: 'Zdarzenia panelu' });
-    expect(within(events).getAllByText('Kalendarz').length).toBeGreaterThan(0);
-    expect(within(events).getAllByText('Limity AI').length).toBeGreaterThan(0);
-    await user.click(within(events).getByRole('button', { name: 'Zwiń zdarzenia panelu' }));
-    expect(screen.getByRole('button', { name: /^Zdarzenia panelu:/ })).toBeTruthy();
-  });
-  it('rozwija Cezara tylko gdy coś czeka i pokazuje komputer tylko przy problemie', async () => {
-    renderWith();
-    const cezar = await screen.findByRole('region', { name: 'Cezar' });
-    expect(within(cezar).getByRole('button', { name: /Potwierdź zakres testów kalendarza/ })).toBeTruthy();
-    expect(within(cezar).getByRole('button', { name: /Widok notatki gotowy do przeglądu/ })).toBeTruthy();
-    expect(within(cezar).queryByRole('button', { name: /więcej$/ })).toBeNull();
-    expect(screen.queryByText('KOMPUTER')).toBeNull();
-    cleanup();
-    renderWith('high-ram');
-    expect(await screen.findByText(/Cezar · nic nie czeka/)).toBeTruthy();
-    // Overload is a red chip (it opens the details) and, when it lasts, a panel event; never a card of its own.
-    expect(screen.queryByText('KOMPUTER')).toBeNull();
-    expect(screen.getByRole('button', { name: /^PC · RAM \d+%$/ })).toBeTruthy();
-  });
-  it('otwiera quota z timestampami, resetem i dyskretną historią', async () => {
+  it('limit otwiera szczegóły z timestampami, resetem i historią, a podział zużycia swój widok', async () => {
     const user = userEvent.setup();
     renderWith();
     expect(screen.queryByRole('region', { name: 'Legenda wykresu limitów' })).toBeNull();
@@ -103,32 +108,11 @@ describe('interaktywny panel', () => {
     expect(screen.getByRole('heading', { name: 'Historia obserwacji' })).toBeTruthy();
     expect(screen.getAllByText('Reset według źródła')).toHaveLength(2);
     expect(screen.getByText('75% limitu')).toBeTruthy();
-  });
-  it('rysuje limity jako paski 5h i 7d ze znacznikiem czasu i kolorem tempa', async () => {
-    renderWith();
-    const claude = await screen.findByRole('button', { name: /^Claude: 5h \d+% · 7d \d+%/ });
-    expect(claude.closest('section')!.getAttribute('aria-label')).toBe('Claude');
-    // Two bars (5h thick, 7d thin), each with the tick of how far its window has run; 92% used at 58% of the time is red.
-    expect(claude.querySelectorAll('.p3-lbar')).toHaveLength(2);
-    expect(claude.querySelectorAll('.p3-lbar u')).toHaveLength(2);
-    expect(claude.querySelector('.p3-lrow.lead .p3-lbar[data-tone="red"]')).toBeTruthy();
-    expect(claude.querySelectorAll('.p3-lrow.thin')).toHaveLength(1);
-    expect(within(claude).getByText(/reset za/)).toBeTruthy();
-  });
-  it('pokazuje każdy limit w osobnym kafelku, także Gemini', async () => {
-    renderWith();
-    for (const name of ['Claude', 'Codex', 'Gemini']) {
-      const limit = await screen.findByRole('button', { name: new RegExp(`^${name}: 5h \\d`) });
-      expect(limit.closest('section')!.getAttribute('aria-label')).toBe(name);
-    }
-  });
-  it('otwiera podział zużycia AI z limitów', async () => {
-    const user = userEvent.setup();
-    renderWith();
+    await user.click(screen.getByRole('button', { name: 'Przejdź do pulpitu' }));
     await user.click((await screen.findAllByRole('button', { name: 'Podział zużycia' }))[0]);
     expect(screen.getByRole('heading', { name: 'Podział zużycia AI' })).toBeTruthy();
   });
-  it('wszystkie zakładki działają; agenda prowadzi do szczegółów', async () => {
+  it('wszystkie zakładki działają, agenda prowadzi do szczegółów, a przyciski u góry zastępują pasek na dole', async () => {
     const user = userEvent.setup();
     renderWith();
     await loaded();
@@ -150,6 +134,11 @@ describe('interaktywny panel', () => {
     await user.click(nav('Ustawienia'));
     expect(screen.getByRole('heading', { name: 'Pulpit' })).toBeTruthy();
     expect(screen.queryByText(/Scenariusze|Rzeczywiste źródła danych/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Przejdź do pulpitu' }));
+    await user.click(await screen.findByRole('button', { name: 'Otwórz kalendarz' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Kalendarz' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Ustawienia' })).toBeTruthy();
   });
   it('ukrywa sekcje i odtwarza zapis po montażu', async () => {
     const user = userEvent.setup();
@@ -185,16 +174,6 @@ describe('interaktywny panel', () => {
     expect(within(await screen.findByRole('region', { name: 'Poczta' })).getByText('Brak nieprzeczytanych wiadomości.')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Dziś' })).getByText('Dziś bez treningu i spotkań')).toBeTruthy();
   });
-  it('obszar roboczy to zawsze siatka 4×2: kafelki i pola do wyboru zajmują każdą komórkę', async () => {
-    renderWith('standard');
-    await screen.findByRole('region', { name: 'Poczta' });
-    const grid = document.querySelector('.wk-grid')!;
-    // Three limits and mail beside Cezar over the right half: nothing is left empty, and nothing is cut.
-    expect(grid.querySelectorAll('.wk-cell')).toHaveLength(5);
-    expect(grid.querySelectorAll('.wk-empty')).toHaveLength(0);
-    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--w: 2');
-    expect(grid.querySelector('[data-kind="cezar"]')!.getAttribute('style')).toContain('--h: 2');
-  });
   it('jedno zadanie Cezara w toku to jedna linia obok poczty, bez nagłówka z licznikami', async () => {
     renderWith('inbox');
     const cezar = await screen.findByRole('region', { name: 'Cezar' });
@@ -202,7 +181,7 @@ describe('interaktywny panel', () => {
     expect(within(cezar).getByRole('button', { name: /Poprawa wyszukiwania po etykietach/ })).toBeTruthy();
     expect(within(await screen.findByRole('region', { name: 'Poczta' })).getAllByRole('button', { name: /^(Anna|GitHub)/ }).length).toBeGreaterThan(0);
   });
-  it('przycisk dzień/noc przyciemnia pulpit, a przycisku pełnego ekranu nie ma', async () => {
+  it('przycisk dzień/noc przyciemnia pulpit, zegar od razu pokazuje tryb ambient, a pełnego ekranu nie ma', async () => {
     const user = userEvent.setup();
     renderWith();
     await user.click(await screen.findByRole('button', { name: 'Przełącz na tryb nocny' }));
@@ -210,24 +189,10 @@ describe('interaktywny panel', () => {
     await user.click(screen.getByRole('button', { name: 'Przełącz na tryb dzienny' }));
     expect(document.querySelector('.app-shell')!.getAttribute('data-night')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Pełny ekran' })).toBeNull();
-  });
-  it('przycisk zegara od razu pokazuje tryb ambient, a dotknięcie go kończy', async () => {
-    const user = userEvent.setup();
-    renderWith();
-    await user.click(await screen.findByRole('button', { name: 'Pokaż zegar (tryb ambient)' }));
+    await user.click(screen.getByRole('button', { name: 'Pokaż zegar (tryb ambient)' }));
     await user.click(screen.getByRole('button', { name: 'Wybudź panel' }));
     expect(screen.queryByRole('button', { name: 'Wybudź panel' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Pokaż zegar (tryb ambient)' })).toBeTruthy();
-  });
-  it('nawiguje dotknięciem paneli i przyciskami u góry zamiast paska na dole', async () => {
-    const user = userEvent.setup();
-    renderWith();
-    await user.click(await screen.findByRole('button', { name: 'Otwórz kalendarz' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Kalendarz' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Ustawienia' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Przejdź do pulpitu' }));
-    expect(await screen.findByRole('region', { name: 'Dziś' })).toBeTruthy();
   });
   it('komunikuje brak możliwości zapisania ustawień', async () => {
     const user = userEvent.setup();
@@ -254,25 +219,23 @@ describe('alarm obciążenia komputera', () => {
 });
 
 describe('okno komputera', () => {
-  it('chip PC otwiera okno z wykresami CPU i RAM, a przycisk prowadzi do zakładki System', async () => {
+  it('chip PC otwiera okno z wykresami CPU i RAM; Escape i dotknięcie poza nim je zamykają, a przycisk prowadzi do zakładki System', async () => {
     const user = userEvent.setup();
     renderWith();
     await user.click(await screen.findByRole('button', { name: /^PC · CPU/ }));
-    const dialog = screen.getByRole('dialog', { name: 'Komputer' });
+    let dialog = screen.getByRole('dialog', { name: 'Komputer' });
     expect(within(dialog).getByRole('img', { name: /^CPU: teraz/ })).toBeTruthy();
     expect(within(dialog).getByRole('img', { name: /^RAM: teraz/ })).toBeTruthy();
-    await user.click(within(dialog).getByRole('button', { name: /Otwórz zakładkę Komputer/ }));
-    expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
-    expect(screen.getByRole('heading', { level: 1, name: 'System' })).toBeTruthy();
-  });
-  it('zamyka się Escape i dotknięciem poza oknem', async () => {
-    const user = userEvent.setup();
-    renderWith();
-    await user.click(await screen.findByRole('button', { name: /^PC · CPU/ }));
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
     await user.click(screen.getByRole('button', { name: /^PC · CPU/ }));
     await user.click(screen.getByRole('button', { name: 'Otwórz ustawienia' }));
     expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Przejdź do pulpitu' }));
+    await user.click(await screen.findByRole('button', { name: /^PC · CPU/ }));
+    dialog = screen.getByRole('dialog', { name: 'Komputer' });
+    await user.click(within(dialog).getByRole('button', { name: /Otwórz zakładkę Komputer/ }));
+    expect(screen.queryByRole('dialog', { name: 'Komputer' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'System' })).toBeTruthy();
   });
 });
