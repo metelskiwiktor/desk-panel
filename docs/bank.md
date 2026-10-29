@@ -207,3 +207,11 @@ jeszcze raz i wykonuje jedną atomową akcją `mergeInto`. Decyzja i podgląd z 
 radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźnej prośbie o zmianę. Id karty to skrót z planu
 (`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
 (skill „Bank”); Wektor czyta ją narzędziem `panel_guide`, gdy rozmowa dochodzi do banku (rejestr `PANEL_GUIDES`), a preambuła ma o niej tylko jedną linijkę.
+
+### Otwarte pomysły (Wektor i bank)
+
+- **Kalendarz wstecz** (`panel_calendar_search`): źródło kalendarza czyta tylko od dziś 42 dni do przodu, więc Wektor nie sprawdzi wizyt z przeszłości (np. czy wizyty u podologa trwają od lipca). Szukanie po słowie w zakresie wstecz.
+- **Karta zgody z kilkoma grupami** i jednym „Wykonaj”: dziś jedna karta to jedna kategoria docelowa, dwie zmiany to dwie karty.
+- **Kolejne dziedziny** (kalendarz, zadania) jako wpisy w `PANEL_GUIDES` oraz kolejne kształty zmian (przeniesienie, usunięcie) jako ciała karty zgody.
+- **Polityka scalania** (kiedy scalać, a kiedy zostawić osobno) w słowach użytkownika, gdy się ustali; Wektor może sam zaproponować dopisek do przewodnika.
+- **Karta danych**: Wektor raz pokazuje ją sam, raz proponuje; zostawione bez wymuszania.

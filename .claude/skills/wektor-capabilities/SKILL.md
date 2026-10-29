@@ -18,6 +18,8 @@ Moving between phases: `soft` = a criterion still forming; `expect` = a rule tha
 
 ## The loop
 
+0. **Know what exists first**: `git log --oneline -- server/panel-mcp.ts src/cockpit src/chat-contract.ts scripts/wektor-cases`, the section "Wektor i bank" and "Otwarte pomysly" in `docs/bank.md`, and the memory notes. This skill holds the method, not the state.
+
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
 2. **Deliver in code** (below), with tests. Commit and push to main (user's standing rule), `just update` to deploy.
 3. **Restart Hermes** after any change to a tool or its schema: `just hermes RESTART`. Hermes caches the tool list from its start (a new tool is invisible until then). Standing permission, given 2026-10-29, only for this workflow. A change to the skill text or a tool's *answer* needs only the deploy.
@@ -122,13 +124,6 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 ## Diagnosing a Wektor conversation
 
 When a conversation looks wrong (a card misbehaves, an answer is odd, a turn hangs, a tool is "unknown"), **read `docs/diagnostyka-czatu-wektora.md` first and follow its procedure**: read-only, evidence over his claims, observations separate from conclusions, never click a card as part of a diagnosis. It lists where each fact lives (`hermes-chats`, `GET /api/chats/<id>`, `chat-logs/turns.jsonl` and `<id>.jsonl`, Hermes history and logs, `cockpit.json`, the harness reports in `output/wektor`). Quick pointers from our own work: grey card buttons or a 409 on "Wykonaj" = the card has no stable id (`pending:` or `call_…`); a "no such tool" after a deploy = Hermes was not restarted; a chat that ignores a new rule = it started before the preamble changed. After a diagnosis that taught something new, **update that document** (add it under "Na co patrzeć" or as a short example), as we did on 2026-10-29.
-
-## Where we stand (2026-10-29), to continue in a new chat
-
-- Built and deployed: `panel_show` (data card incl. unmarked spending), `panel_bank_propose` (consent card for merging spending categories; atomic `mergeInto`; preview kept after the answer), `panel_guide` (area guides on demand; bank only), bank guide `BANK_GUIDE`, harness and 6 cases, the card shell/body split.
-- Phase for the bank: **kalibracja odpowiedzi** (we are tuning his answers with the user, not yet freezing expectations).
-- Open ideas: `panel_calendar_search` (the calendar source reads only today + 42 days ahead, so he cannot check past visits); a consent card with several groups and one "Wykonaj"; guides for other areas (calendar, to-dos) as new `PANEL_GUIDES` entries; the user's own merge policy, to be added in his words when it appears; whether the data card is shown by Wektor or only offered (left as it is: sometimes shown, sometimes offered).
-- Working agreements: push straight to main, no co-author trailer; restart Hermes after tool changes (standing permission); never delete the kept test chats; never click "Wykonaj" in them; the user's real account changes under the cases.
 
 ## Gotchas
 
