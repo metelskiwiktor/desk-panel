@@ -11,6 +11,8 @@ import type { AddressInfo } from 'node:net';
  * asks for approval first (`terminal`), and the answer says what was decided.
  */
 export interface MockHermesOptions {
+  /** Scenario-specific calls, still executed against scenario sources, never real integrations. */
+  toolScript?: (message: string) => Promise<{ tools: MockTool[]; answer?: string } | undefined>;
   key?: string;
   /** Pause between two events of a run. */
   stepMs?: number;
@@ -85,7 +87,7 @@ const MOCK_PROMPT = [
   '- Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
 ].join('\n');
 /** `before`: text the agent writes ahead of this call (its plan before the card); the run's output is only the last answer. */
-type MockTool = { name: string; args: Record<string, unknown>; output: string; before?: string };
+export type MockTool = { name: string; args: Record<string, unknown>; output: string; before?: string };
 /** The panel tools a message makes the stand-in call, like Hermes with the two skills, and the answer after them. */
 function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
   // A skill picked with @ comes as a context item; the typed text counts too (the preamble names both skills, so not it).
@@ -146,7 +148,7 @@ export async function startMockHermes(initial: MockHermesOptions = {}): Promise<
       push(run, 'approval.resolved', { approval_id: approval, choice: approved ? 'once' : 'deny' });
       prefix = approved ? 'Zgoda przyjęta: polecenie wykonane. ' : 'Bez zgody nie uruchomiłem polecenia. ';
     }
-    const script = scriptFor(run.input);
+    const script = await options.toolScript?.(messageOf(run.input)) ?? scriptFor(run.input);
     const calls = script.tools.map((tool, i) => ({ ...tool, id: i ? `${call}_${i}` : call }));
     const say = async (text: string) => {
       if (!options.deltas) return true;

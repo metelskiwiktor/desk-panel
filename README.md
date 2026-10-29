@@ -36,6 +36,7 @@ wdraża do usługi Windows. Autostart, usługa i kiosk: [docs/system.md](docs/sy
 | [docs/cezar.md](docs/cezar.md) | Dane Cezara, limity AI, monitoring V2, warmup |
 | [docs/gmail.md](docs/gmail.md) | Karta Poczta: zakres, akcje, odczyt |
 | [docs/calendar.md](docs/calendar.md) | Google Calendar i OAuth (też dla Gmaila) |
+| [docs/znanylekarz.md](docs/znanylekarz.md) | Wybór terminu wizyty w rozmowie Wektora i zapis do Google po potwierdzeniu |
 | [docs/garmin.md](docs/garmin.md) | Plan treningowy z Garmin Connect; katalog danych w [docs/garmin-data.md](docs/garmin-data.md) |
 | [docs/zdarzenia.md](docs/zdarzenia.md) | Reguły i historia zdarzeń panelu |
 | [docs/zadania.md](docs/zadania.md) | Listy zadań: model, zapis, API zmian, dostęp agenta czatu |

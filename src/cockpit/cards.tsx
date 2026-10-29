@@ -12,7 +12,7 @@ import { watchAnswerTask } from '../cockpit-contract';
  * What a card can do and see: answer on behalf of the user (a promise that fails says why), whether the thread is busy
  * (cards wait then), and the task the cockpit watches now, so a watch card shows it live.
  */
-export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask }>({ respond: () => {}, running: false });
+export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask; chatId?: string | null }>({ respond: () => {}, running: false });
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
 
 /** One card that cannot render says so in its place; without this, React drops the whole chat window (a black screen). */

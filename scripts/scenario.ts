@@ -20,6 +20,7 @@ import { createPanelServer } from '../server/app';
 import { createCockpit } from '../server/cockpit';
 import { createScenarioSources, loadScenario, SCENARIO_PR } from '../server/scenario';
 import { createScenarioChat } from '../server/scenario-chat';
+import { PANEL_TOOLS } from '../server/panel-mcp';
 import { devices, viewportsOf, type Viewport } from '../src/devices';
 
 const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', ustawienia: 'Ustawienia' } as const;
@@ -44,9 +45,15 @@ try { loadScenario(file); } catch (error) { console.error((error as Error).messa
 
 // The chat answers from a script (no agy, no Hermes, no limit spent), so it can be tried and photographed.
 // `--hermes down` shows the chat as it is when Hermes is not running.
-const chat = await createScenarioChat({ hermes: values.hermes === 'down' ? 'down' : 'up' });
 // The cockpit of the live chat: dispatched runs are made up by the scenario, and GitHub answers from a stand-in.
 const sources = createScenarioSources(file);
+const chat = await createScenarioChat({ hermes: values.hermes === 'down' ? 'down' : 'up', toolScript: async message => {
+  const fixture = loadScenario(file).appointment;
+  if (!/wizyt|znanylekarz/i.test(message) || !('query' in fixture)) return;
+  const args = fixture.query;
+  const output = await PANEL_TOOLS.panel_znanylekarz.run(args, { sources, views: {}, now: Date.now(), cezarUrl: 'http://127.0.0.1:4321/' });
+  return { tools: [{ name: 'mcp_desk-panel_panel_znanylekarz', args, output }], answer: 'Wybierz dzień i godzinę na karcie. To dane scenariusza; niczego nie rezerwujesz.' };
+} });
 let checksAsked = 0;
 const cockpit = createCockpit({
   sources, file: join(mkdtempSync(join(tmpdir(), 'desk-panel-cockpit-')), 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/',
@@ -141,6 +148,25 @@ if (!values.shot) {
             else await page.waitForTimeout(6000);
           }
           await page.waitForTimeout(500);
+        } else if (values.open === 'chat-appointment' || values.open === 'chat-appointment-selected' || values.open === 'chat-appointment-saved') {
+          await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+          await page.getByLabel('Wiadomość do agenta').fill('Pokaż terminy wizyty online');
+          await page.getByLabel('Wiadomość do agenta').press('Enter');
+          const visit = page.getByRole('region', { name: 'Umów wizytę', exact: true });
+          try { await visit.getByRole('button', { name: 'Wybieram termin', exact: true }).waitFor({ timeout: 20_000 }); }
+          catch (error) { await page.screenshot({ path: join(values.out, 'wizyty-failure.png'), fullPage: true }); throw error; }
+          await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
+          if (values.open !== 'chat-appointment') {
+            await visit.getByRole('button', { name: '08:00', exact: true }).click();
+            await visit.getByRole('button', { name: 'Wybieram 08:00', exact: true }).click();
+            await visit.getByRole('link', { name: 'Otwórz ZnanyLekarz' }).waitFor();
+            if (await visit.getByLabel('Godzina zakończenia').inputValue() !== '08:30') throw new Error('Czas wizyty nie został uzupełniony.');
+            if (values.open === 'chat-appointment-saved') {
+              await visit.getByRole('button', { name: 'Zarezerwowałem ten termin — zapisz', exact: true }).click();
+              await visit.getByText('Zapisano w Google Calendar', { exact: true }).waitFor();
+            }
+          }
+          await visit.scrollIntoViewIfNeeded();
         } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
           // A Hermes turn of the stand-in: an answer with a tool step, or one waiting for the user's approval.
           await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();

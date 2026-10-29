@@ -56,7 +56,7 @@ export function createCalendarReader(calendarId: string, request: Request, now =
     }
     return { events, partial: !!pageToken };
   }
-  return async function read(): Promise<CalendarSource> {
+  const read = async function read(): Promise<CalendarSource> {
     if (pending) return pending;
     if (cache && now() - lastAttempt < (cache.status === 'connected' ? 60_000 : 15_000)) return cache;
     pending = (async () => {
@@ -101,4 +101,5 @@ export function createCalendarReader(calendarId: string, request: Request, now =
     })().finally(() => { pending = undefined; });
     return pending;
   };
+  return Object.assign(read, { invalidate: () => { lastAttempt = -Infinity; } });
 }

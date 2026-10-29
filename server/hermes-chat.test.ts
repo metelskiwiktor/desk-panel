@@ -108,6 +108,18 @@ describe('Hermes API client', () => {
 });
 
 describe('Hermes chat', () => {
+  it('restores appointment card identities after panel restart from canonical Hermes history', async () => {
+    const args = { profile: 'https://www.znanylekarz.pl/profil/anna-maj', service: 'konsultacja dermatologiczna', mode: 'online' };
+    const output = 'Karta terminów jest u użytkownika; ref=a-11111111111111111111111111111111.';
+    mock.configure({ streamToolArgs: false, toolScript: async () => ({ tools: [{ name: 'mcp_desk-panel_panel_znanylekarz', args, output }], answer: 'Wybierz godzinę.' }) });
+    const first = hermes(), { id } = await first.create({ text: 'Terminy wizyty' });
+    const before = await finishedChat(first, id);
+    const card = before.items[1].parts?.find(p => p.type === 'tool');
+    expect(card?.id).toMatch(/:v-[a-f0-9]{16}$/);
+    await first.drain(); first.close();
+    const after = await hermes().get(id);
+    expect(after.items[1].parts?.find(p => p.type === 'tool')?.id).toBe(card?.id);
+  });
   it('streams a turn: preamble and context to Hermes, tool step, text deltas, then the final answer', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'Co tu jest?', context: [tile] });

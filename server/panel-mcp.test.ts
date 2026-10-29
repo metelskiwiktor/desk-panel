@@ -157,10 +157,11 @@ describe('panel MCP for Hermes', () => {
     expect(guide.isError).toBeUndefined();
     expect(guide.content[0].text).toContain('Przewodnik „bank”');
     expect(guide.content[0].text).toContain('Pokrycie danych');
-    expect(await call('panel_guide', { topic: 'kalendarz' })).toMatchObject({ isError: true });
+    expect((await call('panel_guide', { topic: 'kalendarz' })).content[0].text).toContain('panel_calendar_propose');
+    expect(await call('panel_guide', { topic: 'nieistniejący' })).toMatchObject({ isError: true });
     expect(await call('panel_guide', {})).toMatchObject({ isError: true });
     const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
-    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_guide').description).toMatch(/Tematy: bank \(rozmowa o koncie/);
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_guide').description).toMatch(/bank \(rozmowa o koncie/);
   });
 
   it('proposes marking by suggestions: it says why there is nothing to mark and takes only a range of days', async () => {

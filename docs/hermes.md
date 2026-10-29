@@ -102,6 +102,8 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
+| `panel_znanylekarz` | karta wyboru terminu: profile, service, mode, opcjonalnie address, firstVisit, from/to; tylko anonimowy odczyt; rezerwuje użytkownik w osobnym oknie, a Google zapisuje jego potwierdzenie na karcie ([znanylekarz.md](znanylekarz.md)) |
+| `panel_calendar_propose` | propozycja nowego wydarzenia: title, start, end, opcjonalnie location/description; karta zgody, bez zapisu narzędziem ([calendar.md](calendar.md)) |
 | `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wynik kroku: dla sprawdzeń linie błędów bez stosu i przechodzących testów, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek); dla kroku agenta (np. `analysis`) cały jego raport z `.ai/cezar/runs/<id>.ndjson` (do 24 tys. znaków), bo `summary` przebiegu trzyma tylko ostatnie 4000 |
 | `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |

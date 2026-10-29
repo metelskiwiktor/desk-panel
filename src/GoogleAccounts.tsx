@@ -56,10 +56,11 @@ export function GoogleAccounts() {
     finally { setBusy(undefined); }
   }
   return <Card title="Konta Google" icon={<CalendarDays />}>
-    <p className="card-intro">Logujesz się na własne konta: kalendarz tylko do odczytu, poczta z prawem oznaczania jako przeczytane i przenoszenia do kosza (nigdy trwałego usuwania).</p>
+    <p className="card-intro">Logujesz się na własne konta: odczyt kalendarza i tworzenie wydarzeń po Twoim potwierdzeniu na karcie; poczta z prawem oznaczania jako przeczytane i przenoszenia do kosza (nigdy trwałego usuwania).</p>
     {accounts?.map(account => <div className="google-account" key={account.email}>
       <p><strong>{account.email}</strong> · {names(account.services)}</p>
       <p className="meta">{describe(account)}</p>
+      {account.canCreateEvents === false && <p className="warning">Agenda działa. Aby zapisywać wydarzenia z kart Wektora, połącz ponownie konto i zezwól na tworzenie wydarzeń.</p>}
       <button className="button" onClick={() => begin(account.email)} disabled={!!busy}>
         {busy === account.email ? 'Przygotowuję logowanie…' : account.status === 'connected' ? 'Połącz ponownie' : 'Połącz przez Google'}
       </button>

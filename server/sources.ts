@@ -13,12 +13,15 @@ import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } from '../src/warmup-contract';
 import type { GitHubPrSource } from '../src/types';
 import type { OpenRouterUsage } from '../src/openrouter-contract';
+import type { AppointmentService } from './appointments';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
  * implementation (real integrations or a scenario file) produced them.
  */
 export interface PanelSources {
+  /** Read-only proposals; Google is written only by the user's Origin-checked confirmation in the chat route. */
+  appointments?: AppointmentService;
   cezar(): Promise<CezarSnapshot>;
   /** Raw details of a single run from Cezar (steps, error, worktreePath) for agent views. */
   cezarRun?(id: string): Promise<Record<string, any> | null>;

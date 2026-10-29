@@ -14,8 +14,9 @@ import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
 import { BankAssignCard } from './assign-card';
+import { AppointmentCard, CalendarPlanCard, type AppointmentArgs } from './appointment-card';
 import {
-  BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
+  APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
   type BankAssignArgs, type BankPlanArgs, type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type WatchArgs,
 } from './types';
 
@@ -77,6 +78,8 @@ const DispatchUI = makeAssistantToolUI<DispatchArgs, DispatchResult>({ toolName:
 const WatchUI = makeAssistantToolUI<WatchArgs, unknown>({ toolName: WATCH, display: 'standalone', render: props => <CardBoundary><WatchCard {...props} /></CardBoundary> });
 const BankPlanUI = makeAssistantToolUI<BankPlanArgs, unknown>({ toolName: BANK_PLAN, display: 'standalone', render: props => <CardBoundary><BankPlanCard {...props} /></CardBoundary> });
 const BankAssignUI = makeAssistantToolUI<BankAssignArgs, unknown>({ toolName: BANK_ASSIGN, display: 'standalone', render: props => <CardBoundary><BankAssignCard {...props} /></CardBoundary> });
+const AppointmentUI = makeAssistantToolUI<AppointmentArgs, unknown>({ toolName: APPOINTMENT, display: 'standalone', render: props => <CardBoundary><AppointmentCard {...props} /></CardBoundary> });
+const CalendarPlanUI = makeAssistantToolUI<AppointmentArgs, unknown>({ toolName: CALENDAR_PLAN, display: 'standalone', render: props => <CardBoundary><CalendarPlanCard {...props} /></CardBoundary> });
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
@@ -281,12 +284,12 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     onCancel: async () => source.stop(),
   });
   runtimeRef.current = runtime;
-  const actions = useMemo(() => ({ respond: source.respond, running: source.running, watched: source.cockpit.task }), [source.respond, source.running, source.cockpit.task]);
+  const actions = useMemo(() => ({ respond: source.respond, running: source.running, watched: source.cockpit.task, chatId: source.activeId }), [source.respond, source.running, source.cockpit.task, source.activeId]);
 
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>
       <CardActions.Provider value={actions}>
-        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><ApprovalUI />
+        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><ApprovalUI />
         <div className="tw:relative tw:min-h-0 tw:flex-1">
           <Conversation {...props} />
         </div>

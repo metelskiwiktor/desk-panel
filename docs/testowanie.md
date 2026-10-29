@@ -25,6 +25,9 @@ just screenshots standard --nav                        # keep the bottom navigat
 npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
+just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
+just screenshots wizyty --pages pulpit --open chat-appointment-selected # automatycznie wypełniony kalendarz
+just screenshots wizyty --pages pulpit --open chat-appointment-saved # zapis do atrapy Google
 ```
 
 `--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.

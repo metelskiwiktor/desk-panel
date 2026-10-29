@@ -1,0 +1,14 @@
+{
+  "description": "Użytkownik prosi o nowe wydarzenie. Wektor pokazuje kartę zgody z podanymi godzinami, a nie wykonuje zapisu. Harness nie klika karty.",
+  "turns": [{
+    "say": "Dodaj mi do mojego kalendarza na jutro od 18:00 do 19:00 wydarzenie Przegląd roweru, miejsce Serwis rowerowy. Pokaż kartę do mojego zatwierdzenia.",
+    "expect": {
+      "calls": ["panel_guide", "panel_calendar_propose"],
+      "notCalls": ["panel_znanylekarz", "panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_bank_propose", "panel_bank_assign", "browser_exec", "execute_code", "terminal"],
+      "order": [["panel_guide", "panel_calendar_propose"]],
+      "textNot": ["(?:zapisałem|utworzyłem|dodałem) (?:wydarzenie|spotkanie|do kalendarza)"],
+      "maxTools": 10, "maxSeconds": 120
+    },
+    "soft": [{"name": "mówi o zatwierdzeniu przez użytkownika", "text": "kart|zatwier|potwier|klik"}]
+  }]
+}

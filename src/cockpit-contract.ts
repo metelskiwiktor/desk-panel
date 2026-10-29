@@ -95,10 +95,22 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign' | 'appointment' | 'calendarPlan';
 }
 
 export const COCKPIT_TOOLS = {
+  panel_znanylekarz: {
+    purpose: 'Karta wyboru terminu wizyty na ZnanyLekarz: profil lekarza (profile), nazwa usługi (service), tryb online/gabinet/dowolnie, opcjonalnie gabinet (address), firstVisit i zakres from/to.',
+    when: 'gdy użytkownik chce znaleźć termin lub umówić wizytę. Profil weź z jego wiadomości albo z prawdziwego wyniku wyszukiwania w internecie. Nie wymyślaj URL ani identyfikatorów. Przedtem przeczytaj panel_guide: wizyty.',
+    effect: 'użytkownik widzi dni i godziny z aktualnego odczytu; wybiera sam. Panel sprawdza termin ponownie i otwiera prawdziwy link w nowym oknie. Rezerwację i płatność kończy użytkownik na ZnanyLekarz; po powrocie potwierdza na karcie i dopiero wtedy panel tworzy wydarzenie Google. Ty niczego nie rezerwujesz i nie zapisujesz. Po karcie krótka odpowiedź, bez listy godzin.',
+    card: 'appointment',
+  },
+  panel_calendar_propose: {
+    purpose: 'Karta zgody na utworzenie jednego wydarzenia Google Calendar: title, start, end (ISO 8601 z offsetem), opcjonalnie location i description.',
+    when: 'gdy użytkownik chce dodać wydarzenie i znasz tytuł, początek i koniec. Brakujące istotne dane najpierw ustal z użytkownikiem. Przedtem przeczytaj panel_guide: kalendarz. Przy rezerwacji przez kartę ZnanyLekarz użyj jej zapisu, nie twórz drugiej karty kalendarza.',
+    effect: 'karta pokazuje dokładny tytuł, datę, godziny i miejsce; zapisuje dopiero kliknięcie użytkownika. Bez zapraszania gości, edycji i usuwania. Nie mów, że utworzyłeś wydarzenie.',
+    card: 'calendarPlan',
+  },
   panel_recon_report: {
     purpose: 'Skill „Zaimplementuj zadanie”: wynik rekonesansu (przeszukane pliki, typ UI/non-UI, scenariusz zrzutów, Executor Prompt).',
     when: 'raz, po rekonesansie w skillu „Zaimplementuj zadanie”, gdy wyniki wyszukiwań są już w rozmowie; pliki tylko takie, jakie pokazały wyniki narzędzi (plik do utworzenia z "new": true); nie w zwykłej rozmowie o zadaniu.',
@@ -149,7 +161,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika', appointment: 'Karta terminów jest u użytkownika', calendarPlan: 'Karta wydarzenia jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.

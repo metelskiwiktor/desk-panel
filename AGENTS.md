@@ -1,5 +1,16 @@
 # Desk Panel
 
+Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
+Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez
+`with[]=service.duration`, nigdy z odstępów między terminami. Użytkownik wybiera dzień/godzinę na karcie, panel ponownie
+sprawdza dostępność i daje zweryfikowany link do osobnego okna. Rezerwację, zgody i płatność kończy wyłącznie użytkownik.
+Dopiero jego „Zarezerwowałem ten termin — zapisz” tworzy wydarzenie Google. Zwykłe wydarzenie Wektor tylko proponuje przez
+`panel_calendar_propose`; zapisuje przycisk karty. Origin-checked POST-y `/api/chats/:id/appointment` i `calendar-plan` czytają
+propozycję z zakończonego wywołania w tej rozmowie, a nie z żądania. Stan i zamrożone zapisy są w `appointments.dpapi`, poza
+Gitem; powtórzenie używa tego samego id Google. Nie klikaj tych potwierdzeń w prawdziwych rozmowach podczas testów. Scope
+`calendar.events.owned` wymaga ponownej zgody Google, stare tokeny zachowują odczyt agendy. Agent nie ma bezpośredniego
+narzędzia zapisu, nie edytuje/usuwa wydarzeń, nie zaprasza gości ani nie rezerwuje wizyt.
+
 Local React/TypeScript dashboard with a Node HTTP server. Read README.md, then the matching file in docs/
 (cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel, czat, hermes, github, openrouter) for integration details. Keep the server bound to loopback; credentials stay on the
 backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.

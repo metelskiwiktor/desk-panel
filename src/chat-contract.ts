@@ -49,6 +49,28 @@ export const BANK_GUIDE: readonly string[] = [
  * to-dos…). The preamble only says that a guide exists and when to read it (one line each, made from `when`).
  */
 export const PANEL_GUIDES = {
+  wizyty: {
+    when: 'szukanie terminu lub rezerwacja wizyty na ZnanyLekarz',
+    core: 'terminy i link tylko przez panel_znanylekarz; rezerwuje i płaci użytkownik, kalendarz zapisuje jego kliknięcie',
+    lines: [
+      'Umawianie wizyty: ustal lekarza (profil ZnanyLekarz), usługę i tryb online albo gabinet. Profil weź od użytkownika albo znajdź wyszukiwaniem w internecie; nie wymyślaj URL ani identyfikatorów. Gdy usługa lub gabinet są niejednoznaczne, narzędzie poda dostępne nazwy — dopytaj.',
+      'Wywołaj panel_znanylekarz z profile, service, mode i tylko podanymi ograniczeniami. firstVisit podaj tylko gdy wiesz, czy to pierwsza wizyta; bez niego panel bierze wspólne terminy pierwszej i kolejnej. Zakres dat domyślnie 42 dni od dziś. Nie używaj przeglądarki ani execute_code do odczytu terminów, nie buduj ręcznie linków ani godzin.',
+      'Karta pokazuje dni i godziny, cenę i czas wizyty z serwisu. Użytkownik wybiera termin; panel sprawdza go ponownie przed udostępnieniem linku. Karta sama pobiera dane, więc nie przepisuj w tekście godzin; odpowiedz krótko. Nie wskazuj jednego terminu jako wybranego za użytkownika.',
+      'Link prowadzi do formularza z datą, godziną i usługą, nie jest potwierdzeniem ani magicznym ominięciem logowania. Użytkownik kończy rezerwację, wymagane zgody i ewentualną płatność w osobnym oknie. Nie klikaj, nie rezerwuj, nie płać, nie pytaj o hasło ani SMS.',
+      'Po powrocie użytkownik potwierdza na tej samej karcie „Zarezerwowałem ten termin — zapisz”. Dopiero to tworzy wydarzenie Google, z automatycznie wypełnioną nazwą, czasem i miejscem. Nie wysyłaj drugiej karty panel_calendar_propose dla tej wizyty. Nie twierdź, że sam zarezerwowałeś lub zapisałeś wydarzenie.',
+      'Dane są odczytem z konkretnej chwili; termin może zniknąć. Nie obiecuj dostępności ani ceny po upływie czasu. Brak czasu trwania oznacza uzupełnienie go na karcie przez użytkownika; nie zgaduj go z odstępów między godzinami.',
+    ],
+  },
+  kalendarz: {
+    when: 'dodanie wydarzenia do Google Calendar lub rozmowa o agendzie',
+    core: 'czytaj panel_calendar, nowe wydarzenie tylko proponuj przez panel_calendar_propose; zapisuje kliknięcie użytkownika',
+    lines: [
+      'Odczyt agendy: panel_calendar pokazuje dziś i najbliższe 42 dni, nie całą historię. Nie twierdź, że przeszłego wydarzenia nie było, gdy nie możesz go odczytać.',
+      'Na wyraźną prośbę o dodanie wydarzenia użyj panel_calendar_propose: title, start i end (ISO 8601 z prawdziwym offsetem Europe/Warsaw), opcjonalnie location i description. Ustal brakującą datę, godzinę lub czas trwania, zamiast zgadywać. Nie wysyłaj propozycji, gdy użytkownik dopiero pyta o radę.',
+      'Narzędzie pokazuje kartę zgody. Niczego nie zapisuje, nie zaprasza gości, nie zmienia ani nie usuwa istniejących wydarzeń. Zapis następuje dopiero po kliknięciu użytkownika. Nie używaj do zapisu innych narzędzi, powłoki ani przeglądarki; nie mów „zapisałem”.',
+      'Wizyta z karty ZnanyLekarz ma własne potwierdzenie i zapis Google. Nie pokazuj dla niej drugiej karty wydarzenia. Brak zgody Google: karta przechowuje wybór i wyjaśnia, że trzeba ponownie połączyć konto w Ustawieniach.',
+    ],
+  },
   bank: {
     when: 'rozmowa o koncie bankowym: wydatki, kategorie, oznaczenia operacji, salda, pokazanie lub zmiana czegoś w koncie',
     // The one sentence that stays in the preamble: what matters most, where the model listens best (a guide read from a tool is followed less).
@@ -104,6 +126,8 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
     description: 'Rozmowa o koncie: opinia z liczb, wydatki na karcie, porządkowanie kategorii i etykiet',
     prompt: BANK_GUIDE.join('\n'),
   },
+  { id: 'wizyty', title: 'Wizyty', description: 'Terminy ZnanyLekarz, wybór dnia i godziny oraz zapis potwierdzonej wizyty do Google', prompt: PANEL_GUIDES.wizyty.lines.join('\n') },
+  { id: 'kalendarz', title: 'Kalendarz', description: 'Agenda i propozycja nowego wydarzenia z Twoim potwierdzeniem na karcie', prompt: PANEL_GUIDES.kalendarz.lines.join('\n') },
   {
     id: 'nasluchuj-cezara',
     title: 'Nasłuchuj Cezara',

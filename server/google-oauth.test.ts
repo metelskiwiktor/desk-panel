@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { OAuth2Client, LoginTicket } from 'google-auth-library';
-import { createGoogleAccount, type GoogleService } from './google-oauth';
+import { CALENDAR_WRITE_SCOPE, createGoogleAccount, type GoogleService } from './google-oauth';
 import { readPrivate, writePrivate } from './private-store';
 
 vi.mock('./private-store', () => ({ readPrivate: vi.fn(async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); }), writePrivate: vi.fn(async () => {}) }));
@@ -16,12 +16,12 @@ afterEach(async () => {
     return rm(path, { recursive: true, force: true });
   }));
 });
-async function setup(type: 'installed' | 'web' = 'installed', services: GoogleService[] = ['calendar']) {
+async function setup(type: 'installed' | 'web' = 'installed', services: GoogleService[] = ['calendar'], calendarWrite = false) {
   const dir = await mkdtemp(join(tmpdir(), 'desk-oauth-test-'));
   dirs.push(dir);
   const clientFile = join(dir, 'client.json');
   await writeFile(clientFile, JSON.stringify({ [type]: { client_id: 'test.apps.googleusercontent.com', client_secret: 'test-oauth-secret' } }));
-  return createGoogleAccount({ clientFile, tokenFile: join(dir, 'token'), email: 'owner@gmail.com', services, redirectUri: 'http://127.0.0.1:5174/api/calendar/callback' });
+  return createGoogleAccount({ clientFile, tokenFile: join(dir, 'token'), email: 'owner@gmail.com', services, calendarWrite, redirectUri: 'http://127.0.0.1:5174/api/calendar/callback' });
 }
 const CALENDAR = 'https://www.googleapis.com/auth/calendar.readonly', GMAIL = 'https://www.googleapis.com/auth/gmail.modify';
 function mockExchange(email: string, scope = `openid email ${CALENDAR}`) {
@@ -29,6 +29,24 @@ function mockExchange(email: string, scope = `openid email ${CALENDAR}`) {
   vi.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockResolvedValue(new LoginTicket('header', { email, email_verified: true, iss: 'https://accounts.google.com', aud: 'test.apps.googleusercontent.com', sub: 'test', iat: 1, exp: 9999999999 }) as never);
 }
 describe('Google OAuth', () => {
+  it('retains old agenda access while a new write scope needs consent; blocks calendar POST before the network', async () => {
+    const auth = await setup('installed', ['calendar'], true);
+    vi.mocked(readPrivate).mockResolvedValueOnce({ clientId: 'test.apps.googleusercontent.com', email: 'owner@gmail.com', refreshToken: 'fake', scopes: [CALENDAR] });
+    expect(await auth.status()).toMatchObject({ status: 'connected', missing: [], canCreateEvents: false });
+    expect(await auth.canWriteCalendar()).toBe(false);
+    const request = vi.spyOn(OAuth2Client.prototype, 'request');
+    await expect(auth.request('calendar', 'https://www.googleapis.com/calendar/v3/calendars/primary/events', { method: 'POST', data: {} })).rejects.toMatchObject({ reason: 'scopes_missing' });
+    expect(request).not.toHaveBeenCalled();
+    expect(new URL(await auth.begin()).searchParams.get('scope')).toContain(CALENDAR_WRITE_SCOPE);
+  });
+  it('saves the extra granted scope and permits inserts after the user reauthorizes', async () => {
+    const auth = await setup('installed', ['calendar'], true), url = new URL(await auth.begin());
+    mockExchange('owner@gmail.com', `openid email ${CALENDAR} ${CALENDAR_WRITE_SCOPE}`);
+    await auth.finish(new URLSearchParams({ state: url.searchParams.get('state')!, code: 'fixture' }));
+    expect(await auth.canWriteCalendar()).toBe(true);
+    expect(await auth.status()).toMatchObject({ canCreateEvents: true });
+    expect(writePrivate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ scopes: expect.arrayContaining([CALENDAR_WRITE_SCOPE]) }));
+  });
   it('accepts the supplied Web client and restores a matching saved account after restart', async () => {
     const auth = await setup('web');
     const url = new URL(await auth.begin());

@@ -1,5 +1,10 @@
 # Czat z agentem
 
+Wektor ma też kartę wyboru dnia i godziny wizyty ZnanyLekarz oraz kartę zgody na nowe wydarzenie Google Calendar.
+Przepływ i granice potwierdzeń opisują [znanylekarz.md](znanylekarz.md) i [calendar.md](calendar.md). Samo wywołanie narzędzia
+niczego nie rezerwuje ani nie tworzy w Google; zapis jest osobnym kliknięciem użytkownika, powiązanym z zakończoną kartą
+w jego rozmowie. Zmiana schematów narzędzi wymaga restartu Hermesa, nowe przewodniki działają w nowych rozmowach.
+
 Okno rozmowy z agentem (**Wektor**) otwierane przyciskiem w pasku u góry pulpitu. Okno pisze **tylko do Hermesa** (zob.
 [hermes.md](hermes.md)): nie ma przełącznika silników, nowe rozmowy startują na Hermesie niezależnie od zapamiętanego wyboru, a
 na liście są tylko rozmowy Hermesa. Silnik **AGY** (Antigravity CLI, `agy`, opisany niżej) zostaje na serwerze; jego stare

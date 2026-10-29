@@ -20,6 +20,8 @@ import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
 import { SourceError, type PanelSources } from './sources';
 import { TodoError } from './todos';
+import { appointmentQuerySchema, calendarProposalSchema } from '../src/appointment-contract';
+import { AppointmentError } from './znanylekarz';
 
 /**
  * The panel's data as MCP tools for Hermes (`POST /api/mcp`, Streamable HTTP, JSON answers only). Each tool is a narrow
@@ -163,6 +165,28 @@ const range = { from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD
 const schema = (properties: Record<string, unknown> = {}, required: string[] = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 
 export const PANEL_TOOLS: Record<string, Tool> = {
+  panel_znanylekarz: {
+    description: cockpitToolDescription('panel_znanylekarz'),
+    input: appointmentQuerySchema,
+    schema: schema({ profile: { type: 'string', description: 'Pełny https URL profilu lekarza na znanylekarz.pl, z wiadomości użytkownika albo wyszukiwania' }, service: { type: 'string', description: 'Nazwa usługi, np. konsultacja dermatologiczna; przy niejednoznaczności odpowiedź nazwie dostępne usługi' }, mode: { type: 'string', enum: ['online', 'gabinet', 'dowolnie'] }, address: { type: 'string', description: 'Fragment nazwy gabinetu, ulicy lub miasta, gdy użytkownik go wskazał' }, firstVisit: { type: 'boolean', description: 'Pierwsza wizyta u tego lekarza? Pomiń, jeśli nie wiadomo: karta pokaże terminy wspólne dla pierwszej i kolejnej wizyty' }, from: { type: 'string', description: 'Pierwszy dzień RRRR-MM-DD, domyślnie dziś' }, to: { type: 'string', description: 'Ostatni dzień włącznie, domyślnie 42 dni od from; zakres do 90 dni' } }, ['profile', 'service']),
+    async run(args, { sources }) {
+      if (!sources.appointments) throw new AgentViewError(503, 'Terminy ZnanyLekarz nie są dostępne.');
+      try {
+        const p = await sources.appointments.propose(appointmentQuerySchema.parse(args));
+        return `${CARD_SHOWN.appointment}; ref=${p.id}. ${p.doctor}, ${p.service}, ${p.location}: ${p.slots.length} terminów w dniach ${p.from} – ${p.to}. Czas wizyty: ${p.durationMinutes ?? 'niepodany'} min. ${p.query.firstVisit === undefined ? 'Pokazano terminy wspólne dla pierwszej i kolejnej wizyty.' : ''} Dane odczytano ${new Date(p.observedAt).toISOString()}. Niczego nie zarezerwowano ani nie zapisano. Użytkownik wybiera na karcie. Odpowiedz krótko, nie przepisuj godzin.`;
+      } catch (error) { if (error instanceof AppointmentError) throw new AgentViewError(error.status, error.message); throw error; }
+    },
+  },
+  panel_calendar_propose: {
+    description: cockpitToolDescription('panel_calendar_propose'), input: calendarProposalSchema,
+    schema: schema({ title: { type: 'string' }, start: { type: 'string', description: 'Początek ISO 8601 z prawdziwym offsetem strefy Europe/Warsaw, np. +01:00 zimą, +02:00 latem' }, end: { type: 'string', description: 'Koniec ISO 8601 z offsetem, po początku; nie zgaduj czasu trwania' }, location: { type: 'string' }, description: { type: 'string' } }, ['title', 'start', 'end']),
+    async run(args, { sources, now }) {
+      if (!sources.appointments) throw new AgentViewError(503, 'Tworzenie wydarzeń nie jest dostępne.');
+      const p = calendarProposalSchema.parse(args);
+      if (Date.parse(p.start) <= now) throw new AgentViewError(400, 'Początek wydarzenia już minął. Sprawdź datę i strefę.');
+      return `${CARD_SHOWN.calendarPlan}: ${p.title}. Niczego nie zapisano; wydarzenie tworzy dopiero kliknięcie użytkownika. Odpowiedz jednym zdaniem.`;
+    },
+  },
   panel_guide: {
     description: `Zasady rozmowy o jednej dziedzinie panelu (jak odpowiadać, co pokazywać, czego nie robić). Wywołaj raz na początku rozmowy o tej dziedzinie, przed jej innymi narzędziami, i stosuj do końca rozmowy. Tematy: ${Object.entries(PANEL_GUIDES).map(([topic, g]) => `${topic} (${g.when})`).join('; ')}.`,
     input: z.object({ topic: z.enum(GUIDE_TOPICS) }).strict(),

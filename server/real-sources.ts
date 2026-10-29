@@ -7,6 +7,9 @@ import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
 import { cezarAction, createCezarRun, createFinishedReader, readCezarRun, readCezarDefaults } from './cezar-finished';
 import { createCalendarReader } from './calendar';
+import { createCalendarWriter } from './calendar-write';
+import { createZnanyLekarzReader } from './znanylekarz';
+import { createAppointments } from './appointments';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
@@ -31,6 +34,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     // The calendar account keeps its original token file, so existing sign-ins survive the upgrade.
     tokenFile: join(dir, email === calendarId ? 'calendar-token.dpapi' : `google-${email.replace(/[^a-z0-9@._-]/gi, '_')}.dpapi`),
     services: [...(email === calendarId ? ['calendar'] : []), ...(options.mailAccounts.includes(email) ? ['mail'] : [])] as GoogleService[],
+    calendarWrite: email === calendarId,
   }));
   const calendarAccount = accounts[0];
   const calendarRequest = (id: string) => (path: string, params?: Record<string, string>) =>
@@ -38,6 +42,10 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   // Other calendars of the calendar account, e.g. a subscribed Garmin training calendar (`…@import.calendar.google.com`).
   const extraCalendars = (env.DESK_EXTRA_CALENDARS || '').split(',').map(id => id.trim()).filter(Boolean);
   const readCalendar = createCalendarReader(calendarId, calendarRequest(calendarId), Date.now, extraCalendars.map(calendarRequest));
+  const insertCalendar = createCalendarWriter((path, init) => calendarAccount.request('calendar', `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}${path}`, init));
+  const writeCalendar: typeof insertCalendar = async (key, draft) => { const saved = await insertCalendar(key, draft); readCalendar.invalidate(); return saved; };
+  const appointments = createAppointments({ read: createZnanyLekarzReader(), writeCalendar, canWriteCalendar: () => calendarAccount.canWriteCalendar(),
+    persistence: { read: () => readPrivate(join(dir, 'appointments.dpapi')), write: value => writePrivate(join(dir, 'appointments.dpapi'), value) } });
   // The plan day boundaries follow the machine's zone unless set explicitly.
   const readTraining = createGarminReader({ api: createGarminApi(garminTokenFile(env)), timeZone: env.DESK_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone });
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
@@ -71,6 +79,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   let lastFinished: Awaited<ReturnType<typeof finishedReader.read>> = [];
   let active = new Set<string>();
   return {
+    appointments,
     async cezar() {
       if (!cache || Date.now() - fetchedAt >= 4000) {
         pending ??= readCezar(options.cezarUrl).then(value => {

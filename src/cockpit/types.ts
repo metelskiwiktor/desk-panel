@@ -59,6 +59,8 @@ export interface BankPlanArgs { tytul?: unknown; merge?: unknown; into?: unknown
 
 /** The consent card for marking many operations with the panel's own suggestions (`panel_bank_assign`). */
 export const BANK_ASSIGN = 'bank_assign';
+export const APPOINTMENT = 'appointment';
+export const CALENDAR_PLAN = 'calendar_plan';
 export interface BankAssignArgs { tytul?: unknown; from?: unknown; to?: unknown; refused?: string }
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */

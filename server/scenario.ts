@@ -17,6 +17,9 @@ import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/w
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
 import { openrouterUsageSchema } from '../src/openrouter-contract';
 import { SourceError, type PanelSources } from './sources';
+import { appointmentPreviewSchema, calendarSavedSchema } from '../src/appointment-contract';
+import { createAppointments } from './appointments';
+import { calendarEventId } from './calendar-write';
 
 /**
  * A scenario file holds one response per API endpoint, in exactly the shape the
@@ -36,6 +39,7 @@ export const scenarioSchema = z.object({
   description: z.string().optional(),
   cezar: endpoint(cezarSchema),
   calendar: endpoint(calendarSourceSchema),
+  appointment: endpoint(appointmentPreviewSchema),
   training: endpoint(trainingSourceSchema),
   googleAccounts: endpoint(googleAccountsSchema),
   /** All listed conversations; the server applies `limit` and the actions taken in this session. */
@@ -60,6 +64,7 @@ export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'
 export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'cezar' ? z.infer<typeof cezarSchema> :
   K extends 'calendar' ? z.infer<typeof calendarSourceSchema> :
+  K extends 'appointment' ? z.infer<typeof appointmentPreviewSchema> :
   K extends 'training' ? z.infer<typeof trainingSourceSchema> :
   K extends 'googleAccounts' ? z.infer<typeof googleAccountsSchema> :
   K extends 'mail' ? z.infer<typeof mailSourceSchema> :
@@ -162,6 +167,11 @@ export function createScenarioSources(file: string): PanelSources {
     return value as unknown as EndpointResult<K>;
   }
   return {
+    appointments: createAppointments({
+      read: async query => ({ ...await serve('appointment'), query }),
+      canWriteCalendar: async () => (await serve('googleAccounts')).some(a => a.canCreateEvents === true),
+      writeCalendar: async (key, draft) => calendarSavedSchema.parse({ id: calendarEventId(key), url: `https://calendar.google.com/calendar/event?eid=scenario-${calendarEventId(key)}`, at: Date.now(), draft }),
+    }),
     async cezar() {
       const source = await serve('cezar');
       if (!('finished' in source)) return source;

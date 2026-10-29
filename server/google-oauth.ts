@@ -10,6 +10,8 @@ export const SCOPES = {
   mail: 'https://www.googleapis.com/auth/gmail.modify',
 } as const;
 export type GoogleService = keyof typeof SCOPES;
+/** Create events only on calendars the user owns; retain the existing read scope for the agenda/subscriptions. */
+export const CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events.owned';
 
 const clientKey = z.object({ client_id: z.string().endsWith('.apps.googleusercontent.com'), client_secret: z.string().min(1) });
 const clientSchema = z.union([z.object({ installed: clientKey }), z.object({ web: clientKey })]);
@@ -21,8 +23,8 @@ export class GoogleAuthError extends Error {
 }
 
 /** One Google account with the services the panel uses for it; its refresh token is stored with DPAPI. */
-export function createGoogleAccount(options: { clientFile: string; tokenFile: string; redirectUri: string; email: string; services: GoogleService[] }) {
-  const required = options.services.map(s => SCOPES[s]);
+export function createGoogleAccount(options: { clientFile: string; tokenFile: string; redirectUri: string; email: string; services: GoogleService[]; calendarWrite?: boolean }) {
+  const required: string[] = [...options.services.map(s => SCOPES[s]), ...(options.calendarWrite ? [CALENDAR_WRITE_SCOPE] : [])];
   let active: { client: OAuth2Client; scopes: string[] } | undefined;
   let flow: { state: string; verifier: string; expires: number; client: OAuth2Client; clientId: string } | undefined;
   let expired = false; // Google rejected the saved refresh token (invalid_grant or 401).
@@ -59,13 +61,16 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
   return {
     email: options.email,
     services: options.services,
+    async canWriteCalendar() {
+      try { return options.services.includes('calendar') && (await session()).scopes.includes(CALENDAR_WRITE_SCOPE); } catch { return false; }
+    },
     async status() {
       try {
         const { scopes } = await session();
         const missing = options.services.filter(s => !scopes.includes(SCOPES[s]));
         return missing.length
           ? { status: 'unavailable' as const, email: options.email, reason: 'scopes_missing' as const, services: options.services, missing }
-          : { status: 'connected' as const, email: options.email, services: options.services, missing };
+          : { status: 'connected' as const, email: options.email, services: options.services, missing, ...(options.calendarWrite ? { canCreateEvents: scopes.includes(CALENDAR_WRITE_SCOPE) } : {}) };
       } catch (error) {
         return { status: 'unavailable' as const, email: options.email, services: options.services, missing: options.services,
           reason: error instanceof GoogleAuthError ? error.reason : 'login_required' as const };
@@ -107,6 +112,7 @@ export function createGoogleAccount(options: { clientFile: string; tokenFile: st
     async request(service: GoogleService, url: string, init: { method?: 'GET' | 'POST'; params?: Record<string, string | string[]>; data?: unknown } = {}) {
       const { client, scopes } = await session();
       if (!scopes.includes(SCOPES[service])) throw new GoogleAuthError('scopes_missing');
+      if (service === 'calendar' && init.method === 'POST' && !scopes.includes(CALENDAR_WRITE_SCOPE)) throw new GoogleAuthError('scopes_missing');
       try {
         const response = await client.request({ url, method: init.method ?? 'GET', params: init.params, data: init.data,
           paramsSerializer: params => serialize(params), timeout: 8000, retry: false });

@@ -50,6 +50,14 @@ Drugi filtr może nadal zwrócić prywatne i długie dane. Zawęź go do konkret
 
 ## Na co patrzeć
 
+- **Karta wizyty lub kalendarza.** Zakończone `panel_znanylekarz` / `panel_calendar_propose` mają id
+  `<wiadomość>:v-<16 znaków>` (`server/appointment-cards.ts`, odtwarzane także z historii Hermesa). W wyniku wizyty musi być
+  `ref=a-…`, wskazujące konkretny odczyt w `appointments.dpapi`. `GET /api/chats/<id>/appointment?toolCallId=…` pokazuje odczyt,
+  wybór i wynik zapisu; niczego nie zmienia. Analogicznie `calendar-plan` pokazuje propozycję zwykłego wydarzenia.
+  Nie klikaj potwierdzenia podczas diagnozy: tworzy prawdziwe wydarzenie Google. Brak `canWriteCalendar` nie oznacza braku
+  odczytu agendy — stary token wymaga nowej zgody na `calendar.events.owned`. W odczycie ZnanyLekarz `timezone: null` jest
+  poprawne, a daty z ułamkiem sekundy (`.000`) powodują `404`; czas wizyty jest w dodatkowym `with[]=service.duration`.
+
 - **Tura bez zdarzeń.** Gdy ślad pokazuje tylko statusy `stall` panelu, sprawdź w logu Hermesa ten przedział czasu. Wywołanie modelu przez `antigravity-oauth` kończy się po 300 s; `no result event, process still alive` trzy razy pod rząd oznacza zawieszone wywołania, nie wolne narzędzie. Panel przerywa taką turę po 6 min ciszy (`DESK_HERMES_SILENCE_MS`, [hermes.md](hermes.md)).
 - **Szczegół, którego nie było w danych.** Każdą konkretną nazwę testu, asercję, ścieżkę, hash czy id z odpowiedzi agenta wyszukaj w historii sesji przed tą odpowiedzią. Jeśli nie występuje w żadnym wyniku narzędzia, agent ją dopowiedział. Najczęściej dzieje się to przy uciętym wyjściu: sprawdź, czy wynik miał `output truncated` i czy agent to przyznał.
 - **Wywołania na ślepo.** Policz `tool_calls` w jednej wiadomości asystenta w historii sesji. Wywołanie, którego argument zależy od wyniku innego z tej samej paczki (ścieżka, hash, recon), powstało bez tego wyniku. Karta wysłana w takiej paczce jest dziś odrzucana przez panel (`panel_recon_report` → `recon`, [hermes.md](hermes.md)); odrzucona karta mówi to w UI.

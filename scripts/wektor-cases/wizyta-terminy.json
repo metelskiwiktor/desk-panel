@@ -1,0 +1,14 @@
+{
+  "description": "Wektor odczytuje rzeczywiste terminy wskazanego lekarza i pokazuje kartę. Niczego nie rezerwuje, nie płaci, nie zapisuje kalendarza ani nie klika karty.",
+  "turns": [{
+    "say": "Pokaż mi na karcie dostępne dni i godziny: https://www.znanylekarz.pl/profil/szczepan-przezdzik — konsultacja psychiatryczna online. Termin wybiorę sam na karcie i sam dokończę rezerwację na stronie.",
+    "expect": {
+      "calls": ["panel_guide", "panel_znanylekarz"],
+      "notCalls": ["panel_calendar_propose", "panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_bank_propose", "panel_bank_assign", "browser_exec", "execute_code", "terminal"],
+      "order": [["panel_guide", "panel_znanylekarz"]],
+      "textNot": ["(?:zarezerwowałem|zapisałem (?:wizytę|wydarzenie)|opłaciłem)"],
+      "maxTools": 10, "maxSeconds": 120
+    },
+    "soft": [{"name": "krótko odsyła do wyboru na karcie", "text": "kart|wybierz|wybor"}]
+  }]
+}

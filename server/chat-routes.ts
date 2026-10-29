@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
+import { appointmentActionSchema, appointmentQuerySchema, appointmentReference, calendarChoiceSchema, calendarProposalSchema } from '../src/appointment-contract';
+import { stableAppointmentCardId } from './appointment-cards';
+import { AppointmentError } from './znanylekarz';
+import type { AppointmentService } from './appointments';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
 import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
@@ -52,14 +56,41 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan))?)?\/?$/.exec(url.pathname);
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService): Promise<boolean> {
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
   const write = req.method !== 'GET';
   if (write && req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return true; }
   try {
+    if (id && id !== 'engine' && (action === 'appointment' || action === 'calendar-plan') && (req.method === 'GET' || req.method === 'POST')) {
+      if (!appointments) throw new ChatError(503, 'Karty wizyt i wydarzeń są niedostępne.');
+      const body = req.method === 'POST' ? parse(z.object({ toolCallId: z.string().min(1).max(200), action: z.unknown() }).strict(), await readBody(req)) : null;
+      const toolCallId = body?.toolCallId ?? url.searchParams.get('toolCallId');
+      const conversation = await chat.get(id);
+      const tool = action === 'appointment' ? 'panel_znanylekarz' : 'panel_calendar_propose';
+      const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done' ? (m.parts ?? []).flatMap(p =>
+        p.type === 'tool' && p.id === toolCallId && p.name.endsWith(tool) && stableAppointmentCardId(m.id, p.name, p.input, p.output) === toolCallId ? [p] : []) : []) : [];
+      if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości gotowej karty. Odśwież rozmowę.');
+      const card = matches[0];
+      if (cardRefusal(action === 'appointment' ? 'appointment' : 'calendarPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę kartę. Poproś Wektora o nową.');
+      const binding = `${id}:${toolCallId}`;
+      if (action === 'appointment') {
+        const ref = appointmentReference(card.output);
+        if (!ref) throw new ChatError(409, 'Karta nie ma zapisanego odczytu terminów.');
+        const query = parse(appointmentQuerySchema, JSON.parse(card.input));
+        const view = await appointments.view(binding, ref);
+        if (JSON.stringify(query) !== JSON.stringify(view.preview.query)) throw new ChatError(409, 'Odczyt terminów nie pasuje do tej karty. Poproś Wektora o nową.');
+        return json(res, 200, body ? await appointments.act(binding, ref, parse(appointmentActionSchema, body.action)) : view), true;
+      }
+      const plan = parse(calendarProposalSchema, JSON.parse(card.input));
+      if (body) {
+        const decision = parse(z.object({ action: z.literal('confirm'), choice: calendarChoiceSchema.optional() }).strict(), body.action);
+        return json(res, 200, await appointments.calendarConfirm(binding, plan, decision.choice)), true;
+      }
+      return json(res, 200, await appointments.calendarView(binding, plan)), true;
+    }
     if (id === 'engine') {
       // The engine new conversations start on, remembered for every screen of the panel.
       if (action || req.method !== 'PUT' || !chat.prefer) { res.writeHead(405).end(); return true; }
@@ -155,7 +186,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     }
     res.writeHead(405).end();
   } catch (error) {
-    const status = error instanceof ChatError || error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError ? error.status : error instanceof SyntaxError ? 400 : 500;
     const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
       ? error.message
       : undefined;

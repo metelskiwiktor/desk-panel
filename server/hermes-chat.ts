@@ -5,6 +5,7 @@ import path from 'node:path';
 import { PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
+import { stableAppointmentCardId } from './appointment-cards';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
@@ -49,7 +50,7 @@ export function hermesPreamble(): string {
     'Plikami i powłoką pracujesz z dowodów, nie z pamięci. Ścieżki, nazwy plików, hashe commitów i identyfikatory bierz tylko z wyników narzędzi tej rozmowy: gdy nie znasz ścieżki, najpierw ją wyszukaj (search_files), potem czytaj to, co wyszło. Wywołanie, które zależy od wyniku innego, wysyłaj dopiero po jego otrzymaniu; razem tylko wywołania od siebie niezależne. Zawężaj wyniki (git log -n 10 --oneline, wyszukiwanie w konkretnym katalogu, ogon logu), bo każdy znak wyniku zostaje w rozmowie.',
     'Przyczynę błędu podajesz tylko taką, jaką widać w wyniku narzędzia; gdy wynik jest ucięty albo go brak, napisz to i nie dopowiadaj szczegółów (nazwy testu, asercji, wartości). Gdy polecenie pada przez środowisko (brak programu albo zależności, np. „is not recognized”, brak node_modules), zgłoś to użytkownikowi jako problem środowiska i nie obchodź go.',
     'Kodu w repozytoriach (desk-panel, Cezar ani innych) nie zmieniasz sam, nawet na prośbę: dla desk-panel proponujesz task Cezara kartą (skill „Zaimplementuj zadanie”), dla innego projektu opisujesz zmianę i proponujesz, by użytkownik zlecił ją w Cezarze.',
-    'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara. Nie proponuj zmian, których te dwa narzędzia nie robią (np. wydarzenia w kalendarzu, przypomnienia, wysłania maila): od razu powiedz, że panel tego nie potrafi.',
+    'Bezpośrednie zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Pozostałe obsługiwane zmiany tylko proponujesz kartami z tabeli narzędzi: oznaczenia banku, zlecenie Cezara i utworzenie wydarzenia Google (panel_calendar_propose albo potwierdzenie wizyty z panel_znanylekarz). Wykonuje je panel po kliknięciu użytkownika. Nie zapisujesz kalendarza ani rezerwacji sam, nie wysyłasz maili i nie ustawiasz przypomnień. Nie proponuj operacji, których narzędzia nie dają.',
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
     ...guideRules(),
@@ -206,12 +207,12 @@ export function stableBankCardId(messageId: string, input: string, name = 'panel
   const key = JSON.stringify({ merge: plan.merge.map(n => n.toLowerCase()), into: plan.into.toLowerCase(), tags: plan.tags });
   return `${messageId}:b-${createHash('sha256').update(key).digest('hex').slice(0, 16)}`;
 }
-/** Gives the bank change cards of a message their stable ids once their arguments are all there; whether any changed. */
+/** Gives consent cards stable ids from their arguments (and, for visits, the persisted reading's reference). */
 export function stabilizeBankCards(message: ChatMessage): boolean {
   let changed = false;
   for (const p of message.parts ?? []) {
-    if (p.type !== 'tool' || !isBankCard(p.name)) continue;
-    const id = stableBankCardId(message.id, p.input, p.name);
+    if (p.type !== 'tool') continue;
+    const id = isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
     if (id && p.id !== id) { p.id = id; changed = true; }
   }
   return changed;
@@ -341,9 +342,10 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       else if (group && group.parts.length) {
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
-        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` }
-          : p.type === 'tool' && isBankCard(p.name) ? { ...p, id: stableBankCardId(turn.agent, p.input, p.name) ?? p.id } : p);
-        out.push({ id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
+        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : { ...p });
+        const restored: ChatMessage = { id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) };
+        stabilizeBankCards(restored);
+        out.push(restored);
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
         out.push({
@@ -432,7 +434,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         tool.endedAt = now();
         if (event.error) { tool.error = true; tool.output = `Błąd: ${event.output || event.error}`.slice(0, 600); }
         else if (event.output) tool.output = event.output.slice(0, 4000);
-        if (isBankCard(tool.name)) stabilizeBankCards(live.message);
+        stabilizeBankCards(live.message);
         break;
       }
       case 'progress':
@@ -596,7 +598,11 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     void ensureHistory(record).then(() => {
       const groups = histories.get(record.id)?.groups;
       const index = record.turns.filter(t => t.run).indexOf(turn);
-      if (groups && index >= 0 && fillFromHistory(message, groups[index])) touch(record, message, true);
+      if (groups && index >= 0) {
+        const filled = fillFromHistory(message, groups[index]);
+        const stabilized = stabilizeBankCards(message);
+        if (filled || stabilized) touch(record, message, true);
+      }
     }).catch(() => { /* the live answer stays */ });
     const answerChars = message.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
     const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: t.input.slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));
