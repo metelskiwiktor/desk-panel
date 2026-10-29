@@ -135,6 +135,6 @@ When a conversation looks wrong (a card misbehaves, an answer is odd, a turn han
 - **Cards in kept test chats are live**: "Wykonaj" there changes the user's real data. Say so when reporting. To test the answer path without changing data, POST `reject` (as the page would, with an `Origin` header).
 - Logs for diagnosis: `~/.desk-panel/chat-logs` (see its README); `turns.jsonl` first.
 
-## Cases so far (`scripts/wektor-cases/`)
+## Cases
 
-`porzadki-kategorie` (advice, must not show the card), `scal-po-zgodzie` (card after "Okej, daj"), `scal-wprost` (explicit request: card at once), `scal-dwa` (two merges: two cards), `subskrypcje`, `jedzenie-sklep` (other topics, with a "Tak" turn).
+The list is the directory `scripts/wektor-cases/`; each file's `description` says what it checks and what it must not make Wektor do.
