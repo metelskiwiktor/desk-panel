@@ -215,6 +215,8 @@ describe('Hermes chat', () => {
     const preamble = hermesPreamble();
     expect(preamble).toContain('panel_guide');
     expect(preamble).toMatch(/- bank: rozmowa o koncie bankowym/);
+    // only the one sentence that matters most stays; the rest is read from the tool
+    expect(preamble).toContain('Istota: opinia z liczb, potem dane na karcie panel_show');
     // what the guide says is read from the tool, not carried at the start of every conversation
     expect(preamble).not.toContain('Pokrycie danych');
     expect(preamble).not.toContain('Rozmowa o koncie bankowym (PKO BP');

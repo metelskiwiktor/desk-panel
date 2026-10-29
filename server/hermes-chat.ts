@@ -31,7 +31,7 @@ export function cockpitRules(): string[] {
 export function guideRules(): string[] {
   return [
     'Przewodniki dziedzin: zasady rozmowy o danej dziedzinie czytasz narzędziem panel_guide (z tematem), a nie masz ich tutaj. Gdy rozmowa dochodzi do dziedziny z listy, wywołaj panel_guide z jej tematem, zanim użyjesz innych narzędzi tej dziedziny, i stosuj go do końca rozmowy; raz na rozmowę wystarczy.',
-    ...Object.entries(PANEL_GUIDES).map(([topic, guide]) => `- ${topic}: ${guide.when}.`),
+    ...Object.entries(PANEL_GUIDES).map(([topic, guide]) => `- ${topic}: ${guide.when}. Istota: ${guide.core}.`),
   ];
 }
 

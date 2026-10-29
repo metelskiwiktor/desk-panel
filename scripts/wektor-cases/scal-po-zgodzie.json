@@ -15,13 +15,7 @@
           "panel_recon_report",
           "panel_bank_propose"
         ],
-        "maxTools": 8,
-        "order": [
-          [
-            "panel_guide",
-            "panel_bank"
-          ]
-        ]
+        "maxTools": 8
       },
       "soft": [
         {

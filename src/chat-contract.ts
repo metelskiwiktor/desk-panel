@@ -49,8 +49,13 @@ export const BANK_GUIDE: readonly string[] = [
  * to-dos…). The preamble only says that a guide exists and when to read it (one line each, made from `when`).
  */
 export const PANEL_GUIDES = {
-  bank: { when: 'rozmowa o koncie bankowym: wydatki, kategorie, oznaczenia operacji, salda, pokazanie lub zmiana czegoś w koncie', lines: BANK_GUIDE },
-} as const satisfies Record<string, { when: string; lines: readonly string[] }>;
+  bank: {
+    when: 'rozmowa o koncie bankowym: wydatki, kategorie, oznaczenia operacji, salda, pokazanie lub zmiana czegoś w koncie',
+    // The one sentence that stays in the preamble: what matters most, where the model listens best (a guide read from a tool is followed less).
+    core: 'opinia z liczb, potem dane na karcie panel_show; zmiany tylko kartą zgody po zgodzie użytkownika',
+    lines: BANK_GUIDE,
+  },
+} as const satisfies Record<string, { when: string; core: string; lines: readonly string[] }>;
 export type GuideTopic = keyof typeof PANEL_GUIDES;
 export const GUIDE_TOPICS = Object.keys(PANEL_GUIDES) as [GuideTopic, ...GuideTopic[]];
 
