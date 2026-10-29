@@ -19,6 +19,22 @@ export interface ChatSkill {
   prompt: string;
 }
 
+/**
+ * How Wektor talks about the bank account (the skill „Bank”, and the same lines in Hermes's preamble so it works without picking
+ * the skill). Each line answers something Wektor did in a test conversation (scripts/wektor-test.mjs), so a change here is
+ * tried the same way: the conversation is meant to feel like talking to someone who knows the data, not like a report.
+ */
+export const BANK_GUIDE: readonly string[] = [
+  'Rozmowa o koncie bankowym (PKO BP, oznaczenia użytkownika): jak z doradcą, który zna dane. Najpierw opinia, potem dowód na karcie.',
+  '- Czytanie: zanim cokolwiek ocenisz albo policzysz, pobierz panel_bank z całą potrzebną historią (from rok wstecz; jedno zapytanie obejmuje do 400 dni), nie z domyślnych 30 dni. W odpowiedzi powiedz, z jakiego zakresu dat i ilu operacji wnioskujesz.',
+  '- Opinia: na „co uważasz” zacznij od werdyktu w jednym zdaniu i podaj powód z liczb (ile operacji, jakie sumy, jak często, czy cykliczne). Nie zmieniaj werdyktu w środku odpowiedzi. Scalanie kategorii ma sens, gdy każda jest mała (kilka operacji) i dotyczą jednego tematu; nie ma sensu, gdy jedna z nich dominuje albo jest regularna i warto ją śledzić osobno. Wtedy zaproponuj etykiety zamiast osobnych kategorii.',
+  '- Pokazywanie: dane pokazuj kartą panel_show (view „tabela” albo „słupki”, kategorie po nazwach z panel_bank, from/to zgodne z tym, co oceniasz). Karta sama czyta wiersze, więc nie wypisuj ich w tekście i nie przepisuj do argumentów; w tekście tylko wniosek.',
+  '- Powiązane: odpowiedź panel_show zawiera listę innych kategorii wydatków z sumami. Przejrzyj ją i napisz wprost, które pasują tematycznie do pytania (np. apteka przy wizytach lekarskich), i zapytaj, czy je dołączyć. Gdy żadna nie pasuje, nie dopisuj nic.',
+  '- Nazwa: gdy nazwa proponowana przez użytkownika nie obejmuje wszystkiego, co ma pod sobą (np. „Lekarz” i podolog albo fizjoterapeuta), zaproponuj szerszą, np. „Zdrowie”, i zostaw wybór jemu.',
+  '- Zmiany: bank jest dla Ciebie tylko do odczytu. Gdy użytkownik chce zmiany, opisz ją i powiedz, jak ją zrobi sam: Ustawienia oznaczeń (zębatka na kafelku Konto), przy kategorii przycisk „Scal”, który przenosi operacje i może zostawić dawną nazwę jako etykietę. Nigdy nie pisz, że coś zmieniłeś.',
+  '- Fakty: daty, kwoty i nazwy bierz tylko z wyników narzędzi. Odpowiadaj po polsku, do ok. 8 zdań.',
+];
+
 export const CHAT_SKILLS: readonly ChatSkill[] = [
   {
     id: 'zaimplementuj-zadanie',
@@ -57,6 +73,12 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '     - Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
       '- Then, in this order, each step only after the previous one\'s result arrived: (1) call the panel tool panel_recon_report ALONE, once the search results are in, with files (path + short note; "new": true for a file to create), kind, scenario and the Executor Prompt; its answer gives a recon id (r-…); it refuses what the rules above forbid (missing files or sections, unknown names, asks without "→", soft criteria) and says why; (2) write a short plan for the user in Polish (3-6 bullets, naming the earlier task you built on); (3) call panel_cezar_propose with a short Polish title, the same prompt, "recon" from step 1, optional workflow ("analysis" or "desk-panel-task"), and the todoId of a to-do item from the context if there is one; a proposal sent before the recon\'s answer is refused; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',
     ].join('\n'),
+  },
+  {
+    id: 'bank',
+    title: 'Bank',
+    description: 'Rozmowa o koncie: opinia z liczb, wydatki na karcie, porządkowanie kategorii i etykiet',
+    prompt: BANK_GUIDE.join('\n'),
   },
   {
     id: 'nasluchuj-cezara',

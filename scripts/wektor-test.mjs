@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Runs a conversation case against the live panel's Wektor (Hermes) and checks what it did: which tools it called, what
 // it said, how many calls it took. Reads only what the case's tools read; a case must never make Wektor write.
-//   node scripts/wektor-test.mjs <case> [--runs N] [--keep] [--base http://127.0.0.1:5174]
+//   node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174]
 // A case is scripts/wektor-cases/<case>.json: { description, turns: [{ say, expect: { calls, notCalls, text, textNot, maxTools, maxSeconds }, soft: [{ name, text }] }] }.
-// `expect` fails the run, `soft` is only reported (judgement we watch, not yet a rule). The chat of each run is deleted afterwards.
+// `expect` fails the run, `soft` is only reported (judgement we watch, not yet a rule). The chats stay (titled "[test] <case> #<run>"):
+// the user reads them; `--delete` removes them.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { dirname, join } from 'node:path';
@@ -13,10 +14,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const name = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--runs' && args[args.indexOf(a) - 1] !== '--base');
 const flag = (f, fallback) => { const i = args.indexOf(f); return i < 0 ? fallback : args[i + 1]; };
-if (!name) { console.error('Użycie: node scripts/wektor-test.mjs <przypadek> [--runs N] [--keep] [--base URL]'); process.exit(2); }
+if (!name) { console.error('Użycie: node scripts/wektor-test.mjs <przypadek> [--runs N] [--delete] [--base URL]'); process.exit(2); }
 const runs = Number(flag('--runs', 1));
 const base = new URL(flag('--base', 'http://127.0.0.1:5174'));
-const keep = args.includes('--keep');
+const del = args.includes('--delete');
 const kase = JSON.parse(readFileSync(join(root, 'scripts', 'wektor-cases', `${name}.json`), 'utf8'));
 
 const call = (method, path, body) => new Promise((resolve, reject) => {
@@ -89,7 +90,8 @@ for (let run = 1; run <= runs; run++) {
       result.turns.push(judge(turn, message, (Date.now() - started) / 1000));
     }
   } catch (error) { result.error = error instanceof Error ? error.message : String(error); }
-  if (result.id && !keep) await call('DELETE', `/api/chats/${result.id}`).catch(() => {});
+  if (result.id && del) await call('DELETE', `/api/chats/${result.id}`).catch(() => {});
+  else if (result.id) await call('PATCH', `/api/chats/${result.id}`, { title: `[test] ${name} #${run} ${new Date().toISOString().slice(0, 16).replace('T', ' ')}` }).catch(() => {});
   const failed = result.error || result.turns.some(t => t.checks.some(c => !c.ok));
   console.log(`\n── przebieg ${run}/${runs}: ${failed ? 'NIEZALICZONY' : 'zaliczony'}${result.error ? ` (${result.error})` : ''}`);
   for (const [i, t] of result.turns.entries()) {
@@ -97,7 +99,10 @@ for (let run = 1; run <= runs; run++) {
     console.log(`  tura ${i + 1}: ${t.tools.map(x => x.name + (x.error ? '!' : '')).join(' → ') || '(bez narzędzi)'}${usage}`);
     for (const c of t.checks) if (!c.ok) console.log(`    ✗ ${c.label}`);
     for (const s of t.soft) console.log(`    ${s.ok ? '+' : '–'} ${s.label}`);
-    console.log(`    odpowiedź: ${t.text.replace(/\s+/g, ' ').slice(0, 400)}`);
+    console.log(`    odpowiedź:
+${t.text.split('
+').map(l => `      ${l}`).join('
+')}`);
   }
 }
 const ok = report.filter(r => !r.error && r.turns.every(t => t.checks.every(c => c.ok))).length;
