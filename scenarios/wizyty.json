@@ -18,7 +18,15 @@
     "calendarId": "owner@gmail.com",
     "status": "connected",
     "observedAt": "now",
-    "data": []
+    "timeZone": "Europe/Warsaw",
+    "coverage": { "startAt": "today@00:00", "endAt": "today+42@00:00" },
+    "data": [
+      { "id": "home", "title": "Praca z domu", "startAt": "today+2@00:00", "endAt": "today+3@00:00", "allDay": true, "busy": false, "description": "" },
+      { "id": "standup", "title": "Odprawa zespołu", "startAt": "today+2@09:00", "endAt": "today+2@10:00", "allDay": false, "busy": true, "description": "" },
+      { "id": "accountant", "title": "Księgowa", "startAt": "today+2@12:30", "endAt": "today+2@13:00", "allDay": false, "busy": true, "description": "" },
+      { "id": "project", "title": "Omówienie projektu", "startAt": "today+2@13:30", "endAt": "today+2@14:15", "allDay": false, "busy": true, "description": "" },
+      { "id": "training", "title": "Trening", "startAt": "today+2@18:00", "endAt": "today+2@19:00", "allDay": false, "busy": true, "description": "" }
+    ]
   },
   "training": {
     "live": true,

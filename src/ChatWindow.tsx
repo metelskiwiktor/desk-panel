@@ -9,6 +9,8 @@ import { useMockCockpit } from './cockpit/mock';
 import { Thread } from './cockpit/Thread';
 import type { CockpitSource } from './cockpit/types';
 import { usePointing } from './cockpit/usePointing';
+import { AppointmentWorkspace, useAppointmentWorkspace } from './cockpit/appointment-workspace';
+import { AppointmentOrCockpit } from './cockpit/AppointmentPanel';
 
 // ── time ──
 const clock = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
@@ -89,6 +91,7 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
     } catch {}
     return null;
   });
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 900 || (!!size && size.width < 900));
 
   useEffect(() => {
     if (picking || !sectionRef.current || typeof ResizeObserver === 'undefined') return;
@@ -96,6 +99,7 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        setNarrow(width < 900);
         if (width >= 400 && height >= 300) {
           try {
             window.localStorage.setItem('desk-panel:chat-size', JSON.stringify({ width: Math.round(width), height: Math.round(height) }));
@@ -192,10 +196,10 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
           ? 'tw:fixed tw:inset-0 tw:z-[91] tw:flex tw:flex-col tw:overflow-hidden tw:bg-ck-surface tw:min-[900px]:inset-x-8 tw:min-[900px]:inset-y-5 tw:min-[900px]:mx-auto tw:min-[900px]:max-w-[1440px] tw:min-[900px]:rounded-3xl tw:min-[900px]:border tw:min-[900px]:border-ck-line-2 tw:min-[900px]:shadow-[0_30px_80px_rgba(0,0,0,0.55)]'
           : 'tw:fixed tw:inset-x-0 tw:bottom-0 tw:z-[91] tw:flex tw:h-[52dvh] tw:flex-col tw:border-t tw:border-ck-line-2 tw:bg-ck-surface tw:min-[900px]:inset-y-0 tw:min-[900px]:left-auto tw:min-[900px]:h-auto tw:min-[900px]:w-[min(460px,100vw)] tw:min-[900px]:border-t-0 tw:min-[900px]:border-l tw:shadow-[-20px_0_50px_rgba(0,0,0,0.35)]'}>
         <header className="tw:flex tw:flex-none tw:items-center tw:gap-2 tw:border-b tw:border-ck-line tw:px-3 tw:py-2.5 tw:md:px-4">
-          <div className="tw:relative tw:min-w-0">
-            <button type="button" className="tw:flex tw:min-h-11 tw:min-w-0 tw:items-center tw:gap-2.5 tw:rounded-xl tw:px-2 tw:hover:bg-ck-surface-2" aria-label="Pokaż rozmowy" aria-expanded={listOpen} onClick={() => setListOpen(o => !o)} disabled={picking}>
+          <div className="tw:relative tw:min-w-0 tw:flex-1">
+            <button type="button" className="tw:flex tw:w-full tw:min-h-11 tw:min-w-0 tw:items-center tw:gap-2.5 tw:rounded-xl tw:px-2 tw:hover:bg-ck-surface-2" aria-label="Pokaż rozmowy" aria-expanded={listOpen} onClick={() => setListOpen(o => !o)} disabled={picking}>
               <span className="tw:grid tw:size-8 tw:flex-none tw:place-items-center tw:rounded-lg tw:bg-ck-agent/20 tw:text-ck-agent"><Sparkles size={16} aria-hidden="true" /></span>
-              <span className="tw:flex tw:min-w-0 tw:flex-col">
+              <span className="tw:flex tw:min-w-0 tw:flex-1 tw:flex-col">
                 <span className="tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-[0.14em] tw:text-ck-muted">Wektor{source.mode === 'mock' ? ' · makieta' : ''}</span>
                 <h1 className="tw:m-0 tw:truncate tw:text-[15px] tw:font-semibold tw:text-ck-text">{source.title}</h1>
               </span>
@@ -203,7 +207,7 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
             </button>
             {listOpen && !picking && <Conversations source={source} close={() => setListOpen(false)} />}
           </div>
-          {!picking && <div className="tw:ml-2 tw:flex tw:rounded-xl tw:bg-ck-side tw:p-1 tw:min-[900px]:hidden" role="tablist" aria-label="Widok">
+          {!picking && narrow && <div className="tw:ml-2 tw:flex tw:rounded-xl tw:bg-ck-side tw:p-1" role="tablist" aria-label="Widok">
             {(['chat', 'cockpit'] as const).map(p => <button key={p} type="button" role="tab" aria-selected={pane === p} onClick={() => setPane(p)}
               className={`tw:min-h-9 tw:rounded-lg tw:px-3 tw:text-sm ${pane === p ? 'tw:bg-ck-surface-2 tw:text-ck-text' : 'tw:text-ck-muted'}`}>{p === 'chat' ? 'Czat' : 'Kokpit'}</button>)}
           </div>}
@@ -211,7 +215,7 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
             {picking
               ? <button type="button" className={icon} aria-label="Rozwiń czat" onClick={() => setPicking(false)}><ChevronLeft size={20} aria-hidden="true" /></button>
               : <>
-                <button type="button" className={icon} aria-label="Nowy czat" onClick={() => source.open(null)}><MessageSquare size={18} aria-hidden="true" /></button>
+                <button type="button" className={`${icon} ${narrow ? 'tw:hidden' : ''}`} aria-label="Nowy czat" onClick={() => source.open(null)}><MessageSquare size={18} aria-hidden="true" /></button>
                 {source.activeId && (confirmDelete
                   ? <button type="button" className="tw:min-h-10 tw:rounded-xl tw:bg-ck-red/15 tw:px-3 tw:text-sm tw:font-medium tw:text-ck-red" onClick={() => { setConfirmDelete(false); source.remove(); }}>Usunąć?</button>
                   : <button type="button" className={icon} aria-label="Usuń rozmowę" onClick={() => setConfirmDelete(true)}><Trash2 size={18} aria-hidden="true" /></button>)}
@@ -220,14 +224,14 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
               </>}
           </div>
         </header>
-        {picking
+        <AppointmentWorkspace key={source.activeId ?? 'new'} openTimeline={() => setPane('cockpit')} openSummary={() => setPane('chat')}>{picking
           ? <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">{thread}</div>
-          : <div className="tw:flex tw:min-h-0 tw:flex-1 tw:min-[900px]:grid tw:min-[900px]:grid-cols-[3fr_2fr]">
-            <div className={`tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col ${pane === 'chat' ? 'tw:flex' : 'tw:hidden'} tw:min-[900px]:flex`}>{thread}</div>
-            <aside className={`tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:bg-ck-side tw:min-[900px]:border-l tw:min-[900px]:border-ck-line ${pane === 'cockpit' ? 'tw:flex' : 'tw:hidden'} tw:min-[900px]:flex`} aria-label="Kokpit taska">
-              <Cockpit source={source} />
+          : <WorkspaceColumns narrow={narrow}>
+            <div className={`tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col ${pane === 'chat' || !narrow ? 'tw:flex' : 'tw:hidden'}`}>{thread}</div>
+            <aside className={`tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:bg-ck-side tw:min-[900px]:border-l tw:min-[900px]:border-ck-line ${pane === 'cockpit' || !narrow ? 'tw:flex' : 'tw:hidden'}`} aria-label="Kokpit taska">
+              <AppointmentOrCockpit><Cockpit source={source} /></AppointmentOrCockpit>
             </aside>
-          </div>}
+          </WorkspaceColumns>}</AppointmentWorkspace>
         {mode === 'window' && (
           <div
             className="chat-resize-handle"
@@ -246,6 +250,12 @@ function CockpitWindow({ source, onClose }: { source: CockpitSource; onClose: ()
     </div>,
     document.body,
   );
+}
+
+function WorkspaceColumns({ children, narrow }: { children: React.ReactNode; narrow: boolean }) {
+  const workspace = useAppointmentWorkspace();
+  const visit = !!workspace?.active && !!workspace.entries[workspace.active];
+  return <div className={`tw:min-h-0 tw:flex-1 ${narrow ? 'tw:flex' : `tw:grid ${visit ? 'tw:grid-cols-[2fr_3fr]' : 'tw:grid-cols-[3fr_2fr]'}`}`}>{children}</div>;
 }
 
 function LiveWindow({ onClose }: { onClose: () => void }) {

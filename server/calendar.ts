@@ -8,6 +8,7 @@ const moment = z.object({ date: date.optional(), dateTime: z.iso.datetime({ offs
   .refine(v => Boolean(v.date) !== Boolean(v.dateTime));
 const event = z.object({
   id: z.string(), status: z.string().optional(), summary: z.string().optional(),
+  transparency: z.enum(['opaque', 'transparent']).optional(),
   start: moment.optional(), end: moment.optional(),
   description: z.string().optional(), location: z.string().optional(), htmlLink: z.url().optional(),
   attendees: z.array(z.object({ self: z.boolean().optional(), responseStatus: z.string().optional() })).optional(),
@@ -24,7 +25,7 @@ export function projectEvents(payload: unknown, timeZone: string) {
     if (allDay !== !!e.end.date) throw new Error('Mixed event boundaries');
     const startAt = DateTime.fromISO(e.start.date || e.start.dateTime!, { zone: timeZone }).toMillis();
     const endAt = DateTime.fromISO(e.end.date || e.end.dateTime!, { zone: timeZone }).toMillis();
-    return { id: e.id, title: e.summary || 'Bez tytułu', startAt, endAt, allDay,
+    return { id: e.id, title: e.summary || 'Bez tytułu', startAt, endAt, allDay, busy: e.transparency !== 'transparent',
       ...(allDay ? { startDate: e.start.date, endDate: e.end.date } : {}),
       description: (e.description || '').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, ''),
       ...(e.location ? { location: e.location } : {}),
@@ -77,7 +78,7 @@ export function createCalendarReader(calendarId: string, request: Request, now =
         }
         cache = calendarSourceSchema.parse({ name: 'Google Calendar', live: true, status: 'connected',
           calendarId, observedAt: now(), data: [...new Map(events.map(e => [e.id, e])).values()].sort((a,b) => a.startAt - b.startAt),
-          timeZone, partial,
+          timeZone, partial, coverage: { startAt: start.toMillis(), endAt: start.plus({ days: CALENDAR_DAYS }).toMillis() },
         });
       } catch (error) {
         // Never serialize GoogleAuth errors: request config can contain credentials.

@@ -1,5 +1,9 @@
 # Google Calendar
 
+Agenda zwraca `coverage` (rzeczywisty półotwarty przedział odczytu) i `busy` każdego wydarzenia, na podstawie
+Google `transparency`. Prawy panel wyboru wizyty porównuje terminy z tym odczytem; nie uznaje braku wydarzeń za wolny czas,
+jeśli dane są niepełne, nieaktualne lub nie obejmują całego dnia. Szczegóły: [znanylekarz.md](znanylekarz.md).
+
 Integracja loguje się na własne konto użytkownika przez OAuth Google.
 Nie używa klucza Google Play ani konta usługi i nie wymaga udostępniania kalendarza.
 Jednorazowe przygotowanie w Google Cloud:

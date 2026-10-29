@@ -38,6 +38,8 @@ body[data-chat-dock] .top-right { margin-left: auto; }
   cursor: pointer;
   transition: transform 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
+/* The open dialog owns its close controls; the launcher must not cover its resize handle. */
+.chat-toggle-fab[aria-expanded="true"] { visibility: hidden; }
 .chat-toggle-fab:hover {
   background: #223044;
   color: #ffffff;

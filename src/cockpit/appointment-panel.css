@@ -1,0 +1,39 @@
+.ck-root .visit-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; font-size: 13px; line-height:1.35; }
+.ck-root .visit-heading { display:flex; gap:10px; align-items:center; color:#7ca9ff; }
+.ck-root .visit-heading h2 { margin:0; font-size:16px; color:#eaeff6; }
+.ck-root .visit-heading p, .ck-root .visit-observed { margin:3px 0 8px; color:#93a0b4; font-size:11px; }
+.ck-root .visit-days, .ck-root .visit-workspaces { display:flex; gap:6px; overflow-x:auto; flex-shrink:0; padding:8px 0; }
+.ck-root .visit-workspaces { padding:8px 12px; border-bottom:1px solid #273044; }
+.ck-root .visit-days { position:sticky; top:-14px; z-index:3; background:#10151d; padding:4px 0; }
+.ck-root .visit-days button, .ck-root .visit-workspaces button { border:1px solid #2f3a52; border-radius:9px; background:#1b2230; color:#93a0b4; padding:8px 10px; min-height:40px; white-space:nowrap; font-size:12px; }
+.ck-root .visit-days button[aria-pressed=true], .ck-root .visit-workspaces button[aria-pressed=true] { background:#243a60; color:#a8c6ff; border-color:#7ca9ff; }
+.ck-root .visit-panel h3 { margin:8px 0 4px; font-size:15px; font-weight:600; text-transform:none; }
+.ck-root .visit-panel h3::first-letter { text-transform:uppercase; }
+.ck-root .visit-notice { background:#e9c26112; color:#e9c261; border-radius:8px; padding:10px; line-height:1.5; }
+.ck-root .visit-all-day { padding:6px 8px; border:1px solid #273044; border-radius:8px; color:#93a0b4; margin-bottom:8px; font-size:12px; }
+.ck-root .visit-columns { display:grid; grid-template-columns:48px minmax(0,1fr) minmax(0,1fr); gap:8px; padding:8px 0; font-size:11px; color:#93a0b4; }
+.ck-root .visit-columns b:last-child { color:#7ca9ff; }
+.ck-root .visit-timeline { position:relative; margin-top:8px; }
+.ck-root .visit-events, .ck-root .visit-slots { position:absolute; top:0; height:100%; width:calc((100% - 64px) / 2); }
+.ck-root .visit-events { left:56px; }
+.ck-root .visit-slots { right:0; }
+.ck-root .visit-rule { position:absolute; left:0; right:0; border-top:1px solid #27304488; }
+.ck-root .visit-rule time { display:block; width:43px; margin-top:3px; font-size:10px; color:#93a0b4; font-variant-numeric:tabular-nums; }
+.ck-root .visit-gap { position:absolute; left:0; right:0; display:flex; justify-content:center; align-items:center; color:#74829a; font-size:10px; border-block:1px dashed #273044; background:#10151d; }
+.ck-root .visit-event, .ck-root .visit-slot { position:absolute; box-sizing:border-box; border:1px solid #48546a; border-radius:7px; padding:6px; overflow:hidden; min-width:0; text-align:left; }
+.ck-root .visit-event { background:#202937; color:#c1cbda; display:flex; flex-direction:column; gap:3px; border-left:3px solid #8293ae; }
+.ck-root .visit-event time, .ck-root .visit-slot time { font-size:11px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.ck-root .visit-event strong { font-size:12px; overflow:hidden; overflow-wrap:anywhere; }
+.ck-root .visit-event.informational { opacity:.7; border-style:dashed; }
+.ck-root .visit-event.conflict { background:#38252f; border-color:#f2888b; color:#ffc1c3; }
+.ck-root .visit-slot { background:#14243a; color:#a8c6ff; border:1px dashed #648ac3; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:2px; cursor:pointer; min-height:44px; }
+.ck-root .visit-slot:hover { background:#223b5e; border-color:#a8c6ff; }
+.ck-root .visit-slot.chosen { background:#7ca9ff; border:1px solid #b1cbff; color:#0d1728; }
+.ck-root .visit-slot:disabled { cursor:default; opacity:1; }
+.ck-root .visit-collision { font-size:9px; border-radius:4px; background:#502c38; color:#ffc0c4; padding:2px 4px; }
+.ck-root .visit-chosen { font-size:14px; font-weight:bold; }
+.ck-root .visit-footer { display:grid; gap:7px; padding:14px 0 6px; color:#93a0b4; }
+.ck-root .visit-footer b { color:#a8c6ff; font-size:16px; }
+.ck-root .visit-footer small { font-size:11px; }
+.ck-root .visit-slot:focus-visible, .ck-root .visit-days button:focus-visible, .ck-root .visit-workspaces button:focus-visible { outline:2px solid #b79cff; outline-offset:2px; }
+@media (pointer:coarse) { .ck-root .visit-days button, .ck-root .visit-workspaces button { min-height:44px; } }

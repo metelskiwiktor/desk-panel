@@ -19,6 +19,8 @@ describe('Google Calendar', () => {
     expect(result.events[0].sourceUrl).toBe(timed.htmlLink);
     expect(result.events[1].endAt - result.events[1].startAt).toBe(23 * 3600_000);
     expect(allDayDate('2026-03-29', '2026-03-30')).toBe('29 marca');
+    expect(result.events.every(e => e.busy)).toBe(true);
+    expect(projectEvents({ items: [{ ...allDay, transparency: 'transparent' }] }, 'Europe/Warsaw').events[0].busy).toBe(false);
   });
   it('fetches recurrence instances over six weeks of calendar days, paginates and caches successful reads', async () => {
     const request = vi.fn(async (path: string, params?: Record<string, string>) => path === '' ? { timeZone: 'Europe/Warsaw' } : params?.pageToken ? { items: [timed] } : { items: [allDay], nextPageToken: 'next' });
@@ -27,6 +29,7 @@ describe('Google Calendar', () => {
     const value = await read();
     expect(value.status).toBe('connected');
     expect(value.data).toHaveLength(2);
+    expect(value.coverage).toEqual({ startAt: Date.parse('2026-03-28T23:00:00Z'), endAt: Date.parse('2026-05-09T22:00:00Z') });
     expect(request.mock.calls[1][1]).toMatchObject({ singleEvents: 'true', orderBy: 'startTime', timeMin: '2026-03-28T23:00:00.000Z', timeMax: '2026-05-09T22:00:00.000Z' });
     await read();
     expect(request).toHaveBeenCalledTimes(3);

@@ -148,16 +148,49 @@ if (!values.shot) {
             else await page.waitForTimeout(6000);
           }
           await page.waitForTimeout(500);
-        } else if (values.open === 'chat-appointment' || values.open === 'chat-appointment-selected' || values.open === 'chat-appointment-saved') {
+        } else if (values.open === 'chat-appointment' || values.open === 'chat-appointment-selected' || values.open === 'chat-appointment-saved' || values.open === 'chat-appointment-axis') {
           await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
-          await page.getByLabel('Wiadomość do agenta').fill('Pokaż terminy wizyty online');
+          try { await page.getByLabel('Wiadomość do agenta').fill('Pokaż terminy wizyty online', { timeout: 10_000 }); }
+          catch (error) { await page.screenshot({ path: join(values.out, 'wizyty-failure.png'), fullPage: true, timeout: 5000 }); throw error; }
           await page.getByLabel('Wiadomość do agenta').press('Enter');
           const visit = page.getByRole('region', { name: 'Umów wizytę', exact: true });
           try { await visit.getByRole('button', { name: 'Wybieram termin', exact: true }).waitFor({ timeout: 20_000 }); }
           catch (error) { await page.screenshot({ path: join(values.out, 'wizyty-failure.png'), fullPage: true }); throw error; }
           await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
-          if (values.open !== 'chat-appointment') {
-            await visit.getByRole('button', { name: '08:00', exact: true }).click();
+          if (values.open === 'chat-appointment-axis') {
+            const timeline = page.getByRole('region', { name: 'Terminy na tle kalendarza' });
+            await timeline.getByRole('button', { name: '13:20 — kolizja', exact: true }).click();
+            await timeline.getByText('Kolizja: Omówienie projektu', { exact: true }).waitFor();
+            if (await visit.getByRole('button', { name: 'Wybieram 13:20', exact: true }).isDisabled()) throw new Error('Kolizja nie może zabraniać wyboru.');
+            await timeline.getByRole('navigation', { name: 'Dzień wizyty' }).getByRole('button').nth(1).click();
+            if (!await visit.getByRole('button', { name: 'Wybieram termin', exact: true }).isDisabled()) throw new Error('Zmiana dnia musi czyścić podgląd.');
+            const tabs = page.getByRole('navigation', { name: 'Zawartość kokpitu' });
+            await tabs.getByRole('button', { name: 'Cezar', exact: true }).click();
+            await page.getByRole('region', { name: 'Aktywny task Cezara' }).waitFor();
+            await tabs.getByRole('button').first().click();
+            await timeline.getByRole('navigation', { name: 'Dzień wizyty' }).getByRole('button').first().click();
+            await timeline.getByRole('button', { name: '13:20 — kolizja', exact: true }).click();
+            await visit.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: join(values.out, 'wizyty-axis-wide.png'), fullPage: true });
+            // Resize the app's own window on a configured target screen, not a second invented device size.
+            const dialog = page.getByRole('dialog', { name: 'Czat z agentem' });
+            const box = await dialog.boundingBox(), grip = await page.getByTestId('chat-resize-handle').boundingBox();
+            if (!box || !grip) throw new Error('Brak uchwytu zmiany rozmiaru.');
+            await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(grip.x + grip.width / 2 - (box.width - 480), grip.y + grip.height / 2, { steps: 12 });
+            await page.mouse.up();
+            await page.getByRole('tab', { name: 'Czat', exact: true }).waitFor();
+            if ((await dialog.boundingBox())!.width > 550) throw new Error('Okno nie zostało zmniejszone do wąskiego układu.');
+            await visit.getByRole('button', { name: 'Pokaż terminy i kalendarz', exact: true }).click();
+            await timeline.getByRole('button', { name: '08:00', exact: true }).click();
+            await page.screenshot({ path: join(values.out, 'wizyty-axis-narrow-calendar.png'), fullPage: true });
+            await timeline.getByRole('button', { name: 'Przejdź do podsumowania', exact: true }).click();
+            await visit.getByRole('button', { name: 'Wybieram 08:00', exact: true }).waitFor();
+            const overflow = await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1);
+            if (overflow) throw new Error('Wąskie okno ma poziome przepełnienie.');
+          } else if (values.open !== 'chat-appointment') {
+            await page.getByRole('region', { name: 'Terminy na tle kalendarza' }).getByRole('button', { name: '08:00', exact: true }).click();
             await visit.getByRole('button', { name: 'Wybieram 08:00', exact: true }).click();
             await visit.getByRole('link', { name: 'Otwórz ZnanyLekarz' }).waitFor();
             if (await visit.getByLabel('Godzina zakończenia').inputValue() !== '08:30') throw new Error('Czas wizyty nie został uzupełniony.');

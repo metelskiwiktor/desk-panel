@@ -1,9 +1,10 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { CalendarCheck, CalendarDays, Check, ChevronLeft, ChevronRight, ExternalLink, RefreshCw } from 'lucide-react';
+import { CalendarCheck, CalendarDays, Check, ExternalLink, RefreshCw } from 'lucide-react';
 import { z } from 'zod';
 import { appointmentViewSchema, calendarPlanViewSchema, type AppointmentView, type CalendarDraft, type CalendarSaved } from '../appointment-contract';
 import { CardActions, btn, card, head, refusedNote } from './cards';
+import { useAppointmentWorkspace } from './appointment-workspace';
 
 export interface AppointmentArgs { refused?: string }
 const money = (p: AppointmentView['preview']) => p.price === null ? 'Cena niepodana' : `${p.priceFrom ? 'od ' : ''}${p.price.toLocaleString('pl-PL')} zł`;
@@ -72,9 +73,10 @@ function GoogleConsent({ available, refresh }: { available: boolean; refresh(): 
 
 export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePartProps<AppointmentArgs, unknown>) {
   const { respond, running } = useContext(CardActions);
+  const workspace = useAppointmentWorkspace();
   const ready = status.type !== 'running' && !args.refused && toolCallId.includes(':v-');
   const { value: view, error, setError, refresh } = useCard('appointment', toolCallId, appointmentViewSchema, !!ready);
-  const [day, setDay] = useState(''), [page, setPage] = useState(0), [picked, setPicked] = useState(''), [busy, setBusy] = useState(false);
+  const [day, setDay] = useState(''), [picked, setPicked] = useState(''), [busy, setBusy] = useState(false);
   const [title, setTitle] = useState(''), [end, setEnd] = useState('');
   useEffect(() => {
     if (!view?.selection) return;
@@ -84,10 +86,18 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
   const answer = async (action: unknown) => { setBusy(true); setError(''); try { await respond(toolCallId, { kind: 'appointment', action }); refresh(); } catch (e) { refresh(); setError(e instanceof Error ? e.message : 'Nie udało się zapisać decyzji.'); } finally { setBusy(false); } };
   const p = view?.preview, selection = view?.selection;
   const days = p ? [...new Set(p.slots.map(s => dayKey(s.startAt, p.timeZone)))] : [];
-  const active = day && days.includes(day) ? day : days[page * 7] ?? days[0];
+  const active = day && days.includes(day) ? day : days[0];
   const slot = p?.slots.find(s => s.id === picked && dayKey(s.startAt, p.timeZone) === active);
   const url = selection ? safeBookingUrl(selection.slot.bookingUrl) : null;
   const endAt = selection && p ? endFromTime(end, selection.draft?.endAt ?? selection.slot.startAt, p.timeZone) : null;
+  const put = workspace?.put, remove = workspace?.remove, show = workspace?.show, offer = workspace?.offer;
+  useEffect(() => {
+    if (!view) { remove?.(toolCallId); return; }
+    put?.(toolCallId, { view, day: day || (selection ? dayKey(selection.slot.startAt, view.preview.timeZone) : active), picked, disabled: busy || running, endAt,
+      chooseDay: d => { setDay(d); setPicked(''); }, chooseSlot: setPicked });
+  }, [put, remove, toolCallId, view, active, day, picked, busy, running, selection, endAt]);
+  useEffect(() => { if (view) offer?.(toolCallId, view.preview.observedAt); }, [!!view, offer, toolCallId]);
+  useEffect(() => () => remove?.(toolCallId), [remove, toolCallId]);
   return <section className={card} aria-label="Umów wizytę">
     <div className={head}><CalendarDays size={16} className="tw:text-ck-cal" /><b className="tw:font-medium">Umów wizytę</b><span className="tw:ml-auto tw:text-xs tw:text-ck-muted">ZnanyLekarz</span></div>
     <div className="tw:grid tw:gap-4 tw:p-4">
@@ -104,11 +114,7 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
           <GoogleConsent available={view.canWriteCalendar} refresh={refresh} />
           <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={busy || running || !view.canWriteCalendar || !url || !title.trim() || !endAt || endAt <= selection.slot.startAt} onClick={() => void answer({ action: 'confirm', selectionId: selection.id, choice: { title, endAt } })}><CalendarCheck size={16} />{busy ? 'Zapisuję…' : 'Zarezerwowałem ten termin — zapisz'}</button>
         </> : <>
-          {!!days.length && <>
-            <div className="tw:flex tw:flex-wrap tw:gap-2" aria-label="Dzień wizyty">{days.slice(page * 7, page * 7 + 7).map(d => { const s = p.slots.find(s => dayKey(s.startAt, p.timeZone) === d)!; return <button key={d} type="button" className={`${btn} tw:border ${active === d ? 'tw:border-ck-cal tw:bg-ck-cal tw:text-ck-bg' : 'tw:border-ck-line-2 tw:bg-ck-surface-2'}`} aria-pressed={active === d} onClick={() => { setDay(d); setPicked(''); }}>{format(s.startAt, p.timeZone, { weekday: 'short', day: 'numeric', month: 'short' })}</button>; })}</div>
-            {days.length > 7 && <div className="tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted"><button type="button" className={btn} aria-label="Poprzednie dni" disabled={page === 0} onClick={() => { setPage(n => n - 1); setDay(''); setPicked(''); }}><ChevronLeft size={16} /></button>{page + 1} / {Math.ceil(days.length / 7)}<button type="button" className={btn} aria-label="Następne dni" disabled={(page + 1) * 7 >= days.length} onClick={() => { setPage(n => n + 1); setDay(''); setPicked(''); }}><ChevronRight size={16} /></button></div>}
-            <div><p className="tw:mt-0 tw:mb-2 tw:text-xs tw:text-ck-muted">Godziny · {p.timeZone}</p><div className="tw:flex tw:flex-wrap tw:gap-2" aria-label="Godzina wizyty">{p.slots.filter(s => dayKey(s.startAt, p.timeZone) === active).map(s => <button key={s.id} type="button" className={`${btn} tw:border ${slot?.id === s.id ? 'tw:border-ck-cal tw:bg-ck-cal tw:text-ck-bg' : 'tw:border-ck-line-2 tw:bg-ck-surface-2'}`} aria-pressed={slot?.id === s.id} onClick={() => setPicked(s.id)}>{time(s.startAt, p.timeZone)}</button>)}</div></div>
-          </>}
+          {!!days.length && <div className="tw:grid tw:gap-2 tw:rounded-xl tw:border tw:border-ck-cal/30 tw:bg-ck-cal/5 tw:p-3"><span className="tw:text-xs tw:text-ck-muted">{slot ? 'Podgląd wybranego terminu' : 'Terminy i Twój kalendarz'}</span><b className="tw:text-base tw:font-medium">{slot ? `${format(slot.startAt, p.timeZone, { weekday: 'long', day: 'numeric', month: 'long' })} · ${time(slot.startAt, p.timeZone)}${p.durationMinutes ? `–${time(slot.startAt + p.durationMinutes * 60_000, p.timeZone)}` : ''}` : 'Wybierz godzinę na osi dnia'}</b><button type="button" className={`${btn} tw:w-fit tw:bg-ck-surface-2`} onClick={() => { show?.(toolCallId); workspace?.openTimeline(); }}>Pokaż terminy i kalendarz</button></div>}
           {!days.length && <p className="tw:m-0 tw:text-sm">Brak wspólnych dostępnych terminów w tym zakresie.{p.query.firstVisit === undefined ? ' Powiedz Wektorowi, czy to pierwsza czy kolejna wizyta — dostępność może się różnić.' : ''}</p>}
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{p.slots.length} terminów · {p.from} – {p.to}. Odczyt {format(p.observedAt, p.timeZone, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.{p.query.firstVisit === undefined ? ' Wspólne dla pierwszej i kolejnej wizyty.' : p.query.firstVisit ? ' Pierwsza wizyta.' : ' Kolejna wizyta.'}</p>
           <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={!slot || busy || running} onClick={() => slot && void answer({ action: 'select', slotId: slot.id })}>{busy ? 'Sprawdzam dostępność…' : `Wybieram ${slot ? time(slot.startAt, p.timeZone) : 'termin'}`}</button>

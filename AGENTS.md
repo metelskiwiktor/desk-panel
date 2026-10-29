@@ -3,7 +3,9 @@
 Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
 Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez
 `with[]=service.duration`, nigdy z odstępów między terminami. Użytkownik wybiera dzień/godzinę na karcie, panel ponownie
-sprawdza dostępność i daje zweryfikowany link do osobnego okna. Rezerwację, zgody i płatność kończy wyłącznie użytkownik.
+sprawdza dostępność i daje zweryfikowany link do osobnego okna. Wszystkie godziny dnia wybiera się w prawym panelu,
+obok kalendarza na wspólnej osi; karta po lewej pokazuje wybór. Kolizje ostrzegają, nie blokują. Respektuj Google transparency,
+wyłączny koniec i coverage: niepełny/stary odczyt lub dzień poza zakresem nigdy nie oznaczają wolnego czasu. Rezerwację, zgody i płatność kończy wyłącznie użytkownik.
 Dopiero jego „Zarezerwowałem ten termin — zapisz” tworzy wydarzenie Google. Zwykłe wydarzenie Wektor tylko proponuje przez
 `panel_calendar_propose`; zapisuje przycisk karty. Origin-checked POST-y `/api/chats/:id/appointment` i `calendar-plan` czytają
 propozycję z zakończonego wywołania w tej rozmowie, a nie z żądania. Stan i zamrożone zapisy są w `appointments.dpapi`, poza

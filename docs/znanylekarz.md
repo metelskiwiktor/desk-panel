@@ -7,7 +7,8 @@ nazwy do doprecyzowania. Zasady rozmowy są w `PANEL_GUIDES.wizyty` (`panel_guid
 
 ## Co robi użytkownik
 
-1. Wybiera dzień i godzinę na karcie, następnie **Wybieram…**. Panel ponownie sprawdza ten konkretny termin, usługę, cenę
+1. W prawym panelu wybiera dzień, następnie klika godzinę w kolumnie **Dostępne wizyty**, obok swoich spotkań na wspólnej
+   osi czasu. Podsumowanie pojawia się na karcie po lewej. Kliknięcie **Wybieram…** ponownie sprawdza konkretny termin, usługę, cenę
    i długość wizyty. Jeśli coś się zmieniło, odmawia wyboru i prosi o aktualną kartę.
 2. **Otwórz ZnanyLekarz** otwiera osobne okno/kartę (`target=_blank`, `noopener noreferrer`) z datą, godziną i usługą.
    Link rozpoczyna formularz; serwis może wymagać logowania, informacji o pierwszej wizycie, zgód i płatności.
@@ -18,6 +19,24 @@ nazwy do doprecyzowania. Zasady rozmowy są w `PANEL_GUIDES.wizyty` (`panel_guid
 Zamknięcie okna, powrót do panelu ani samo otwarcie linku nie potwierdzają rezerwacji. Wektor nie zakłada, że rezerwacja się
 udała. Po potwierdzeniu nie sprawdzamy ponownie wolnego terminu: prawidłowo zarezerwowana godzina może już zniknąć z listy.
 Karta nie tworzy automatycznych zaproszeń ani linku do wideokonferencji. Link do konsultacji wysyła sam ZnanyLekarz.
+
+## Terminy na tle kalendarza
+
+`AppointmentWorkspace` łączy kartę z prawym panelem w obrębie otwartej rozmowy. Każda karta ma własny wybór i podgląd;
+najnowsza propozycja otwiera oś dnia. Zakładka **Cezar** zachowuje dostęp do obserwowanego taska. W wąskim oknie przycisk
+**Pokaż terminy i kalendarz** przełącza na kokpit, a **Przejdź do podsumowania** wraca do czatu. Szerokość samego okna,
+także po ręcznym zmniejszeniu, decyduje o układzie.
+
+- Wszystkie godziny danego dnia są przyciskami na osi; nakładające się wizyty mają osobne kolumny. Oś przewija się pionowo.
+  Długie puste przerwy są skrócone i podpisane „przerwa na osi”; obie kolumny mają identyczną skalę.
+- Kolizja to przecięcie rzeczywistych przedziałów, z wyłącznym końcem. Wydarzenie Google `transparency=transparent`
+  jest informacją, pozostałe blokują czas, także całodniowe. Kolizja ostrzega, ale nie zabrania wyboru.
+- Kalendarz pochodzi z tego samego cache `GET /api/calendar`, odświeżanego najwyżej raz na minutę i po powrocie do okna.
+  `coverage` opisuje rzeczywiście odczytane 42 dni. Brak dostępu, niepełny odczyt, brak zakresu, odczyt starszy niż 2 minuty
+  lub dzień poza zakresem oznaczają **niepewność**, nigdy zapewnienie, że jest wolne. Zachowujemy ostatnie dane i czas obserwacji.
+- Czas wizyty pochodzi z usługi, nie z odstępów między godzinami. Bez długości pokazujemy sam początek i nie potwierdzamy
+  braku kolizji. Po wyborze korekta zakończenia w formularzu Google zmienia też podgląd. Utworzone wydarzenie nie koliduje samo ze sobą.
+- Wybór na osi jest lokalnym podglądem; niczego nie rezerwuje i nie zapisuje. Zapisy pozostają wyłącznie na przyciskach karty.
 
 ## Odczyt serwisu
 
@@ -66,5 +85,5 @@ Nie powstaje drugie wydarzenie. Przy niepewności karta pokazuje błąd zamiast 
 Scenariusz nie wywołuje ZnanyLekarz ani prawdziwego Google. Nie klikaj potwierdzenia w prawdziwym czacie jako testu.
 
 Testy: `server/znanylekarz.test.ts`, `server/appointments.test.ts`, `server/calendar-write.test.ts`,
-`server/appointment-routes.test.ts`, `server/google-oauth.test.ts`, `src/appointment-card.test.tsx`
+`server/appointment-routes.test.ts`, `server/google-oauth.test.ts`, `src/appointment-card.test.tsx`, `src/appointment-timeline.test.ts`
 i odtwarzanie kart po restarcie w `server/hermes-chat.test.ts`.
