@@ -771,6 +771,27 @@ describe('the live cockpit (Hermes and the panel)', () => {
     });
   });
 
+  it('a choice for a whole recipient replaces what was picked for its single operations, so the card says what it saves', async () => {
+    liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const turnWithCard: ChatMessage = { id: 'a9', role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id: 'a9:b-1', name: 'mcp__desk_panel__panel_bank_assign', input: JSON.stringify({ tytul: 'Podpowiedzi', from: '2026-09-24' }), output: JSON.stringify({ result: `${CARD_SHOWN.bankAssign}: 4 operacje.` }), state: 'done' },
+    ] };
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turnWithCard], { id: H }) });
+    const card = await screen.findByRole('region', { name: 'Zgoda na masowe oznaczenie' });
+    const mixed = await within(card).findByTestId('assign-mixed');
+    await user.click(within(mixed).getByText('wcześniej: Wydatek · Paliwo 4 razy, Wydatek · Jedzenie 1 raz'));
+    const field = () => within(mixed).getByLabelText('Oznaczenie: 2026-10-05 Orlen') as HTMLSelectElement;
+    // one operation is picked by hand, then the whole recipient: the operation follows the recipient again
+    await user.selectOptions(field(), 'c:c-2');
+    expect(field().value).toBe('c:c-2');
+    await user.click(within(mixed).getByRole('button', { name: 'Wydatek · Paliwo ×4' }));
+    expect(field().value).toBe('');
+    expect(within(card).getByText(/Zaznaczone: 4 operacji, [-−]269,91/)).toBeTruthy();
+  });
+
   it('watches the task the conversation names, and shows the watch card live', async () => {
     const calls = liveServer();
     const user = userEvent.setup();

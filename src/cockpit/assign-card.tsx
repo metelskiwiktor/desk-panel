@@ -110,17 +110,20 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
   const groupText = pickLabel(group, r.templates, categories, sel);
   const [adding, setAdding] = useState<{ tx: string } | 'group' | null>(null);
   const set = (patch: Partial<AssignSelection>) => onChange({ ...sel, ...patch });
+  // A choice for the whole recipient replaces what was picked for its single operations (otherwise the earlier pick of an operation
+  // would win and the card would say one thing and save another).
+  const withoutOwn = () => Object.fromEntries(Object.entries(sel.picks).filter(([tx]) => !r.items.some(i => i.tx === tx)));
   const toggleGroup = () => {
     if (t.count > 0) { set({ skip: new Set(sel.skip).add(r.key) }); return; }
     const skip = new Set(sel.skip); skip.delete(r.key);
     const skipOps = new Set([...sel.skipOps].filter(tx => !r.items.some(i => i.tx === tx)));
-    set({ skip, skipOps, ...(groupText ? {} : { groupPicks: { ...sel.groupPicks, [r.key]: { template: r.templates[0].key } } }) });
+    set({ skip, skipOps, ...(groupText ? {} : { groupPicks: { ...sel.groupPicks, [r.key]: { template: r.templates[0].key } }, picks: withoutOwn() }) });
   };
   const pickGroup = (tpl: BankAssignTemplate) => {
     const groupPicks = { ...sel.groupPicks };
     if (groupPicks[r.key]?.template === tpl.key && !r.certain) delete groupPicks[r.key]; else groupPicks[r.key] = { template: tpl.key };
     const skip = new Set(sel.skip); skip.delete(r.key);
-    set({ groupPicks, skip });
+    set({ groupPicks, skip, picks: withoutOwn() });
   };
   const setOp = (tx: string, value: string) => {
     if (value === '__new') { setAdding({ tx }); return; }
@@ -132,12 +135,12 @@ function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }
   const setGroup = (value: string) => {
     if (value === '__new') { setAdding('group'); return; }
     if (!value) return;
-    set({ groupPicks: { ...sel.groupPicks, [r.key]: pickFromValue(value) }, skip: new Set([...sel.skip].filter(k => k !== r.key)) });
+    set({ groupPicks: { ...sel.groupPicks, [r.key]: pickFromValue(value) }, skip: new Set([...sel.skip].filter(k => k !== r.key)), picks: withoutOwn() });
   };
   const named = (name: string) => {
     const { pick, newCategories } = withNamed(sel, categories, name);
     const skip = new Set([...sel.skip].filter(k => k !== r.key));
-    if (adding === 'group') onChange({ ...sel, newCategories, groupPicks: { ...sel.groupPicks, [r.key]: pick }, skip });
+    if (adding === 'group') onChange({ ...sel, newCategories, groupPicks: { ...sel.groupPicks, [r.key]: pick }, skip, picks: withoutOwn() });
     else if (adding) { const skipOps = new Set(sel.skipOps); skipOps.delete(adding.tx); onChange({ ...sel, newCategories, picks: { ...sel.picks, [adding.tx]: pick }, skipOps }); }
     setAdding(null);
   };
