@@ -63,8 +63,8 @@ najpierw ruch: wydatek (kategoria), przychód (źródło), rozliczenie (z drugą
 ma jedną oś, a nowe pytanie to etykieta, nie kolejna oś. Do tego druga strona (sama nazwa, bez rodzaju; identyfikatory jako HMAC, dwie mogą mieć
 to samo imię), etykiety, cykliczne, opis, w `~/.desk-panel/bank-labels.dpapi`;
 metoda płatności idzie z banku. Zapis tylko `POST /api/bank/labels/action` (Origin-checked), lokalny, nic nie idzie do banku. Podpowiedzi
-tylko przez pewne powiązania (tekst sprzedawcy, rachunek, telefon, nazwa z banku; bez nazwy wyłącznie ta sama kwota jako wybór), bez
-przedziałów kwot i zgadywania (`server/bank-suggest.ts`); nigdy nie przypisują same. Agent czatu widzi bank i oznaczenia do odczytu w `/api/agent/bank` (strony po nazwie,
+tylko przez powiązania, które pokazuje bank (tekst sprzedawcy, rachunek, telefon, nazwa; pewne dopiero od dwóch zgodnych wcześniejszych oznaczeń), a płatność
+bez nazwy z banku (telefon, BLIK) nie ma odbiorcy i nie jest podpowiadana ani po kwocie, ani po historii (`server/bank-suggest.ts`); nigdy nie przypisują same. Agent czatu widzi bank i oznaczenia do odczytu w `/api/agent/bank` (strony po nazwie,
 bez pełnych numerów) i pokazuje wydatki kartą (`panel_show`, wiersze czyta sama karta z `/api/bank/show`). Zmiany nie robi sam: scalenie
 kategorii wydatków i masowe oznaczenie operacji pewnymi podpowiedziami tylko proponuje kartą zgody (`panel_bank_propose`, `panel_bank_assign`, docs/bank.md), a panel zmienia oznaczenia dopiero po kliknięciu
 użytkownika (`POST /api/chats/:id/bank-plan`, Origin-checked; plan czyta z rozmowy, nie z żądania). Jak dawać Wektorowi nowe

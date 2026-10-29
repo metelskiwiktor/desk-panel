@@ -234,6 +234,7 @@ zgodnych wcześniejszych oznaczeń, nie od jednego.
 - **Potwierdzenia zamówień z Gmaila jako wskazówka sklepu** (nie teraz): płatność telefonem lub BLIK-iem nie niesie nazwy sklepu, ale sklepy (np. pyszne.pl) wysyłają
   mail z potwierdzeniem; data (i godzina) maila z nazwą nadawcy mogłaby wskazać, jaki to sklep, bez zgadywania po kwocie (kwoty się zmieniają: napiwek, podatek, dodatki).
   Panel już czyta Gmail tylko do odczytu (docs/gmail.md). Do rozważenia, gdy płatności bez nazwy dalej będą problemem.
+- **Głębokość odczytu i schematy:** ustawienia `HISTORY_DAYS`, `MAX_PAGES`, `KEEP` (`server/bank.ts`) i limit w `src/bank-contract.ts` muszą iść razem (kafelek odrzuca odpowiedź, gdy operacji jest więcej niż schemat dopuszcza, i pokazuje „Nie można połączyć się z lokalnym serwerem”). Po pierwszym odczycie z 90 dniami w logu jest, ile stron przeczytano i czy bank miał więcej.
 - **Zasada podpowiedzi** (ustalona z użytkownikiem): pewność bierze się z tego, co pokazuje bank (tekst sklepu, rachunek, numer, nazwa), a wiedza użytkownika jest
   oznaczeniem, nigdy tożsamością. Płatność bez nazwy z banku nie ma „odbiorcy” i nie dostaje podpowiedzi z kwoty; użytkownik wybiera dla niej szablon (kategoria i etykiety
   z jego wcześniejszych oznaczeń), a sklep, jeśli go zna, wpisuje jako etykietę, nie jako drugą stronę.
