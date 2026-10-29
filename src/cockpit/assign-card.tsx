@@ -51,8 +51,8 @@ function counted(r: BankAssignRecipient, sel: AssignSelection, categories: BankA
 const historyText = (r: BankAssignRecipient) => `wcześniej: ${r.templates.map(t => `${markLabel(t.mark)} ${t.count} ${times(t.count)}`).join(', ')}`;
 
 const checkbox = 'tw:size-4 tw:accent-[#7ca9ff]';
-const selectOn = 'tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-text';
-const selectOff = 'tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-muted';
+const selectOn = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-cal tw:bg-ck-cal/25 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-text';
+const selectOff = 'tw:[color-scheme:dark] tw:h-6 tw:max-w-[170px] tw:rounded-full tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-xs tw:text-ck-muted';
 
 /** One recipient: a tick, who and how many, what it was marked with before, templates for the whole group; opens to its operations. */
 function RecipientRow({ r, sel, categories, onChange, locked, expanded, onFlip }: {
@@ -138,80 +138,47 @@ function poolCounted(pool: BankAssignPool | null, sel: AssignSelection) {
 }
 
 /**
- * The payments the bank gives no shop for. Nothing says whose they are, so nothing is suggested or ticked: the user selects payments
- * (a filter by amount helps), then clicks one of the templates the earlier marks of such payments give, or picks a category. A payment
- * whose very same amount was marked the same way before says so in a note and lists that template first; that is all a hint does.
+ * The payments the bank gives no shop for that have a lead: the very same amount was marked the same way before. Ticking a payment takes
+ * the template its lead names (written out in full beside it); the field at its end picks another template or any category. Nothing is
+ * ticked for the user, and payments with no lead are not here.
  */
 function PoolSection({ pool, categories, sel, onChange, locked }: {
   pool: BankAssignPool; categories: BankAssignCategory[]; sel: AssignSelection; onChange: (next: AssignSelection) => void; locked: boolean;
 }) {
-  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
-  const [amount, setAmount] = useState('');
-  const [view, setView] = useState<'all' | 'open' | 'marked'>('all');
-  const amounts = [...pool.items.reduce((m, i) => m.set(Math.round(i.amount * 100), (m.get(Math.round(i.amount * 100)) ?? 0) + 1), new Map<number, number>())]
-    .sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 15);
-  const visible = pool.items.filter(i => (!amount || Math.round(i.amount * 100) === Number(amount)) && (view === 'all' || (view === 'marked') === !!sel.picks[i.tx]));
-  const apply = (pick: { template?: string; category?: string } | null) => {
-    const picks = { ...sel.picks };
-    for (const tx of checked) { if (pick) picks[tx] = pick; else delete picks[tx]; }
-    onChange({ ...sel, picks });
-    setChecked(new Set());
-  };
-  const flip = (tx: string) => setChecked(prev => { const next = new Set(prev); if (!next.delete(tx)) next.add(tx); return next; });
-  const setOne = (tx: string, value: string) => {
-    const picks = { ...sel.picks };
-    if (!value) delete picks[tx]; else if (value.startsWith('t:')) picks[tx] = { template: value.slice(2) }; else picks[tx] = { category: value.slice(2) };
-    onChange({ ...sel, picks });
-  };
-  const none = checked.size === 0 || locked;
   const done = poolCounted(pool, sel);
+  const set = (tx: string, pick: { template?: string; category?: string } | null) => {
+    const picks = { ...sel.picks };
+    if (pick) picks[tx] = pick; else delete picks[tx];
+    onChange({ ...sel, picks });
+  };
   return <div className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-ck-line" data-testid="assign-pool">
-    <div className="tw:flex tw:justify-between tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted"><span>Bez sklepu: bank nie podaje, gdzie zapłaciłeś. Nic nie jest zaznaczone ani zaproponowane.</span><span>{plural(pool.count, 'płatność', 'płatności')}</span></div>
-    <div className="tw:grid tw:gap-2 tw:border-t tw:border-ck-line tw:px-3 tw:py-2">
-      <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5" role="group" aria-label="Szablony dla płatności bez sklepu">
-        <span className="tw:text-xs tw:text-ck-muted">Zaznacz płatności, potem kliknij szablon{checked.size ? ` (zaznaczone: ${checked.size})` : ''}:</span>
-        {pool.templates.map(t => <button key={t.key} type="button" disabled={none} onClick={() => apply({ template: t.key })}
-          className={`${chip} tw:border tw:border-ck-line tw:bg-ck-surface-2 tw:text-ck-text tw:enabled:hover:border-ck-cal tw:disabled:opacity-50`}>{templateLabel(t, true)} ×{t.count}</button>)}
-        <select className={selectOff} value="" disabled={none} aria-label="Inna kategoria dla zaznaczonych" onChange={e => { if (e.target.value) apply({ category: e.target.value.slice(2) }); }}>
-          <option value="">Inna kategoria…</option>
-          {categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}
-        </select>
-        <button type="button" disabled={none} onClick={() => apply(null)} className={`${chip} tw:border tw:border-ck-line tw:text-ck-muted tw:enabled:hover:text-ck-text tw:disabled:opacity-50`}>Wyczyść zaznaczone</button>
-      </div>
-      <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5">
-        <span className="tw:text-xs tw:text-ck-muted">Pokaż:</span>
-        <select className={selectOff} value={amount} aria-label="Filtr kwoty" onChange={e => setAmount(e.target.value)}>
-          <option value="">wszystkie kwoty</option>
-          {amounts.map(([c, n]) => <option key={c} value={c}>{pln(Math.abs(c) / 100)} ({n})</option>)}
-        </select>
-        <select className={selectOff} value={view} aria-label="Filtr stanu" onChange={e => setView(e.target.value as typeof view)}>
-          <option value="all">wszystkie</option><option value="open">bez wyboru</option><option value="marked">z wyborem</option>
-        </select>
-        <button type="button" disabled={locked} onClick={() => setChecked(new Set(visible.map(i => i.tx)))} className={`${chip} tw:border tw:border-ck-line tw:text-ck-muted tw:enabled:hover:text-ck-text`}>Zaznacz widoczne ({visible.length})</button>
-        <button type="button" disabled={locked || !checked.size} onClick={() => setChecked(new Set())} className={`${chip} tw:border tw:border-ck-line tw:text-ck-muted tw:enabled:hover:text-ck-text tw:disabled:opacity-50`}>Odznacz</button>
-      </div>
+    <div className="tw:flex tw:justify-between tw:gap-3 tw:bg-ck-surface-2 tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted">
+      <span>Bez sklepu, ale ta sama kwota była już oznaczona tak samo. Zaznacz, żeby przyjąć.</span><span className="tw:flex-none">{plural(pool.count, 'płatność', 'płatności')}</span>
     </div>
-    <ul className="tw:m-0 tw:grid tw:max-h-80 tw:list-none tw:gap-0.5 tw:overflow-y-auto tw:border-t tw:border-ck-line tw:px-3 tw:py-2 tw:text-xs">
-      {visible.map(i => {
+    <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1.5 tw:px-3 tw:py-2 tw:text-xs">
+      {pool.items.map(i => {
         const pick = sel.picks[i.tx];
         const value = pick?.category ? `c:${pick.category}` : pick?.template ? `t:${pick.template}` : '';
         const hinted = i.hint ? pool.templates.find(t => t.key === i.hint!.template) : undefined;
-        return <li key={i.tx} className="tw:flex tw:items-center tw:gap-2">
-          <input type="checkbox" className={checkbox} checked={checked.has(i.tx)} disabled={locked} onChange={() => flip(i.tx)} aria-label={`Zaznacz ${i.day} ${signed(i.amount)}`} />
-          <span className="tw:w-[72px] tw:flex-none tw:text-ck-muted">{i.day.slice(5)}</span>
-          <span className="tw:w-[84px] tw:flex-none tw:text-ck-text">{signed(i.amount)}</span>
-          <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:text-ck-faint">{hinted && i.hint ? `ta sama kwota: ${templateLabel(hinted, true)} ${i.hint.count} ${times(i.hint.count)}` : ''}</span>
-          <select className={value ? selectOn : selectOff} value={value} disabled={locked} aria-label={`Oznaczenie płatności ${i.day} ${signed(i.amount)}`} onChange={e => setOne(i.tx, e.target.value)}>
+        return <li key={i.tx} className="tw:flex tw:flex-wrap tw:items-center tw:gap-x-2 tw:gap-y-0.5">
+          <input type="checkbox" className={checkbox} checked={!!pick} disabled={locked || !hinted} aria-label={`Przyjmij ${i.day} ${signed(i.amount)}`}
+            onChange={() => hinted && set(i.tx, pick ? null : { template: hinted.key })} />
+          <span className="tw:text-ck-muted">{i.day}</span>
+          <span className="tw:min-w-0 tw:flex-1 tw:text-ck-text">{signed(i.amount)}</span>
+          <select className={value ? selectOn : selectOff} value={value} disabled={locked} aria-label={`Oznaczenie płatności ${i.day} ${signed(i.amount)}`}
+            onChange={e => { const v = e.target.value; set(i.tx, !v ? null : v.startsWith('t:') ? { template: v.slice(2) } : { category: v.slice(2) }); }}>
             <option value="">nie oznaczaj</option>
             <optgroup label="Szablony">{[...pool.templates].sort((a, b) => Number(b.key === i.hint?.template) - Number(a.key === i.hint?.template)).map(t => <option key={t.key} value={`t:${t.key}`}>{templateLabel(t, true)}</option>)}</optgroup>
             <optgroup label="Wszystkie kategorie">{categories.map(c => <option key={c.id} value={`c:${c.id}`}>{categoryLabel(c)}</option>)}</optgroup>
           </select>
+          {hinted && i.hint && <span className="tw:basis-full tw:pl-6 tw:text-ck-muted" data-testid="assign-hint">ta sama kwota: {templateLabel(hinted, true)}, {i.hint.count} {times(i.hint.count)}</span>}
         </li>;
       })}
-      {!visible.length && <li className="tw:text-ck-muted">Nic nie pasuje do filtra.</li>}
-      {pool.hidden > 0 && <li className="tw:text-ck-muted">… i {pool.hidden} starszych: poza limitem karty, oznaczysz je sam później.</li>}
+      {pool.hidden > 0 && <li className="tw:text-ck-muted">… i {pool.hidden} kolejnych: poza limitem karty.</li>}
     </ul>
-    <div className="tw:border-t tw:border-ck-line tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted">Z tej sekcji do zapisu: {plural(done.count, 'płatność', 'płatności')}{done.count ? `, ${signed(done.total)}` : ''}. Reszta zostaje nieoznaczona.</div>
+    <div className="tw:border-t tw:border-ck-line tw:px-3 tw:py-1.5 tw:text-xs tw:text-ck-muted">
+      Z tej sekcji do zapisu: {plural(done.count, 'płatność', 'płatności')}{done.count ? `, ${signed(done.total)}` : ''}.{pool.rest > 0 ? ` Pominięto ${pool.rest} bez tropu.` : ''}
+    </div>
   </div>;
 }
 

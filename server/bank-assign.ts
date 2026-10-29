@@ -66,19 +66,23 @@ function recipients(ledger: BankLedger, plan: BankAssign): Recipient[] {
   return out.sort((a, b) => Number(b.certain) - Number(a.certain) || b.entries.length - a.entries.length || a.key.localeCompare(b.key));
 }
 
-/** The unmarked payments with no name from the bank in the range, newest first, and the templates their earlier marks give (all such payments together). */
-function pool(ledger: BankLedger, plan: BankAssign): { entries: Entry[]; templates: Template[]; hints: Map<string, { template: string; count: number }> } {
+/**
+ * The unmarked payments with no name from the bank in the range that have a lead, newest first, and the templates their earlier marks
+ * give (all such payments together). A payment with no lead is left out (`rest` counts them): there is nothing to go on.
+ */
+function pool(ledger: BankLedger, plan: BankAssign): { entries: Entry[]; rest: number; templates: Template[]; hints: Map<string, { template: string; count: number }> } {
   const inRange = inRangeOf(plan);
-  const entries = ledger.entries.filter(e => !isDone(e.label) && inRange(e.op.at) && nameless(e)).sort((a, b) => b.op.at - a.op.at);
+  const all = ledger.entries.filter(e => !isDone(e.label) && inRange(e.op.at) && nameless(e)).sort((a, b) => b.op.at - a.op.at);
   const history = doneHistory(ledger).filter(nameless);
   const templates = countTemplates(history);
   // Only a hint, never a reason to tick: the very same amount marked the same way at least twice before.
   const hints = new Map<string, { template: string; count: number }>();
-  for (const e of entries) {
+  for (const e of all) {
     const same = countTemplates(history.filter(h => cents(h.op.amount) === cents(e.op.amount)));
     if (same.length && same[0].count >= 2) hints.set(e.tx, { template: same[0].key, count: same[0].count });
   }
-  return { entries, templates, hints };
+  const entries = all.filter(e => hints.has(e.tx));
+  return { entries, rest: all.length - entries.length, templates, hints };
 }
 
 const markOf = (ledger: BankLedger, t: Template): BankAssignMark => {
@@ -101,7 +105,7 @@ export function assignPreview(ledger: BankLedger, plan: BankAssign): BankAssignP
     hidden: Math.max(0, r.entries.length - BANK_ASSIGN_LIMITS.items),
   }));
   const poolPreview: BankAssignPool | null = p.entries.length ? {
-    count: p.entries.length, total: plnTotal(p.entries), templates: p.templates.map(t => templateOf(ledger, t)),
+    rest: p.rest, count: p.entries.length, total: plnTotal(p.entries), templates: p.templates.map(t => templateOf(ledger, t)),
     items: p.entries.slice(0, BANK_ASSIGN_LIMITS.poolItems).map(e => ({ ...item(e), hint: p.hints.get(e.tx) ?? null })),
     hidden: Math.max(0, p.entries.length - BANK_ASSIGN_LIMITS.poolItems),
   } : null;

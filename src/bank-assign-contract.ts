@@ -64,11 +64,13 @@ export interface BankAssignRecipient {
 export interface BankAssignPoolItem extends BankAssignItem { hint: { template: string; count: number } | null }
 
 /**
- * The payments the bank gives no shop for (phone, BLIK, from a card). Nothing says whose they are, so they have no recipient and
- * are never suggested or ticked: the user picks, for each payment or for several at once, one of the templates the earlier
- * marks of such payments give (any shop together), or a category.
+ * The payments the bank gives no shop for (phone, BLIK, from a card) that have a lead: the very same amount was marked the same
+ * way at least twice before. Nothing says whose they are, so they have no recipient and are never ticked: the user ticks one to take
+ * the template its lead names, or picks another template or a category.
  */
 export interface BankAssignPool {
+  /** Only payments with a lead (the very same amount marked the same way before) are listed; `rest` is how many had none and are left out. */
+  rest: number;
   count: number;
   total: number;
   /** Most used first. */

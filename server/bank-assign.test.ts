@@ -38,7 +38,7 @@ const ledger: BankLedger = {
     entry('a1', '2026-10-01', -200, 'Alicja', { known: 'p-alicja' }), entry('a2', '2026-09-30', -150, 'Alicja', { known: 'p-alicja' }),
     // known, but nothing to offer: no earlier operation of this side was marked
     entry('n1', '2026-10-06', -9, 'Nowy', { known: 'p-nowy' }),
-    phone('t1', '2026-10-06', -80.59), phone('t2', '2026-10-07', -25),
+    phone('t1', '2026-10-06', -80.59), phone('t2', '2026-10-07', -80.59), phone('t3', '2026-10-08', -25),
   ],
 };
 const plan = (over: Record<string, unknown> = {}) => bankAssignSchema.parse(over);
@@ -64,13 +64,16 @@ describe('recipients and their templates', () => {
 
   it('puts payments with no name from the bank in a pool with every template their earlier marks give, and a hint only for the very same amount', () => {
     const pool = preview().pool!;
-    expect(pool).toMatchObject({ count: 2, total: -105.59, hidden: 0 });
+    // only payments with a lead are listed; the 25 zł one has none and is only counted
+    expect(pool).toMatchObject({ count: 2, total: -161.18, rest: 1, hidden: 0 });
     // all such payments together, whatever the shop: food with no note three times, then the newer of two used once (a tip, food with a note)
     expect(pool.templates.map(t => [t.mark.category?.name, t.mark.tags, t.party, t.count])).toEqual([['Jedzenie', [], null, 3], ['Donejt', ['tipply'], null, 1], ['Jedzenie', [], 'pyszne.pl', 1]]);
-    // 80,59 was marked the same way three times: a hint (never a tick); 25 has no earlier payment of that amount
-    expect(pool.items.map(i => [i.tx, i.hint])).toEqual([['t2', null], ['t1', { template: pool.templates[0].key, count: 3 }]]);
-    // one earlier payment of an amount is no hint (12 was a tip once)
-    expect(assignPreview({ ...ledger, entries: [...ledger.entries, phone('t3', '2026-10-08', -12)] }, plan()).pool!.items[0].hint).toBeNull();
+    // 80,59 was marked the same way three times: that is the lead (never a tick)
+    expect(pool.items.map(i => [i.tx, i.hint])).toEqual([['t2', { template: pool.templates[0].key, count: 3 }], ['t1', { template: pool.templates[0].key, count: 3 }]]);
+    // one earlier payment of an amount is no lead (12 was a tip once): left out like the 25 zł one
+    const more = assignPreview({ ...ledger, entries: [...ledger.entries, phone('t4', '2026-10-09', -12)] }, plan()).pool!;
+    expect(more).toMatchObject({ count: 2, rest: 2 });
+    expect(more.items.map(i => i.tx)).not.toContain('t4');
     expect(assignPreview(ledger, plan({ from: '2025-01-01', to: '2025-01-02' })).pool).toBeNull();
   });
 
@@ -103,9 +106,11 @@ describe('what would be marked', () => {
   it('marks a payment of the pool only by its own pick: a template with the note it carried, or a category with none', () => {
     const pool = preview().pool!;
     const tipTemplate = pool.templates[1].key, noted = pool.templates[2].key;
-    const marks = assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }, { tx: 't2', template: tipTemplate }] });
+    const marks = assignMarks(ledger, plan(), { picks: [{ tx: 't1', template: noted }, { tx: 't2', template: tipTemplate }, { tx: 't3', template: tipTemplate }] });
     expect(marks).toContainEqual({ tx: 't1', move: 'spend', category: 'c-2', tags: [], party: 'p-pyszne', recurring: false });
     expect(marks).toContainEqual({ tx: 't2', move: 'spend', category: 'c-5', tags: ['tipply'], party: null, recurring: false });
+    // a payment with no lead is not on the card, so a pick for it is dropped
+    expect(marks.map(m => m.tx)).not.toContain('t3');
     expect(assignMarks(ledger, plan(), { picks: [{ tx: 't1', category: 'c-1' }] })).toContainEqual({ tx: 't1', move: 'spend', category: 'c-1', tags: [], party: null, recurring: false });
     // a group pick does nothing to the pool, and an operation unticked is left out
     expect(assignMarks(ledger, plan(), { groupPicks: [{ group: orlen(), template: t('Orlen', 0) }] }).map(m => m.tx)).not.toContain('t1');
@@ -141,7 +146,7 @@ describe('the answer on the card', () => {
   it('refuses when nothing is ticked, and a rejection changes nothing but keeps what was proposed', async () => {
     await expect(cockpit.bankAssign('chat', { toolCallId: 'm1:b-2', decision: 'apply', skip: [byName('Społem').key] }, plan())).rejects.toMatchObject({ status: 409 });
     const rejected = await cockpit.bankAssign('chat', { toolCallId: 'm1:b-3', decision: 'reject' }, plan());
-    expect(rejected).toMatchObject({ decision: 'rejected', preview: { recipients: [{}, {}, {}], pool: { count: 2 } } });
+    expect(rejected).toMatchObject({ decision: 'rejected', preview: { recipients: [{}, {}, {}], pool: { count: 2, rest: 1 } } });
     expect(calls).toHaveLength(1);
     rmSync(dir, { recursive: true, force: true });
   });
