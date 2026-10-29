@@ -851,12 +851,14 @@ describe('chat resizing, minimizing, and draft preservation', () => {
     expect(saved.height).toBeGreaterThanOrEqual(300);
   });
 
-  it('preserves unsent draft text in the chat input when re-rendering', async () => {
+  it('keeps the unsent text and its context chips when the window closes and opens again', async () => {
     mockServer();
     const user = userEvent.setup();
     const { unmount } = render(<ChatWindow onClose={() => {}} />);
     await listed();
     const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, '@zaimp');
+    await user.keyboard('{Enter}');
     await user.type(input, 'Niewysłana wiadomość robocza');
     expect(input.value).toBe('Niewysłana wiadomość robocza');
     expect(getChatDraft().text).toBe('Niewysłana wiadomość robocza');
@@ -867,5 +869,6 @@ describe('chat resizing, minimizing, and draft preservation', () => {
     await listed();
     const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
     expect(reopenedInput.value).toBe('Niewysłana wiadomość robocza');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Zaimplementuj zadanie' })).toBeTruthy();
   });
 });

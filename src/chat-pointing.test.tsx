@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch } from './test-fixtures';
@@ -80,38 +80,6 @@ describe('the chat window', () => {
     await user.click(toggleBtn);
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
-  });
-  it('preserves unsent draft text and attached context chips when closing and reopening the chat', async () => {
-    const panel = scenarioFetch('standard');
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-      String(input).startsWith('/api/chats')
-        ? Promise.resolve(new Response(JSON.stringify({ chats: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-        : panel(input, init)));
-    const user = userEvent.setup();
-    render(<App />);
-    await openChat(user);
-    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
-    await user.type(input, 'Projekt koncepcji');
-
-    await startPointing(user);
-    await user.click(screen.getByText('Anna Nowak'));
-    await user.click(screen.getByRole('button', { name: 'Gotowe' }));
-
-    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
-    await waitFor(() => expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Projekt koncepcji'));
-
-    // Close chat using toggle button
-    const toggleBtn = screen.getByRole('button', { name: 'Otwórz czat z agentem' });
-    await user.click(toggleBtn);
-    expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
-
-    // Reopen chat using toggle button
-    await user.click(toggleBtn);
-    await screen.findByRole('dialog', { name: 'Czat z agentem' });
-
-    const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
-    expect(reopenedInput.value).toBe('Projekt koncepcji');
-    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
   });
 });
 

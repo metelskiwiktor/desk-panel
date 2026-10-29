@@ -10,15 +10,19 @@ beforeEach(()=>{localStorage.clear();vi.spyOn(window,'scrollTo').mockImplementat
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function Warmup() {const warmup=useWarmupStatus();return <><WarmupSettingsCard warmup={warmup}/><WarmupHistoryCard warmup={warmup}/></>;}
 const navigate=async(user:ReturnType<typeof userEvent.setup>,name:string)=>user.click(within(screen.getByRole('navigation')).getByRole('button',{name}));
-it('hides only the selected AGY group on dashboard and details, survives reload, and can restore it',async()=>{
-  vi.stubGlobal('fetch',vi.fn(scenarioFetch('quota-settings')));const user=userEvent.setup(),view=render(<App/>);
+it('hides only the selected AGY group on dashboard and details, and can restore it',async()=>{
+  vi.stubGlobal('fetch',vi.fn(scenarioFetch('quota-settings')));const user=userEvent.setup();render(<App/>);
   await screen.findByText(/^Gemini 4 Argon/);await navigate(user,'Ustawienia');
   await user.click(screen.getByRole('checkbox',{name:'Gemini 4 Argon'}));
   await navigate(user,'Pulpit');expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();expect(screen.getByText(/^Agy: Claude & GPT/)).toBeTruthy();
   await user.click(screen.getByRole('button',{name:/^Gemini:/}));expect(screen.queryByText(/Gemini 4 Argon/)).toBeNull();
-  view.unmount();render(<App/>);await screen.findAllByText(/^Gemini/);expect(screen.queryByText(/^Gemini 4 Argon/)).toBeNull();
   await navigate(user,'Ustawienia');expect((screen.getByRole('checkbox',{name:'Gemini 4 Argon'}) as HTMLInputElement).checked).toBe(false);
   await user.click(screen.getByRole('checkbox',{name:'Gemini 4 Argon'}));await navigate(user,'Pulpit');expect(screen.getByText(/^Gemini 4 Argon/)).toBeTruthy();
+});
+it('keeps what is hidden for the next start of the panel',()=>{
+  const first=renderHook(()=>useQuotaVisibility());act(()=>first.result.current.set({hiddenProviders:['Codex'],hiddenAgyGroups:['Gemini 4 Argon']}));
+  first.unmount();
+  expect(renderHook(()=>useQuotaVisibility()).result.current.value).toEqual({hiddenProviders:['Codex'],hiddenAgyGroups:['Gemini 4 Argon']});
 });
 it('does not mutate source readings and leaves previously unknown groups visible',()=>{
   const accounts=createFixture(Date.now(),'quota-settings').quotas.data!;
