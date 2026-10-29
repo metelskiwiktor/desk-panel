@@ -7,6 +7,15 @@ description: Use when the user wants Wektor (the in-panel Hermes chat agent) to 
 
 The user asks for an action that is hard in the panel UI (e.g. "merge these bank categories"). **We deliver, Wektor executes.** The user does not do it by hand and does not want a one-off script on his data. Wektor is Hermes Agent (DeepSeek Flash via OpenRouter) in the panel's chat; he reaches the panel only through MCP tools (`server/panel-mcp.ts`).
 
+## Phases of a new ability
+
+1. **Zdolnosc** (capability): we build the tool, card, guide entry, with tests. Wektor can do it; nobody knows yet what a good answer looks like.
+2. **Pierwszy kontakt** (first contact): run the first cases, read his answers with the user, expect nothing yet. The user cannot say beforehand what the answer should be; he can say what he likes and dislikes once he sees it. Collect observations (what he did, what was good, what was off). This is error analysis in the usual sense: look at real outputs first.
+3. **Kalibracja odpowiedzi** (response calibration): from the observations, decide with the user what a good answer is - the content, tone, length, what is shown on a card, when a card is offered or shown - and write it down as general rules (`BANK_GUIDE`, tool answers, card design). Then sharpen it over several runs and several cases. The user's expectations move as he reads more answers (this is a known effect, "criteria drift": people define what they want by reviewing outputs, and the criteria change with the prompt and the outputs; [Shankar et al.](https://arxiv.org/pdf/2404.12272)). Do not freeze expectations at phase 1.
+4. **Utrwalenie** (stabilisation): turn what has become stable into `expect` checks, keep what is still judgement as `soft`, run `--runs 3-5` to see variance, add a case for every real conversation that went wrong. Re-run after any change to a tool, the preamble or a guide.
+
+Moving between phases: `soft` = a criterion still forming; `expect` = a rule that has settled. A criterion that keeps surprising us stays `soft`. The user decides what a good answer is; I propose wording and show evidence (answers, counts over runs).
+
 ## The loop
 
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
