@@ -26,7 +26,7 @@ function Mark({ group }: { group: BankAssignGroup }) {
       {Icon && group.category && <Icon size={13} style={{ color: COLOR_VALUES[group.category.color] }} aria-hidden="true" />}
       {group.category ? `${MOVE_WORDS[group.move]} · ${group.category.name}` : MOVE_WORDS[group.move]}
     </span>
-    {group.party && <span className={`${chip} tw:bg-ck-surface-2 tw:text-ck-muted`}>{group.party}</span>}
+    {group.party && !namesOf(group).toLowerCase().includes(group.party.toLowerCase()) && <span className={`${chip} tw:bg-ck-surface-2 tw:text-ck-muted`}>{group.party}</span>}
     {group.tags.map(t => <span key={t} className={`${chip} tw:bg-ck-surface-2 tw:text-ck-muted`}>#{t}</span>)}
   </div>;
 }
@@ -44,12 +44,12 @@ export function AssignBody({ preview, ticked, onToggle, locked = false, state = 
     {preview.groups.map(g => {
       const on = ticked.has(g.key), expanded = open.has(g.key);
       return <div key={g.key} className="tw:border-b tw:border-ck-line tw:last:border-b-0" data-group={g.key}>
-        <div className={`tw:grid tw:grid-cols-[20px_minmax(0,1fr)_auto] tw:items-center tw:gap-3 tw:px-3 tw:py-2 ${on ? '' : 'tw:opacity-55'}`}>
+        <div className={`tw:grid tw:grid-cols-[20px_minmax(0,1fr)_minmax(0,auto)] tw:items-center tw:gap-3 tw:px-3 tw:py-2 ${on ? '' : 'tw:opacity-55'}`}>
           <input type="checkbox" className="tw:size-4 tw:accent-[#7ca9ff]" checked={on} disabled={locked} onChange={() => onToggle?.(g.key)} aria-label={`Oznacz ${g.count} operacji: ${namesOf(g)}`} />
           <div className="tw:min-w-0">
             <div className="tw:truncate tw:text-sm tw:text-ck-text"><span className="tw:text-ck-muted">{g.count} ×</span> {namesOf(g)}</div>
-            <button type="button" className="tw:inline-flex tw:items-center tw:gap-1 tw:text-xs tw:text-ck-muted tw:hover:text-ck-text" aria-expanded={expanded} onClick={() => flip(g.key)}>
-              {expanded ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}{g.why || 'pokaż operacje'}
+            <button type="button" className="tw:flex tw:max-w-full tw:items-center tw:gap-1 tw:text-left tw:text-xs tw:text-ck-muted tw:hover:text-ck-text" aria-expanded={expanded} onClick={() => flip(g.key)}>
+              {expanded ? <ChevronUp size={13} className="tw:flex-none" aria-hidden="true" /> : <ChevronDown size={13} className="tw:flex-none" aria-hidden="true" />}<span className="tw:truncate">{g.why || 'pokaż operacje'}</span>
             </button>
           </div>
           <div className="tw:grid tw:justify-items-end tw:gap-0.5"><Mark group={g} /><span className="tw:text-xs tw:text-ck-muted">{signed(g.total)}</span></div>
