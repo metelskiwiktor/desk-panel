@@ -377,7 +377,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       const certain = preview.recipients.filter(r => r.certain), mixed = preview.recipients.filter(r => !r.certain);
       const ops = (list: typeof certain) => list.reduce((sum, r) => sum + r.count, 0);
       const range = preview.range.from || preview.range.to ? `${preview.range.from ?? 'od początku'} – ${preview.range.to ?? 'do dziś'}` : 'wszystkie zapisane operacje';
-      return `${CARD_SHOWN.bankAssign}: ${certain.length} odbiorców (${ops(certain)} operacji) ma zawsze to samo oznaczenie i jest zaznaczonych na karcie; ${mixed.length} odbiorców (${ops(mixed)} operacji) miało różne oznaczenia albo jedno, więc użytkownik wybiera szablon sam. Zakres: ${range}${preview.range.first ? `, z dni ${preview.range.first} – ${preview.range.last}` : ''}; powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
+      return `${CARD_SHOWN.bankAssign}: ${certain.length} odbiorców (${ops(certain)} operacji) ma zawsze to samo oznaczenie i jest zaznaczonych na karcie; ${mixed.length} odbiorców (${ops(mixed)} operacji) miało różne oznaczenia albo jedno, więc użytkownik wybiera szablon sam.${preview.pool ? ` ${preview.pool.count} płatności bez nazwy sklepu z banku jest w osobnej sekcji: nic z nich nie jest zaznaczone ani zaproponowane, użytkownik wybiera szablon albo kategorię sam.` : ''} Zakres: ${range}${preview.range.first ? `, z dni ${preview.range.first} – ${preview.range.last}` : ''}; powiedz go użytkownikowi. Oznacza dopiero kliknięcie użytkownika. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
   panel_cockpit_clear: {

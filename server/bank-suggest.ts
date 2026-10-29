@@ -67,10 +67,6 @@ const LINK_REASON: Record<(typeof KIND_ORDER)[number], (hint: string, name: stri
 };
 export const OPTIONS = 3;
 
-const money = (amount: number, currency: string) => Math.abs(amount).toLocaleString('pl-PL', { style: 'currency', currency });
-const sameAmount = (a: number, b: number) => Math.abs(a - b) < 0.005;
-/** Phone and BLIK are both "a payment without a name": the same amount means the same in either. */
-const group = (m: Method) => m === 'phone' || m === 'blik' ? 'nameless' : m;
 const times = (n: number) => n === 1 ? 'raz' : 'razy';
 /** A move in words, as the dialog's buttons name it. */
 export const MOVE_WORDS: Record<BankMove, string> = { spend: 'Wydatek', income: 'Przychód', settle: 'Rozliczenie', move: 'Przełożenie' };
@@ -92,22 +88,16 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
   // A mark that only says who (nothing about what the money did) says nothing about what it was.
   const marks = ctx.marked.filter(m => m.tx !== tx && (m.move || m.category || m.tags.length || m.recurring) && Math.sign(m.op.amount) === sign);
 
-  // What it was the other times: this side's earlier marks, money going the same way; without a name, only the very same amount.
-  let basis: string, history: Marked[], reliable: boolean;
-  if (link) {
-    basis = `party:${link.owner.id}`;
-    history = marks.filter(m => m.party === link!.owner.id);
-    reliable = link.reliable;
-  } else if (op.merchant === null) {
-    basis = `amount:${group(op.method)}:${Math.round(op.amount * 100)}`;
-    history = marks.filter(m => m.op.merchant === null && group(m.op.method) === group(op.method) && sameAmount(m.op.amount, op.amount));
-    reliable = false;
-  } else return null;
+  // What it was the other times: this side's earlier marks, money going the same way. A payment the bank gives no name for is linked to
+  // nothing (not even by its amount: amounts change), so it gets no suggestion here; the bulk card offers templates for it instead.
+  if (!link) return null;
+  const basis = `party:${link.owner.id}`;
+  const history = marks.filter(m => m.party === link.owner.id);
+  const reliable = link.reliable;
 
   // Earlier marks grouped by what they said (move, category, tags, recurring, and the side when only the amount links them).
   const signature = (m: Marked) => JSON.stringify({
     m: m.move, c: m.category && categories.has(m.category) ? m.category : null, t: [...m.tags].sort(), r: m.recurring,
-    s: !link && m.party && owners.has(m.party) ? m.party : null,
   });
   const groups = new Map<string, { marks: Marked[]; last: number }>();
   for (const m of history) {
@@ -125,15 +115,15 @@ export function suggest(tx: string, op: OpFeatures, ctx: SuggestContext): Propos
   for (const [s, g] of ranked) {
     const first = g.marks[0];
     const category = first.category && categories.has(first.category) ? first.category : undefined;
-    const party = link?.owner.id ?? (first.party && owners.has(first.party) ? first.party : undefined);
+    const party = link.owner.id;
     // A spend is said by its category alone; any other move, or a spend without one, by its name.
     const moveWord = first.move && (first.move !== 'spend' || !category) ? MOVE_WORDS[first.move] : null;
-    const words = [!link && party ? owners.get(party)!.name : null, moveWord, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
+    const words = [moveWord, category && categories.get(category)!.name, ...first.tags.map(t => `#${t}`), first.recurring ? 'cykliczne' : null].filter(Boolean).join(' · ') || 'bez kategorii';
     const count = `${words}: ${g.marks.length} z ${total} ${times(total)}`;
     options.push({
       ...(first.move ? { move: first.move } : {}), ...(category ? { category } : {}), ...(first.tags.length ? { tags: [...first.tags] } : {}),
       ...(party ? { party } : {}), ...(first.recurring ? { recurring: true as const } : {}),
-      reasons: link ? [link.reason, count] : [`ta sama kwota ${money(op.amount, op.currency)}, bez nazwy sklepu`, count],
+      reasons: [link.reason, count],
     });
     signatures.push(s);
   }

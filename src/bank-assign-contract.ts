@@ -12,7 +12,7 @@ import { bankCategoryId, bankTxId } from './bank-labels-contract';
  * marked until the user clicks „Wykonaj”, and nothing the panel works out is trusted from the request: the request names
  * recipients, operations, template keys and category ids, and the panel resolves them again against what it keeps now.
  */
-export const BANK_ASSIGN_LIMITS = { items: 40, skip: 60, skipOps: 300, groupPicks: 60, picks: 300, templates: 4 } as const;
+export const BANK_ASSIGN_LIMITS = { items: 40, poolItems: 300, skip: 60, skipOps: 300, groupPicks: 60, picks: 600, templates: 6 } as const;
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const bankAssignSchema = z.object({
@@ -35,7 +35,11 @@ export interface BankAssignMark {
 }
 
 /** A mark the recipient's earlier operations got, and how many did. */
-export interface BankAssignTemplate { key: string; mark: BankAssignMark; count: number }
+export interface BankAssignTemplate {
+  key: string; mark: BankAssignMark; count: number;
+  /** The other side the user gave the earlier operations (a note of theirs, say "pyszne.pl"), set again when the template is chosen. */
+  party: string | null;
+}
 
 export interface BankAssignItem { tx: string; day: string; name: string; amount: number }
 
@@ -47,8 +51,6 @@ export interface BankAssignRecipient {
   count: number;
   /** Signed sum in PLN: money in is positive. */
   total: number;
-  /** Set when the bank gives no name for these payments (a phone or BLIK payment): they are one recipient only by the same amount (signed). */
-  amount: number | null;
   /** The earlier operations of this recipient all got one mark (at least two of them): its template is ticked by default. */
   certain: boolean;
   /** Most frequent first. */
@@ -58,12 +60,31 @@ export interface BankAssignRecipient {
   hidden: number;
 }
 
+/** A payment of the pool: with a hint when the very same amount was marked the same way at least twice before (never a reason to tick). */
+export interface BankAssignPoolItem extends BankAssignItem { hint: { template: string; count: number } | null }
+
+/**
+ * The payments the bank gives no shop for (phone, BLIK, from a card). Nothing says whose they are, so they have no recipient and
+ * are never suggested or ticked: the user picks, for each payment or for several at once, one of the templates the earlier
+ * marks of such payments give (any shop together), or a category.
+ */
+export interface BankAssignPool {
+  count: number;
+  total: number;
+  /** Most used first. */
+  templates: BankAssignTemplate[];
+  /** Newest first; at most `BANK_ASSIGN_LIMITS.poolItems`, the rest is `hidden` and cannot be chosen here. */
+  items: BankAssignPoolItem[];
+  hidden: number;
+}
+
 export interface BankAssignCategory { id: string; name: string; move: BankMove; color: BankColor; icon: BankIcon }
 
 export interface BankAssignPreview {
   /** What was asked (null: no limit) and the days the operations on the card really span (null: none). */
   range: { from: string | null; to: string | null; first: string | null; last: string | null };
   recipients: BankAssignRecipient[];
+  pool: BankAssignPool | null;
   /** The user's own categories, spending first: any of them can be picked for an operation. */
   categories: BankAssignCategory[];
   problems: string[];

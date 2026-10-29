@@ -487,12 +487,19 @@ describe('the live cockpit (Hermes and the panel)', () => {
     range: { from: '2026-09-24', to: null, first: '2026-10-02', last: '2026-10-05' },
     recipients: [
       { key: 'r-11111111', name: 'Społem', amount: null, count: 2, total: -51.36, certain: true, hidden: 0,
-        templates: [{ key: 't-11111111', mark: mark('c-3', 'Sklep spożywczy', 'blue', 'cart'), count: 3 }],
+        templates: [{ key: 't-11111111', mark: mark('c-3', 'Sklep spożywczy', 'blue', 'cart'), count: 3, party: null }],
         items: [{ tx: 's1', day: '2026-10-03', name: 'Społem', amount: -28.87 }, { tx: 's2', day: '2026-10-02', name: 'Społem', amount: -22.49 }] },
       { key: 'r-22222222', name: 'Orlen', amount: null, count: 2, total: -218.55, certain: false, hidden: 0,
-        templates: [{ key: 't-22222222', mark: mark('c-1', 'Paliwo', 'orange', 'fuel'), count: 4 }, { key: 't-33333333', mark: mark('c-2', 'Jedzenie', 'green', 'utensils'), count: 1 }],
+        templates: [{ key: 't-22222222', mark: mark('c-1', 'Paliwo', 'orange', 'fuel'), count: 4, party: null }, { key: 't-33333333', mark: mark('c-2', 'Jedzenie', 'green', 'utensils'), count: 1, party: null }],
         items: [{ tx: 'o1', day: '2026-10-05', name: 'Orlen', amount: -200.15 }, { tx: 'o2', day: '2026-10-04', name: 'Orlen', amount: -18.4 }] },
     ],
+    pool: { count: 3, total: -185.59, hidden: 0,
+      templates: [{ key: 't-44444444', mark: mark('c-2', 'Jedzenie', 'green', 'utensils'), count: 3, party: 'pyszne.pl' }],
+      items: [
+        { tx: 'p1', day: '2026-10-06', name: 'Płatność telefonem', amount: -80.59, hint: { template: 't-44444444', count: 3 } },
+        { tx: 'p2', day: '2026-09-22', name: 'Płatność telefonem', amount: -80.59, hint: { template: 't-44444444', count: 3 } },
+        { tx: 'p3', day: '2026-09-21', name: 'Płatność telefonem', amount: -25, hint: null },
+      ] },
     categories: [{ id: 'c-1', name: 'Paliwo', move: 'spend', color: 'orange', icon: 'fuel' }, { id: 'c-2', name: 'Jedzenie', move: 'spend', color: 'green', icon: 'utensils' }, { id: 'c-3', name: 'Sklep spożywczy', move: 'spend', color: 'blue', icon: 'cart' }],
     problems: [],
   };
@@ -510,7 +517,7 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url.startsWith('/api/bank/assign')) return reply(assignPreviewMock);
       if (url === `/api/chats/${H}/bank-plan` && body?.toolCallId === 'a9:b-1') {
         const { toolCallId: _id, decision: _decision, ...choice } = body;
-        const outcome = { decision: 'applied', at: NOW, assigned: 3, choice, preview: assignPreviewMock };
+        const outcome = { decision: 'applied', at: NOW, assigned: 5, choice, preview: assignPreviewMock };
         cockpit = view({ bankPlans: { 'a9:b-1': outcome } });
         return reply(outcome);
       }
@@ -717,11 +724,23 @@ describe('the live cockpit (Hermes and the panel)', () => {
     await user.selectOptions(within(mixed).getByLabelText('Oznaczenie: 2026-10-04 Orlen'), 'c:c-2');
     await user.click(within(mixed).getByRole('checkbox', { name: 'Oznacz 2026-10-05 Orlen' }));
     expect(within(card).getByText(/Zaznaczone: 3 operacji, [-−]69,76/)).toBeTruthy();
+    // payments with no shop name: nothing is chosen for them; templates wait for a selection, a filter by amount helps selecting
+    const pool = within(card).getByTestId('assign-pool');
+    expect(within(pool).getByText(/Nic nie jest zaznaczone ani zaproponowane/)).toBeTruthy();
+    const template = within(pool).getByRole('button', { name: 'Wydatek · Jedzenie · pyszne.pl ×3' });
+    expect((template as HTMLButtonElement).disabled).toBe(true);
+    expect(within(pool).getAllByText('ta sama kwota: Wydatek · Jedzenie · pyszne.pl 3 razy')).toHaveLength(2);
+    await user.selectOptions(within(pool).getByLabelText('Filtr kwoty'), '-8059');
+    await user.click(within(pool).getByRole('button', { name: 'Zaznacz widoczne (2)' }));
+    await user.click(template);
+    expect(within(pool).getByText(/Z tej sekcji do zapisu: 2 płatności, [-−]161,18/)).toBeTruthy();
+    expect(within(card).getByText(/Zaznaczone: 5 operacji, [-−]230,94/)).toBeTruthy();
     expect(calls.some(c => c.url.endsWith('/bank-plan'))).toBe(false);
     await user.click(within(card).getByRole('button', { name: 'Wykonaj' }));
-    await waitFor(() => expect(within(card).getByText('Oznaczono 3 operacji.')).toBeTruthy());
+    await waitFor(() => expect(within(card).getByText('Oznaczono 5 operacji.')).toBeTruthy());
     expect(calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!.body).toEqual({
-      toolCallId: 'a9:b-1', decision: 'apply', skipOps: ['o1'], groupPicks: [{ group: 'r-22222222', template: 't-22222222' }], picks: [{ tx: 'o2', category: 'c-2' }],
+      toolCallId: 'a9:b-1', decision: 'apply', skipOps: ['o1'], groupPicks: [{ group: 'r-22222222', template: 't-22222222' }],
+      picks: [{ tx: 'o2', category: 'c-2' }, { tx: 'p1', template: 't-44444444' }, { tx: 'p2', template: 't-44444444' }],
     });
     expect(within(card).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
   });

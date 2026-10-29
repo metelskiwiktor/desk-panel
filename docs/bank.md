@@ -210,12 +210,15 @@ radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźne
 
 Masowe oznaczanie (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`, tylko gdy
 użytkownik go wskazał), resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Karta grupuje nieoznaczone operacje **według odbiorcy**
-(ten sam sklep lub osoba, po tekście w banku, rachunku, telefonie albo nazwie; kto nie jest rozpoznany, jest grupowany po nazwie operacji), a nie według
-oznaczenia: operacje jednego odbiorcy nie muszą mieć tego samego oznaczenia (stacja paliw: paliwo albo jedzenie). Dla odbiorcy panel pokazuje **szablony**,
+(ten sam sklep lub osoba, po tekście w banku, rachunku, telefonie albo nazwie), a nie według oznaczenia: operacje jednego odbiorcy nie muszą mieć tego samego oznaczenia (stacja paliw: paliwo albo jedzenie). Dla odbiorcy panel pokazuje **szablony**,
 czyli oznaczenia, które dostały jego wcześniejsze operacje (ruch, kategoria, etykiety, cykliczność), od najczęstszego, z liczbą. Gdy wszystkie wcześniejsze
 operacje odbiorcy dostały to samo (co najmniej dwie), jego szablon jest domyślnie zaznaczony na karcie („zawsze to samo”); w pozostałych grupach
 („różnie”, albo tylko jedna wcześniejsza operacja) użytkownik wybiera szablon dla całej grupy. Każdą operację można zmienić osobno: szablon z historii
 odbiorcy albo dowolna kategoria użytkownika (kategoria przychodu ustawia przychód). Karta zaczyna od zakresu dat (o co pytano i jakie dni obejmują operacje).
+Płatność, której bank nie podpisuje sklepem (telefon, BLIK, z karty), nie ma odbiorcy i nie jest podpowiadana ani po kwocie, ani po historii: leży w osobnej sekcji
+„Bez sklepu”, gdzie użytkownik zaznacza płatności (filtr po kwocie i „zaznacz widoczne” pomagają), a potem klika szablon (zestaw: ruch, kategoria, etykiety,
+ewentualnie notatka „druga strona”, liczony z jego dotychczasowych oznaczeń takich płatności, od najczęściej użytego) albo wybiera dowolną kategorię. Dokładnie ta sama kwota
+oznaczona wcześniej tak samo co najmniej dwa razy daje tylko dopisek przy płatności i pierwsze miejsce szablonu na liście tej płatności, nigdy zaznaczenie.
 Nic nie wchodzi do zapisu bez zaznaczenia lub wyboru, a zaznaczenie na karcie nie jest zapisem: oznacza dopiero „Wykonaj”.
 `POST /api/chats/:id/bank-plan` bierze wtedy tylko wybór (`skip` odbiorców, `skipOps` operacji, `groupPicks` szablon grupy, `picks` szablon albo kategoria
 operacji; klucze `r-…`, `t-…`, id kategorii), który panel rozwiązuje jeszcze raz na tym, co trzyma w chwili kliknięcia i odrzuca to, czego już nie ma.

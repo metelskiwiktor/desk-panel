@@ -240,7 +240,7 @@ describe('bank label store', () => {
     expect(data.suggestions['acc:O;2']).toBeUndefined();
   });
 
-  it('offers a choice, not a guess, when earlier marks differ or only the exact amount links them', async () => {
+  it('offers a choice, not a guess, when earlier marks differ, and nothing for a payment with no name from the bank', async () => {
     const ops = [
       ...['O;1', 'O;2', 'O;3'].map((ref, i) => map(raw.card(ref, `2026-10-2${i}`, '10.00', 'LESZNOKAWIARNIA 7PL'))),
       map(raw.phonePay('P;1', '2026-10-21', '76.93')), map(raw.phonePay('P;2', '2026-10-26', '76.93')), map(raw.phonePay('P;3', '2026-10-26', '20.10')),
@@ -256,8 +256,8 @@ describe('bank label store', () => {
     const data = (await store.read()).data!;
     expect(data.suggestions['acc:O;3'].sure).toBe(false);
     expect(data.suggestions['acc:O;3'].options.map(o => o.category)).toEqual([b, a]);
-    expect(data.suggestions['acc:P;2']).toEqual({ sure: false, options: [{ move: 'spend', category: a, tags: ['restauracja'], party: pyszne, reasons: [expect.stringMatching(/^ta sama kwota 76,93\s?zł, bez nazwy sklepu$/), 'pyszne.pl · Kawa · #restauracja: 1 z 1 raz'] }] });
-    // No ranges and no guessing: another amount has nothing.
+    // A payment the bank gives no name for is linked to nothing, not even to an earlier one of the very same amount: amounts change.
+    expect(data.suggestions['acc:P;2']).toBeUndefined();
     expect(data.suggestions['acc:P;3']).toBeUndefined();
     await store.apply({ action: 'accept', tx: 'acc:O;3', option: 1 });
     expect((await store.read()).data!.labels['acc:O;3']).toMatchObject({ move: 'spend', category: a, party: cafe });
@@ -355,7 +355,7 @@ describe('the bank label routes (standard scenario)', () => {
     const labels = bankLabelsSourceSchema.parse(await (await fetch(`${base}/api/bank/labels`)).json());
     expect(labels.data!.suggestions['acc-1:t13']).toEqual({ sure: true, options: [{ party: 'k-00000012', reasons: ['ta sama nazwa w banku („Anna Kowalska”): Anna'] }] });
     expect(labels.data!.suggestions['acc-1:t1'].options[0]).toMatchObject({ move: 'income', category: 'c-0000000f', party: 'k-00000010', recurring: true });
-    expect(labels.data!.suggestions['acc-1:t22'].sure).toBe(false);
+    expect(labels.data!.suggestions['acc-1:t22']).toBeUndefined();
     expect(labels.data!.balances).toEqual([{ party: 'k-00000012', currency: 'PLN', amount: -120 }]);
     expect((await post({ action: 'accept', tx: 'acc-1:t3' }, null)).status).toBe(403);
     expect((await post({ action: 'accept', tx: 'acc-1:t3' }, 'http://evil.example')).status).toBe(403);
