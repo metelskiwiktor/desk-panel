@@ -51,13 +51,16 @@ describe('bank card data', () => {
     expect(() => bankShow(ledger, { view: 'tabela', nieoznaczone: false, kategorie: ['psych'], from: '2024-01-01', to: '2026-10-29' }, '2026-10-29')).toThrow(/najwyżej/);
   });
 
-  it('tells the model only a summary, with the other spending categories so it can notice a related one itself', () => {
+  it('tells the model a summary with the names of what each category holds, not the rows, and with the other spending categories so it can notice a related one itself', () => {
     const data = bankShow(ledger, { view: 'tabela', nieoznaczone: false, kategorie: ['psych', 'podo'] }, '2026-10-29');
     const summary = bankShowSummary(ledger, data);
     expect(summary).toContain('Razem 4 operacji');
+    expect(summary).toMatch(/Psycholog 3 op\. 270,00 zł \(Gabinet Anna K\./);
+    expect(summary).toContain('Podolog 1 op. 120,00 zł (Podolog Kowalski)');
     expect(summary).toContain('Oznaczenia w tym zakresie zaczynają się 2026-09-20; nieoznaczonych wydatków: 1 op. 60,00 zł (od 2026-10-03 do 2026-10-03)');
     expect(summary).toContain('same operacje od 2026-09-20 do 2026-10-20');
     expect(summary).toContain('Inne kategorie wydatków w tym zakresie: Apteka 1 op. 45,50 zł (Apteka Gemini)');
-    expect(summary).not.toContain('Gabinet');
+    // names of what it holds, never the rows: no single operation's amount is told
+    expect(summary).not.toContain('150,00');
   });
 });

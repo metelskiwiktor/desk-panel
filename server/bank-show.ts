@@ -85,6 +85,20 @@ function coverage(ledger: BankLedger, data: BankShowData): string {
   return `Oznaczenia w tym zakresie zaczynają się ${first}; nieoznaczonych wydatków: ${unmarked.length} op. ${money(-unmarked.reduce((sum, e) => sum + e.op.amount, 0))}${unmarked.length ? ` (od ${bookedOn(Math.min(...unmarked.map(e => e.op.at)))} do ${bookedOn(Math.max(...unmarked.map(e => e.op.at)))})` : ''}.`;
 }
 
+/** The most frequent names of the operations in one shown category (at most 5): what it holds, which sums alone do not say. */
+function namesOf(ledger: BankLedger, data: BankShowData, id: string): string {
+  const own = id === UNMARKED ? unmarkedSpending(ledger, data.from, data.to) : spending(ledger, data.from, data.to).filter(e => e.label?.category === id);
+  const counts = new Map<string, { n: number; spent: number }>();
+  for (const e of own) {
+    const name = masked(clip(e.op.name, 24));
+    const entry = counts.get(name) ?? { n: 0, spent: 0 };
+    entry.n++; entry.spent -= e.op.amount;
+    counts.set(name, entry);
+  }
+  const top = [...counts].sort((a, b) => b[1].n - a[1].n || b[1].spent - a[1].spent).slice(0, 5).map(([name]) => name);
+  return top.length ? ` (${top.join(', ')})` : '';
+}
+
 /**
  * What the model is told after a card: a short line it can comment on, not the rows. The spending categories beside the
  * asked ones come with their sums, so it can notice a related one itself (the model decides, the panel only lists).
@@ -105,7 +119,7 @@ export function bankShowSummary(ledger: BankLedger, data: BankShowData): string 
   // The operations' names say what a category holds: without them the model guesses from the category's name.
   const rest = [...others].sort((a, b) => b[1].spent - a[1].spent).map(([id, o]) => `${names.get(id) ?? '?'} ${o.count} op. ${money(o.spent)} (${o.names.join(', ')})`);
   return [
-    `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)}; zakres ${data.from} – ${data.to}${data.span ? `, same operacje od ${data.span.first} do ${data.span.last}` : ''}.`,
+    `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}${namesOf(ledger, data, c.id)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)}; zakres ${data.from} – ${data.to}${data.span ? `, same operacje od ${data.span.first} do ${data.span.last}` : ''}.`,
     coverage(ledger, data),
     data.unknown.length ? `Bez dopasowania: ${data.unknown.join(', ')}.` : '',
     `Inne kategorie wydatków w tym zakresie: ${rest.length ? rest.join('; ') : 'brak'}.`,
