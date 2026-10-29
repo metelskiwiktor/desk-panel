@@ -151,13 +151,17 @@ export function createBank(options: {
       const from = new Date(now() - days * DAY).toISOString().slice(0, 10);
       const list: BankTransaction[] = [];
       let continuation: string | undefined;
+      let pages = 0;
       for (let page = 0; page < MAX_PAGES; page++) {
+        pages++;
         const query = new URLSearchParams({ date_from: from, transaction_status: 'BOOK', ...(continuation ? { continuation_key: continuation } : {}) });
         const answer = await call(`/accounts/${encodeURIComponent(uid)}/transactions?${query}`);
         (answer.transactions as unknown[] | undefined)?.forEach((raw, i) => { const t = mapTransaction(raw, uid, page * 1000 + i); if (t) list.push(t); });
         continuation = typeof answer.continuation_key === 'string' && answer.continuation_key ? answer.continuation_key : undefined;
         if (!continuation) break;
       }
+      // Only counts and a yes or no, never a payload: whether the bank had more after the last page asked for (the pages cap cut the reading).
+      console.log(`bank: odczyt ${list.length} operacji od ${from} w ${pages} stronach; po ostatniej stronie bank ma ${continuation ? 'jeszcze dalsze (ucięte limitem stron)' : 'już nic więcej'}`);
       return list;
     };
     for (const account of current.accounts) {
