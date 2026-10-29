@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { BANK_GUIDE } from '../src/chat-contract';
+import { bankPlanSchema } from '../src/bank-plan-contract';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
@@ -178,6 +179,30 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  * them whole. Fills a finished answer's tool steps from the session's group of that turn, matching them by name and
  * order (the stream gives no call ids). True when something changed.
  */
+/**
+ * A bank change card has no id of Hermes's to stand on (the stream gives only the tool's name, or a call id the history may
+ * not repeat), and two cards of one answer cannot be told apart by order. Its identity is what it proposes: the message and
+ * a hash of the plan (the names, the target, the tags flag; the title is only a label). The same answer read live, kept, or
+ * from Hermes's history gives the same id, so the user's decision stays with the card, and two different plans never share one.
+ */
+export const isBankCard = (name: string) => name.includes('panel_bank_propose');
+export function stableBankCardId(messageId: string, input: string): string | null {
+  let plan;
+  try { plan = bankPlanSchema.parse(JSON.parse(input)); } catch { return null; }
+  const key = JSON.stringify({ merge: plan.merge.map(n => n.toLowerCase()), into: plan.into.toLowerCase(), tags: plan.tags });
+  return `${messageId}:b-${createHash('sha256').update(key).digest('hex').slice(0, 16)}`;
+}
+/** Gives the bank change cards of a message their stable ids once their arguments are all there; whether any changed. */
+export function stabilizeBankCards(message: ChatMessage): boolean {
+  let changed = false;
+  for (const p of message.parts ?? []) {
+    if (p.type !== 'tool' || !isBankCard(p.name)) continue;
+    const id = stableBankCardId(message.id, p.input);
+    if (id && p.id !== id) { p.id = id; changed = true; }
+  }
+  return changed;
+}
+
 export function fillFromHistory(message: ChatMessage, group: { parts: ChatPart[] } | undefined): boolean {
   if (!group) return false;
   const seen = new Map<string, number>();
@@ -298,11 +323,12 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       // What this panel saw live (approvals and timings included, text checked against Hermes's final output) is
       // shown as it was; after a restart the session's history is the answer.
       const kept = finished.get(turn.agent);
-      if (kept) { fillFromHistory(kept, group); out.push(kept); }
+      if (kept) { fillFromHistory(kept, group); stabilizeBankCards(kept); out.push(kept); }
       else if (group && group.parts.length) {
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
-        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : p);
+        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` }
+          : p.type === 'tool' && isBankCard(p.name) ? { ...p, id: stableBankCardId(turn.agent, p.input) ?? p.id } : p);
         out.push({ id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
@@ -392,6 +418,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         tool.endedAt = now();
         if (event.error) { tool.error = true; tool.output = `Błąd: ${event.output || event.error}`.slice(0, 600); }
         else if (event.output) tool.output = event.output.slice(0, 4000);
+        if (isBankCard(tool.name)) stabilizeBankCards(live.message);
         break;
       }
       case 'progress':

@@ -6,7 +6,7 @@ import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract'
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
 import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
-import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules } from './hermes-chat';
+import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableBankCardId } from './hermes-chat';
 import { watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
@@ -209,6 +209,28 @@ describe('Hermes chat', () => {
     const single = { ...message, parts: [message.parts![0]] };
     fillFromHistory(single, { parts: [first] });
     expect(single.parts?.[0]).toMatchObject({ id: 'answer:call_1' });
+  });
+
+  it('gives a bank change card an id from its plan: apart for different plans, one for the same plan, stable across reads', () => {
+    const name = 'mcp__desk_panel__panel_bank_propose';
+    const tool = (id: string, input: string) => ({ type: 'tool' as const, id, name, input, state: 'done' as const });
+    const a = { merge: ['Psycholog', 'Podolog'], into: 'Zdrowie' }, b = { merge: ['Gry'], into: 'Gadżety' };
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 0, parts: [
+      tool('pending:answer:4', JSON.stringify({ ...a, tytul: 'x' })), tool('pending:answer:6', JSON.stringify(b)), tool('call_9', ''),
+    ] };
+    expect(stabilizeBankCards(message)).toBe(true);
+    const ids = message.parts!.map(p => p.type === 'tool' && p.id);
+    expect(ids[0]).toMatch(/^answer:b-[0-9a-f]{16}$/);
+    expect(ids[1]).toMatch(/^answer:b-[0-9a-f]{16}$/);
+    expect(ids[0]).not.toBe(ids[1]);
+    // no arguments yet (a card streamed without them): it keeps its id until they are there
+    expect(ids[2]).toBe('call_9');
+    // the title, the case of the names and Hermes's call id do not matter; the plan, the tags flag and the answer do
+    expect(stableBankCardId('answer', JSON.stringify({ merge: ['psycholog', 'PODOLOG'], into: 'zdrowie', tags: true, tytul: 'inny' }))).toBe(ids[0]);
+    expect(stableBankCardId('answer', JSON.stringify({ ...a, tags: false }))).not.toBe(ids[0]);
+    expect(stableBankCardId('other', JSON.stringify(a))).not.toBe(ids[0]);
+    expect(stableBankCardId('answer', 'not json')).toBeNull();
+    expect(stabilizeBankCards(message)).toBe(false);
   });
 
   it('binds the one proposal the panel accepted, past one it refused', () => {

@@ -141,7 +141,8 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
   }, [key, !!decided]);
   const preview = state.key === key ? state.data : undefined;
   const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Zmiana w kategoriach';
-  const unidentified = toolCallId.startsWith('pending:') || toolCallId.includes('panel_bank_propose');
+  // Until the card has its stable id (the answer is over and its arguments are in), a decision could not be tied to it.
+  const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
   const blocked = !!args.refused || !plan.success || !!preview?.problems.length;
   const answer = async (decision: 'apply' | 'reject') => {
     setSending(true); setError('');

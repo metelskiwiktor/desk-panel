@@ -122,7 +122,8 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
         ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_bank_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
         : []) : [];
-      if (matches.length !== 1) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      // The id comes from the plan, so the same plan twice in one answer is one card.
+      if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
       const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
       if (cardRefusal('bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
       let plan;

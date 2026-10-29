@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { CARD_SHOWN } from '../src/cockpit-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { planPreview } from './bank-plan';
+import { stableBankCardId } from './hermes-chat';
 import { createCockpit } from './cockpit';
 import type { BankLedger } from './bank-labels';
 
@@ -69,6 +70,11 @@ describe('the preview of a merge', () => {
 describe('the answer on the card', () => {
   const CHAT = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11';
   const answered = JSON.stringify({ result: `${CARD_SHOWN.bankPlan}: 3 operacji przejdzie.` });
+  // The ids the chat makes for these cards: the answer and the plan, so a decision is tied to what the user saw.
+  const okInput = { merge: ['Subskrypcje', 'Rachunki'], into: 'Stałe opłaty', tytul: 'Stałe opłaty' };
+  const badInput = { merge: ['Nie ma takiej'], into: 'X' };
+  const refusedInput = { merge: ['Subskrypcje'], into: 'Y' };
+  const OK = stableBankCardId('m1', JSON.stringify(okInput))!, BAD = stableBankCardId('m1', JSON.stringify(badInput))!, REFUSED = stableBankCardId('m1', JSON.stringify(refusedInput))!;
   const card = (id: string, input: unknown, output = answered) => ({ type: 'tool', id, name: 'mcp__desk_panel__panel_bank_propose', input: JSON.stringify(input), output, state: 'done' });
 
   async function withServer<T>(run: (base: string, sources: Awaited<ReturnType<typeof makeSources>>) => Promise<T>) {
@@ -78,9 +84,13 @@ describe('the answer on the card', () => {
     const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
     const items = [{
       id: 'm1', role: 'agent', status: 'done', parts: [
-        card('m1:ok', { merge: ['Subskrypcje', 'Rachunki'], into: 'Stałe opłaty', tytul: 'Stałe opłaty' }),
-        card('m1:bad', { merge: ['Nie ma takiej'], into: 'X' }),
-        card('m1:refused', { merge: ['Subskrypcje'], into: 'Y' }, JSON.stringify({ result: 'Nie ma kategorii wydatków „Y”.' })),
+        card(OK, okInput),
+        // the same plan sent twice in one answer is one card with one id
+        card(OK, okInput),
+        card(BAD, badInput),
+        card(REFUSED, refusedInput, JSON.stringify({ result: 'Nie ma kategorii wydatków „Y”.' })),
+        // a card that never got its stable id (Hermes's own call id) cannot be answered
+        card('call_raw', okInput),
       ],
     }];
     const chat = { get: async () => ({ engine: 'hermes', items }) } as never;
@@ -103,19 +113,20 @@ describe('the answer on the card', () => {
       expect(preview).toMatchObject({ problems: [], into: { name: 'Stałe opłaty', created: true } });
       expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
 
-      expect((await post(base, { toolCallId: 'm1:ok', decision: 'apply' }, {})).status).toBe(403);
+      expect((await post(base, { toolCallId: OK, decision: 'apply' }, {})).status).toBe(403);
       // A request that carries its own plan is refused: only a card id and a yes or no are taken.
-      expect((await post(base, { toolCallId: 'm1:ok', decision: 'apply', merge: ['Zdrowie'], into: 'Wszystko' })).status).toBe(400);
+      expect((await post(base, { toolCallId: OK, decision: 'apply', merge: ['Zdrowie'], into: 'Wszystko' })).status).toBe(400);
       expect((await post(base, { toolCallId: 'm1:nope', decision: 'apply' })).status).toBe(409);
-      const refused = await post(base, { toolCallId: 'm1:refused', decision: 'apply' });
+      expect((await post(base, { toolCallId: 'call_raw', decision: 'apply' })).status).toBe(409);
+      const refused = await post(base, { toolCallId: REFUSED, decision: 'apply' });
       expect(refused.status).toBe(409);
       expect((await refused.json()).error).toContain('odrzucił');
-      const impossible = await post(base, { toolCallId: 'm1:bad', decision: 'apply' });
+      const impossible = await post(base, { toolCallId: BAD, decision: 'apply' });
       expect(impossible.status).toBe(409);
       expect((await impossible.json()).error).toContain('Nie ma kategorii wydatków');
       expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
 
-      const applied = await post(base, { toolCallId: 'm1:ok', decision: 'apply' });
+      const applied = await post(base, { toolCallId: OK, decision: 'apply' });
       expect(applied.status).toBe(200);
       const outcome = await applied.json();
       expect(outcome).toMatchObject({ decision: 'applied', into: 'Stałe opłaty', created: true, moved: preview.moved });
@@ -125,18 +136,18 @@ describe('the answer on the card', () => {
       expect(after.entries.filter(e => e.label?.category === after.categories.find(c => c.name === 'Stałe opłaty')!.id)).toHaveLength(preview.moved);
       expect(after.entries.some(e => e.label?.tags.includes('subskrypcje') || e.label?.tags.includes('rachunki'))).toBe(true);
       // The same answer again (a double click) answers the same and does nothing twice.
-      expect(await (await post(base, { toolCallId: 'm1:ok', decision: 'apply' })).json()).toEqual(outcome);
+      expect(await (await post(base, { toolCallId: OK, decision: 'apply' })).json()).toEqual(outcome);
       const view = await (await fetch(`${base}/api/chats/${CHAT}/cockpit`)).json();
-      expect(view.bankPlans['m1:ok']).toMatchObject({ decision: 'applied' });
+      expect(view.bankPlans[OK]).toMatchObject({ decision: 'applied' });
     });
   });
 
   it('a rejection changes nothing and is kept', async () => {
     await withServer(async (base, sources) => {
       const before = (await sources.bankLedger()).categories.map(c => c.name);
-      expect(await (await post(base, { toolCallId: 'm1:ok', decision: 'reject' })).json()).toMatchObject({ decision: 'rejected' });
+      expect(await (await post(base, { toolCallId: OK, decision: 'reject' })).json()).toMatchObject({ decision: 'rejected' });
       expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
-      expect((await (await post(base, { toolCallId: 'm1:ok', decision: 'apply' })).json())).toMatchObject({ decision: 'rejected' });
+      expect((await (await post(base, { toolCallId: OK, decision: 'apply' })).json())).toMatchObject({ decision: 'rejected' });
     });
   });
 });
