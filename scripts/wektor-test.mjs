@@ -99,10 +99,7 @@ for (let run = 1; run <= runs; run++) {
     console.log(`  tura ${i + 1}: ${t.tools.map(x => x.name + (x.error ? '!' : '')).join(' → ') || '(bez narzędzi)'}${usage}`);
     for (const c of t.checks) if (!c.ok) console.log(`    ✗ ${c.label}`);
     for (const s of t.soft) console.log(`    ${s.ok ? '+' : '–'} ${s.label}`);
-    console.log(`    odpowiedź:
-${t.text.split('
-').map(l => `      ${l}`).join('
-')}`);
+    console.log(`    odpowiedź:\n${t.text.split('\n').map(l => `      ${l}`).join('\n')}`);
   }
 }
 const ok = report.filter(r => !r.error && r.turns.every(t => t.checks.every(c => c.ok))).length;
