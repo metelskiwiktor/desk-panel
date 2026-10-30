@@ -1,5 +1,9 @@
 # Skill: @Zaimplementuj zadanie
 
+> What Wektor reads is the skill's prompt in `CHAT_SKILLS` (`src/chat-contract.ts`); he never opens this file. This file says
+> why each rule is there (the incidents, with dates), and keeps the templates and examples for people. A rule changes in the
+> code first; then add here why.
+
 You are the **dispatcher** in Desk Panel's chat. Your job is to perform a fast, concrete reconnaissance in the Desk Panel repository, formulate a self-contained task prompt for the **Cezar** executor, and propose it to the user.
 
 The skill operates via a **two-stage analytical workflow** to ensure complex architectural tasks are thoroughly investigated before code changes begin, while allowing straightforward tasks to proceed directly to implementation.
@@ -179,7 +183,7 @@ Notes for executor:
 > Chciałbym dodać obsługę wielu kont bankowych w kafelku Konto, z osobnymi tokenami DPAPI i filtrowaniem operacji.
 
 **Agent Action (Hermes)**:
-1. `panel_recon_report` with `server/bank.ts`, `server/bank-sources.ts`, `src/BankTile.tsx`, `kind: "UI"`.
+1. `panel_recon_report` with `server/bank.ts`, `server/real-sources.ts`, `src/BankTile.tsx`, `kind: "UI"`.
 2. Short Polish plan:
    - Analiza obecnej struktury przechowywania sesji Enable Banking w DPAPI.
    - Ocena wpływu migracji schematu na kafelki i agenta czatu.
@@ -189,7 +193,7 @@ Notes for executor:
    {
      "title": "Analiza: obsługa wielu kont bankowych w kafelku Konto",
      "workflow": "analysis",
-     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nUser asks (each thing the user asked for, in their words):\n- \"wiele kont bankowych w kafelku Konto\" → criteria 1-4\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
+     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nUser asks (each thing the user asked for, in their words):\n- \"wiele kont bankowych w kafelku Konto\" → criteria 1-4\nRelevant files (from recon):\n- server/bank.ts\n- server/real-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
    }
    ```
 
@@ -214,7 +218,7 @@ Notes for executor:
    {
      "title": "Wdrożenie: obsługa wielu kont bankowych",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nUser asks (each thing the user asked for, in their words):\n- \"przełączanie kont\" → criterion 3\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nUser asks (each thing the user asked for, in their words):\n- \"przełączanie kont\" → criterion 3\nRelevant files (from recon):\n- server/bank.ts\n- server/real-sources.ts\n- src/BankTile.tsx\n- src/bank.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```
 
@@ -224,13 +228,13 @@ Notes for executor:
 > Zmień kolor badge'a w kalendarzu na szary gdy spotkanie minęło.
 
 **Agent Action (Hermes)**:
-1. Recon: minor single-file UI change in `src/CalendarTile.tsx`.
-2. `panel_recon_report` with `src/CalendarTile.tsx`, `kind: "UI"`, `scenario: "standard"`.
+1. Recon: minor single-file UI change in `src/DaysZone.tsx`.
+2. `panel_recon_report` with `src/DaysZone.tsx`, `kind: "UI"`, `scenario: "standard"`.
 3. `panel_cezar_propose`:
    ```json
    {
      "title": "Szary badge minionych spotkań w kalendarzu",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nUser asks (each thing the user asked for, in their words):\n- \"szary badge gdy spotkanie minęło\" → criterion 1\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nUser asks (each thing the user asked for, in their words):\n- \"szary badge gdy spotkanie minęło\" → criterion 1\nRelevant files (from recon):\n- src/DaysZone.tsx\n- src/calendar.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```

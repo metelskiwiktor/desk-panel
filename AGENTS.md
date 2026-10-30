@@ -16,7 +16,7 @@ below names for the area you touch.
 | Tests and verification | docs/testowanie.md, `just check` | agents |
 | How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities | Claude Code sessions |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
-| `@Zaimplementuj zadanie` | `CHAT_SKILLS` in src/chat-contract.ts is the source; docs/agent-workflows/skills/zaimplementuj-zadanie.md is an older copy that has drifted, do not edit it as the source | Wektor |
+| `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
 | The user's personal preferences (how he likes to work) | Claude Code memory, outside the repo; never project facts | Claude Code sessions |
 
 Adding something: put it where the map says. A rule every change must keep goes here as one line with a link to its
