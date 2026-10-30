@@ -85,7 +85,7 @@ describe('preview state directory', () => {
     expect(setupStart).toBeGreaterThan(0); expect(setupEnd).toBeGreaterThan(setupStart);
     // Replace only external checkout/install and the worker entrypoint; preserve the controller's real catch/recovery.
     let fixtureSource = original.slice(0, setupStart) + "    mkdirSync(checkout);\n    const env = { ...process.env }; const sha = 'b'.repeat(40);\n" + original.slice(setupEnd);
-    const workerArgs = "['--import', 'tsx', '.desk-preview-worker.ts', marker]";
+    const workerArgs = "['--import', 'tsx', 'scripts/.desk-preview-worker.ts', marker]";
     expect(fixtureSource).toContain(workerArgs);
     fixtureSource = fixtureSource.replace(workerArgs, "['-e', 'setInterval(() => {}, 1000)', marker]");
     const controller = join(fixture, 'preview.mjs');

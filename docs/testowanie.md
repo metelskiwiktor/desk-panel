@@ -159,6 +159,12 @@ Frontend i moduły API pochodzą z pobranego commitu; API używa syntetycznego p
 scenariuszowych akcji w pamięci i lokalnej makiety Hermes. Linki symulowanych zleceń Cezara
 kierują do lokalnej atrapy, a nie do prawdziwego Cezara. Czat i kokpit zapisują do katalogów
 tymczasowych. Porty API, makiety i Vite są przydzielane przez system i dostępne tylko na loopback.
+Vite dostaje jawny port sprawdzony przez `listen(0)` (nigdy 5174) i `strictPort: true`.
+Między zwolnieniem portu a startem Vite inny proces może go zająć; wtedy start kończy się
+błędem zamiast wybierać kolejne porty. Uruchom podgląd ponownie po `stop`.
+Worker jest kopiowany do `scripts/` checkoutu PR-a, więc importy `../server/...` wskazują
+te same moduły podczas analizy statycznej i działania. Test workera tworzy fixture z bieżących
+plików roboczych (także niezacommitowanych i nieignorowanych nowych), a nie z HEAD.
 To osobne procesy, bez restartowania usługi i bez odczytu jej konfiguracji. Scenariusz i interfejsy
 serwera wybranego PR muszą być zgodne z kontrolerem; niezgodność jest zgłaszana w logu.
 

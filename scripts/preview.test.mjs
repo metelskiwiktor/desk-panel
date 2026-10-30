@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync, spawn } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const root = process.cwd(), dir = mkdtempSync(join(tmpdir(), 'desk-preview-test-'));
 const checkout = join(dir, 'checkout'), alias = join(dir, 'RUNNER~1'), stateFile = join(dir, 'state.json'), token = 'a'.repeat(64);
@@ -12,22 +12,36 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
 
 describe('isolated preview worker', () => {
   beforeAll(async () => {
-    execFileSync('git', ['clone', '--no-hardlinks', '--no-checkout', '--', root, checkout], { stdio: 'ignore' });
-    execFileSync('git', ['checkout', '--detach', 'HEAD'], { cwd: checkout, stdio: 'ignore' });
+    // Snapshot current files, including dirty and untracked sources, but no ignored
+    // dependencies, credentials or build output. Deleted tracked files stay deleted.
+    mkdirSync(checkout);
+    const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
+    for (const file of new Set(files)) {
+      if (!existsSync(join(root, file))) continue;
+      mkdirSync(dirname(join(checkout, file)), { recursive: true });
+      copyFileSync(join(root, file), join(checkout, file));
+    }
+    execFileSync('git', ['init', '--quiet'], { cwd: checkout });
+    // Observe the resolved configuration, not just whichever default port is free.
+    const config = join(checkout, 'vite.config.ts');
+    const observePort = `plugins: [{ name: 'preview-port-observer', configResolved(config) {
+      writePreviewPort(${JSON.stringify(join(dir, "vite-port.json"))}, JSON.stringify({ port: config.server.port, strictPort: config.server.strictPort }));
+    } }, `;
+    writeFileSync(config, "import { writeFileSync as writePreviewPort } from 'node:fs';\n" + readFileSync(config, 'utf8').replace('plugins: [', observePort));
     // A synthetic head differs from the checkout running the controller, on both sides of the API.
     const app = join(checkout, 'server', 'app.ts');
     writeFileSync(app, readFileSync(app, 'utf8').replace("res.setHeader('X-Content-Type-Options', 'nosniff');", "res.setHeader('X-Preview-Backend', 'selected-code'); res.setHeader('X-Content-Type-Options', 'nosniff');"));
     const index = join(checkout, 'index.html');
     writeFileSync(index, readFileSync(index, 'utf8').replace('</head>', '<meta name="selected-frontend" content="yes"></head>'));
-    execFileSync('git', ['add', 'server/app.ts', 'index.html'], { cwd: checkout });
+    execFileSync('git', ['add', '.'], { cwd: checkout });
     execFileSync('git', ['-c', 'user.name=Preview Test', '-c', 'user.email=preview@example.invalid', '-c', 'core.hooksPath=', 'commit', '-m', 'synthetic preview head'], { cwd: checkout, stdio: 'ignore' });
     sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
     symlinkSync(join(root, 'node_modules'), join(checkout, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
-    copyFileSync(join(root, 'scripts', 'preview-worker.ts'), join(checkout, '.desk-preview-worker.ts'));
+    copyFileSync(join(root, 'scripts', 'preview-worker.ts'), join(checkout, 'scripts/.desk-preview-worker.ts'));
     copyFileSync(join(root, 'scripts', 'preview-scenario.json'), join(dir, 'scenario.json'));
     // Reproduce Windows runner's short-name spelling even on machines without 8.3 names.
     symlinkSync(checkout, alias, process.platform === 'win32' ? 'junction' : 'dir');
-    child = spawn(process.execPath, [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), '.desk-preview-worker.ts'], {
+    child = spawn(process.execPath, [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'scripts/.desk-preview-worker.ts'], {
       cwd: alias, env: { ...process.env, HOME: dir, USERPROFILE: dir, TEMP: dir, TMP: dir, TMPDIR: dir, PREVIEW_PR: '123', PREVIEW_SHA: sha, PREVIEW_STATE: stateFile, PREVIEW_TOKEN: token }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', c => output += c); child.stderr.on('data', c => output += c);
@@ -39,6 +53,13 @@ describe('isolated preview worker', () => {
     if (child && child.exitCode === null) await Promise.race([new Promise(r => child.once('exit', r)), pause(5000)]);
     if (child && child.exitCode === null) child.kill();
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  });
+  it('uses an explicit OS port with no fallback to the service port', () => {
+    const configured = JSON.parse(readFileSync(join(dir, 'vite-port.json'), 'utf8'));
+    expect(configured.strictPort).toBe(true);
+    expect(configured.port).toBeGreaterThan(0);
+    expect(configured.port).not.toBe(5174);
+    expect(Number(new URL(state.url).port)).toBe(configured.port);
   });
   it('serves selected frontend and backend and shows exact identity', async () => {
     const responsePage = await fetch(state.url);

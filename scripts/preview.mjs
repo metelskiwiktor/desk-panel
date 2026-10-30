@@ -107,14 +107,14 @@ if (action === 'status') {
     const npm = process.platform === 'win32' ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm.cmd ci --ignore-scripts --no-audit --no-fund'], { cwd: checkout, env, stdio: 'inherit' }) : spawnSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: checkout, env, stdio: 'inherit' });
     if (npm.status !== 0) throw new Error('Dependency installation failed; see output above.');
     copyFileSync(fileURLToPath(new URL('./preview-scenario.json', import.meta.url)), join(dir, 'scenario.json'));
-    copyFileSync(fileURLToPath(new URL('./preview-worker.ts', import.meta.url)), join(checkout, '.desk-preview-worker.ts'));
+    copyFileSync(fileURLToPath(new URL('./preview-worker.ts', import.meta.url)), join(checkout, 'scripts/.desk-preview-worker.ts'));
     const token = randomBytes(32).toString('hex');
     Object.assign(env, { PREVIEW_PR: number, PREVIEW_SHA: sha, PREVIEW_STATE: stateFile, PREVIEW_TOKEN: token });
     const log = openSync(join(dir, 'preview.log'), 'a');
     const marker = randomBytes(32).toString('hex');
     // A pending record prevents concurrent cleanup during the process spawn.
     writeFileSync(launchFile, JSON.stringify({ marker, pending: true }));
-    const child = spawn(process.execPath, ['--import', 'tsx', '.desk-preview-worker.ts', marker], { cwd: checkout, env, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+    const child = spawn(process.execPath, ['--import', 'tsx', 'scripts/.desk-preview-worker.ts', marker], { cwd: checkout, env, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
     if (!child.pid) throw new Error('Could not launch preview worker.');
     const launch = { pid: child.pid, marker };
     spawned = launch;
