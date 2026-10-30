@@ -18,7 +18,7 @@ import { bankAssignSchema } from '../src/bank-assign-contract';
 import { assignPreview } from './bank-assign';
 import { AgentViewError, DEFAULT_ZONE, type AgentView } from './agent-views';
 import { cezarTaskView } from './cockpit';
-import { SourceError, type PanelSources } from './sources';
+import { SourceError, sourceFailure, type PanelSources } from './sources';
 import { TodoError } from './todos';
 import { appointmentQuerySchema, calendarProposalSchema } from '../src/appointment-contract';
 import { AppointmentError } from './znanylekarz';
@@ -571,7 +571,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       } catch (error) {
         const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError ? error.message
           : error instanceof z.ZodError ? `Niepoprawne argumenty: ${error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}`
-          : error instanceof SourceError ? `Nie udało się pobrać danych źródła (${error.status}).` : 'Nie udało się wykonać narzędzia.';
+          : error instanceof SourceError ? sourceFailure(error) : 'Nie udało się wykonać narzędzia.';
         return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: reason }] } };
       }
     }

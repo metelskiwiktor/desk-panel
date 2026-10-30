@@ -13,7 +13,7 @@ import { createAppointments } from './appointments';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
-import { createMailReader } from './gmail';
+import { createMailReader, mailFailure } from './gmail';
 import { createSmartRuleStore } from './smart-rules';
 import { createSystemReader } from './system';
 import { createTodoStore } from './todos';
@@ -23,6 +23,17 @@ import { createWarmupClient } from './warmup';
 import { createGitHubClient } from './github';
 import { createOpenRouterClient } from './openrouter';
 import { SourceError, type PanelSources } from './sources';
+
+/**
+ * A failed read of Gmail for Wektor's tools: the cause goes to the service log (servy/logs/Desk-Panel/stderr.log, with the
+ * time; never the error itself, which may carry credentials), and the status says what it was (429 Gmail limits requests,
+ * 401 sign-in, 502 anything else), so the tool can tell him what to do instead of a bare 502.
+ */
+function mailError(what: string, error: unknown): SourceError {
+  const failure = mailFailure(error);
+  console.error(`${new Date().toISOString()} gmail ${what}: ${failure.kind} (${failure.detail})`);
+  return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
+}
 
 export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
   const { calendarId, env } = options;
@@ -128,11 +139,14 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     },
     async mailSearch(q, limit) {
       try { return await mail.search(q, limit); }
-      catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : 502); }
+      catch (error) { throw mailError('wyszukiwanie', error); }
     },
     async mailThread(account, threadId) {
       try { return await mail.thread(account, threadId); }
-      catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : error instanceof Error && error.message === 'Unknown conversation' ? 404 : 502); }
+      catch (error) {
+        if (error instanceof Error && error.message === 'Unknown conversation') throw new SourceError(404);
+        throw mailError('odczyt maila', error);
+      }
     },
     smartRules,
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),

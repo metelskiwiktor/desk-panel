@@ -190,7 +190,9 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         res.end(JSON.stringify(await previewPlan(sources, plan)));
       } catch (error) {
         const status = error instanceof SmartRuleError || error instanceof SourceError ? error.status : 502;
-        res.writeHead(status).end(JSON.stringify({ error: error instanceof SmartRuleError ? error.message : 'Nie udało się odczytać poczty ani reguł.' }));
+        res.writeHead(status).end(JSON.stringify({ error: error instanceof SmartRuleError ? error.message
+          : error instanceof SourceError && error.status === 429 ? 'Gmail chwilowo ogranicza liczbę zapytań. Odśwież kartę za pół minuty.'
+          : 'Nie udało się odczytać poczty ani reguł.' }));
       }
       return;
     }

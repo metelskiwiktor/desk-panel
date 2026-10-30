@@ -50,6 +50,12 @@ Drugi filtr może nadal zwrócić prywatne i długie dane. Zawęź go do konkret
 
 ## Na co patrzeć
 
+- **Narzędzie poczty lub Smart Actions zwraca błąd źródła.** Panel zapisuje przyczynę każdego nieudanego odczytu Gmaila
+  (`<czas ISO> gmail wyszukiwanie: rate|auth|other (HTTP 429 rateLimitExceeded)`) w `servy/logs/Desk-Panel/stderr.log`,
+  bez samego błędu (może nieść dane logowania). Porównaj czas z `t` narzędzia w `chat-logs/<id>.jsonl`. `rate` to limit
+  zapytań Google (panel ponawia po 2 i 5 s, Wektor dostaje polecenie, by odczekać ok. 30 s), `auth` to logowanie do
+  połączenia w Ustawieniach. Wcześniej (do 30.10.2026) Wektor dostawał samo „(502)”, ponawiał w pętli i czekał `sleep`.
+
 - **„Przejdź do podsumowania” nic nie robi.** W szerokim oknie obie kolumny są już widoczne, więc samo `setPane('chat')`
   nie daje efektu. Przycisk ma wywołać `review()` właściwej karty: odsłonić czat, przewinąć do jej akcji i ustawić fokus.
   Przed wyborem celem jest „Wybieram…”, po wyborze link rezerwacji. Sprawdzaj fokus i położenie celu, a nie tylko zmianę

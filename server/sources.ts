@@ -73,7 +73,15 @@ export interface PanelSources {
 
 /** A source failure answered with this HTTP status instead of a body. */
 export class SourceError extends Error {
-  constructor(readonly status: number) { super(`source failed with ${status}`); }
+  /** `detail`: what failed, safe to show and log (no credentials), e.g. `HTTP 429 rateLimitExceeded`. */
+  constructor(readonly status: number, readonly detail?: string) { super(`source failed with ${status}`); }
+}
+/** What Wektor reads when a source failed: the cause and what to do, not a bare status. */
+export function sourceFailure(error: SourceError): string {
+  if (error.status === 429) return `Gmail chwilowo ogranicza liczbę zapytań (${error.detail ?? 'HTTP 429'}). Panel już ponowił zapytanie po 2 i 5 s. Odczekaj ok. 30 s i wywołaj narzędzie raz; nie ponawiaj w pętli i nie zmieniaj przez to argumentów.`;
+  if (error.status === 401) return `Panel nie ma dostępu do Gmaila (${error.detail ?? 'logowanie'}): użytkownik musi połączyć konto ponownie w Ustawieniach. Nie ponawiaj.`;
+  if (error.status === 404) return 'Nie ma takiego maila: sprawdź id (konto:wątek) w wyniku panel_mail_search.';
+  return `Nie udało się pobrać danych źródła (${error.status}${error.detail ? `, ${error.detail}` : ''}).`;
 }
 
 /** GET endpoints answered with JSON; shared by the HTTP server and UI tests. */

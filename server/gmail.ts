@@ -110,8 +110,23 @@ export function projectThread(email: string, raw: unknown): MailThread {
     sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox/${thread.id}` };
 }
 
+const RETRY_MS = [2_000, 5_000];
+/**
+ * What went wrong with a Gmail request, without the error itself (an auth error may carry credentials): `rate` when Gmail
+ * limits the user's requests, `auth` when the sign-in is missing or refused, `other` otherwise. `detail` is safe to log.
+ */
+export function mailFailure(error: unknown): { kind: 'rate' | 'auth' | 'other'; detail: string } {
+  if (error instanceof GoogleAuthError) return { kind: 'auth', detail: `auth ${error.reason}` };
+  const failure = error as { response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } } };
+  const status = failure.response?.status;
+  const reasons = (failure.response?.data?.error?.errors ?? []).map(e => e.reason).filter((r): r is string => !!r);
+  const rate = status === 429 || reasons.some(r => /rateLimitExceeded|userRateLimitExceeded|quotaExceeded/.test(r));
+  const detail = status ? `HTTP ${status}${reasons.length ? ` ${reasons.join(',')}` : ''}` : error instanceof Error ? `${error.name}: ${error.message.slice(0, 120)}` : 'nieznany błąd';
+  return { kind: rate ? 'rate' : status === 401 || status === 403 && reasons.some(r => /auth|insufficientPermissions/i.test(r)) ? 'auth' : 'other', detail };
+}
+
 /** Unread inbox conversations of every account, merged newest first. Never sends or permanently deletes messages. */
-export function createMailReader(accounts: Account[], now = Date.now) {
+export function createMailReader(accounts: Account[], now = Date.now, wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))) {
   const states = new Map<string, AccountState>(accounts.map(a => [a.email, { status: 'loading', observedAt: null, threads: [], partial: false, cache: new Map(), retryAt: 0, rateLimitFailures: 0 }]));
   let lastAttempt = -Infinity;
   let pending: Promise<void> | undefined;
@@ -173,18 +188,19 @@ export function createMailReader(accounts: Account[], now = Date.now) {
    */
   const running = new Map<string, Promise<MailThread[]>>();
   let queue: Promise<unknown> = Promise.resolve();
-  const limited = (error: unknown) => {
-    const failure = error as { response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } } };
-    return failure.response?.status === 429 || !!failure.response?.data?.error?.errors?.some(e => /rateLimitExceeded|userRateLimitExceeded/.test(e.reason ?? ''));
-  };
-  /** A request Gmail refused for its rate is tried once more after a second. */
+  /**
+   * A request Gmail refused for its rate is tried again after 2 s and 5 s: one second was too short right after a few
+   * searches, and three tests in a row failed while a minute later the same ones passed (30.10.2026).
+   */
   async function get(account: Account, url: string, params: Record<string, string>): Promise<unknown> {
-    try { return await account.request('mail', url, { params }); }
-    catch (error) {
-      if (!limited(error)) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1_000));
-      return account.request('mail', url, { params });
+    for (const delay of [...RETRY_MS, null]) {
+      try { return await account.request('mail', url, { params }); }
+      catch (error) {
+        if (delay === null || mailFailure(error).kind !== 'rate') throw error;
+        await wait(delay);
+      }
     }
+    throw new Error('unreachable');
   }
   async function full(account: Account, id: string, historyId?: string): Promise<MailThread> {
     const key = `${account.email}:${id}`, known = found.get(key);
@@ -197,7 +213,8 @@ export function createMailReader(accounts: Account[], now = Date.now) {
   }
   return {
     /**
-     * Conversations of the whole mailbox (read or not) matching a Gmail query, newest first, at most `limit` per account.
+     * Conversations of the whole mailbox (read or not) matching a Gmail query, newest first, at most `limit` of all the
+     * accounts together (each account was given `limit`, so two accounts doubled what Wektor read and a test ran on).
      * Read-only: Wektor uses it to see what a Smart Actions rule would catch. Answers are kept for two minutes.
      */
     async search(q: string, limit: number): Promise<MailThread[]> {
@@ -213,6 +230,7 @@ export function createMailReader(accounts: Account[], now = Date.now) {
           for (let i = 0; i < listed.length; i += 5) threads.push(...await Promise.all(listed.slice(i, i + 5).map(t => full(account, t.id, t.historyId))));
         }
         threads.sort((a, b) => b.receivedAt - a.receivedAt);
+        threads.splice(limit);
         if (searches.size > 50) searches.clear();
         searches.set(key, { at: now(), threads });
         return threads;
