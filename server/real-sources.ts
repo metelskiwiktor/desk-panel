@@ -123,8 +123,11 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
         cache = undefined;
         fetchedAt = 0;
         return created;
-      } catch {
-        throw new SourceError(502);
+      } catch (error) {
+        // Cezar's own answer (e.g. a runner it refuses) is what the user needs to see on the card and in the log.
+        const detail = error instanceof Error ? error.message.slice(0, 300) : String(error);
+        console.warn(`cezar: zlecenie nie powiodło się: ${detail}`);
+        throw new SourceError(502, detail);
       }
     },
     async cezarDefaults(workflow, selectedRunner) {

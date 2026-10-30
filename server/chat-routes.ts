@@ -203,7 +203,9 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     res.writeHead(405).end();
   } catch (error) {
     const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : 500;
-    const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
+    const msg = error instanceof SourceError && error.detail
+      ? error.detail
+      : error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
       ? error.message
       : undefined;
     if (res.headersSent) res.end();
