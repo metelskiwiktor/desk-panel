@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Runs a conversation case against the live panel's Wektor (Hermes) and checks what it did: which tools it called, what
 // it said, how many calls it took. Reads only what the case's tools read; a case must never make Wektor write.
-//   node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174]
-// A case is scripts/wektor-cases/<case>.json: { description, turns: [{ say, expect: { calls, notCalls, order: [[a, b]] (a is called before b), text, textNot, maxTools, maxSeconds }, soft: [{ name, text }] }] }.
+//   node scripts/wektor-test.mjs <case> [--runs N] [--delete] [--base http://127.0.0.1:5174] [--chat <id>]
+// --chat sends the turns into a kept conversation (one run): a follow-up the user asked for in a chat that already has a card.
+// A case is scripts/wektor-cases/<case>.json: { description, turns: [{ say, context: [{ kind, id, title, text }] (dashboard elements the user points at, as the panel sends them), expect: { calls, notCalls, order: [[a, b]] (a is called before b), text, textNot, maxTools, maxSeconds }, soft: [{ name, text }] }] }.
 // `expect` fails the run, `soft` is only reported (judgement we watch, not yet a rule). The chats stay (titled "[test] <case> #<run>"):
 // the user reads them; `--delete` removes them.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -12,12 +13,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const name = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--runs' && args[args.indexOf(a) - 1] !== '--base');
+const name = args.find(a => !a.startsWith('--') && !['--runs', '--base', '--chat'].includes(args[args.indexOf(a) - 1]));
 const flag = (f, fallback) => { const i = args.indexOf(f); return i < 0 ? fallback : args[i + 1]; };
 if (!name) { console.error('Użycie: node scripts/wektor-test.mjs <przypadek> [--runs N] [--delete] [--base URL]'); process.exit(2); }
-const runs = Number(flag('--runs', 1));
+const runs = args.includes('--chat') ? 1 : Number(flag('--runs', 1));
 const base = new URL(flag('--base', 'http://127.0.0.1:5174'));
 const del = args.includes('--delete');
+const kept = flag('--chat', null);
 const kase = JSON.parse(readFileSync(join(root, 'scripts', 'wektor-cases', `${name}.json`), 'utf8'));
 
 const call = (method, path, body) => new Promise((resolve, reject) => {
@@ -75,30 +77,32 @@ for (let run = 1; run <= runs; run++) {
   const result = { run, turns: [], id: null };
   report.push(result);
   try {
-    let id = null;
+    let id = kept;
+    result.id = kept;
+    const before = kept ? ((await call('GET', `/api/chats/${kept}`)).body?.items ?? []).filter(m => m.role === 'agent').length : 0;
     for (const [i, turn] of kase.turns.entries()) {
       const started = Date.now();
       if (!id) {
-        const created = await call('POST', '/api/chats', { text: turn.say, engine: 'hermes' });
+        const created = await call('POST', '/api/chats', { text: turn.say, engine: 'hermes', ...(turn.context ? { context: turn.context } : {}) });
         if (created.status !== 201) throw new Error(`POST /api/chats: ${created.status} ${JSON.stringify(created.body).slice(0, 200)}`);
         id = created.body.id;
         result.id = id;
       } else {
-        const sent = await call('POST', `/api/chats/${id}/messages`, { text: turn.say });
+        const sent = await call('POST', `/api/chats/${id}/messages`, { text: turn.say, ...(turn.context ? { context: turn.context } : {}) });
         if (sent.status !== 202) throw new Error(`POST messages: ${sent.status}`);
       }
-      const message = await waitAnswer(id, i + 1);
+      const message = await waitAnswer(id, before + i + 1);
       result.turns.push(judge(turn, message, (Date.now() - started) / 1000));
     }
   } catch (error) { result.error = error instanceof Error ? error.message : String(error); }
   if (result.id && del) await call('DELETE', `/api/chats/${result.id}`).catch(() => {});
-  else if (result.id) await call('PATCH', `/api/chats/${result.id}`, { title: `[test] ${name} #${run} ${new Date().toISOString().slice(0, 16).replace('T', ' ')}` }).catch(() => {});
+  else if (result.id && !kept) await call('PATCH', `/api/chats/${result.id}`, { title: `[test] ${name} #${run} ${new Date().toISOString().slice(0, 16).replace('T', ' ')}` }).catch(() => {});
   const failed = result.error || result.turns.some(t => t.checks.some(c => !c.ok));
   console.log(`\n── przebieg ${run}/${runs}: ${failed ? 'NIEZALICZONY' : 'zaliczony'}${result.error ? ` (${result.error})` : ''}`);
   for (const [i, t] of result.turns.entries()) {
     const usage = t.usage ? `  [${t.usage.calls} wywołań modelu, ${t.usage.input + (t.usage.cached ?? 0)} tok. wejścia, ${t.usage.output} wyjścia, ${t.seconds} s]` : `  [${t.seconds} s]`;
     console.log(`  tura ${i + 1}: ${t.tools.map(x => x.name + (x.error ? '!' : '')).join(' → ') || '(bez narzędzi)'}${usage}`);
-    for (const x of t.tools) if (x.name === 'panel_bank_propose' || x.name === 'panel_bank_assign') console.log(`    karta zgody: ${x.input}${x.error ? ' (błąd)' : ''}`);
+    for (const x of t.tools) if (x.name === 'panel_bank_propose' || x.name === 'panel_bank_assign' || x.name === 'panel_smart_rule_propose') console.log(`    karta zgody: ${x.input}${x.error ? ' (błąd)' : ''}`);
     for (const c of t.checks) if (!c.ok) console.log(`    ✗ ${c.label}`);
     for (const s of t.soft) console.log(`    ${s.ok ? '+' : '–'} ${s.label}`);
     console.log(`    odpowiedź:\n${t.text.split('\n').map(l => `      ${l}`).join('\n')}`);

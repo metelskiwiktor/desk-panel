@@ -1,0 +1,19 @@
+{
+  "description": "Dalszy ciąg rozmowy z kartą nowej reguły (uruchamiany z --chat): użytkownik chce, żeby reguła łapała też inne maile tego nadawcy, które test pominął. Wektor zmienia tę samą regułę (to samo id), testuje ją na mailach nadawcy, sprawdza, czy nowe maile mają link do przycisku, i pokazuje nową kartę. Nie mówi, że zapisał.",
+  "turns": [
+    {
+      "say": "Tak, też je łap: przypomnienia o terminie płatności i wezwania do zapłaty też mają dawać alert z przyciskiem do zapłaty.",
+      "expect": {
+        "calls": ["panel_smart_rule_test", "panel_smart_rule_propose"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action"],
+        "textNot": ["zapisałem", "zmieniłem", "dodałem"],
+        "maxTools": 14,
+        "maxSeconds": 180
+      },
+      "soft": [
+        { "name": "mówi, czy nowe maile mają przycisk", "text": "bez przycisku|link|przycisk" },
+        { "name": "ta sama reguła", "text": "inea-rachunek|tę samą|tę reguł" }
+      ]
+    }
+  ]
+}
