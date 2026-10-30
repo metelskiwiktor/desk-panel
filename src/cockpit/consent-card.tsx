@@ -28,9 +28,17 @@ interface ShellProps {
   onReject: () => void;
   sending: boolean;
   error: string;
+  /** The apply button's label (default „Wykonaj”). */
+  applyLabel?: string;
+  /** The decision buttons sit at the end of the card (a consent card that reads like a form). */
+  actionsAlign?: 'start' | 'end';
+  /** „Odrzuć” comes before the apply button (the automation card's form order). */
+  rejectFirst?: boolean;
 }
 
 export function ConsentShell(p: ShellProps) {
+  const apply = <button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg tw:hover:bg-[#9bbcff]`} disabled={!p.canApply || p.sending} onClick={p.onApply}><Check size={15} aria-hidden="true" />{p.applyLabel ?? 'Wykonaj'}</button>;
+  const reject = <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={!p.canReject || p.sending} onClick={p.onReject}><X size={15} aria-hidden="true" />Odrzuć</button>;
   return <section className={`${card} ${p.outcome ? '' : 'tw:border-ck-cal/60 tw:shadow-[0_0_0_1px_rgba(124,169,255,0.25)]'}`} aria-label={p.label}>
     <div className={head}>
       <Merge size={16} className="tw:text-ck-cal" aria-hidden="true" />
@@ -41,9 +49,8 @@ export function ConsentShell(p: ShellProps) {
       {p.notices}
       {p.body}
       {p.footnote}
-      {!p.outcome && <div className="tw:flex tw:flex-wrap tw:gap-2">
-        <button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg tw:hover:bg-[#9bbcff]`} disabled={!p.canApply || p.sending} onClick={p.onApply}><Check size={15} aria-hidden="true" />Wykonaj</button>
-        <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={!p.canReject || p.sending} onClick={p.onReject}><X size={15} aria-hidden="true" />Odrzuć</button>
+      {!p.outcome && <div className={`tw:flex tw:flex-wrap tw:gap-2 ${p.actionsAlign === 'end' ? 'tw:justify-end' : ''}`}>
+        {p.rejectFirst ? <>{reject}{apply}</> : <>{apply}{reject}</>}
       </div>}
       {p.sending && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zapisuję decyzję…</p>}
       {p.error && <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4]" role="alert">{p.error}</p>}

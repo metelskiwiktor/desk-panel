@@ -98,6 +98,12 @@ W próbach takie wywołania trwały 53–68 s. Panel ogranicza to tak, że **dan
 MCP `panel_*` (bez zgody, krótka odpowiedź tekstowa, bez surowego JSON-a), a instrukcja każe nie używać do tego `curl`. Zgody
 zostają dla tego, co faktycznie ich wymaga.
 
+### Tożsamość tury przy raporcie automatu
+
+Raport automatu używa jednorazowego żetonu z treści tury i okna wyznaczonego przez trwający przebieg Hermesa.
+Panel zapisuje jego tożsamość i wykonuje runy automatów kolejno; źródła Hermesa pozostają bez zmian.
+Szczegóły: [automaty.md](automaty.md#żeton-i-okno-raportu).
+
 ### Narzędzia panelu (MCP)
 
 `POST /api/mcp` (`server/panel-mcp.ts`): minimalny serwer MCP (Streamable HTTP, odpowiedzi JSON; `initialize`, `ping`,
@@ -126,7 +132,10 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
 | `panel_observe` | bez karty, akcje `create`/`list`/`cancel`: jednorazowy obserwator rozmowy — kind `cezar` (target `projekt/uuid`), `pr` (pełny URL PR) albo `time` (ISO 8601 lub „za 10 minut”, „jutro o 9”); instruction trafia dosłownie do jednej tury automatyki; rozmowę bierze z trwającej tury ([czat.md](czat.md)) |
-
+| `panel_automation_propose` | karta „Nowy automat”: `name`, `goal`, `trigger`, `doneWhen?`, `actions`, `learn`, `replaces?`; zapis dopiero po kliknięciu (`POST /api/chats/:id/automation`, plan z rozmowy) |
+| `panel_automations` | lista albo szczegóły automatu (`id`): harmonogram, stan, notatnik, ostatnie runy |
+| `panel_automation_update` | bez karty: `pause`/`resume`/`cancel`/`runNow`, `notebook?`, `name?` |
+| `panel_automation_report` | tylko w turze automatyki z tym `runId`: `outcome`, `summary`, `notebook?`; zapisuje run i kończy cel przy `done` |
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 

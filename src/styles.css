@@ -973,7 +973,7 @@ nav button.active:after {
   }
 }
 
-/* ── Top bar: time, date and one line of state, on every page ── */
+/* â”€â”€ Top bar: time, date and one line of state, on every page â”€â”€ */
 .top-bar { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px 16px; padding: 22px 0 16px; }
 .top-clock { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
 .top-clock time { font-size: clamp(40px, 7vw, 60px); font-weight: 300; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -1032,7 +1032,7 @@ nav button.active:after {
 .quota-value { text-align: right; font-size: 15px; color: var(--quota-pace-color); }
 .quota-sub { grid-column: 2 / 4; font-size: 11px; color: #8d9bb0; }
 
-/* ── Panel events float over the dashboard, tagged with their source ── */
+/* â”€â”€ Panel events float over the dashboard, tagged with their source â”€â”€ */
 .source-tag { flex: none; align-self: flex-start; padding: 3px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; }
 .source-event { background: #1c2b44; color: #a9c6f2; }
 .source-task { background: #3a2f1c; color: #f3d9ab; }
@@ -1066,8 +1066,8 @@ nav button.active:after {
 .warmup-history-row { border-bottom: 1px solid var(--line); padding: .7rem 0; min-width: 0; }
 .warmup-history-row summary { cursor: pointer; display: grid; grid-template-columns: 1rem minmax(0, 1fr); gap: .15rem 0; list-style: none; }
 .warmup-history-row summary::-webkit-details-marker { display: none; }
-.warmup-history-row summary::before { content: '▸'; color: var(--muted); grid-row: 1; }
-.warmup-history-row[open] summary::before { content: '▾'; }
+.warmup-history-row summary::before { content: 'â–¸'; color: var(--muted); grid-row: 1; }
+.warmup-history-row[open] summary::before { content: 'â–ľ'; }
 .warmup-history-row summary > * { grid-column: 2; }
 .warmup-history-row dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem .9rem; margin: .7rem 0 0 1rem; font-size: 13px; }
 .warmup-history-row dt { color: var(--muted); }
@@ -1075,7 +1075,7 @@ nav button.active:after {
 .warmup-history-row code { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 479px) { .warmup-history-row dl { grid-template-columns: minmax(0, 1fr); } .warmup-history-row dd { margin-bottom: .3rem; } }
 
-/* Podział zużycia AI */
+/* PodziaĹ‚ zuĹĽycia AI */
 .breakdown-card { display: grid; gap: 10px; }
 .breakdown-list { display: grid; gap: 12px; }
 .breakdown-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
@@ -1101,11 +1101,11 @@ nav button.active:after {
 .breakdown-axis div { display: flex; justify-content: space-between; }
 @media (max-width: 560px) { .breakdown-lane, .breakdown-axis { grid-template-columns: 90px minmax(0, 1fr); } }
 
-/* ── Breakdown: one line while the dashboard is busy, the full card when there is room ── */
+/* â”€â”€ Breakdown: one line while the dashboard is busy, the full card when there is room â”€â”€ */
 /* Touch works by swipe; these stay in the tree for keyboard and screen readers only. */
 .mail-action-hidden { position: absolute; width: 1px; height: 1px; min-height: 0; flex: none; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 
-/* ── Landscape desk screen: wide and short, so the home page fits it without page scroll ──
+/* â”€â”€ Landscape desk screen: wide and short, so the home page fits it without page scroll â”€â”€
    The frame (pulpit.css) divides the height; long lists scroll inside their cards. Not tied to a device. */
 @media (min-aspect-ratio: 4/3) and (max-height: 900px) and (min-width: 1000px) {
   :root { --gap: 14px; }
@@ -1116,8 +1116,8 @@ nav button.active:after {
   .app-shell.is-home main { flex: 1; overflow: hidden; }
 }
 
-/* ── Navigation is the dashboard itself: tap a panel. The old bar stays for keyboards and screen readers,
-   out of sight until something in it has focus; the top bar keeps Settings and the way back. ── */
+/* â”€â”€ Navigation is the dashboard itself: tap a panel. The old bar stays for keyboards and screen readers,
+   out of sight until something in it has focus; the top bar keeps Settings and the way back. â”€â”€ */
 nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; box-shadow: none; }
 .top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .top-button { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 999px; border: 1px solid #263246; background: #111824; color: #c9d3e1; }
@@ -1126,7 +1126,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 .card-link { position: absolute; inset: 0; width: 100%; padding: 0; border: 0; background: none; border-radius: 12px; cursor: pointer; }
 .card-link:hover:not(:disabled) { background: #ffffff08; }
 
-/* ── Smart Actions Tile ── */
+/* â”€â”€ Smart Actions Tile â”€â”€ */
 .smart-actions {
   display: flex;
   flex-direction: column;
@@ -1393,7 +1393,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   gap: 8px;
 }
 
-/* ── Smart Actions Settings & Dialog ── */
+/* â”€â”€ Smart Actions Settings & Dialog â”€â”€ */
 .sa-head-actions {
   display: inline-flex;
   align-items: center;
@@ -1533,7 +1533,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   margin-top: 12px;
 }
 
-/* — GitHub PR Tile — */
+/* â€” GitHub PR Tile â€” */
 .gh-pr-tile {
   display: flex;
   flex-direction: column;
@@ -1760,7 +1760,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   gap: 8px;
 }
 
-/* — OpenRouter Spend Tile — */
+/* â€” OpenRouter Spend Tile â€” */
 .or-tile {
   display: flex;
   flex-direction: column;
@@ -2009,3 +2009,71 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 }
 
 
+
+/* Automaty: lista, os runow, szczegoly */
+.automation-view { display: grid; gap: 16px; }
+.automation-card { padding: clamp(16px, 2.4cqi, 22px); }
+.automation-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.automation-side { display: grid; gap: 18px; min-width: 0; border-right: 1px solid var(--line); padding-right: 18px; }
+.automation-group h3 { margin: 0 0 6px; padding: 0 10px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.automation-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.automation-row { width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.automation-row:hover { background: #141d2b; }
+.automation-row.active { border-color: #2c3854; background: #1a2340; }
+.automation-row-main { display: grid; gap: 3px; min-width: 0; }
+.automation-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-row .meta { font-size: 12px; line-height: 1.4; }
+.automation-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); display: inline-block; }
+.automation-dot.ok { background: #4cc38a; }
+.automation-dot.warn, .automation-dot.skip { background: var(--amber); }
+.automation-dot.bad { background: #f85149; }
+.automation-dot.idle { background: #5b6680; }
+.automation-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.automation-dots { display: inline-flex; gap: 4px; }
+.automation-dots .automation-dot { width: 7px; height: 7px; }
+.automation-empty { display: grid; justify-items: center; gap: 10px; padding: 34px 16px; color: #a7b6cd; text-align: center; font-size: 14px; line-height: 1.7; }
+.automation-empty svg { color: #829abf; }
+.automation-detail { display: grid; gap: 16px; min-width: 0; }
+.automation-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.automation-head-main { min-width: 0; flex: 1 1 320px; }
+.automation-head h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.35px; }
+.automation-head p { margin: 0; font-size: 13px; line-height: 1.6; }
+.automation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.automation-actions .button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; height: 40px; padding: 0 14px; border-radius: 10px; background: transparent; border: 1px solid #405675; font-size: 13px; font-weight: 500; }
+.automation-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.automation-tabs button { background: #121a2e; border: 1px solid transparent; border-radius: 999px; color: #cfd6e6; padding: 8px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+.automation-tabs button:hover { background: #1a2340; }
+.automation-tabs button.active { background: var(--amber); border-color: var(--amber); color: #161a20; font-weight: 600; }
+.automation-tab { display: grid; gap: 12px; }
+.automation-runs-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+.automation-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.automation-runs > li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 14px; }
+.automation-axis-rail { display: flex; flex-direction: column; align-items: center; }
+.automation-axis-rail .automation-dot { width: 12px; height: 12px; margin-top: 4px; }
+.automation-axis-rail .automation-dot:not(.ok):not(.bad):not(.skip):not(.warn) { background: #3a4560; }
+.automation-axis-line { flex: 1; width: 2px; background: #24304a; }
+.automation-run-card { display: grid; gap: 8px; margin-bottom: 12px; padding: 14px 16px; border: 1px solid #2c3854; border-radius: 14px; background: #121a2e; }
+.automation-run-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.automation-run-when { font-variant-numeric: tabular-nums; font-weight: 600; }
+.automation-run-outcome { font-size: 13px; font-weight: 600; color: #93a0b8; }
+.automation-run-summary { margin: 0; font-size: 14px; line-height: 1.55; color: #d5dcea; }
+.automation-run-meta { margin: 0; font-size: 12px; color: #93a0b8; }
+.automation-axis-older { margin: 0; padding: 2px 0 14px; font-size: 14px; line-height: 1.55; color: #b9c3d6; }
+.automation-run-aside { display: grid; gap: 12px; }
+.automation-aside-card { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid #24304a; border-radius: 14px; background: #121a2e; }
+.automation-aside-card.wektor { border-color: #3b3470; background: #161f37; }
+.automation-aside-card h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: #b9c3d6; }
+.automation-aside-card.wektor h3 { color: #cfc8ff; }
+.automation-aside-card p { margin: 0; font-size: 13px; line-height: 1.55; color: #d5dcea; }
+.automation-aside-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; line-height: 1.55; color: #c3cbdb; }
+.automation-aside-card .link-button { padding-top: 2px; }
+.link-button { justify-self: start; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; padding: 0; color: var(--amber); cursor: pointer; font: inherit; font-size: 13px; }
+.automation-goal { margin: 0; white-space: pre-wrap; }
+.automation-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.automation-chip { border-radius: 999px; background: rgba(255,255,255,.08); padding: 2px 10px; font-size: 12px; }
+.automation-tab textarea { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: rgba(0,0,0,.2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+@media (max-width: 1100px) { .automation-runs-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) {
+  .automation-layout { grid-template-columns: minmax(0, 1fr); }
+  .automation-side { border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; padding-bottom: 18px; }
+}

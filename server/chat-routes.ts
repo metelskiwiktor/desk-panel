@@ -13,6 +13,9 @@ import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
 import { SmartRuleError } from './smart-rules';
+import { automationPlanSchema, automationDecisionSchema } from '../src/automation-contract';
+import type { Automations } from './automations';
+import { AutomationError } from './automations';
 
 /** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
 const MAX_BODY = 512 * 1024;
@@ -58,8 +61,8 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations): Promise<boolean> {
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|automation|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
@@ -183,6 +186,35 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       const plan = smartRulePlanOf(card.input);
       if (!plan) throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
       return json(res, 200, await cockpit.smartRule(id, input, plan)), true;
+    } else if (action === 'automation' && req.method === 'POST') {
+      // The user's answer on a „Nowy automat” card: the only way the chat creates an automation. Its plan comes from the
+      // conversation's own tool call, never from the request.
+      if (!automations || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(automationDecisionSchema, await readBody(req));
+      const conversation = await chat.get(id);
+      const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_automation_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+      if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      if (input.decision === 'reject') {
+        const outcome = { decision: 'rejected' as const, at: Date.now() };
+        return json(res, 200, cockpit ? await cockpit.automation(id, input, async () => outcome) : outcome), true;
+      }
+      if (cardRefusal('automation', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej utworzyć. Poproś Wektora o nową.');
+      let plan;
+      try { plan = automationPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
+      if (input.actions) {
+        const allowed = new Set(plan.actions.map(a => a.kind));
+        plan = { ...plan, actions: input.actions.filter(a => allowed.has(a.kind)) };
+        if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
+      }
+      // The card may only narrow the plan: turning „learn” off works, turning it on cannot.
+      if (input.learn === false && plan.learn) plan = { ...plan, learn: false };
+      const create = async () => {
+        const automation = await automations.createFromPlan(id, plan);
+        return { decision: 'created' as const, at: Date.now(), automationId: automation.id, name: automation.name };
+      };
+      return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;
@@ -202,7 +234,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     }
     res.writeHead(405).end();
   } catch (error) {
-    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError || error instanceof SmartRuleError || error instanceof AutomationError ? error.status : error instanceof SyntaxError ? 400 : 500;
     const msg = error instanceof SourceError && error.detail
       ? error.detail
       : error instanceof Error && error.message && !error.message.startsWith('chat failed with ')

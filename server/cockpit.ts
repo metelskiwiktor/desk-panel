@@ -8,6 +8,7 @@ import {
 } from '../src/cockpit-contract';
 import { stepOverridesSchema } from '../src/cezar-contract';
 import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
+import { type AutomationOutcome, automationOutcomeSchema } from '../src/automation-contract';
 import { BankPlanError, planPreview } from './bank-plan';
 import { assignMarks, assignPreview } from './bank-assign';
 import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
@@ -43,6 +44,8 @@ const storeSchema = z.object({
     bankPlans: z.record(z.string(), bankPlanOutcomeSchema).default({}),
     /** Automation turns already handled, by `taskId|state`: a restart never reports the same event twice. */
     automations: z.record(z.string(), z.number()).default({}),
+    /** The user's answers on „Nowy automat” cards, by tool call id: a reload shows the decision, a second click does nothing. */
+    automationCards: z.record(z.string(), automationOutcomeSchema).default({}),
     updatedAt: z.number().default(0),
   })),
 });
@@ -128,6 +131,8 @@ export interface Cockpit {
   bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign): Promise<BankAssignOutcome>;
   /** The user's answer on a Smart Actions rule card: the rule is saved (or removed) once, as worked out now. */
   smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
+  /** The user's answer on a „Nowy automat” card; `work` creates (or rejects) it. Answered twice: done once, kept for a reload. */
+  automation(chatId: string, input: { toolCallId: string; decision: 'create' | 'reject' }, work: () => Promise<AutomationOutcome>): Promise<AutomationOutcome>;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader }: {
@@ -145,7 +150,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     writeFileSync(`${file}.tmp`, JSON.stringify(store, null, 2), 'utf8');
     renameSync(`${file}.tmp`, file);
   };
-  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, automations: {}, updatedAt: now() };
+  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, automations: {}, automationCards: {}, updatedAt: now() };
   /** PR links already tried, so a read every few seconds does not write the same link again (the action itself is idempotent). */
   const linkedPrs = new Set<string>();
   /** The to-do a run was dispatched from, kept with the dispatch: it survives a restart and needs no open chat. */
@@ -172,6 +177,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
   const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
   const pendingAssigns = new Map<string, Promise<BankAssignOutcome | SmartRuleOutcome>>();
+  const pendingAutomations = new Map<string, Promise<AutomationOutcome>>();
   /** A bank card is answered once: the kept answer, one still being worked, or the work (kept when it finishes). */
   async function decideBankCard<T extends BankAssignOutcome | SmartRuleOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
     const chat = chatOf(chatId);
@@ -212,7 +218,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           }
         }
       }
-      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'] };
+      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'], automationCards: { ...chat?.automationCards } };
     },
 
     async dispatch(chatId, input) {
@@ -313,6 +319,24 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         sources.smartRules.apply(plan);
         return { decision: 'applied', at: now(), ...(preview ? { preview } : {}) };
       });
+    },
+
+    async automation(chatId, input, work) {
+      const chat = chatOf(chatId);
+      const known = chat.automationCards[input.toolCallId];
+      if (known) return known;
+      const key = `${chatId}:${input.toolCallId}`;
+      const pending = pendingAutomations.get(key);
+      if (pending) return pending;
+      const operation = (async (): Promise<AutomationOutcome> => {
+        const outcome = await work();
+        chat.automationCards[input.toolCallId] = outcome;
+        chat.updatedAt = now();
+        save();
+        return outcome;
+      })();
+      pendingAutomations.set(key, operation);
+      try { return await operation; } finally { pendingAutomations.delete(key); }
     },
 
     async bankPlan(chatId, input, plan) {

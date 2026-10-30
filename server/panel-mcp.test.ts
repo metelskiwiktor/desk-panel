@@ -11,7 +11,7 @@ import { createHermesClient } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { startMockHermes, type MockHermes } from './hermes-mock';
 import { foreignPaths, mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
-import { createObservers } from './observers';
+import { createAutomations } from './automations';
 import { createScenarioSources } from './scenario';
 
 const TOKEN = 'a'.repeat(64);
@@ -149,22 +149,22 @@ describe('panel MCP for Hermes', () => {
 
   it('creates a card-free observer in the conversation whose turn is running, and refuses without one', async () => {
     const sources = createScenarioSources(path.join(process.cwd(), 'scenarios', 'standard.json'));
-    const observers = createObservers({
-      file: path.join(dir, 'observers.json'),
-      chat: { sendAutomation: async () => {} },
+    const automations = createAutomations({
+      file: path.join(dir, 'automations.json'),
+      chat: { sendAutomation: async () => {}, createAutomation: async () => ({ id: 'run-chat' }) },
       readTask: async () => ({ status: 'running' }),
-      readPr: async url => ({ number: 41, title: 'Paski', branch: 'cez/x', url, state: 'OPEN', checks: [] }),
+      readPr: async (url: string) => ({ number: 41, title: 'Paski', branch: 'cez/x', url, state: 'OPEN' as const, checks: [] }),
       log: () => {},
     });
-    const ctx = { views: {}, sources, now: Date.now(), cezarUrl: 'http://127.0.0.1:4321/', observers, activeChats: () => ['chat-1'] };
+    const ctx = { views: {}, sources, now: Date.now(), cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['chat-1'] };
     const tool = PANEL_TOOLS.panel_observe;
     const args = tool.input.parse({ action: 'create', kind: 'time', target: 'za 10 minut', instruction: 'Powiedz krótko, że minęło.' });
     const created = await tool.run(args as Record<string, any>, ctx);
     expect(created).toContain('utworzony');
-    expect(created).toContain('Czas');
+    expect(created).toContain('Obserwator czasu');
     expect(created).not.toMatch(/Karta/);
     const list = await tool.run(tool.input.parse({ action: 'list' }) as Record<string, any>, ctx);
-    expect(list).toContain('Aktywne obserwatory (1 z 10)');
+    expect(list).toContain('Aktywne automaty (1 z 20)');
     // Without exactly one running turn there is no conversation to report back to: nothing is stored.
     await expect(tool.run(args as Record<string, any>, { ...ctx, activeChats: () => [] })).rejects.toThrow(/trwa tura/);
     await expect(tool.run(args as Record<string, any>, { ...ctx, activeChats: () => ['a', 'b'] })).rejects.toThrow(/kilka/);

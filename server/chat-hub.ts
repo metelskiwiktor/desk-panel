@@ -89,6 +89,15 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       if (!service.sendAutomation) throw new ChatError(503, `Silnik ${owner.get(id) ?? 'rozmowy'} nie przyjmuje tur automatyki.`);
       return service.sendAutomation(id, input);
     },
+    async createAutomation(input: ChatAutomationInput) {
+      const engine = readPreference();
+      const service = serviceOf(engine);
+      if (!service.createAutomation) throw new ChatError(503, `Silnik ${engine} nie zaczyna rozmów automatyki.`);
+      const created = await service.createAutomation(input);
+      owner.set(created.id, engine);
+      return created;
+    },
+    automationTurn(runId) { return services.map(([, service]) => service.automationTurn?.(runId)).find(Boolean); },
     activeTurns() { return services.flatMap(([, service]) => service.activeTurns?.() ?? []); },
     async stop(id) { return (await find(id)).stop(id); },
     async rename(id, title) { return (await find(id)).rename(id, title); },

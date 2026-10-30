@@ -6,7 +6,7 @@ import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract'
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
 import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
-import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableBankCardId } from './hermes-chat';
+import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableAutomationCardId, stableBankCardId } from './hermes-chat';
 import { watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
@@ -232,6 +232,21 @@ describe('Hermes chat', () => {
     // what the guide says is read from the tool, not carried at the start of every conversation
     expect(preamble).not.toContain('Pokrycie danych');
     expect(preamble).not.toContain('Rozmowa o koncie bankowym (PKO BP');
+  });
+
+  it('gives an automation card an id from its plan, stable across live and restored reads', () => {
+    const name = 'mcp__desk_panel__panel_automation_propose';
+    const plan = { name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: true };
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 1, status: 'done', parts: [
+      { type: 'tool', id: 'pending:answer:2', name, input: JSON.stringify(plan), state: 'done' },
+    ] };
+    expect(stabilizeBankCards(message)).toBe(true);
+    const id = (message.parts![0] as { id: string }).id;
+    expect(id).toMatch(/^answer:x-[0-9a-f]{16}$/);
+    expect(stableAutomationCardId('answer', JSON.stringify(plan))).toBe(id);
+    expect(stableAutomationCardId('other', JSON.stringify(plan))).not.toBe(id);
+    expect(stableAutomationCardId('answer', JSON.stringify({ ...plan, learn: false }))).not.toBe(id);
+    expect(stableAutomationCardId('answer', 'not json')).toBeNull();
   });
 
   it('gives a bank change card an id from its plan: apart for different plans, one for the same plan, stable across reads', () => {

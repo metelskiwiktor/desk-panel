@@ -15,6 +15,7 @@ import {
   MailOpen,
   Trash2,
   Settings2,
+  Bot,
   Moon,
   Clock,
   Sun,
@@ -43,6 +44,7 @@ import { useQuotas } from './useQuotas';
 import { useUsageBreakdown } from './useUsageBreakdown';
 import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
+import { AutomationsView } from './AutomationsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
 import { useTodos } from './useTodos';
@@ -59,17 +61,19 @@ import { PulpitMenu } from './PulpitMenu';
 import { usePulpits } from './pulpits';
 import './chat.css';
 import { useChatPresentation } from './useChatPresentation';
+import { PANEL_NAVIGATE } from './panel-nav';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
 
-type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
+type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'automations' | 'settings';
 const pageNames: Record<Page, string> = {
   home: 'Pulpit',
   tasks: 'Zadania',
   calendar: 'Kalendarz',
   system: 'System',
   events: 'Zdarzenia',
+  automations: 'Automaty',
   settings: 'Ustawienia',
 };
 const navIcons = {
@@ -78,6 +82,7 @@ const navIcons = {
   calendar: CalendarDays,
   system: Monitor,
   events: ListChecks,
+  automations: Bot,
   settings: Settings2,
 };
 export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPreview?: boolean; onTabletPreviewChange?: () => void } = {}) {
@@ -118,6 +123,14 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     setDetail(null);
     setPage(target);
   };
+  useEffect(() => {
+    const jump = (event: Event) => {
+      const target = (event as CustomEvent<string>).detail;
+      if (target in pageNames) { setDetail(null); setPage(target as Page); }
+    };
+    window.addEventListener(PANEL_NAVIGATE, jump);
+    return () => window.removeEventListener(PANEL_NAVIGATE, jump);
+  }, []);
   const configure = (next: Layout) => {
     setLayout(next);
     setStorageError(!saveLayout(next));
@@ -428,10 +441,10 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
               </>
             ) : (
               <>
-                <div className="page-heading">
+                {page !== 'automations' && <div className="page-heading">
                   <p className="eyebrow">DESK PANEL</p>
                   <h1>{pageNames[page]}</h1>
-                </div>
+                </div>}
                 {page === 'tasks' && (
                   <Card title="Aktywne zadania Cezara" icon={<ListTodo />}>
                     {summary}
@@ -472,12 +485,14 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                   </>
                 )}
                 {page === 'events' && <EventRulesView />}
+                {page === 'automations' && <AutomationsView />}
                 {page === 'settings' && (
                   <SettingsView
                     quotaAccounts={quotas.data}
                     quotaVisibility={quotaVisibility}
                     tabletPreview={tabletPreview}
                     onTabletPreviewChange={onTabletPreviewChange}
+                    onOpenAutomations={() => navigate('automations')}
                     layout={layout}
                     configure={configure}
                     resetArrangement={pulpits.resetActive}

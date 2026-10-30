@@ -18,6 +18,7 @@ import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/w
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
 import { openrouterUsageSchema } from '../src/openrouter-contract';
 import { observerListSchema } from '../src/observers-contract';
+import { automationListSchema, automationUpdateSchema, type Automation } from '../src/automation-contract';
 import { SourceError, type PanelSources } from './sources';
 import { appointmentPreviewSchema, calendarSavedSchema } from '../src/appointment-contract';
 import { createAppointments } from './appointments';
@@ -61,6 +62,8 @@ export const scenarioSchema = z.object({
   openrouterUsage: endpoint(openrouterUsageSchema),
   /** The chat's one-shot observers the scenario starts with; cancelling one removes it for the session. */
   observers: endpoint(observerListSchema).default({ observers: [] }),
+  /** Wektor's automations the scenario starts with; action buttons change them in memory for the session. */
+  automations: endpoint(automationListSchema).default({ automations: [] }),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
@@ -82,6 +85,7 @@ export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'githubPr' ? GitHubPrSource :
   K extends 'openrouterUsage' ? z.infer<typeof openrouterUsageSchema> :
   K extends 'observers' ? z.infer<typeof observerListSchema> :
+  K extends 'automations' ? z.infer<typeof automationListSchema> :
   never;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
@@ -159,6 +163,12 @@ export function createScenarioSources(file: string): PanelSources {
   async function observerRows() {
     const source = await serve('observers');
     return { observers: source.observers.filter(o => !cancelledObservers.has(o.id)) };
+  }
+  /** Automations of the scenario, copied once so the view's buttons can change them for this session without a service. */
+  let automationStore: Automation[] | undefined;
+  async function automationRows() {
+    automationStore ??= structuredClone((await serve('automations')).automations);
+    return { automations: automationStore };
   }
   /** Like the lists: made once, from the scenario's bank reading (raw numbers whole, as the service keeps them) and its marks. */
   let labelStore: BankLabelStore | undefined;
@@ -262,6 +272,20 @@ export function createScenarioSources(file: string): PanelSources {
     usageBreakdown: () => serve('usageBreakdown'),
     observers: observerRows,
     async observerCancel(id) { cancelledObservers.add(id); return observerRows(); },
+    automations: automationRows,
+    async automationAction(input) {
+      const parsed = automationUpdateSchema.parse(input);
+      await automationRows();
+      const found = automationStore!.find(a => a.id === parsed.id);
+      if (!found) throw new SourceError(404);
+      if (parsed.name !== undefined) found.name = parsed.name;
+      if (parsed.notebook !== undefined) { found.notebook = parsed.notebook; found.learn = true; }
+      if (parsed.action === 'pause') found.status = 'paused';
+      if (parsed.action === 'resume') found.status = 'active';
+      if (parsed.action === 'cancel') found.status = 'cancelled';
+      if (parsed.action === 'runNow') { found.status = 'active'; found.lastRunAt = Date.now(); }
+      return found;
+    },
     githubPr: async () => serve('githubPr') as Promise<GitHubPrSource>,
     openrouterUsage: () => serve('openrouterUsage'),
     async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },

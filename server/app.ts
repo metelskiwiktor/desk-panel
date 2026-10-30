@@ -25,7 +25,8 @@ import { assignPreview } from './bank-assign';
 import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 import { observerCancelSchema } from '../src/observers-contract';
-import type { Observers } from './observers';
+import { automationUpdateSchema } from '../src/automation-contract';
+import { AutomationError, type Automations } from './automations';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, maxBytes = 4096): Promise<T> {
@@ -40,7 +41,7 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; cockpit?: Cockpit; cezarUrl?: string; observers?: Observers } = {}) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations } = {}) {
   const routes = jsonRoutes(sources);
   const agent = agentViews(sources);
   return createServer(async (req, res) => {
@@ -60,9 +61,9 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
       return;
     }
-    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments)) return;
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations)) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
-    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, observers: options.observers, activeChats: () => chat?.activeTurns?.() ?? [] }); return; }
+    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [] }); return; }
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
       if(req.headers.origin!==ownOrigin){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
@@ -82,7 +83,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle' || url.pathname === '/api/observers/cancel')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle' || url.pathname === '/api/observers/cancel' || url.pathname === '/api/automations/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -103,6 +104,10 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         } else if (url.pathname === '/api/todos/action') {
           res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
+        } else if (url.pathname === '/api/automations/action') {
+          // The Automaty view's buttons: pause, resume, cancel, run now and the notebook, local only.
+          if (!sources.automationAction) throw new SourceError(503);
+          res.end(JSON.stringify(await sources.automationAction(await readJson(req, automationUpdateSchema))));
         } else if (url.pathname === '/api/observers/cancel') {
           // The user's cancel on the settings card: local only, the observer never fires.
           if (!sources.observerCancel) throw new SourceError(503);
@@ -121,7 +126,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         }
       } catch (error) {
-        const status = error instanceof SourceError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
+        const status = error instanceof SourceError || error instanceof SmartRuleError || error instanceof AutomationError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
         // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
         const reason = error instanceof TodoError || error instanceof BankLabelError || error instanceof SmartRuleError ? error.message
           : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'

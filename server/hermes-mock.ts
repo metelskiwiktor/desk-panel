@@ -108,7 +108,14 @@ function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
     tools: [{ name: 'mcp_desk-panel_panel_cezar_watch', args: { id: MOCK_DISPATCHED }, output: JSON.stringify({ task: { id: MOCK_DISPATCHED, title: 'Chip statusu taska w kokpicie', status: 'RUNNING', progress: 0.33, steps: [] } }) }],
     answer: `Nasłuchuję Cezara: **${MOCK_DISPATCHED}**. Postęp widać w karcie i w kokpicie obok.`,
   };
-  return { tools: [{ name: 'mcp_desk-panel_panel_todos', args: { list: 'Zadania' }, output: 'Lista „Zadania” (l-1): 2 do zrobienia.' }] };
+  if (/automat/i.test(message)) return {
+    tools: [{ name: 'mcp_desk-panel_panel_automation_propose', output: 'Karta „Nowy automat” jest u użytkownika.', args: {
+      name: 'Ceny prądu u dostawcy', goal: 'Sprawdzaj codziennie rano, czy na stronie dostawcy prądu pojawiła się nowa taryfa, i podaj różnicę.',
+      trigger: { kind: 'daily', time: '07:00', from: '2026-10-31', until: '2026-12-31' }, doneWhen: 'Na stronie jest taryfa z ceną niższą niż obecna.',
+      actions: [{ kind: 'message' }], learn: true,
+    }, before: '**Plan**\n\n- codzienne sprawdzenie cennika,\n- wynik wraca do tej rozmowy,\n- automat uczy się między runami.\n\n' }],
+    answer: 'Decyzja w karcie poniżej.',
+  };  return { tools: [{ name: 'mcp_desk-panel_panel_todos', args: { list: 'Zadania' }, output: 'Lista „Zadania” (l-1): 2 do zrobienia.' }] };
 }
 
 export async function startMockHermes(initial: MockHermesOptions = {}): Promise<MockHermes> {
@@ -195,6 +202,7 @@ ${JSON.stringify({ result: t.output })}
   const json = (res: ServerResponse, status: number, value: unknown) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
   const readBody = async (req: IncomingMessage) => { let body = ''; for await (const chunk of req) body += chunk; return body ? JSON.parse(body) : {}; };
 
+  const admitted = new Map<string, { body: string; run: MockRun }>();
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://mock');
     const body = req.method === 'POST' ? await readBody(req).catch(() => null) : undefined;
@@ -204,9 +212,16 @@ ${JSON.stringify({ result: t.output })}
     if (options.key && req.headers.authorization !== `Bearer ${options.key}`) return json(res, 401, { error: { message: 'Invalid API key' } });
     if (url.pathname === '/v1/runs' && req.method === 'POST') {
       if (!body || typeof body.input !== 'string') return json(res, 400, { error: 'input required' });
+      const key = req.headers['idempotency-key'];
+      const replay = typeof key === 'string' ? admitted.get(key) : undefined;
+      if (replay) {
+        if (replay.body !== JSON.stringify(body)) return json(res, 409, { error: 'Idempotency key payload mismatch' });
+        return json(res, 202, { run_id: replay.run.id, session_id: replay.run.session });
+      }
       const session = typeof body.session_id === 'string' ? body.session_id : `sess_${randomUUID()}`;
       const run: MockRun = { id: `run_${randomUUID().replace(/-/g, '').slice(0, 16)}`, session, input: body.input, status: 'running', events: [], streams: new Set(), timers: new Set() };
       runs.set(run.id, run);
+      if (typeof key === 'string') admitted.set(key, { body: JSON.stringify(body), run });
       if (!sessions.has(session)) sessions.set(session, []);
       sessions.get(session)!.push({ role: 'user', content: body.input });
       void play(run);

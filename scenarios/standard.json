@@ -1215,5 +1215,63 @@
         ]
       }
     ]
+  },
+  "automations": {
+    "automations": [
+      {
+        "id": "a-111111111111",
+        "name": "Ceny prądu u dostawcy",
+        "goal": "Sprawdzaj codziennie rano, czy na stronie mojego dostawcy prądu pojawiła się nowa taryfa, i podaj różnicę.",
+        "trigger": { "kind": "daily", "time": "07:00", "from": "today", "until": "today+90" },
+        "status": "active",
+        "doneWhen": "Na stronie jest taryfa z ceną niższą niż obecna.",
+        "notebook": "Obecna taryfa: 0,79 zł/kWh. Strona cennika: https://example.com/cennik",
+        "learn": true,
+        "actions": [{ "kind": "message" }],
+        "chatId": "00000000-0000-4000-8000-000000000001",
+        "createdAt": "now-6d",
+        "nextRunAt": "now+9h",
+        "lastRunAt": "now-15h",
+        "runs": [
+          { "id": "run-aaaaaaaaaaaa", "at": "now-15h", "chatId": "00000000-0000-4000-8000-000000000011", "outcome": "not-yet", "summary": "Cennik bez zmian; najniższa cena to nadal 0,79 zł/kWh.", "notebookChanged": false, "seconds": 12.4, "costUsd": 0.0004 },
+          { "id": "run-bbbbbbbbbbbb", "at": "now-2d", "chatId": "00000000-0000-4000-8000-000000000012", "outcome": "not-yet", "summary": "Nowa promocja na 6 miesięcy, ale cena po promocji wyższa.", "notebookChanged": true, "previousNotebook": "Obecna taryfa: 0,79 zł/kWh.", "seconds": 18.1, "costUsd": 0.0006 },
+          { "id": "run-cccccccccccc", "at": "now-3d", "chatId": "00000000-0000-4000-8000-000000000013", "outcome": "not-yet", "summary": "Strona odpowiedziała, brak nowych taryf.", "notebookChanged": false, "seconds": 9.7, "costUsd": 0.0003 },
+          { "id": "run-ffffffffffff", "at": "now-4d", "chatId": "00000000-0000-4000-8000-000000000014", "outcome": "not-yet", "summary": "Cennik bez zmian; sprawdziłem też stronę z promocjami.", "notebookChanged": false, "seconds": 11.2, "costUsd": 0.0004 },
+          { "id": "run-999999999999", "at": "now-5d", "chatId": "00000000-0000-4000-8000-000000000015", "outcome": "not-yet", "summary": "Pierwszy run: znalazłem cennik i zapisałem, jak go sprawdzać.", "notebookChanged": true, "previousNotebook": "", "seconds": 21.6, "costUsd": 0.0007 }
+        ]
+      },
+      {
+        "id": "a-222222222222",
+        "name": "Treningi w planie Garmina",
+        "goal": "W każdą środę sprawdź plan treningowy na kolejny tydzień i powiedz, czy czegoś nie brakuje.",
+        "trigger": { "kind": "weekly", "weekday": 3, "time": "18:30", "from": "today-30", "until": "today+60" },
+        "status": "paused",
+        "notebook": "",
+        "learn": false,
+        "actions": [{ "kind": "message" }],
+        "chatId": "00000000-0000-4000-8000-000000000002",
+        "createdAt": "now-10d",
+        "lastRunAt": "now-4d",
+        "runs": [
+          { "id": "run-dddddddddddd", "at": "now-4d", "chatId": "00000000-0000-4000-8000-000000000002", "outcome": "error", "summary": "Nie udało się odczytać planu Garmina: brak połączenia.", "notebookChanged": false, "seconds": 4.2, "costUsd": 0.0002 }
+        ]
+      },
+      {
+        "id": "a-333333333333",
+        "name": "Przypomnienie o rachunku",
+        "goal": "Przypomnij mi w piątek o zapłaceniu rachunku za prąd.",
+        "trigger": { "kind": "once", "at": "now-1d" },
+        "status": "done",
+        "notebook": "",
+        "learn": false,
+        "actions": [{ "kind": "message" }],
+        "chatId": "00000000-0000-4000-8000-000000000003",
+        "createdAt": "now-3d",
+        "lastRunAt": "now-1d",
+        "runs": [
+          { "id": "run-eeeeeeeeeeee", "at": "now-1d", "chatId": "00000000-0000-4000-8000-000000000003", "outcome": "done", "summary": "Przypomnienie wysłane; rachunek opłacony.", "notebookChanged": false, "seconds": 3.5, "costUsd": 0.0003 }
+        ]
+      }
+    ]
   }
 }

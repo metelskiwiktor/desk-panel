@@ -194,23 +194,14 @@ describe('interaktywny panel', () => {
     expect(screen.queryByRole('button', { name: 'Wybudź panel' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Pokaż zegar (tryb ambient)' })).toBeTruthy();
   });
-  it('pokazuje aktywne obserwatory Wektora w Ustawieniach i anuluje wskazany', async () => {
+  it('prowadzi z Ustawień do widoku Automaty', async () => {
     const user = userEvent.setup();
-    renderWith('quota-settings');
+    renderWith();
     await user.click(nav('Ustawienia'));
-    const list = await screen.findByRole('list', { name: 'Aktywne obserwatory' });
-    const rows = within(list).getAllByRole('listitem');
-    expect(rows).toHaveLength(3);
-    expect(within(list).getByText('Task Cezara')).toBeTruthy();
-    expect(within(list).getByText('PR na GitHubie')).toBeTruthy();
-    expect(within(list).getByText('https://github.com/metelskiwiktor/desk-panel/pull/41')).toBeTruthy();
-    expect(within(list).getAllByText(/utworzono .* · wygasa/)).toHaveLength(3);
-    const prRow = rows.find(row => within(row).queryByText(/pull\/41/))!;
-    await user.click(within(prRow).getByRole('button', { name: 'Anuluj' }));
-    await waitFor(() => expect(within(screen.getByRole('list', { name: 'Aktywne obserwatory' })).getAllByRole('listitem')).toHaveLength(2));
-    expect(screen.queryByText('https://github.com/metelskiwiktor/desk-panel/pull/41')).toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'Otwórz Automaty' }));
+    expect((await screen.findAllByRole('heading', { name: 'Automaty' })).length).toBe(1);
+    expect((await screen.findAllByText('Ceny prądu u dostawcy')).length).toBeGreaterThan(0);
   });
-
   it('komunikuje brak możliwości zapisania ustawień', async () => {
     const user = userEvent.setup();
     renderWith();

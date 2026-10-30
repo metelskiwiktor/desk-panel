@@ -24,8 +24,12 @@ import { appointmentQuerySchema, calendarProposalSchema } from '../src/appointme
 import { AppointmentError } from './znanylekarz';
 import { SMART_CATEGORIES, SMART_LIMITS, SMART_PRIORITIES, SMART_SUGGESTION, smartRulePlanSchema, smartRuleSchema, type SmartRule, type SmartRulePreview } from '../src/smart-rules-contract';
 import { linksOf, mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } from './smart-rules';
-import { ObserverError, type Observers } from './observers';
-import { observerKinds, OBSERVER_KIND_LABELS, MAX_ACTIVE_OBSERVERS } from '../src/observers-contract';
+import { AutomationError, type Automations } from './automations';
+import { observerKinds, OBSERVER_KIND_LABELS } from '../src/observers-contract';
+import {
+  describeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationPlanSchema, automationReportSchema, automationUpdateSchema,
+  type Automation,
+} from '../src/automation-contract';
 
 /**
  * The panel's data as MCP tools for Hermes (`POST /api/mcp`, Streamable HTTP, JSON answers only). Each tool is a narrow
@@ -46,7 +50,7 @@ interface Tool {
   input: z.ZodType<Record<string, unknown>>;
   /** JSON Schema of the arguments as MCP lists it. */
   schema: Record<string, unknown>;
-  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; observers?: Observers; activeChats?: () => string[] }): Promise<string>;
+  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; automations?: Automations; activeChats?: () => string[] }): Promise<string>;
 }
 
 const view = (name: string, params: (args: Record<string, any>) => Record<string, string | undefined>) =>
@@ -523,39 +527,125 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       kind: z.enum(observerKinds).optional(),
       target: text(1000).optional(),
       instruction: text(2000).optional(),
-      id: z.string().trim().regex(/^o-[0-9a-f]{12}$/).optional(),
+      id: z.string().trim().regex(/^a-[0-9a-f]{12}$/).optional(),
     }).strict(),
     schema: schema({
       action: { type: 'string', enum: ['create', 'list', 'cancel'], description: 'create (domyślnie), list albo cancel' },
       kind: { type: 'string', enum: [...observerKinds], description: 'cezar: task Cezara (koniec albo czekanie na odpowiedź); pr: PR na GitHubie; time: moment w czasie' },
       target: { type: 'string', description: 'cezar: id projekt/uuid; pr: pełny adres https://github.com/owner/repo/pull/n; time: ISO 8601 albo „za 10 minut”, „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”' },
-      instruction: { type: 'string', description: 'Polecenie, które trafi do rozmowy dosłownie, gdy obserwator zadziała' },
-      id: { type: 'string', description: 'Id obserwatora (o-…) do anulowania' },
+      instruction: { type: 'string', description: 'Polecenie, które trafi do rozmowy dosłownie, gdy automat zadziała' },
+      id: { type: 'string', description: 'Id automatu (a-…) do anulowania' },
     }),
     async run(args, ctx) {
-      if (!ctx.observers) throw new AgentViewError(503, 'Obserwatory nie są dostępne.');
-      const line = (o: { id: string; kind: keyof typeof OBSERVER_KIND_LABELS; target: string; createdAt: number; expiresAt: number }) =>
-        `${o.id} · ${OBSERVER_KIND_LABELS[o.kind]} · ${o.target} · utworzono ${localTime(o.createdAt)} · wygasa ${localTime(o.expiresAt)}`;
+      if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      const line = (a: Automation) =>
+        `${a.id} · ${a.trigger.kind === 'once' ? 'Czas' : a.trigger.kind === 'cezar' ? OBSERVER_KIND_LABELS.cezar : OBSERVER_KIND_LABELS.pr} · ${describeTrigger(a.trigger)} · utworzono ${localTime(a.createdAt)}`;
       try {
         if (args.action === 'list') {
-          const rows = await ctx.observers.list();
-          return rows.length ? [`Aktywne obserwatory (${rows.length} z ${MAX_ACTIVE_OBSERVERS}):`, ...rows.map(line)].join('\n') : 'Brak aktywnych obserwatorów.';
+          const rows = (await ctx.automations.list()).filter(a => a.status === 'active');
+          return rows.length ? [`Aktywne automaty (${rows.length} z ${MAX_ACTIVE_AUTOMATIONS}):`, ...rows.map(line)].join('\n') : 'Brak aktywnych automatów.';
         }
         if (args.action === 'cancel') {
-          if (!args.id) throw new AgentViewError(400, 'cancel wymaga id obserwatora (o-…, z listy).');
-          const rows = await ctx.observers.cancel(args.id);
-          return `Obserwator ${args.id} anulowany; aktywnych: ${rows.length} z ${MAX_ACTIVE_OBSERVERS}.`;
+          if (!args.id) throw new AgentViewError(400, 'cancel wymaga id automatu (a-…, z listy).');
+          await ctx.automations.update({ id: args.id, action: 'cancel' });
+          const rows = await ctx.automations.list();
+          return `Automat ${args.id} anulowany; aktywnych: ${rows.length} z ${MAX_ACTIVE_AUTOMATIONS}.`;
         }
         if (!args.kind || !args.target || !args.instruction) throw new AgentViewError(400, 'create wymaga kind, target i instruction.');
         // The conversation is the one whose turn is running now: the tool never takes a chat id from the model.
         const chats = ctx.activeChats?.() ?? [];
         if (chats.length !== 1) throw new AgentViewError(409, chats.length
-          ? 'Obserwator powstaje w rozmowie, w której trwa tura, a teraz trwa ich kilka. Poczekaj, aż zostanie jedna.'
-          : 'Obserwator powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa. Wywołaj to narzędzie w odpowiedzi na wiadomość użytkownika.');
-        const created = await ctx.observers.create({ chatId: chats[0], kind: args.kind, target: args.target, instruction: args.instruction });
-        return `Obserwator ${created.id} utworzony (${OBSERVER_KIND_LABELS[created.kind]}: ${created.target}); wygasa ${localTime(created.expiresAt)}. Gdy zadziała, panel wyśle do tej rozmowy jedną turę automatyki z Twoim poleceniem. Nic więcej nie zapisano i nie powstała żadna karta.`;
+          ? 'Automat powstaje w rozmowie, w której trwa tura, a teraz trwa ich kilka. Poczekaj, aż zostanie jedna.'
+          : 'Automat powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa. Wywołaj to narzędzie w odpowiedzi na wiadomość użytkownika.');
+        const created = await ctx.automations.createObserver({ chatId: chats[0], kind: args.kind, target: args.target, instruction: args.instruction });
+        return `Automat ${created.id} utworzony (${created.name}); aktywny do ${describeTrigger(created.trigger)}. Gdy zadziała, panel zacznie w tej rozmowie run automatu z Twoim poleceniem. Nic więcej nie zapisano i nie powstała żadna karta.`;
       } catch (error) {
-        if (error instanceof ObserverError) throw new AgentViewError(error.status, error.message);
+        if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
+        throw error;
+      }
+    },
+  },
+  panel_automation_propose: {
+    description: cockpitToolDescription('panel_automation_propose'),
+    input: automationPlanSchema,
+    schema: schema({
+      name: { type: 'string', description: 'Krótka nazwa automatu po polsku' },
+      goal: { type: 'string', description: 'Polecenie użytkownika słowo w słowie: co automat ma sprawdzać i robić' },
+      trigger: { type: 'object', description: 'once {at: epoch ms}; daily {time:"HH:MM", from?, until?}; weekly {weekday:1–7, time, from?, until?}; cezar {taskId}; pr {url}' },
+      doneWhen: { type: 'string', description: 'Warunek celu jednym zdaniem; przy nim outcome done kończy automat' },
+      actions: { type: 'array', description: 'Zatwierdzone akcje; etap 1 tylko [{kind:"message"}]', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message'] } }, required: ['kind'] } },
+      learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },
+      replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), gdy ta karta zmienia jego cel, akcje albo harmonogram' },
+    }, ['name', 'goal', 'trigger', 'actions', 'learn']),
+    async run(args) {
+      const plan = automationPlanSchema.parse(args);
+      return `${CARD_SHOWN.automation}: ${plan.name}, ${describeTrigger(plan.trigger)}. Automat powstaje dopiero po kliknięciu użytkownika. Nie pisz, że go utworzyłeś. Zakończ odpowiedź jednym zdaniem.`;
+    },
+  },
+  panel_automations: {
+    description: cockpitToolDescription('panel_automations'),
+    input: z.object({ id: z.string().trim().regex(/^a-[0-9a-f]{12}$/).optional() }).strict(),
+    schema: schema({ id: { type: 'string', description: 'Id automatu (a-…); bez niego lista' } }),
+    async run(args, ctx) {
+      if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      if (ctx.automations.error()) return ctx.automations.error()!;
+      const automations = await ctx.automations.list();
+      const all = await Promise.all(automations.map(a => ctx.automations!.get(a.id)));
+      if (args.id) {
+        const one = all.find(a => a?.id === args.id);
+        if (!one) throw new AgentViewError(404, `Panel nie zna automatu ${args.id}.`);
+        return [
+          `Automat ${one.id}: ${one.name} (${one.status}; ${describeTrigger(one.trigger)}).`,
+          `Cel: ${one.goal}`,
+          ...(one.doneWhen ? [`Cel osiągnięty, gdy: ${one.doneWhen}`] : []),
+          `Akcje: ${one.actions.map(a => a.kind).join(', ')}; uczy się: ${one.learn ? 'tak' : 'nie'}; następny run: ${one.nextRunAt ? localTime(one.nextRunAt) : 'z wyzwalacza'}.`,
+          ...(one.notebook.trim() ? ['Notatnik:', one.notebook.trim()] : []),
+          `Runy (${one.runs.length}, najnowszy ostatni):`,
+          ...(one.runs.length ? one.runs.slice(-20).map(r => `- ${localTime(r.at)} · ${r.outcome} · ${r.summary}${r.notebookChanged ? ' · notatnik zmieniony' : ''} · rozmowa ${r.chatId}`) : ['- brak']),
+        ].join('\n');
+      }
+      return all.length ? [`Automaty (${all.length}; aktywne: ${all.filter(a => a?.status === 'active').length}):`,
+        ...all.map(a => `${a!.id} · ${a!.name} · ${a!.status} · ${scheduleLabel(a!.trigger)} · runów: ${a!.runs.length} · ${a!.runs.at(-1) ? `${localTime(a!.runs.at(-1)!.at)} ${a!.runs.at(-1)!.outcome}` : 'brak runów'}`)].join('\n')
+        : 'Brak automatów.';
+    },
+  },
+  panel_automation_update: {
+    description: cockpitToolDescription('panel_automation_update'),
+    input: automationUpdateSchema,
+    schema: schema({
+      id: { type: 'string', description: 'Id automatu (a-…, z panel_automations)' },
+      action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'runNow'], description: 'Wstrzymaj, wznów, anuluj albo uruchom teraz' },
+      notebook: { type: 'string', description: 'Nowa treść notatnika (do 4000 znaków)' },
+      name: { type: 'string', description: 'Nowa nazwa automatu' },
+    }, ['id']),
+    async run(args, ctx) {
+      if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      try {
+        const a = await ctx.automations.update(args as any);
+        return `Automat ${a.id} (${a.name}): ${a.status}, ${scheduleLabel(a.trigger)}.`;
+      } catch (error) {
+        if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
+        throw error;
+      }
+    },
+  },
+  panel_automation_report: {
+    description: cockpitToolDescription('panel_automation_report'),
+    input: automationReportSchema,
+    schema: schema({
+      token: { type: 'string', description: 'Żeton przepisany dokładnie z treści tury automatyki; nigdy nie podawaj go nigdzie indziej' },
+      runId: { type: 'string', description: 'Identyfikator runu z treści tury automatyki (run-…)' },
+      outcome: { type: 'string', enum: ['not-yet', 'done', 'error', 'skipped'], description: 'done: cel osiągnięty; not-yet: sprawdzić ponownie; error: nie udało się' },
+      summary: { type: 'string', description: 'Wynik w 1–2 zdaniach' },
+      notebook: { type: 'string', description: 'Nowa treść notatnika, tylko gdy automat się uczy i jest co zapamiętać' },
+    }, ['runId', 'token', 'outcome', 'summary']),
+    async run(args, ctx) {
+      if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      try {
+        const run = await ctx.automations.report(args as any);
+        return `Raport zapisany: ${run.outcome} — ${run.summary}. Notatnik zmieniony: ${run.notebookChanged ? 'tak' : 'nie'}.`;
+      } catch (error) {
+        if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
         throw error;
       }
     },
@@ -588,7 +678,7 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; observers?: Observers; activeChats?: () => string[] }): Promise<unknown | null> {
+export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<unknown | null> {
   if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return rpcError(message?.id, -32600, 'Invalid Request');
   const notification = message.id === undefined;
   if (notification) return null;
@@ -613,10 +703,10 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       const args = tool.input.safeParse(params.arguments ?? {});
       if (!args.success) return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: `Niepoprawne argumenty: ${args.error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}` }] } };
       try {
-        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', observers: ctx.observers, activeChats: ctx.activeChats });
+        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', automations: ctx.automations, activeChats: ctx.activeChats });
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: out }] } };
       } catch (error) {
-        const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError || error instanceof ObserverError ? error.message
+        const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError || error instanceof AutomationError ? error.message
           : error instanceof z.ZodError ? `Niepoprawne argumenty: ${error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}`
           : error instanceof SourceError ? sourceFailure(error) : 'Nie udało się wykonać narzędzia.';
         return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: reason }] } };
@@ -632,7 +722,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; observers?: Observers; activeChats?: () => string[] }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -644,7 +734,7 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
-  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, observers: ctx.observers, activeChats: ctx.activeChats };
+  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, activeChats: ctx.activeChats };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);
   if (!answers.length) { res.writeHead(202).end(); return; }

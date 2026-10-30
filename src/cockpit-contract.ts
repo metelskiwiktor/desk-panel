@@ -4,6 +4,7 @@ import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
 import type { BankPlanOutcome } from './bank-plan-contract';
 import type { BankAssignOutcome } from './bank-assign-contract';
 import type { SmartRuleOutcome } from './smart-rules-contract';
+import type { AutomationOutcome } from './automation-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -53,6 +54,8 @@ export interface CockpitView {
   dispatches: Record<string, DispatchOutcome>;
   /** The user's answer on each consent card of the conversation (bank changes, Smart Actions rules), by its tool call id. */
   bankPlans: Record<string, BankPlanOutcome | BankAssignOutcome | SmartRuleOutcome>;
+  /** The user's answer on each „Nowy automat” card, by its tool call id: a reload shows the decision. */
+  automationCards: Record<string, AutomationOutcome>;
   /** A historical decision cannot be attributed safely to a single card. */
   legacyUnresolved?: boolean;
 }
@@ -96,7 +99,7 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign' | 'appointment' | 'calendarPlan' | 'mailList' | 'smartRule';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign' | 'appointment' | 'calendarPlan' | 'mailList' | 'smartRule' | 'automation';
 }
 
 export const COCKPIT_TOOLS = {
@@ -161,9 +164,30 @@ export const COCKPIT_TOOLS = {
     card: 'smartRule',
   },
   panel_observe: {
-    purpose: 'Bez karty: jednorazowy obserwator tej rozmowy — task Cezara (koniec albo czekanie na odpowiedź), PR na GitHubie (stan, CI, scalenie) albo moment w czasie. Akcje: create (kind, target, instruction), list, cancel (id).',
+    purpose: 'Bez karty: jednorazowy automat tej rozmowy — task Cezara (koniec albo czekanie na odpowiedź), PR na GitHubie (stan, CI, scalenie) albo moment w czasie. Akcje: create (kind, target, instruction), list, cancel (id).',
     when: 'gdy użytkownik prosi, żebyś sam coś zauważył i wrócił do tego w tej rozmowie („daj znać, gdy task skończy”, „obserwuj ten PR”, „przypomnij za 10 minut”). Nie do zwykłego pytania o stan teraz (panel_cezar_watch) i nie jako zapis danych użytkownika.',
-    effect: 'obserwator zapisuje się w panelu (Ustawienia → Obserwatory); po zadziałaniu panel wysyła do tej rozmowy dokładnie jedną turę automatyki z poleceniem zapisanym przy tworzeniu, a obserwator znika. Limit aktywnych i wygasanie pilnuje panel. Karty nie ma: to zapis obserwatora, nie zapis danych użytkownika. Ty niczego poza tym nie zapisujesz, nie zlecasz i nie zatwierdzasz.',
+    effect: 'automat zapisuje się w panelu (widok Automaty, sekcja Jednorazowe); po zadziałaniu panel zaczyna w tej rozmowie run automatu z poleceniem zapisanym przy tworzeniu, a automat kończy się po raporcie. Limit aktywnych pilnuje panel. Karty nie ma: to zapis automatu, nie zapis danych użytkownika. Ty niczego poza tym nie zapisujesz, nie zlecasz i nie zatwierdzasz.',
+  },
+  panel_automation_propose: {
+    purpose: 'Karta zgody „Nowy automat”: name, goal (polecenie użytkownika słowo w słowie), trigger (once/daily/weekly/cezar/pr), opcjonalnie doneWhen, actions (etap 1: [{kind:"message"}]), learn i opcjonalnie replaces (id automatu, który ma zastąpić).',
+    when: 'gdy użytkownik chce, żebyś coś sprawdzał cyklicznie (codziennie, w dany dzień) albo założył automat na stałe, a nie jednorazowy obserwator (panel_observe). Najpierw ustal cel i harmonogram słowami; kartę pokaż po jego zgodzie albo przy wyraźnej prośbie. Zmiana celu, akcji albo harmonogramu to nowa karta z replaces.',
+    effect: 'użytkownik widzi kartę z harmonogramem po polsku, warunkiem celu, akcjami i przełącznikiem „Ucz się między runami”; automat powstaje dopiero po kliknięciu „Utwórz automat”. Ty niczego nie zapisujesz. Run cykliczny to nowa rozmowa automatu, a wynik wraca do tej rozmowy po raporcie.',
+    card: 'automation',
+  },
+  panel_automations: {
+    purpose: 'Lista automatów (bez id) albo szczegóły jednego (z id): harmonogram, stan, cel, warunek, akcje, notatnik i ostatnie runy z wynikami.',
+    when: 'gdy użytkownik pyta o swoje automaty, ich historię albo co automat się nauczył; także przed propozycją zmiany, żeby znać jego id i obecny kształt.',
+    effect: 'tylko odczyt; niczego nie zmienia i nie uruchamia.',
+  },
+  panel_automation_update: {
+    purpose: 'Bez karty: pause, resume, cancel albo runNow jednego automatu (id z panel_automations); opcjonalnie notebook lub name.',
+    when: 'na wyraźną prośbę użytkownika („wstrzymaj”, „wznów”, „anuluj”, „uruchom teraz”, „zmień notatnik”). Nie zmieniaj celu, akcji ani harmonogramu: to nowa karta panel_automation_propose z replaces.',
+    effect: 'zmiana jest natychmiastowa i lokalna; runNow uruchamia run teraz, reszta tylko zmienia stan.',
+  },
+  panel_automation_report: {
+    purpose: 'Raport runu automatu: runId i token przepisane dokładnie z treści własnej tury automatyki (żetonu nigdy nie podawaj nigdzie indziej), outcome (not-yet/done/error/skipped), summary (1–2 zdania) i opcjonalnie notebook (gdy automat się uczy).',
+    when: 'tylko w turze automatyki, na końcu runu, zgodnie z poleceniem w treści runu. Po końcu tej tury panel odmawia; brak raportu od razu kończy run błędem.',
+    effect: 'panel zapisuje run w historii automatu, podmienia notatnik tylko przy learn=true, a outcome done kończy cel i harmonogram. Przy done/error panel wysyła krótką wiadomość do rozmowy automatu. Sam nic więcej nie zapisujesz.',
   },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
@@ -179,7 +203,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika', appointment: 'Karta terminów jest u użytkownika', calendarPlan: 'Karta wydarzenia jest u użytkownika', mailList: 'Karta z mailami jest u użytkownika', smartRule: 'Karta zgody na regułę Smart Actions jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika', appointment: 'Karta terminów jest u użytkownika', calendarPlan: 'Karta wydarzenia jest u użytkownika', mailList: 'Karta z mailami jest u użytkownika', smartRule: 'Karta zgody na regułę Smart Actions jest u użytkownika', automation: 'Karta „Nowy automat” jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.

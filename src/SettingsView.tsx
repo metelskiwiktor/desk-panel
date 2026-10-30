@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Check, Layers3, Settings2 } from 'lucide-react';
+import { Bot, Check, Layers3, Settings2 } from 'lucide-react';
 import { defaultLayout, widgetNames, type Layout } from './layout';
 import { Card } from './components';
 import { GoogleAccounts } from './GoogleAccounts';
 import { ScreenCard } from './ScreenCard';
 import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
-import { ObserversCard } from './ObserversCard';
 import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
 import { resetWorkspace } from './tile-grid';
@@ -16,6 +15,7 @@ export function SettingsView({
   storageError,
   tabletPreview,
   onTabletPreviewChange,
+  onOpenAutomations,
   quotaAccounts,
   quotaVisibility,
   resetArrangement = resetWorkspace,
@@ -25,6 +25,7 @@ export function SettingsView({
   storageError: boolean;
   tabletPreview?: boolean;
   onTabletPreviewChange?: () => void;
+  onOpenAutomations?: () => void;
   quotaAccounts?:QuotaAccount[]|null;
   quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
   /** Forgets the arrangement of the open virtual desktop; false when it could not be saved. */
@@ -40,7 +41,10 @@ export function SettingsView({
       <ScreenCard />
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
       <WarmupSettingsCard warmup={warmup} />
-      <ObserversCard />
+      <Card title="Automaty" icon={<Bot />}>
+        <p className="card-intro">Cykliczne i jednorazowe zadania Wektora: lista, historia runów, notatnik i przyciski stanu są w osobnym widoku.</p>
+        <button className="button" onClick={onOpenAutomations}>Otwórz Automaty</button>
+      </Card>
       <Card title="Podgląd pionowy" icon={<Settings2 />}>
         <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
         <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>

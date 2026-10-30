@@ -7,6 +7,7 @@ import { mailActionSchema } from './mail-contract';
 import { todoActionSchema } from './todo-contract';
 import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 import { observerCancelSchema } from './observers-contract';
+import { automationUpdateSchema } from './automation-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
 export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings' | 'inbox';
@@ -46,6 +47,11 @@ export function scenarioFetch(name: ScenarioName): typeof fetch {
         }
         const provider=warmupProviderSchema.parse(url.pathname.split('/').at(-1));
         return Response.json(await sources.saveWarmup!(provider,warmupEditSchema.parse(JSON.parse(String(init.body)))));
+      }
+      if (init?.method === 'POST' && url.pathname === '/api/automations/action') {
+        const input = automationUpdateSchema.parse(JSON.parse(String(init.body)));
+        if (!sources.automationAction) return new Response('', { status: 503 });
+        return Response.json(await sources.automationAction(input));
       }
       if (init?.method === 'POST' && url.pathname === '/api/observers/cancel') {
         const { id } = observerCancelSchema.parse(JSON.parse(String(init.body)));

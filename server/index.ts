@@ -10,7 +10,7 @@ import { createCockpit } from './cockpit';
 import { createPrReader } from './github';
 import { createHermesClient, hermesUrl } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
-import { createObservers, type Observers } from './observers';
+import { createAutomations, type Automations } from './automations';
 import { mcpToken } from './panel-mcp';
 import { createRealSources } from './real-sources';
 
@@ -27,20 +27,21 @@ const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
 const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
 let cockpit: ReturnType<typeof createCockpit> | undefined;
 let automation: ReturnType<typeof createChatAutomation> | undefined;
-let observers: Observers | undefined;
+let automations: Automations | undefined;
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env,
   // The same reads that feed the dashboard also feed the automations: an active task waiting for the user, a finished one.
-  onActive: tasks => { automation?.active(tasks); void observers?.active(tasks); },
+  onActive: tasks => { automation?.active(tasks); void automations?.active(tasks); },
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
-  onFinished: tasks => { cockpit?.linkPrs(tasks); automation?.finished(tasks); void observers?.finished(tasks); },
-  // The settings card reads the active observers; its cancel button is the only other way one goes away.
-  observers: async () => ({ observers: await observers?.list() ?? [] }),
-  observerCancel: async id => ({ observers: await observers?.cancel(id) ?? [] }) });
+  onFinished: tasks => { cockpit?.linkPrs(tasks); automation?.finished(tasks); void automations?.finished(tasks); },
+  // The Automaty view reads the active automations; its buttons are the only other way one changes.
+  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}) }),
+  automationAction: async input => { if (!automations) throw new Error('Automaty nie są dostępne.'); return automations.update(input); } });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
 const namer = createAgyNamer();
 const hermes = createHermesChat({
   namer,
+  onAutomationTurn: turn => automations?.turnChanged(turn),
   client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
   turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
   silenceMs: Number(process.env.DESK_HERMES_SILENCE_MS) || undefined,
@@ -53,15 +54,16 @@ cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit
 // The first automation: a task dispatched from a chat reports its waiting/finished state back to that chat, once.
 // `DESK_AUTOMATIONS=0` turns every automation off; the scenario mode does not create this observer at all.
 if (automationsEnabled(process.env)) automation = createChatAutomation({ chat, cockpit, sources });
-// The chat's one-shot observers: created card-free by `panel_observe`, listed and cancelled in the settings. They are
-// kept (and listed) even with automations off; only creating and firing stop then.
-observers = createObservers({
-  file: join(homedir(), '.desk-panel', 'observers.json'), chat,
+// Wektor's automations: cyclic and one-shot; the old observers.json is migrated on first load. They are kept (and listed)
+// even with automations off; only creating and firing stop then.
+const panelDir = join(homedir(), '.desk-panel');
+automations = createAutomations({
+  file: join(panelDir, 'automations.json'), observersFile: join(panelDir, 'observers.json'), chat,
   readTask: id => sources.cezarRun ? sources.cezarRun(id) : Promise.resolve(null),
   readPr: url => prReader.read(url),
   enabled: automationsEnabled(process.env),
 });
-observers.start();
-const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href, observers }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+automations.start();
+const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href, automations }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

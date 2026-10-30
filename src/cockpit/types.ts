@@ -71,6 +71,10 @@ export interface MailListArgs { q?: unknown; tytul?: unknown; refused?: string }
 /** The consent card for a Smart Actions rule (`panel_smart_rule_propose`): the plan as the model wrote it (checked by the card). */
 export const SMART_RULE = 'smart_rule';
 export interface SmartRuleArgs { tytul?: unknown; rule?: unknown; remove?: unknown; q?: unknown; refused?: string }
+/** The consent card for a new automation (`panel_automation_propose`): the plan as the model wrote it (checked by the card). */
+export const AUTOMATION = 'automation';
+export interface AutomationArgs { name?: unknown; goal?: unknown; trigger?: unknown; doneWhen?: unknown; actions?: unknown; learn?: unknown; replaces?: unknown; refused?: string }
+export type AutomationResult = { decision: 'created'; at: number; automationId: string; name: string } | { decision: 'rejected'; at: number };
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
