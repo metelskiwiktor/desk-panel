@@ -6,12 +6,16 @@ Zegar korzysta z czasu przeglądarki.
 
 ## Uruchomienie
 
-Wymagany Node.js 22.12+ i npm. Uruchom Cezara, następnie w katalogu Desk Panelu:
+Wymagany Node.js 22.12+, npm i [just](https://github.com/casey/just). Uruchom Cezara, następnie w katalogu Desk Panelu:
 
 ```powershell
-npm install
+just setup
 npm run dev
 ```
+
+`just setup` instaluje zablokowane zależności (`npm ci`), Chromium dla Playwrighta i łączy `.claude/skills` oraz
+`.agents/skills` z folderem `skills/` (skille agentów dla Claude Code i Codexa, zob. mapę w AGENTS.md). W istniejącym
+checkoucie same dowiązania tworzy `node scripts/link-skills.mjs`.
 
 To uruchamia lokalne API na `http://127.0.0.1:5174` i Vite (domyślnie port 5173).
 Do zwykłego używania wystarczy jeden proces, serwujący również frontend:
