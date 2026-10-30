@@ -573,7 +573,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       goal: { type: 'string', description: 'Polecenie użytkownika słowo w słowie: co automat ma sprawdzać i robić' },
       trigger: { type: 'object', description: 'once {at: epoch ms}; daily {time:"HH:MM", from?, until?}; weekly {weekday:1–7, time, from?, until?}; cezar {taskId}; pr {url}' },
       doneWhen: { type: 'string', description: 'Warunek celu jednym zdaniem; przy nim outcome done kończy automat' },
-      actions: { type: 'array', description: 'Akcje do jednorazowego zatwierdzenia: message, calendarEvent {reminderMinutes?:60, allDay?}, smartAction {domain}, notify', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message', 'calendarEvent', 'smartAction', 'notify'] }, domain: { type: 'string' }, reminderMinutes: { type: 'integer' }, allDay: { type: 'boolean' } }, required: ['kind'] } },
+      actions: { type: 'array', description: 'Akcje do jednorazowego zatwierdzenia: message, calendarEvent {reminderMinutes?:60, allDay?, domain?}, smartAction {domain?}, notify {domain?}', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message', 'calendarEvent', 'smartAction', 'notify'] }, domain: { type: 'string', description: 'Własna domena tej akcji, nie sufiks publiczny. Bez domain akcja nie przyjmuje url.' }, reminderMinutes: { type: 'integer' }, allDay: { type: 'boolean' } }, required: ['kind'] } },
       learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },
       replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), do aktualizacji na miejscu; historia i notatnik zostają' },
     }, ['name', 'goal', 'trigger', 'actions', 'learn']),

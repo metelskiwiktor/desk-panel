@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getDomain } from 'tldts';
 
 /**
  * Automaty Wektora: zadania panelu, które sam się budzi (cyklicznie albo jednorazowo) i wykonuje sprawdzenie w rozmowie
@@ -22,11 +23,15 @@ export type AutomationTrigger = z.infer<typeof triggerSchema>;
 /**
  * Zatwierdzone na karcie akcje automatu; parametry są limitem uprawnień runu.
  */
+// PSL includes private suffixes (e.g. github.io): consent must identify an owner, not a hosting service.
+const actionDomainSchema = z.string().trim().toLowerCase()
+  .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/)
+  .refine(domain => getDomain(domain, { allowPrivateDomains: true }) !== null, 'Domena musi mieć część rejestrowalną, nie sam sufiks publiczny.');
 export const automationActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('message') }).strict(),
-  z.object({ kind: z.literal('calendarEvent'), reminderMinutes: z.number().int().min(0).max(40320).optional(), allDay: z.boolean().optional() }).strict(),
-  z.object({ kind: z.literal('smartAction'), domain: z.string().trim().toLowerCase().regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/) }).strict(),
-  z.object({ kind: z.literal('notify') }).strict(),
+  z.object({ kind: z.literal('calendarEvent'), domain: actionDomainSchema.optional(), reminderMinutes: z.number().int().min(0).max(40320).optional(), allDay: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal('smartAction'), domain: actionDomainSchema.optional() }).strict(),
+  z.object({ kind: z.literal('notify'), domain: actionDomainSchema.optional() }).strict(),
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 
@@ -50,9 +55,9 @@ export const RUN_OUTCOMES = ['not-yet', 'done', 'error', 'skipped'] as const;
 export type RunOutcome = typeof RUN_OUTCOMES[number];
 
 export function actionLabel(a: AutomationAction): string {
-  if (a.kind === 'calendarEvent') return `${ACTION_LABELS[a.kind]} · ${a.allDay ? 'całodniowe' : 'godzina Europe/Warsaw, 1 h'} · popup ${a.reminderMinutes ?? 60} min przed`;
-  if (a.kind === 'smartAction') return `${ACTION_LABELS[a.kind]} · https://${a.domain}`;
-  return ACTION_LABELS[a.kind];
+  const link = a.kind === 'message' ? '' : a.domain ? ` · linki: https://${a.domain} (i subdomeny)` : ' · bez linków';
+  if (a.kind === 'calendarEvent') return `${ACTION_LABELS[a.kind]} · ${a.allDay ? 'całodniowe' : 'godzina Europe/Warsaw, 1 h'} · popup ${a.reminderMinutes ?? 60} min przed${link}`;
+  return ACTION_LABELS[a.kind] + link;
 }
 
 export const automationActSchema = z.object({

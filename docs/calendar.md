@@ -78,3 +78,5 @@ z zachowaniem ostatniej obserwacji na wypadek błędu następnego odczytu. Narz�
 ## Zapis z automatu
 
 Wyjątek od zapisu po kliknięciu karty wydarzenia: trwający run może wykonać `calendarEvent` przez panel_automation_act, jeśli użytkownik wcześniej zatwierdził tę akcję na karcie automatu. Parametry, idempotencja, godziny i przypomnienia: [Automaty](automaty.md#akcje-zatwierdzone-raz-na-karcie). Ten sam moduł calendar-write i konto panelu; scope calendar.events.owned. Wizyty nadal wymagają potwierdzenia użytkownika.
+
+Automat z zatwierdzoną akcją calendarEvent (docs/automaty.md) sprawdza asynchronicznie zgodę calendar.events.owned przed wywołaniem Google. Brak zgody odmawia lokalnie, bez próby zapisu.

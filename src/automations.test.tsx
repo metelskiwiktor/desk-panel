@@ -148,3 +148,13 @@ it('shows action parameters on consent and preserves them when unticked and tick
   await user.click(screen.getByRole('button', { name: 'Utwórz automat' }));
   expect(respond.mock.calls[0]).toEqual(['message:call', { kind: 'automation', decision: 'create', learn: false, actions: [actions[1], actions[0]] }]);
 });
+
+
+it('shows a separate link domain or no-links restriction for every consented action', () => {
+  const props: any = { toolCallId: 'message:domains', args: { name: 'Linki', goal: 'Sprawdź', trigger: { kind: 'daily', time: '07:00' }, learn: false,
+    actions: [{ kind: 'notify', domain: 'news.example.com' }, { kind: 'calendarEvent', domain: 'calendar.example.com' }, { kind: 'smartAction' }] } };
+  render(<CardActions.Provider value={{ respond: vi.fn(), running: false }}><AutomationCard {...props} /></CardActions.Provider>);
+  expect(screen.getByRole('checkbox', { name: /news.example.com/ })).toBeTruthy();
+  expect(screen.getByRole('checkbox', { name: /calendar.example.com/ })).toBeTruthy();
+  expect(screen.getByRole('checkbox', { name: /Alert Smart Actions.*bez linków/ })).toBeTruthy();
+});

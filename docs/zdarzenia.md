@@ -29,3 +29,5 @@ ustąpienia. Pamięć deduplikacji jest ograniczona do ostatnich 2000 jednorazow
 sygnałów i 1000 aktywnych warunków.
 
 Reguła „Automat: <nazwa>”: zatwierdzona akcja notify zapisana w runie tworzy wpis z treścią i linkiem, najwyżej raz na run. Dzwonek odbiera historię GET /api/automations co 15 s, również po otwarciu panelu po wykonaniu runu. Usunięcie i odświeżenie nie ponawia wpisu (pamięć signalKey runId+notify). Błąd wysyłki ntfy nie usuwa wpisu. Dane z automatów to wyjątek od wykrywania tylko przy otwartym panelu: wykonanie i treść są utrwalone na serwerze; przeglądarka odbiera je później.
+
+Powiadomienia notify z automatów: dzwonek pobiera zakończone akcje z ostatnich 24 h, również w nowej przeglądarce (docs/automaty.md). Przy wczytywaniu pomija pojedyncze nieprawidłowe wpisy, zachowując poprawną historię i pamięć seen.
