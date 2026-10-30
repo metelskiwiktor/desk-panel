@@ -69,6 +69,14 @@ export function useChat(fixed?: ChatEngine) {
     }
   }, [fixed]);
   useEffect(() => { void refresh(); }, [refresh]);
+  // Conversations started elsewhere (the phone, another window, a test run) show up without reopening the panel.
+  useEffect(() => {
+    const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const timer = window.setInterval(visible, 30_000);
+    window.addEventListener('focus', visible);
+    document.addEventListener('visibilitychange', visible);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible); };
+  }, [refresh]);
   useEffect(() => {
     if (fixed !== 'hermes') return;
     try { if (activeId) localStorage.setItem(LAST_CHAT, activeId); else localStorage.removeItem(LAST_CHAT); } catch { /* optional preference */ }

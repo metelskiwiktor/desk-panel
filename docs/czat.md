@@ -20,7 +20,8 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   wykorzystująca pozostałą szerokość. Historia jest przeszukiwana lokalnie po nazwie lub ID (bez odczytywania treści wszystkich
   rozmów), grupowana według ostatniej aktywności i zwijana przyciskiem. Jej prawą krawędź można przeciągać; szerokość jest
   zapamiętywana lokalnie. Separator obsługuje też strzałki (Shift przyspiesza), Home/End i dwuklik przywracający domyślną szerokość.
-  Na małym ekranie historia otwiera się jako szuflada.
+  Na małym ekranie historia otwiera się jako szuflada. Lista rozmów odświeża się co 30 s przy widocznej karcie, po powrocie do
+  niej i po fokusie okna (`src/useChat.ts`), więc rozmowa zaczęta gdzie indziej (telefon, test) pojawia się sama.
   Wybranie rozmowy ją **kontynuuje**. Ostatnia rozmowa Hermesa jest pamiętana lokalnie również po przeładowaniu strony.
   Powrót do niedawno otwartej rozmowy pokazuje jej własny podgląd z pamięci bieżącego okna (do 8 rozmów i kokpitów;
   odczyty kart do 32). SSE i kokpit nadal odświeżają dane z serwera. Zgody i wysyłanie czekają na aktualny stan;
