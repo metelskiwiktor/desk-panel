@@ -11,6 +11,7 @@ import { createHermesClient } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { startMockHermes, type MockHermes } from './hermes-mock';
 import { foreignPaths, mcpToken, PANEL_TOOLS, unknownNames } from './panel-mcp';
+import { createObservers } from './observers';
 import { createScenarioSources } from './scenario';
 
 const TOKEN = 'a'.repeat(64);
@@ -141,9 +142,32 @@ describe('panel MCP for Hermes', () => {
     expect((await call('panel_cockpit_clear', {})).content[0].text).toContain('nie obserwuje');
     const listed = await (await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list' })).json() as any;
     // The cockpit tools describe themselves by the contract: what, when, and what follows.
-    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_bank_propose', 'panel_bank_assign', 'panel_cockpit_clear']) {
+    for (const name of ['panel_recon_report', 'panel_cezar_propose', 'panel_cezar_watch', 'panel_show', 'panel_bank_propose', 'panel_bank_assign', 'panel_cockpit_clear', 'panel_observe']) {
       expect(listed.result.tools.find((t: { name: string }) => t.name === name).description).toMatch(/Kiedy: .* Skutek: /);
     }
+  });
+
+  it('creates a card-free observer in the conversation whose turn is running, and refuses without one', async () => {
+    const sources = createScenarioSources(path.join(process.cwd(), 'scenarios', 'standard.json'));
+    const observers = createObservers({
+      file: path.join(dir, 'observers.json'),
+      chat: { sendAutomation: async () => {} },
+      readTask: async () => ({ status: 'running' }),
+      readPr: async url => ({ number: 41, title: 'Paski', branch: 'cez/x', url, state: 'OPEN', checks: [] }),
+      log: () => {},
+    });
+    const ctx = { views: {}, sources, now: Date.now(), cezarUrl: 'http://127.0.0.1:4321/', observers, activeChats: () => ['chat-1'] };
+    const tool = PANEL_TOOLS.panel_observe;
+    const args = tool.input.parse({ action: 'create', kind: 'time', target: 'za 10 minut', instruction: 'Powiedz krótko, że minęło.' });
+    const created = await tool.run(args as Record<string, any>, ctx);
+    expect(created).toContain('utworzony');
+    expect(created).toContain('Czas');
+    expect(created).not.toMatch(/Karta/);
+    const list = await tool.run(tool.input.parse({ action: 'list' }) as Record<string, any>, ctx);
+    expect(list).toContain('Aktywne obserwatory (1 z 10)');
+    // Without exactly one running turn there is no conversation to report back to: nothing is stored.
+    await expect(tool.run(args as Record<string, any>, { ...ctx, activeChats: () => [] })).rejects.toThrow(/trwa tura/);
+    await expect(tool.run(args as Record<string, any>, { ...ctx, activeChats: () => ['a', 'b'] })).rejects.toThrow(/kilka/);
   });
 
   it('shows a data card: the model gets a summary and the other categories, never the rows; the card reads them from the panel', async () => {

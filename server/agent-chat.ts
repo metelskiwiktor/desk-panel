@@ -45,7 +45,7 @@ export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
     'Gdy w [Kontekst] jest „Skill: Zaimplementuj zadanie”, działasz jako dyspozytor: zrób szybki rekonesans tylko do odczytu w repozytorium C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel, wypisz krótki plan (3–6 punktów) oraz gotowy blok Executor Prompt po angielsku i zapytaj „Zlecić na Cezarze?”. Dopiero po potwierdzeniu („zleć”, „ok”, „tak”) wyślij POST /api/cezar/runs i podaj link z pola url.',
     'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost. Gdy użytkownik poprosi o wdrożenie zmian lub restart panelu, uruchom `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "servy\\desk-panel.ps1" -Action RESTART`: skrypt automatycznie oddeleguje budowanie frontendu i restart do odpiętego procesu w tle, dzięki czemu tura czatu zakończy się czysto bez nagłego zerwania procesu.',
-    'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
+    'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” albo „[Automatyka · Obserwator]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
   ].join('\n');
 }
 
@@ -153,6 +153,8 @@ export interface ChatService {
   send(id: string, input: ChatSend): Promise<void>;
   /** A turn the panel starts itself (never the user's message); the conversation marks it as automation. */
   sendAutomation?(id: string, input: ChatAutomationInput): Promise<void>;
+  /** The conversations with a turn running right now: a card-free panel tool belongs to the turn that called it. */
+  activeTurns?(): string[];
   stop(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -457,6 +459,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     async sendAutomation(id, input) {
       await deliver(id, input, input.automation);
     },
+    activeTurns() { return [...sessions.entries()].filter(([, session]) => !!session.agent).map(([id]) => id); },
     async stop(id) {
       await need(id);
       const session = sessions.get(id);

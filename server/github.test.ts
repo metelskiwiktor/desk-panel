@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   checkState,
   createGitHubClient,
+  createPrReader,
   deriveReviewStatus,
   parsePrFromGhList,
   prFromGh,
@@ -296,5 +297,23 @@ describe('createGitHubClient', () => {
     expect(source.status).toBe('offline');
     expect(source.pullRequests).toEqual([]);
     expect(source.totalCount).toBe(0);
+  });
+});
+
+describe('createPrReader', () => {
+  it('shares one cached read of a PR and asks gh again only after its TTL', async () => {
+    let clock = 0;
+    const gh: GhRunner = vi.fn(async () => JSON.stringify({ number: 41, title: 'Paski', state: 'OPEN', headRefName: 'cez/x', statusCheckRollup: [{ name: 'test', status: 'IN_PROGRESS' }] }));
+    const reader = createPrReader({ gh, now: () => clock });
+    const url = 'https://github.com/metelskiwiktor/desk-panel/pull/41';
+    const first = await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(1);
+    clock = 19_000;
+    await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(1);
+    clock = 21_000;
+    await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(2);
+    expect(first).toMatchObject({ number: 41, state: 'OPEN', checks: [{ name: 'test', state: 'running' }] });
   });
 });

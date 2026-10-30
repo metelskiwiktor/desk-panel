@@ -17,6 +17,7 @@ import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
 import { openrouterUsageSchema } from '../src/openrouter-contract';
+import { observerListSchema } from '../src/observers-contract';
 import { SourceError, type PanelSources } from './sources';
 import { appointmentPreviewSchema, calendarSavedSchema } from '../src/appointment-contract';
 import { createAppointments } from './appointments';
@@ -58,6 +59,8 @@ export const scenarioSchema = z.object({
   usageBreakdown: endpoint(usageBreakdownSchema),
   githubPr: endpoint(gitHubPrSourceSchema).default({ pullRequests: [] }),
   openrouterUsage: endpoint(openrouterUsageSchema),
+  /** The chat's one-shot observers the scenario starts with; cancelling one removes it for the session. */
+  observers: endpoint(observerListSchema).default({ observers: [] }),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
@@ -78,6 +81,7 @@ export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'usageBreakdown' ? z.infer<typeof usageBreakdownSchema> :
   K extends 'githubPr' ? GitHubPrSource :
   K extends 'openrouterUsage' ? z.infer<typeof openrouterUsageSchema> :
+  K extends 'observers' ? z.infer<typeof observerListSchema> :
   never;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
@@ -150,6 +154,12 @@ export function createScenarioSources(file: string): PanelSources {
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   /** Made from the scenario the first time the lists are asked for, so they stay as the session changed them. */
   let todoStore: TodoStore | undefined;
+  /** Observers cancelled in this session: the settings card behaves as the real one, without a service or a clock. */
+  const cancelledObservers = new Set<string>();
+  async function observerRows() {
+    const source = await serve('observers');
+    return { observers: source.observers.filter(o => !cancelledObservers.has(o.id)) };
+  }
   /** Like the lists: made once, from the scenario's bank reading (raw numbers whole, as the service keeps them) and its marks. */
   let labelStore: BankLabelStore | undefined;
   const labels = () => labelStore ??= createBankLabelStore({
@@ -250,6 +260,8 @@ export function createScenarioSources(file: string): PanelSources {
     async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
+    observers: observerRows,
+    async observerCancel(id) { cancelledObservers.add(id); return observerRows(); },
     githubPr: async () => serve('githubPr') as Promise<GitHubPrSource>,
     openrouterUsage: () => serve('openrouterUsage'),
     async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },

@@ -5,6 +5,7 @@ import { Card } from './components';
 import { GoogleAccounts } from './GoogleAccounts';
 import { ScreenCard } from './ScreenCard';
 import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarmupStatus } from './QuotaSettings';
+import { ObserversCard } from './ObserversCard';
 import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
 import { resetWorkspace } from './tile-grid';
@@ -39,6 +40,7 @@ export function SettingsView({
       <ScreenCard />
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
       <WarmupSettingsCard warmup={warmup} />
+      <ObserversCard />
       <Card title="Podgląd pionowy" icon={<Settings2 />}>
         <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
         <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>
