@@ -51,6 +51,16 @@ function fingerprint() {
   return hash.digest('hex');
 }
 
+/** Scenario servers of this checkout (`just scenario`/`just screenshots`): they hold dist open and break the swap. */
+function scenarioServers() {
+  if (!windows) return [];
+  const query = spawnSync('powershell.exe', ['-NoProfile', '-Command',
+    "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match 'scripts[\\\\/]scenario\\.ts' } | ForEach-Object { \"$($_.ProcessId) $($_.CreationDate.ToString('yyyy-MM-dd HH:mm'))\" }"], { encoding: 'utf8' });
+  return query.status === 0 ? lines(String(query.stdout ?? '').trim()) : [];
+}
+const scenarios = scenarioServers();
+if (scenarios.length) fail('Działają serwery scenariuszy; blokują podmianę dist. Zatrzymaj je (just scenario-stop) i ponów.', scenarios.map(s => `PID i start: ${s}`));
+
 const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
 const onMain = branch === BRANCH;
 if (onMain && !run('git', ['fetch', 'origin', BRANCH])) fail('Nie udało się pobrać zmian z origin.');

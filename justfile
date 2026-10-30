@@ -19,6 +19,10 @@ dev:
 scenario name="standard":
     npm run scenario -- {{name}}
 
+# Stop every scenario server of this machine (left over from sessions; they block `just update`).
+scenario-stop:
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'scripts[\\/]scenario\.ts|run scenario' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "Zatrzymano $($_.ProcessId)" }
+
 # Playwright screenshots of a scenario into output/screenshots, e.g. `just screenshots offline --pages pulpit`.
 screenshots name="standard" *args:
     node scripts/ensure-deps.mjs

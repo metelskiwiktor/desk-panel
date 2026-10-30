@@ -10,12 +10,14 @@ vi.mock('node:fs', () => ({ existsSync: vi.fn(), readFileSync: vi.fn(), renameSy
 const files = new Map();
 const installed = () => createHash('sha256').update(files.get('package-lock.json')).digest('hex');
 const platform = process.platform;
-/** Runs the script as on Windows with the service in `state` ('' = not registered). */
-function onWindows(state) {
+/** Runs the script as on Windows with the service in `state` ('' = not registered) and these scenario servers running. */
+function onWindows(state, scenarios = '') {
   Object.defineProperty(process, 'platform', { value: 'win32' });
   const base = vi.mocked(spawnSync).getMockImplementation();
   vi.mocked(spawnSync).mockImplementation((command, args, options) =>
-    command === 'powershell.exe' && args.includes('-Command') ? { status: 0, stdout: `${state}\r\n` } : base(command, args, options));
+    command === 'powershell.exe' && args.includes('-Command')
+      ? { status: 0, stdout: `${String(args.at(-1)).includes('Win32_Process') ? scenarios : state}\r\n` }
+      : base(command, args, options));
 }
 const serviceCalls = () => vi.mocked(spawnSync).mock.calls.filter(([command, args]) => command === 'powershell.exe' && args.includes('-Action')).map(([, args]) => args.at(-1));
 
@@ -55,6 +57,13 @@ it('skips an unchanged deployment whose installed dependencies match', async () 
   files.set('node_modules/.desk-panel-dependencies', installed());
   await expect(import('./update.mjs')).rejects.toThrow('SKIPPED');
   expect(spawnSync).not.toHaveBeenCalledWith('npm', ['ci'], expect.anything());
+});
+
+it('refuses before touching anything while a scenario server holds dist', async () => {
+  onWindows('Running', '4242 2026-10-30 12:20');
+  await expect(import('./update.mjs')).rejects.toThrow('SKIPPED');
+  expect(serviceCalls()).toEqual([]);
+  expect(execFileSync).not.toHaveBeenCalled();
 });
 
 it('installs without stopping a service that is not registered yet', async () => {

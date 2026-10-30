@@ -69,7 +69,8 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   nothing); on another branch it pulls nothing. Runs tests and build, swaps dist and
   restarts. Uncommitted local changes are deployed too (no commit needed); an unchanged version is skipped. The
   restart needs no elevation (the service lets this user start and stop it); UAC shows only if Windows refuses.
-  Stop any scenario server first: it blocks the dist swap (servy/README.md).
+  It refuses while a scenario server runs (it blocks the dist swap): `just scenario-stop` stops them (servy/README.md);
+  a failed swap puts the served dist back.
 - `just service`: Windows service status. `just service RESTART` applies changes
   after a successful build. Never run another listener while the service runs.
 - `just install`: first-time Servy registration; may need Windows credentials
