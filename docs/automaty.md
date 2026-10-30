@@ -2,9 +2,13 @@
 
 Cykliczne i jednorazowe zadania panelu, które sam się budzą i wykonują sprawdzenie w rozmowie automatu. Zastępują dawne
 obserwatory (`panel_observe`): jeden model, jeden zapis, jeden widok. Stare `~/.desk-panel/observers.json` jest migrowane
-przy pierwszym wczytaniu, bez utraty wpisów (także zakończonych); plik zostaje na dysku nietknięty. Nieczytelnego
-`automations.json` ani `observers.json` panel nigdy nie nadpisuje: odkłada go jako `<plik>.corrupt-<czas>` (gdy nie może,
-blokuje zapis) i mówi o tym w logu.
+jednorazowo, wyłącznie gdy `automations.json` nie istnieje, bez utraty wpisów (także zakończonych). Po atomowym zapisie
+nowego magazynu z `migratedFrom: "observers.json"` źródło zmienia nazwę na `observers.json.migrated`.
+Nieczytelny magazyn nie uruchamia migracji: panel odkłada go jako `<plik>.corrupt-<czas>`, tworzy trwałą blokadę
+`automations.json.blocked` i pokazuje pustą listę z wyjaśnieniem (API, widok Automaty i MCP). Nie wykonuje ani nie zapisuje
+automatów, także po następnym restarcie. Uszkodzone źródło migracji również blokuje wykonanie i zapis zamiast finalizować
+pustą migrację. Odzyskanie wymaga ręcznego przywrócenia poprawnego magazynu/źródła i usunięcia `.blocked` po sprawdzeniu
+stanu; panel nie rekonstruuje go ze starego pliku sam.
 
 ## Model
 
@@ -29,8 +33,10 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - Zegar (`server/automations.ts`) chodzi co minutę tylko wtedy, gdy są aktywne automaty. Jeden tick naraz (serializacja),
   po każdym odczycie PR stan jest sprawdzany ponownie, a wspólny cache PR (`createPrReader` w `server/github.ts`) jest ten
   sam co w kokpicie. Po restarcie zaległy run startuje najwyżej jeden na tick.
-- Run jest rezerwowany na dysku (`pending`) przed wysłaniem rozmowy, a restart wznawia tę samą rezerwację (bez drugiego
-  runu). Dostawa jednego `pending` ma wspólną blokadę, więc callback Cezara i tick nie wyślą go dwa razy.
+- Run jest rezerwowany na dysku (`pending`) przed wysyłką, z trwałymi `chatId` i `turnId` (nonce). Hermes-chat zapisuje
+  turę i dokładne żądanie przed POST-em do Hermesa. Nonce jest `Idempotency-Key` tego POST-a: po utracie odpowiedzi
+  restart ponawia zamrożone żądanie z tym samym kluczem i odzyskuje istniejący przebieg zamiast drugiego wykonania.
+  Istniejąca rozmowa z tym nonce jest odzyskiwana. Wymagane jest trwałe wsparcie idempotencji w przypiętym Hermesie. Dostawa jednego `pending` ma wspólną blokadę, więc callback Cezara i tick nie wyślą go dwa razy.
 - Ostatnie wystąpienie daily/weekly w dniu `until` jeszcze się wykonuje; dopiero raport `not-yet` wygasa automat. Po zmianie
   czasu (np. 02:30 w marcową noc) kolejne dni wracają do godziny z harmonogramu; godzina nieistniejąca danego dnia ląduje
   na najbliższej istniejącej.
@@ -38,10 +44,14 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
   automatyki (`automation.source = 'automation'`). Treść: cel, warunek celu, notatnik, ostatnie 5 runów, zatwierdzone
   akcje i polecenie wykonania sprawdzenia oraz wywołania `panel_automation_report` na końcu.
 - Run jednorazowy (once/cezar/pr) wraca do rozmowy automatu (`chatId`), jak dawne obserwatory.
-- `panel_automation_report {runId, outcome, summary, notebook?}` jest przyjmowany tylko w turze automatyki z tym samym
-  otwartym runem (`runId` jest w treści tury); w rozmowie może być kilka runów, a raport trafia do wskazanego. `outcome:
+- Run jest otwarty tylko podczas własnej tury: tej, którą panel uruchomił dla niego. `pending` i historia runu trzymają
+  rozmowę, panelowe `turnId` i natywne `hermesRunId`. `panel_automation_report {runId, turnId, outcome, summary, notebook?}`
+  przyjmuje raport tylko, gdy metadane wywołującego MCP wskazują właśnie tę trwającą turę automatyki, a oba argumenty
+  zgadzają się z rezerwacją. Zwykła lub obca równoległa tura nie może raportować tego runu. `outcome:
   done` kończy cel i harmonogram; `notebook` podmienia notatnik tylko przy `learn = true`, a poprzednia wersja zostaje w
-  runie. Brak raportu po 15 minutach to `error`.
+  runie. Koniec tury (`done/error/cancel`) bez raportu natychmiast zapisuje `error`: „Tura zakończona bez raportu.”.
+  Późniejsza tura w tej samej rozmowie już go nie przyjmie. Limit 15 minut zostaje jako zabezpieczenie, gdy koniec tury
+  nie dotrze, także przy niepewnym przyjęciu wysyłki.
 - Gdy run kończy się `done` albo `error`, panel wysyła krótką wiadomość automatyki (`message`) do rozmowy automatu
   (`chatId`). Wiadomość czeka, gdy rozmowa jest w trakcie tury. Błąd przejściowy (409, 503, sieć) zostawia ją w outboxie
   do następnego ticku (z kluczem deduplikacji, więc nie wyjdzie dwa razy); trwały błąd, np. usunięta rozmowa, porzuca ją
@@ -61,7 +71,7 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - `panel_automations {id?}` — lista albo szczegóły (runy, notatnik) do analizy.
 - `panel_automation_update {id, pause|resume|cancel|runNow, notebook?, name?}` — bez karty, na wyraźną prośbę. Zmiana celu,
   akcji albo harmonogramu to nowa karta `panel_automation_propose` z `replaces`.
-- `panel_automation_report {runId, …}` — tylko w runie o tym `runId`, w bieżącej turze jego rozmowy.
+- `panel_automation_report {runId, turnId, …}` — tylko w runie o tym `runId`, w bieżącej turze jego rozmowy.
 
 ## UI
 
@@ -84,3 +94,19 @@ wskazywalny w czacie (`ctx('automation', …)`).
   zatwierdzonych; zmiany danych użytkownika nadal idą tylko kartami zgody.
 - Zapis jest lokalny, poza Gitem. Klucze i tokeny nie trafiają do automatu. `runNow`, pauza i anulowanie są lokalne i
   Origin-checked; Hermes nie uruchamia automatów sam.
+
+## Skąd pochodzi tożsamość wywołania MCP
+
+Sam Hermes wysyłał tylko nazwę narzędzia i argumenty, bez tożsamości tury. Lista aktywnych rozmów ani id podane przez
+model nie są dowodem źródła. Most `scripts/hermes-mcp-turn-context.py` (hash źródła i wyniku w
+`servy/hermes.lock.json`) przechwytuje `tools.approval_context._approval_session_key` w wątku wywołującego agenta,
+przed przeniesieniem pracy na współdzieloną pętlę MCP. `gateway/platforms/api_server_runs.py::_run_agent_sync`
+ustawia ten ContextVar na natywne `run.run_id` (właściwość `_RunLaunch.approval_session_key`), oddzielnie dla każdego
+przebiegu. Most dopisuje je do `tools/call.params._meta["desk-panel/run-id"]` dla serwera `desk-panel`, poza argumentami
+modelu. Panel porównuje je z żywą turą z `hermes-chat` i trwałym wiązaniem rezerwacji; bez metadanych odmawia raportu.
+
+Most wymaga SDK MCP z parametrem `ClientSession.call_tool(meta=…)`. `just hermes-setup` aplikuje przypiętą łatkę,
+`just hermes CHECK` weryfikuje jej hash. Samo wdrożenie kodu panelu nie instaluje mostu w działającym procesie Hermesa:
+łatkę trzeba zastosować do przypiętego źródła i osobno zatwierdzić restart Hermesa. Próba bez instalacji, bez usług,
+promptów i danych użytkownika:
+`python scripts/hermes-mcp-turn-context-probe.py --source <źródła-Hermesa>`.

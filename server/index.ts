@@ -34,13 +34,14 @@ const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mail
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
   onFinished: tasks => { cockpit?.linkPrs(tasks); automation?.finished(tasks); void automations?.finished(tasks); },
   // The Automaty view reads the active automations; its buttons are the only other way one changes.
-  automations: async () => ({ automations: await automations?.list() ?? [] }),
+  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}) }),
   automationAction: async input => { if (!automations) throw new Error('Automaty nie są dostępne.'); return automations.update(input); } });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
 const namer = createAgyNamer();
 const hermes = createHermesChat({
   namer,
+  onAutomationTurn: turn => automations?.turnChanged(turn),
   client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
   turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
   silenceMs: Number(process.env.DESK_HERMES_SILENCE_MS) || undefined,

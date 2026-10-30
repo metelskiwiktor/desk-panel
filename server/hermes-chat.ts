@@ -79,6 +79,8 @@ interface Turn {
   context?: ContextItem[];
   nonce?: string;
   run: string | null;
+  /** Frozen before dispatch: replay must have exactly the same body and key. */
+  request?: Parameters<HermesClient['startRun']>[0];
   status: MessageStatus;
   error?: string;
 }
@@ -105,6 +107,7 @@ interface Live {
 interface History { at: number; groups?: { user: string; parts: ChatPart[] }[]; error?: string }
 
 export interface HermesChatOptions {
+  onAutomationTurn?: (turn: { chatId: string; turnId: string; runId: string; ended: boolean }) => void;
   client: HermesClient;
   namer?: ChatNamer;
   /** Where the mapping lives (`<dir>/hermes-chats`); `~/.desk-panel` by default. */
@@ -299,18 +302,23 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   // ── storage ──
   const file = (id: string) => path.join(chatsDir, `${id}.json`);
   const writes = new Map<string, Promise<void>>();
-  const save = (record: Stored) => {
+  const save = (record: Stored, strict = false) => {
+    const bytes = JSON.stringify(record);
     const turn = (writes.get(record.id) ?? Promise.resolve())
       .then(async () => {
         if (records.get(record.id) !== record || !record.turns.length) return;
         await mkdir(chatsDir, { recursive: true });
         const temp = `${file(record.id)}.tmp`;
-        await writeFile(temp, JSON.stringify(record), 'utf8');
+        await writeFile(temp, bytes, 'utf8');
         await rename(temp, file(record.id));
       })
-      .catch(() => { /* kept in memory; the next save tries again */ });
+      .catch(error => { if (strict) throw error; /* kept in memory; the next save tries again */ });
     writes.set(record.id, turn);
-    void turn.then(() => { if (writes.get(record.id) === turn) writes.delete(record.id); });
+    void turn.then(() => { if (writes.get(record.id) === turn) writes.delete(record.id); }, () => {});
+    return turn;
+  };
+  const notifyTurn = (record: Stored, turn: Turn, ended: boolean) => {
+    if (turn.automation && turn.nonce && turn.run) options.onAutomationTurn?.({ chatId: record.id, turnId: turn.id, runId: turn.run, ended });
   };
   const load = () => loading ??= (async () => {
     await mkdir(chatsDir, { recursive: true });
@@ -326,8 +334,17 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     for (const record of records.values()) {
       const turn = record.turns.at(-1);
       if (!turn || turn.status !== 'streaming') continue;
+      if (!turn.run && turn.request) {
+        try {
+          const started = await client.startRun(turn.request);
+          turn.run = started.run;
+          if (started.session) record.session = started.session;
+          await save(record, true);
+        } catch { continue; } // uncertain acceptance: never issue a different key or request
+      }
       if (!turn.run) { turn.status = 'error'; turn.error = 'Przerwano przed wysłaniem do Hermesa: panel został uruchomiony ponownie.'; save(record); continue; }
       const live = begin(record, turn);
+      notifyTurn(record, turn, false);
       live.message.notice = 'Panel uruchomiono ponownie: wznawiam odczyt odpowiedzi z Hermesa…';
       log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'resume', run: turn.run });
       void follow(live);
@@ -562,6 +579,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const finalize = async (live: Live, status: RunStatus, endedBy: Live['endedBy'], usage?: Record<string, unknown>) => {
     if (live.done) return;
     live.done = true;
+    notifyTurn(live.record, live.turn, true);
     live.endedBy = endedBy;
     clearInterval(live.watchdog);
     live.abort.abort();
@@ -656,16 +674,36 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const deliver = async (id: string, input: ChatSend | ChatAutomationInput, automation?: ChatAutomation) => {
     const record = await need(id);
     const nonce = 'nonce' in input ? input.nonce : undefined;
-    if (nonce && record.turns.some(t => t.nonce === nonce)) return;
+    const existing = nonce && record.turns.find(t => t.nonce === nonce);
+    if (existing) {
+      if (!existing.run && existing.request) {
+        if (lives.has(id)) throw new ChatError(409, 'Trwa wysyłanie tej tury.');
+        const live = begin(record, existing);
+        try {
+          await save(record, true);
+          const started = await client.startRun(existing.request);
+          existing.run = started.run;
+          if (started.session) record.session = started.session;
+          await save(record, true);
+        } catch (error) { lives.delete(id); throw unavailable(error); }
+        void follow(live);
+      }
+      notifyTurn(record, existing, existing.status !== 'streaming');
+      return;
+    }
     if (lives.has(id)) throw new ChatError(409, 'Agent jeszcze odpowiada.');
     const at = now();
     const context = input.context ?? [];
-    const turn: Turn = { id: randomUUID(), agent: randomUUID(), at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
+    const turn: Turn = { id: nonce ?? randomUUID(), agent: randomUUID(), at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
     const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
     const first = !record.turns.some(t => t.run);
     const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, context);
     let started: { run: string; session?: string };
-    try { started = await client.startRun({ input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session }); }
+    turn.request = { input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
+    try {
+      if (nonce) { record.turns.push(turn); await save(record, true); }
+      started = await client.startRun(turn.request);
+    }
     catch (error) {
       lives.delete(id);
       log.trace(id, { turn: record.turns.length + 1, src: 'panel', kind: 'start-failed', error: error instanceof Error ? error.message : null });
@@ -674,9 +712,10 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     health = { at: now(), value: { available: true } };
     turn.run = started.run;
     if (started.session && started.session !== record.session) record.session = started.session;
-    record.turns.push(turn);
+    if (!nonce) record.turns.push(turn);
     record.updatedAt = at;
-    save(record);
+    await save(record, !!nonce);
+    notifyTurn(record, turn, false);
     log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'sent', run: started.run, preamble: first, contextItems: context.length, chars: prompt.length, ...(automation ? { automation: automation.source } : {}) });
     sendState(record);
     if (live.stopping) void client.cancel(started.run).catch(() => {});
@@ -706,14 +745,23 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     async send(id, input) { await deliver(id, input); },
     async sendAutomation(id, input) { await deliver(id, input, input.automation); },
     async createAutomation(input) {
+      await load();
       const at = now();
-      const id = randomUUID();
+      const id = input.chatId ?? randomUUID();
+      if (!ID.test(id)) throw new ChatError(400, 'Niepoprawny identyfikator rozmowy automatu.');
+      if (records.has(id)) { await deliver(id, input, input.automation); return { id }; }
       // A fresh session of its own; the title is the panel's (a cyclic automation's date), so the namer never renames it.
       const record: Stored = { schema: 1, id, engine: 'hermes', title: (input.title || titleFrom(input.text)).slice(0, 120), userNamed: true, createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
       records.set(id, record);
       try { await deliver(id, input, input.automation); }
-      catch (error) { records.delete(id); throw error; }
+      catch (error) { if (!record.turns.length) records.delete(id); throw error; }
       return { id };
+    },
+    automationTurn(runId) {
+      for (const [chatId, live] of lives) {
+        if (!live.done && live.turn.automation && live.turn.run === runId) return { chatId, turnId: live.turn.id, runId: live.turn.run! };
+      }
+      return undefined;
     },
     activeTurns() { return [...lives.entries()].filter(([, live]) => !live.done).map(([id]) => id); },
     async stop(id) {

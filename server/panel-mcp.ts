@@ -50,7 +50,7 @@ interface Tool {
   input: z.ZodType<Record<string, unknown>>;
   /** JSON Schema of the arguments as MCP lists it. */
   schema: Record<string, unknown>;
-  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; automations?: Automations; activeChats?: () => string[] }): Promise<string>;
+  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; automations?: Automations; callerRunId?: string; automationTurn?: (runId: string) => { chatId: string; turnId: string; runId: string } | undefined; activeChats?: () => string[] }): Promise<string>;
 }
 
 const view = (name: string, params: (args: Record<string, any>) => Record<string, string | undefined>) =>
@@ -588,6 +588,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     schema: schema({ id: { type: 'string', description: 'Id automatu (a-…); bez niego lista' } }),
     async run(args, ctx) {
       if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      if (ctx.automations.error()) return ctx.automations.error()!;
       const automations = await ctx.automations.list();
       const all = await Promise.all(automations.map(a => ctx.automations!.get(a.id)));
       if (args.id) {
@@ -632,20 +633,18 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     description: cockpitToolDescription('panel_automation_report'),
     input: automationReportSchema,
     schema: schema({
+      turnId: { type: 'string', description: 'Jednorazowy identyfikator własnej tury z jej treści; raportuj przed jej końcem' },
       runId: { type: 'string', description: 'Identyfikator runu z treści tury automatyki (run-…)' },
       outcome: { type: 'string', enum: ['not-yet', 'done', 'error', 'skipped'], description: 'done: cel osiągnięty; not-yet: sprawdzić ponownie; error: nie udało się' },
       summary: { type: 'string', description: 'Wynik w 1–2 zdaniach' },
       notebook: { type: 'string', description: 'Nowa treść notatnika, tylko gdy automat się uczy i jest co zapamiętać' },
-    }, ['runId', 'outcome', 'summary']),
+    }, ['runId', 'turnId', 'outcome', 'summary']),
     async run(args, ctx) {
       if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
-      const chats = ctx.activeChats?.() ?? [];
-      const chatId = typeof args.runId === 'string' ? ctx.automations.openRunChat(args.runId) : undefined;
-      if (!chatId || !chats.includes(chatId)) throw new AgentViewError(409, chats.length
-        ? 'Ten raport nie należy do runu otwartego w rozmowie bieżącej tury.'
-        : 'Raport runu powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa.');
+      const turn = ctx.callerRunId ? ctx.automationTurn?.(ctx.callerRunId) : undefined;
+      if (!turn || turn.turnId !== args.turnId) throw new AgentViewError(409, 'Ten raport nie należy do runu bieżącej, trwającej tury automatyki.');
       try {
-        const run = await ctx.automations.report(chatId, args as any);
+        const run = await ctx.automations.report(turn.chatId, args as any, turn.runId);
         return `Raport zapisany: ${run.outcome} — ${run.summary}. Notatnik zmieniony: ${run.notebookChanged ? 'tak' : 'nie'}.`;
       } catch (error) {
         if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
@@ -681,7 +680,7 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<unknown | null> {
+export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; automations?: Automations; callerRunId?: string; automationTurn?: (runId: string) => { chatId: string; turnId: string; runId: string } | undefined; activeChats?: () => string[] }): Promise<unknown | null> {
   if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return rpcError(message?.id, -32600, 'Invalid Request');
   const notification = message.id === undefined;
   if (notification) return null;
@@ -706,7 +705,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       const args = tool.input.safeParse(params.arguments ?? {});
       if (!args.success) return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: `Niepoprawne argumenty: ${args.error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}` }] } };
       try {
-        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', automations: ctx.automations, activeChats: ctx.activeChats });
+        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', automations: ctx.automations, callerRunId: typeof params._meta?.['desk-panel/run-id'] === 'string' ? params._meta['desk-panel/run-id'] : undefined, automationTurn: ctx.automationTurn, activeChats: ctx.activeChats });
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: out }] } };
       } catch (error) {
         const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError || error instanceof AutomationError ? error.message
@@ -725,7 +724,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; callerRunId?: string; automationTurn?: (runId: string) => { chatId: string; turnId: string; runId: string } | undefined; activeChats?: () => string[] }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -737,7 +736,7 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
-  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, activeChats: ctx.activeChats };
+  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, automationTurn: ctx.automationTurn, activeChats: ctx.activeChats };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);
   if (!answers.length) { res.writeHead(202).end(); return; }

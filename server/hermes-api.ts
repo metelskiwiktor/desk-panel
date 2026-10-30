@@ -64,7 +64,7 @@ export interface HistoryMessage {
 export interface HermesClient {
   readonly url: string;
   health(): Promise<void>;
-  startRun(input: { input: string; session: string; instructions?: string }): Promise<{ run: string; session?: string }>;
+  startRun(input: { input: string; session: string; instructions?: string; idempotencyKey?: string }): Promise<{ run: string; session?: string }>;
   status(run: string): Promise<RunStatus>;
   /** Reads the run's events until the stream ends or `signal` aborts. Resumes after `lastEventId` when given. */
   events(run: string, onEvent: (event: HermesEvent, id: string | null) => void, options: { signal: AbortSignal; lastEventId?: string | null }): Promise<void>;
@@ -231,12 +231,12 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
   const doFetch = options.fetch ?? fetch;
   const headers = (extra: Record<string, string> = {}) => ({ ...(options.key ? { Authorization: `Bearer ${options.key}` } : {}), ...extra });
 
-  const request = async (path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<unknown> => {
+  const request = async (path: string, init: { method?: string; body?: unknown; idempotencyKey?: string; timeoutMs?: number } = {}): Promise<unknown> => {
     let response: Response;
     try {
       response = await doFetch(`${base}${path}`, {
         method: init.method ?? 'GET',
-        headers: headers(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        headers: headers({ ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(init.idempotencyKey ? { 'Idempotency-Key': init.idempotencyKey } : {}) }),
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
         signal: AbortSignal.timeout(init.timeoutMs ?? timeoutMs),
       });
@@ -258,8 +258,8 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
   return {
     url: base,
     async health() { await request(HERMES_ROUTES.health, { timeoutMs: 3000 }); },
-    async startRun({ input, session, instructions }) {
-      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', body: { input, session_id: session, ...(instructions ? { instructions } : {}) } }));
+    async startRun({ input, session, instructions, idempotencyKey }) {
+      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', idempotencyKey, body: { input, session_id: session, ...(instructions ? { instructions } : {}) } }));
       const run = safeId(first(body, 'run_id', 'id') ?? rec(body.run).id);
       if (!run) throw new HermesError(502, 'Hermes nie podał identyfikatora przebiegu.');
       return { run, session: safeId(first(body, 'session_id')) ?? undefined };

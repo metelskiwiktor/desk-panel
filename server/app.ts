@@ -63,7 +63,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
     }
     if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations)) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
-    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [] }); return; }
+    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, automationTurn: runId => chat?.automationTurn?.(runId), activeChats: () => chat?.activeTurns?.() ?? [] }); return; }
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
       if(req.headers.origin!==ownOrigin){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');

@@ -98,6 +98,12 @@ W próbach takie wywołania trwały 53–68 s. Panel ogranicza to tak, że **dan
 MCP `panel_*` (bez zgody, krótka odpowiedź tekstowa, bez surowego JSON-a), a instrukcja każe nie używać do tego `curl`. Zgody
 zostają dla tego, co faktycznie ich wymaga.
 
+### Tożsamość tury przy raporcie automatu
+
+Raport automatu wymaga metadanych natywnego przebiegu Hermesa spoza argumentów modelu. Przypięty most MCP,
+instalacja, weryfikacja i zachowanie przy jego braku: [automaty.md](automaty.md#skąd-pochodzi-tożsamość-wywołania-mcp).
+Setup aplikuje most; działający proces wymaga osobno zatwierdzonego restartu.
+
 ### Narzędzia panelu (MCP)
 
 `POST /api/mcp` (`server/panel-mcp.ts`): minimalny serwer MCP (Streamable HTTP, odpowiedzi JSON; `initialize`, `ping`,

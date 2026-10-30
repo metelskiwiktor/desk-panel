@@ -42,6 +42,8 @@ export const RUN_OUTCOMES = ['not-yet', 'done', 'error', 'skipped'] as const;
 export type RunOutcome = typeof RUN_OUTCOMES[number];
 
 export const automationRunSchema = z.object({
+  turnId: z.string().optional(),
+  hermesRunId: z.string().optional(),
   id: z.string().regex(/^run-[0-9a-f]{12}$/),
   at: z.number().int().nonnegative(),
   /** The conversation this run happened in (for a cyclic automation a fresh one). */
@@ -91,7 +93,7 @@ export const automationSchema = z.object({
 });
 export type Automation = z.infer<typeof automationSchema>;
 
-export const automationListSchema = z.object({ automations: z.array(automationSchema) });
+export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional() });
 export type AutomationList = z.infer<typeof automationListSchema>;
 
 /** The plan a `panel_automation_propose` card carries; `replaces` says which automation it replaces. */
@@ -132,6 +134,7 @@ export const automationOutcomeSchema = z.discriminatedUnion('decision', [
 export type AutomationOutcome = z.infer<typeof automationOutcomeSchema>;
 
 export const automationReportSchema = z.object({
+  turnId: z.string().uuid(),
   /** The run id the panel put in the automation turn: it binds the report to that one run. */
   runId: z.string().regex(/^run-[0-9a-f]{12}$/),
   outcome: z.enum(RUN_OUTCOMES),

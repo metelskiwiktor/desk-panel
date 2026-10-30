@@ -89,7 +89,7 @@ function Dots({ runs }: { runs: AutomationRun[] }) {
 export function AutomationsView() {
   const polling = usePollingEnabled();
   const [rows, setRows] = useState<Automation[] | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | false>(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('runs');
   const [busy, setBusy] = useState<string | null>(null);
@@ -102,10 +102,10 @@ export function AutomationsView() {
       const value = automationListSchema.parse(await response.json());
       if (!signal?.aborted) {
         setRows(value.automations);
-        setError(false);
+        setError(value.error ?? false);
         setSelected(current => current && value.automations.some(a => a.id === current) ? current : value.automations[0]?.id ?? null);
       }
-    } catch { if (!signal?.aborted) setError(true); }
+    } catch { if (!signal?.aborted) setError('Nie udało się odczytać automatów ani wykonać akcji.'); }
   }, []);
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export function AutomationsView() {
       });
       if (!response.ok) throw new Error('refused');
       await read();
-    } catch { setError(true); }
+    } catch { setError('Nie udało się odczytać automatów ani wykonać akcji.'); }
     finally { setBusy(null); }
   };
   const saveNote = async () => {
@@ -145,7 +145,7 @@ export function AutomationsView() {
       });
       if (!response.ok) throw new Error('refused');
       await read();
-    } catch { setError(true); }
+    } catch { setError('Nie udało się odczytać automatów ani wykonać akcji.'); }
     finally { setBusy(null); }
   };
 
@@ -177,7 +177,7 @@ export function AutomationsView() {
   return (
     <div className="automation-view">
       <Card title="Automaty" icon={<Bot />} className="automation-card">
-        {error && <p className="warning" role="status">Nie udało się odczytać automatów ani wykonać akcji.</p>}
+        {error && <p className="warning" role="status">{error}</p>}
         {!rows ? <p className="meta">Odczytuję automaty…</p> : rows.length === 0 ? (
           <div className="automation-empty">
             <Bot size={26} aria-hidden="true" />

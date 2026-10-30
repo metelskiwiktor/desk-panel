@@ -97,6 +97,7 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       owner.set(created.id, engine);
       return created;
     },
+    automationTurn(runId) { return services.map(([, service]) => service.automationTurn?.(runId)).find(Boolean); },
     activeTurns() { return services.flatMap(([, service]) => service.activeTurns?.() ?? []); },
     async stop(id) { return (await find(id)).stop(id); },
     async rename(id, title) { return (await find(id)).rename(id, title); },

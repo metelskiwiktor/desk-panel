@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -23,6 +23,7 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'desk-auto-mcp-')); sent = [
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const make = (over: Partial<Parameters<typeof createAutomations>[0]> = {}) => createAutomations({ file: join(dir, 'automations.json'), chat, now: () => clock, log: () => {}, ...over });
+const pending = () => existsSync(join(dir, 'automations.json')) ? JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8')).pending[0] : undefined;
 const pendingId = () => JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8')).pending[0].id as string;
 
 describe('automation tools', () => {
@@ -30,21 +31,22 @@ describe('automation tools', () => {
     const automations = make();
     const output = await PANEL_TOOLS.panel_automation_propose.run({
       name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: true,
-    }, { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['chat-1'] });
+    }, { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, callerRunId: 'hermes-run', automationTurn: (runId: string) => runId === 'hermes-run' && pending() ? { chatId: pending().chatId, turnId: pending().turnId, runId } : undefined, activeChats: () => ['chat-1'] });
     expect(output).toContain('Karta „Nowy automat” jest u użytkownika');
     expect(await automations.list()).toHaveLength(0);
   });
 
   it('refuses a report outside a run and accepts it inside one', async () => {
     const automations = make();
-    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['chat-1'] };
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, callerRunId: 'hermes-run', automationTurn: (runId: string) => runId === 'hermes-run' && pending() ? { chatId: pending().chatId, turnId: pending().turnId, runId } : undefined, activeChats: () => ['chat-1'] };
     await expect(PANEL_TOOLS.panel_automation_report.run({ outcome: 'done', summary: 'x' }, ctx)).rejects.toThrow(/nie należy do runu/);
     const created = await PANEL_TOOLS.panel_observe.run({ action: 'create', kind: 'time', target: 'za 1 minutę', instruction: 'Sprawdź.' }, ctx);
     const id = /a-[0-9a-f]{12}/.exec(created)![0];
     clock += 2 * 60_000;
     await automations.tick();
     expect(sent).toHaveLength(1);
-    const output = await PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), outcome: 'done', summary: 'Cel osiągnięty.' }, ctx);
+    automations.turnChanged({ chatId: pending().chatId, turnId: pending().turnId, runId: 'hermes-run', ended: false });
+    const output = await PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), turnId: pending().turnId, outcome: 'done', summary: 'Cel osiągnięty.' }, ctx);
     expect(output).toContain('Raport zapisany');
     const list = await PANEL_TOOLS.panel_automations.run({ id }, ctx);
     expect(list).toContain('Cel osiągnięty.');
@@ -53,7 +55,7 @@ describe('automation tools', () => {
   it('lists, pauses, resumes and cancels an automation without a card', async () => {
     const automations = make();
     const created = await automations.createFromPlan('chat-1', { name: 'Ceny', goal: 'Sprawdź.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: false });
-    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => [] };
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, callerRunId: 'hermes-run', automationTurn: (runId: string) => runId === 'hermes-run' && pending() ? { chatId: pending().chatId, turnId: pending().turnId, runId } : undefined, activeChats: () => [] };
     expect(await PANEL_TOOLS.panel_automations.run({ id: created.id }, ctx)).toContain('Ceny');
     await PANEL_TOOLS.panel_automation_update.run({ id: created.id, action: 'pause' }, ctx);
     expect((await automations.get(created.id))!.status).toBe('paused');
@@ -68,14 +70,15 @@ describe('automation tools', () => {
     const created = await automations.createFromPlan('origin', { name: 'Ceny', goal: 'Sprawdź.', trigger: { kind: 'once', at: clock + 60_000 }, actions: [{ kind: 'message' }], learn: false });
     clock += 60_000;
     await automations.tick();
-    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['origin', 'other'] };
-    await expect(PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), outcome: 'done', summary: 'Cel osiągnięty.' }, ctx)).resolves.toContain('Raport zapisany');
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, callerRunId: 'hermes-run', automationTurn: (runId: string) => runId === 'hermes-run' && pending() ? { chatId: pending().chatId, turnId: pending().turnId, runId } : undefined, activeChats: () => ['origin', 'other'] };
+    automations.turnChanged({ chatId: pending().chatId, turnId: pending().turnId, runId: 'hermes-run', ended: false });
+    await expect(PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), turnId: pending().turnId, outcome: 'done', summary: 'Cel osiągnięty.' }, ctx)).resolves.toContain('Raport zapisany');
     expect((await automations.get(created.id))!.runs).toHaveLength(1);
   });
 
   it('refuses a report in an ordinary turn that names no open run', async () => {
     const automations = make();
-    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['origin'] };
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, callerRunId: 'hermes-run', automationTurn: (runId: string) => runId === 'hermes-run' && pending() ? { chatId: pending().chatId, turnId: pending().turnId, runId } : undefined, activeChats: () => ['origin'] };
     await expect(PANEL_TOOLS.panel_automation_report.run({ runId: 'run-000000000000', outcome: 'done', summary: 'Zwykła tura.' }, ctx)).rejects.toThrow(/nie należy do runu/);
   });
 });
