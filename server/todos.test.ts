@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -18,6 +18,81 @@ const LIST = /^l-[0-9a-f]{8}$/, TASK = /^t-[0-9a-f]{8}$/;
 const data = async (store: ReturnType<typeof createTodoStore>) => (await store.read()).data!.lists;
 
 describe('listy zadań: sklep', () => {
+  it('stan jest niezależny od blokady; done jest pochodne, a odznaczenie wraca do ostatniego otwartego stanu', async () => {
+    const store = createTodoStore({ now: () => 123 });
+    const list = (await store.apply({ action: 'createList', name: 'L' })).list!.id;
+    const task = (await store.apply({ action: 'addTask', list, title: 'Praca' })).task!.id;
+    await store.apply({ action: 'setStatus', task, status: 'gotowe', by: 'agent' });
+    await store.apply({ action: 'setBlocked', task, reason: 'Czekamy', by: 'user' });
+    expect((await data(store))[0].tasks[0]).toMatchObject({ status: 'gotowe', done: false, completedAt: null, blocked: 'Czekamy' });
+    await store.apply({ action: 'setStatus', task, status: 'porzucone' });
+    expect((await data(store))[0].tasks[0]).toMatchObject({ status: 'porzucone', done: true, completedAt: 123 });
+    await store.apply({ action: 'updateTask', task, done: true });
+    expect((await data(store))[0].tasks[0].status).toBe('zakonczone');
+    await store.apply({ action: 'updateTask', task, done: false, by: 'agent' });
+    const open = (await data(store))[0].tasks[0];
+    expect(open).toMatchObject({ status: 'gotowe', done: false, completedAt: null, blocked: 'Czekamy' });
+    expect(open.history).toEqual([
+      { at: 123, kind: 'status', from: 'pomysl', to: 'gotowe', by: 'agent' },
+      { at: 123, kind: 'blocked', text: 'Czekamy', by: 'user' },
+      { at: 123, kind: 'status', from: 'gotowe', to: 'porzucone', by: 'user' },
+      { at: 123, kind: 'status', from: 'porzucone', to: 'zakonczone', by: 'user' },
+      { at: 123, kind: 'status', from: 'zakonczone', to: 'gotowe', by: 'agent' },
+    ]);
+    await store.apply({ action: 'setBlocked', task, reason: null });
+    await store.apply({ action: 'setBlocked', task, reason: null });
+    expect((await data(store))[0].tasks[0].history).toHaveLength(6);
+  });
+
+  it('powiązania są unikalne i ograniczone, komentarze Markdown zostają w ograniczonej historii', async () => {
+    const store = createTodoStore();
+    const list = (await store.apply({ action: 'createList', name: 'L' })).list!.id;
+    const task = (await store.apply({ action: 'addTask', list, title: 'Praca' })).task!.id;
+    const link = { action: 'link' as const, task, kind: 'pr' as const, id: 'https://github.com/owner/repo/pull/1', title: 'PR', by: 'agent' as const };
+    await store.apply(link);
+    await store.apply(link);
+    expect((await data(store))[0].tasks[0].history).toHaveLength(1);
+    for (let i = 1; i < TODO_LIMITS.links; i++) await store.apply({ action: 'link', task, kind: 'chat', id: `chat-${i}` });
+    const before = (await data(store))[0].tasks[0];
+    await expect(store.apply({ action: 'link', task, kind: 'cezar', id: 'overflow' })).rejects.toMatchObject({ status: 409 });
+    expect((await data(store))[0].tasks[0]).toEqual(before);
+    await store.apply({ action: 'unlink', task, kind: link.kind, id: link.id });
+    await store.apply({ action: 'unlink', task, kind: link.kind, id: link.id });
+    expect((await data(store))[0].tasks[0].history.at(-1)).toMatchObject({ kind: 'link', text: `- pr ${link.id}` });
+    for (let i = 0; i <= TODO_LIMITS.history; i++) await store.apply({ action: 'addComment', task, text: `**Ustalenie ${i}**`, by: 'agent' });
+    const final = (await data(store))[0].tasks[0];
+    expect(final.links).toHaveLength(19);
+    expect(final.history).toHaveLength(TODO_LIMITS.history);
+    expect(final.history[0]).toMatchObject({ kind: 'comment', text: '**Ustalenie 1**', by: 'agent' });
+    expect(final.history.at(-1)?.text).toBe('**Ustalenie 200**');
+  });
+
+  it('v1 migruje tylko w pamięci, pierwszy zapis v2 zachowuje oryginał i nie nadpisuje kopii', async () => {
+    const file = path.join(dir, 'v1.json');
+    const legacyTask = { id: 't-00000001', title: 'Dawne', note: '', done: false, createdAt: 1, completedAt: null, by: 'user' };
+    const original = JSON.stringify({ version: 1, lists: [{ id: 'l-00000001', name: 'Stara', createdAt: 1, tasks: [legacyTask, { ...legacyTask, id: 't-00000002', done: true, completedAt: 10 }] }] });
+    await writeFile(file, original);
+    const store = createTodoStore({ file });
+    const tasks = (await data(store))[0].tasks;
+    expect(tasks[0]).toMatchObject({ status: 'pomysl', blocked: null, links: [], history: [] });
+    expect(tasks[1]).toMatchObject({ status: 'zakonczone', done: true, completedAt: 10 });
+    expect(await readFile(file, 'utf8')).toBe(original);
+    expect(await readdir(dir)).toEqual(['v1.json']);
+    await mkdir(`${file}.tmp`); // a real write failure after making the backup
+    await expect(store.apply({ action: 'setStatus', task: tasks[0].id, status: 'gotowe' })).rejects.toBeDefined();
+    expect((await data(store))[0].tasks[0]).toMatchObject({ status: 'pomysl', history: [] });
+    expect(await readFile(file, 'utf8')).toBe(original);
+    await rm(`${file}.tmp`, { recursive: true });
+    await store.apply({ action: 'updateTask', task: tasks[1].id, done: false });
+    expect((await data(store))[0].tasks[1]).toMatchObject({ status: 'pomysl', done: false });
+    expect(await readFile(`${file}.v1-backup`, 'utf8')).toBe(original);
+    expect(JSON.parse(await readFile(file, 'utf8')).version).toBe(2);
+    // Simulate restoring a v1 file while the backup is already present.
+    await writeFile(file, original.replace('Stara', 'Przywrócona'));
+    await createTodoStore({ file }).apply({ action: 'setStatus', task: tasks[0].id, status: 'realizacja' });
+    expect(await readFile(`${file}.v1-backup`, 'utf8')).toBe(original);
+    expect((await data(createTodoStore({ file })))[0].tasks[0].status).toBe('realizacja');
+  });
   it('tworzy listę raz (ta sama nazwa, także inną wielkością liter, zwraca istniejącą) i nie przekracza limitu list', async () => {
     const store = createTodoStore();
     const first = await store.apply({ action: 'createList', name: 'Do poprawy - Chat Agy' });
@@ -141,7 +216,7 @@ describe('listy zadań: plik', () => {
     await store.drain();
     expect(await readdir(path.join(dir, 'sub'))).toEqual(['todos.json']);
     const raw = JSON.parse(await readFile(file(), 'utf8'));
-    expect(raw.version).toBe(1);
+    expect(raw.version).toBe(2);
     const restarted = createTodoStore({ file: file() });
     const source = await restarted.read();
     expect(todoSourceSchema.safeParse(source).success).toBe(true);
@@ -186,7 +261,7 @@ describe('listy zadań: plik', () => {
 });
 
 describe('akcje: schemat', () => {
-  it.each([
+  it.each<[string, unknown]>([
     ['nieznana akcja', { action: 'nuke' }],
     ['dodatkowe pole', { action: 'createList', name: 'x', extra: 1 }],
     ['złe id listy', { action: 'addTask', list: 'abc', title: 'x' }],
@@ -195,6 +270,11 @@ describe('akcje: schemat', () => {
     ['zbyt długi tytuł', { action: 'addTask', list: 'l-aaaaaaaa', title: 'x'.repeat(TODO_LIMITS.title + 1) }],
     ['zła wartość by', { action: 'addTask', list: 'l-aaaaaaaa', title: 'x', by: 'ktoś' }],
     ['updateTask bez zmiany', { action: 'updateTask', task: 't-aaaaaaaa' }],
+    ['nieznany stan', { action: 'setStatus', task: 't-aaaaaaaa', status: 'done' }],
+    ['długa blokada', { action: 'setBlocked', task: 't-aaaaaaaa', reason: 'x'.repeat(301) }],
+    ['długi komentarz', { action: 'addComment', task: 't-aaaaaaaa', text: 'x'.repeat(2001) }],
+    ['pusty komentarz', { action: 'addComment', task: 't-aaaaaaaa', text: ' ' }],
+    ...['http://github.com/o/r/pull/1', 'https://evil.com/o/r/pull/1', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/pull/1?x=1', 'https://github.com/o/r/pull/0', 'https://github.com/o/../pull/1', 'https://github.com/o/./pull/1', 'https://github.com/invalid_owner/r/pull/1'].map<[string, unknown]>(id => ['zły PR', { action: 'link', task: 't-aaaaaaaa', kind: 'pr', id }]),
   ])('odrzuca %s', (_, body) => { expect(todoActionSchema.safeParse(body).success).toBe(false); });
   it('przycina spacje z nazw i tytułów', () => {
     expect(todoActionSchema.parse({ action: 'createList', name: '  Dom  ' })).toEqual({ action: 'createList', name: 'Dom' });
@@ -235,6 +315,16 @@ describe('trasa /api/todos (scenariusz standardowy)', () => {
     const missing = await post({ action: 'addTask', list: 'l-00000000', title: 'x' });
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'Nie ma takiej listy.' });
+    for (const action of [
+      { action: 'setStatus', status: 'gotowe' }, { action: 'setBlocked', reason: 'Blokada' },
+      { action: 'addComment', text: 'Ustalenie' }, { action: 'link', kind: 'chat', id: 'c' }, { action: 'unlink', kind: 'chat', id: 'c' },
+    ]) {
+      const body = { ...action, task: 't-a0000001' };
+      expect((await post(body, null)).status).toBe(403);
+      expect((await post(body, 'http://evil.example')).status).toBe(403);
+      expect((await post(body)).status).toBe(200);
+    }
+    expect((await post(JSON.stringify({ action: 'addComment', task: 't-a0000001', text: 'x'.repeat(4100) }))).status).toBe(413);
   });
 
   it('dodane zadanie jest od razu w liście, z id w odpowiedzi, i znika z widoku po zaznaczeniu', async () => {
@@ -289,6 +379,21 @@ describe('widok dla agenta: zadania', () => {
 
   it('ukonczone=1 dodaje ukończone z czasem ukończenia', async () => {
     expect(await view('?ukonczone=1')).toMatch(/\[x\] t-a0000003  Komunikat o pustej odpowiedzi \(\d{4}-\d{2}-\d{2}, ukończone \d{4}-\d{2}-\d{2} \d{2}:\d{2}\)/);
+  });
+
+  it('pokazuje nowe pola, wybiera stan także terminalny, a błędny filtr odrzuca', async () => {
+    const text = await view('?stan=przygotowanie');
+    expect(text).toContain('Stan: Do przygotowania (przygotowanie); Blokada: Czekam na ustalenie zakresu');
+    expect(text).toContain('Powiązanie: chat scenario-todo-chat — Ustalenia');
+    expect(text).toContain('Najpierw ustalmy zakres zmian.');
+    expect(text).not.toContain('t-a0000002');
+    expect(await view('?stan=zakonczone')).toContain('t-a0000003');
+    await expect(view('?stan=unknown')).rejects.toMatchObject({ status: 400 });
+    for (let i = 0; i < 5; i++) await sources.todoAction({ action: 'addComment', task: 't-a0000001', text: `Komentarz ${i}` });
+    const comments = await view('?stan=przygotowanie');
+    expect(comments).not.toContain('Komentarz 1');
+    expect(comments).toContain('Komentarz 2');
+    expect(comments).toContain('Komentarz 4');
   });
 
   it('list= wybiera listę po id albo po fragmencie nazwy, a nieznana wymienia istniejące', async () => {

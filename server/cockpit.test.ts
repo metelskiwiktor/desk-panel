@@ -191,10 +191,29 @@ describe('the cockpit of a conversation', () => {
     expect(view.task).toBeNull();
   });
 
-  it('passes the to-do item a task implements on to Cezar', async () => {
+  it('passes a missing to-do on to Cezar without breaking the dispatch', async () => {
     const { cockpit, created } = setup();
     await cockpit.dispatch(CHAT, { toolCallId: 'call_3', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId: 't-0000a001' });
     expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski', todoId: 't-0000a001' });
+  });
+
+  it('links the dispatched run and chat once, starts the todo, and never completes it from Cezar or PR state', async () => {
+    const { cockpit, todos, created } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    const input = { toolCallId: 'todo-dispatch', decision: 'dispatch' as const, title: 'Paski', prompt: PROMPT, todoId };
+    created.mockRejectedValueOnce(new Error('Cezar unavailable'));
+    await expect(cockpit.dispatch(CHAT, input)).rejects.toThrow('Cezar unavailable');
+    expect((await todos.read()).data!.lists[0].tasks[0]).toMatchObject({ status: 'pomysl', links: [], history: [] });
+    await cockpit.dispatch(CHAT, input);
+    await cockpit.dispatch(CHAT, input);
+    await cockpit.view(CHAT, []); // fixture: Cezar done, PR open
+    const todo = (await todos.read()).data!.lists[0].tasks[0];
+    expect(created).toHaveBeenCalledTimes(2); // failed creation, then the successful dispatch only once
+    expect(todo).toMatchObject({ status: 'realizacja', done: false, links: [
+      { kind: 'cezar', id: RUN, title: 'Paski' }, { kind: 'chat', id: CHAT },
+    ] });
+    expect(todo.history.map(h => [h.kind, h.by])).toEqual([['link', 'panel'], ['link', 'panel'], ['status', 'panel']]);
   });
 
   it('without the GitHub CLI says the checks are not known, and keeps the PR', async () => {

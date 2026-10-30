@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SourceError, type PanelSources } from './sources';
 import type { TrainingStep } from '../src/training-contract';
+import { TODO_STATUSES, todoStatusSchema } from '../src/todo-contract';
 
 /**
  * The panel's data as short plain text for the chat agent: local time instead of epoch milliseconds, only the fields a
@@ -266,7 +267,9 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       const source = await sources.todos();
       const zone = DEFAULT_ZONE;
       const withDone = url.searchParams.get('ukonczone') === '1';
-      const header = `Listy zadań użytkownika (zadania do zrobienia, nie zadania Cezara), stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). ${withDone ? 'Ukończone są pokazane.' : 'Ukończone są tylko policzone; ukonczone=1 je pokazuje.'}`;
+      const state = url.searchParams.get('stan');
+      if (state !== null && !todoStatusSchema.safeParse(state).success) throw new AgentViewError(400, 'Nieznany stan zadania.');
+      const header = `Listy zadań użytkownika (zadania do zrobienia, nie zadania Cezara), stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). ${state ? `Filtr stanu: ${state}.` : withDone ? 'Ukończone są pokazane.' : 'Ukończone są tylko policzone; ukonczone=1 je pokazuje.'}`;
       const none = unavailable('Zadania', source.status, !!source.data, source.message);
       if (none) return `${header}\n${none}`;
       const wanted = url.searchParams.get('list')?.trim().toLowerCase();
@@ -274,11 +277,16 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       if (!lists.length) return `${header}\n${wanted ? `Nie ma listy „${clip(wanted, 60)}”.` : 'Brak list. Utwórz listę akcją createList.'}${source.data!.lists.length ? ` Są: ${source.data!.lists.map(l => `„${l.name}” (${l.id})`).join(', ')}.` : ''}`;
       const task = (t: (typeof lists)[number]['tasks'][number]) => {
         const meta = [t.by === 'agent' ? 'dodał agent' : null, dateOf(t.createdAt, zone), t.done && t.completedAt ? `ukończone ${stamp(t.completedAt, zone)}` : null].filter(Boolean).join(', ');
-        return `  [${t.done ? 'x' : ' '}] ${t.id}  ${clip(t.title, 200)} (${meta})${t.note ? ` — ${clip(t.note, 300)}` : ''}`;
+        return [`  [${t.done ? 'x' : ' '}] ${t.id}  ${clip(t.title, 200)} (${meta})${t.note ? ` — ${clip(t.note, 300)}` : ''}`,
+          `    Stan: ${TODO_STATUSES[t.status]} (${t.status})${t.blocked ? `; Blokada: ${t.blocked}` : ''}`,
+          ...t.links.map(l => `    Powiązanie: ${l.kind} ${l.id}${l.title ? ` — ${l.title}` : ''}`),
+          ...t.history.filter(h => h.kind === 'comment').slice(-3).map(h => `    Komentarz (${stamp(h.at, zone)}, ${h.by}): ${h.text}`),
+        ].join('\n');
       };
       return [header, ...lists.flatMap(list => {
         const open = list.tasks.filter(t => !t.done), done = list.tasks.filter(t => t.done);
-        return [`Lista „${list.name}” (id=${list.id}): do zrobienia ${open.length}, ukończonych ${done.length}`, ...(open.length ? open.map(task) : ['  (brak zadań do zrobienia)']), ...(withDone ? done.map(task) : [])];
+        const shown = state ? list.tasks.filter(t => t.status === state) : [...open, ...(withDone ? done : [])];
+        return [`Lista „${list.name}” (id=${list.id}): do zrobienia ${open.length}, ukończonych ${done.length}`, ...shown.map(task), ...(!shown.length ? ['  (brak pasujących zadań)'] : [])];
       })].join('\n');
     },
 

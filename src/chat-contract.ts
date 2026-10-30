@@ -49,6 +49,15 @@ export const BANK_GUIDE: readonly string[] = [
  * to-dos…). The preamble only says that a guide exists and when to read it (one line each, made from `when`).
  */
 export const PANEL_GUIDES = {
+  zadania: {
+    when: 'rozmowa o zadaniach z list użytkownika',
+    core: 'stan i komentarze na prośbę użytkownika; Cezar i PR nie wyznaczają stanu zadania',
+    lines: [
+      'Zadania z list czytaj przez panel_todos (list, stan, ukonczone); zmieniaj przez panel_todo_action. Bez wskazanej listy użyj jedynej lub jednoznacznie pasującej; gdy niepewny, pytaj. Gdy list nie ma, utwórz Zadania. Usuwaj tylko na wyraźną prośbę.',
+      'Stan zadania zmieniaj na prośbę użytkownika. Ustalenia z rozmowy możesz zapisać komentarzem, gdy użytkownik o to prosi. Blokada jest niezależna od stanu. Stan zadania jest niezależny od Cezara i PR-a: zakończenie Cezara nie kończy zadania.',
+      'Przy propozycji zlecenia Cezara z zadania podaj todoId. Po kliknięciu karty panel sam podpina task Cezara i rozmowę oraz ustawia W realizacji.',
+    ],
+  },
   wizyty: {
     when: 'szukanie terminu lub rezerwacja wizyty na ZnanyLekarz',
     core: 'terminy i link tylko przez panel_znanylekarz; rezerwuje i płaci użytkownik, kalendarz zapisuje jego kliknięcie',

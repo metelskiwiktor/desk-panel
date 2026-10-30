@@ -240,7 +240,7 @@ describe('pointing at to-do lists and tasks', () => {
     expect(within(chip).getByText('Zadanie')).toBeTruthy();
     expect(chip.getAttribute('title')).toBe([
       'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-a0000002', 'Tytuł: Odpowiedź bez sformułowania „nie mam dostępu”',
-      'Stan: do zrobienia', 'Dodał: użytkownik',
+      'Stan: Pomysł', 'Dodał: użytkownik',
     ].join('\n'));
     expect(chips()).toHaveLength(1); // not the list as well
   });

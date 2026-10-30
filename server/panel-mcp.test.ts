@@ -272,10 +272,10 @@ describe('panel MCP for Hermes', () => {
     expect(due.content[0].text).toContain('addTask przyjmuje tylko pola: list, title, note, by. Tych pól nie ma: due.');
     expect(due.content[0].text).toContain('Zadania nie mają terminu ani przypomnienia');
     const update = await call('panel_todo_action', { action: { action: 'updateTask', list: 'l-5de7602c', task: 't-a73c8431', title: 'x' } });
-    expect(update.content[0].text).toContain('updateTask przyjmuje tylko pola: task, title, note, done. Tych pól nie ma: list.');
+    expect(update.content[0].text).toContain('updateTask przyjmuje tylko pola: task, title, note, done, by. Tych pól nie ma: list.');
     expect((await call('panel_todo_action', { action: { action: 'remind' } })).content[0].text).toContain('Nieznana akcja "remind". Akcje: createList');
     const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
-    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todo_action').description).toContain('updateTask {task, title, note, done}');
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todo_action').description).toContain('updateTask {task, title, note, done, by}');
   });
 
   it('makes the to-do changes the chat agent may make', async () => {
@@ -283,6 +283,25 @@ describe('panel MCP for Hermes', () => {
     expect(made.isError).toBeUndefined();
     expect(JSON.parse(made.content[0].text)).toMatchObject({ ok: true });
     expect((await call('panel_todos', { list: 'Z Hermesa' })).content[0].text).toContain('Z Hermesa');
+  });
+
+  it('attributes todo workflow changes to the agent and filters their state', async () => {
+    for (const action of [
+      { action: 'setStatus', status: 'gotowe' }, { action: 'setBlocked', reason: 'Czekamy' },
+      { action: 'link', kind: 'chat', id: 'test-chat' }, { action: 'addComment', text: '**Ustalenie**' },
+    ]) {
+      const result = await call('panel_todo_action', { action: { ...action, task: 't-a0000001', by: 'panel' } });
+      expect(result.isError).toBeUndefined();
+    }
+    const source = await (await fetch(`${base}/api/todos`)).json();
+    const todo = source.data.lists[0].tasks[0];
+    expect(todo.history.slice(-4).map((h: { by: string }) => h.by)).toEqual(['agent', 'agent', 'agent', 'agent']);
+    const result = await call('panel_todos', { stan: 'gotowe' });
+    expect(result.content[0].text).toContain('Gotowe do realizacji');
+    expect(result.content[0].text).toContain('Blokada: Czekamy');
+    expect(result.content[0].text).toContain('**Ustalenie**');
+    expect(result.content[0].text).not.toContain('t-a0000002');
+    expect((await call('panel_todos', { stan: 'invalid' })).isError).toBe(true);
   });
 
   it('makes and keeps its token outside the repository', async () => {

@@ -171,7 +171,7 @@ scenariusza):
 | `cezar` | | liczniki, zadania aktywne i zakończone, niezarchiwizowane (do 40, każde zakończone z `id=projekt/uuid` do akcji poniżej) |
 | `mail` | `limit` (1–50, domyślnie 10) | nieprzeczytane z 30 dni: nadawca, temat, początek; bez treści |
 | `quotas`, `system` | | limity AI z resetami w czasie lokalnym; CPU i RAM |
-| `todos` | `list` (id lub fragment nazwy), `ukonczone=1` | listy zadań użytkownika z id list i zadań; ukończone tylko policzone (zob. [docs/zadania.md](zadania.md)) |
+| `todos` | `list` (id lub fragment nazwy), `ukonczone=1`, `stan` (id stanu) | listy zadań z id, stanem PL, blokadą, powiązaniami i ostatnimi 3 komentarzami; ukończone domyślnie tylko policzone, jawny stan wybiera też terminalne (zob. [docs/zadania.md](zadania.md)) |
 | `bank` | `from`, `to` (domyślnie ostatnie 30 dni, najwyżej 400), `ruch` (wydatek, przychód, rozliczenie, przełożenie), `kategoria` (także źródło), `etykieta`, `strona` (fragment nazwy), `nieprzypisane=1` | saldo, przychody, wydatki i netto, wydatki według kategorii i przychody według źródła, salda rozliczeń z każdą stroną z całej zapisanej historii, operacje z ruchem, kategorią albo źródłem, drugą stroną, etykietami, cyklicznością, opisem, „do przypisania” i podpowiedzią albo wyborem (zob. [docs/bank.md](bank.md)) |
 
 Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie

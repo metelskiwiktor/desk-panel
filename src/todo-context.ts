@@ -1,5 +1,5 @@
 import { MAX_CONTEXT_TEXT } from './chat-context';
-import type { TodoList, TodoTask } from './todo-contract';
+import { TODO_STATUSES, type TodoList, type TodoTask } from './todo-contract';
 
 /**
  * What the chat agent is told about a to-do list or task the user points at. The ids are there so it can write at
@@ -30,9 +30,12 @@ export function taskContext(list: TodoList, task: TodoTask): { id: string; title
     `Zadanie z listy „${list.name}” (id listy: ${list.id})`,
     `id zadania: ${task.id}`,
     `Tytuł: ${flat(task.title)}`,
-    `Stan: ${task.done ? 'ukończone' : 'do zrobienia'}`,
-    ...(task.note ? [`Notatka: ${clip(task.note, 600)}`] : []),
+    `Stan: ${TODO_STATUSES[task.status]}`,
+    ...(task.blocked ? [`Blokada: ${task.blocked}`] : []),
+    ...(task.links.length ? [`Powiązania (${task.links.length}): ${clip(task.links.map(l => `${l.kind} ${l.id}${l.title ? ` — ${flat(l.title)}` : ''}`).join('; '), 300)}`] : []),
+    ...task.history.filter(h => h.kind === 'comment').slice(-3).map(h => `Komentarz (${h.by}): ${clip(h.text ?? '', 150)}`),
+    ...(task.note ? [`Notatka: ${clip(task.note, 200)}`] : []),
     `Dodał: ${task.by === 'agent' ? 'agent' : 'użytkownik'}`,
   ].join('\n');
-  return { id: task.id, title: flat(task.title), text };
+  return { id: task.id, title: flat(task.title), text: clip(text, MAX_CONTEXT_TEXT) };
 }

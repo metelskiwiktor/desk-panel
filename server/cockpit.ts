@@ -223,6 +223,13 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();
       save();
+      if (input.todoId) {
+        try {
+          await sources.todoAction({ action: 'link', task: input.todoId, kind: 'cezar', id: created.id, title: input.title, by: 'panel' });
+          await sources.todoAction({ action: 'link', task: input.todoId, kind: 'chat', id: chatId, by: 'panel' });
+          await sources.todoAction({ action: 'setStatus', task: input.todoId, status: 'realizacja', by: 'panel' });
+        } catch { console.warn(`todos: nie udało się powiązać ${input.todoId} po zleceniu Cezara ${created.id}.`); }
+      }
       return outcome;
       })();
       pendingDispatches.set(key, operation);

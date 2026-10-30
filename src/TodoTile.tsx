@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Check, ListChecks, MoreHorizontal, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useDismiss } from './popover';
-import { TODO_LIMITS, type TodoList, type TodoTask } from './todo-contract';
+import { TODO_LIMITS, todoOpenStatus, type TodoList, type TodoTask } from './todo-contract';
 import { TodoDialog } from './TodoDialog';
 import type { TileConfig } from './tile-grid';
 import { taskContext } from './todo-context';
@@ -17,7 +17,7 @@ const NEW_LIST = '__new__';
 
 function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: TodoTask; notes: boolean; hot: boolean; act: TodosState['act']; edit: (opener: HTMLElement) => void }) {
   const toggle = () => void act({ action: 'updateTask', task: task.id, done: !task.done }, data => ({
-    lists: data.lists.map(l => ({ ...l, tasks: l.tasks.map(t => t.id === task.id ? { ...t, done: !task.done, completedAt: task.done ? null : Date.now() } : t) })),
+    lists: data.lists.map(l => ({ ...l, tasks: l.tasks.map(t => t.id === task.id ? { ...t, status: task.done ? todoOpenStatus(task) : 'zakonczone', done: !task.done, completedAt: task.done ? null : Date.now() } : t) })),
   }));
   const point = (() => { const c = taskContext(list, task); return ctx('todo', c.id, c.title, c.text); })();
   return <li className={`todo-row${task.done ? ' done' : ''}${hot ? ' hot' : ''}`} {...point}>

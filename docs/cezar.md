@@ -39,6 +39,10 @@ z kontrolą Origin (ochrona CSRF) i walidowanym, małym JSON-em. Do Cezara panel
 Private api-client Cezara nie jest publikowany: integracja waliduje dokumentowany
 podzbiór kontraktu bez importów do sąsiedniego checkoutu.
 
+`todoId` łączy task Cezara z zadaniem listy panelu. Po udanym dispatchu z karty panel dopina do zadania linki Cezara i rozmowy,
+ustawia „W realizacji” z autorem `panel`; błąd powiązania nie psuje zlecenia. Stan zadania pozostaje niezależny od taska Cezara
+i PR-a, bez dalszych automatycznych przejść ([zadania.md](zadania.md)).
+
 ## Limity AI
 
 Panel czyta `/panel/v1/quotas/live` w cezar-adapter co 15 s (cache serwera 10 s,
