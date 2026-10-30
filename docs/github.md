@@ -20,8 +20,9 @@ obserwowanego taska Cezara i jego checki. Oba czytają GitHub przez jeden moduł
   na ten sam odczyt. Repozytoria są czytane równolegle (`Promise.allSettled`): błąd jednego nie ukrywa pozostałych.
 - Gdy nie odpowie żadne, źródło ma `status: "offline"` i zachowuje ostatnią listę, jeśli była.
 - Kafelek czyta trasę co minutę, tylko gdy pulpit jest widoczny (`usePollingEnabled`), więc `gh` jest pytane najwyżej co 30–90 s.
-- Kokpit ma własny, krótszy czas pamiętania PR-a obserwowanego taska (20 s w trakcie checków, 5 min po nich), ale te same
-  `runGh`, `prFromGh` i `checkState` z `server/github.ts`.
+- Kokpit i obserwatory PR dzielą jedną wstrzykniętą instancję `createPrReader`: `gh pr view` jednego PR-a jest pamiętany
+  30 s, gdy checki trwają, a 90 s po ich ustabilizowaniu; równoczesne odczyty tego samego URL-a czekają na jedno żądanie.
+  To ten sam limit 30–90 s co kafelka, a nie osobny krótszy cache kokpitu.
 
 ## Scenariusze i zrzuty
 

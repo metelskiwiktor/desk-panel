@@ -47,14 +47,14 @@ const hermes = createHermesChat({
 });
 const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ namer, panelUrl: `http://127.0.0.1:${port}` }) } });
 // The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
-cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
+// One cached PR reader is injected into the cockpit and the observers: GitHub is asked gently, never once per reader.
+const prReader = createPrReader();
+cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href, reader: prReader });
 // The first automation: a task dispatched from a chat reports its waiting/finished state back to that chat, once.
 // `DESK_AUTOMATIONS=0` turns every automation off; the scenario mode does not create this observer at all.
 if (automationsEnabled(process.env)) automation = createChatAutomation({ chat, cockpit, sources });
 // The chat's one-shot observers: created card-free by `panel_observe`, listed and cancelled in the settings. They are
 // kept (and listed) even with automations off; only creating and firing stop then.
-// One cached reader for every PR observer: GitHub is asked gently, never once per observer (server/github.ts).
-const prReader = createPrReader();
 observers = createObservers({
   file: join(homedir(), '.desk-panel', 'observers.json'), chat,
   readTask: id => sources.cezarRun ? sources.cezarRun(id) : Promise.resolve(null),

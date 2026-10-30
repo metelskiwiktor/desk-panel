@@ -308,12 +308,25 @@ describe('createPrReader', () => {
     const url = 'https://github.com/metelskiwiktor/desk-panel/pull/41';
     const first = await reader.read(url);
     expect(gh).toHaveBeenCalledTimes(1);
-    clock = 19_000;
+    clock = 29_000;
     await reader.read(url);
     expect(gh).toHaveBeenCalledTimes(1);
-    clock = 21_000;
+    clock = 31_000;
     await reader.read(url);
     expect(gh).toHaveBeenCalledTimes(2);
     expect(first).toMatchObject({ number: 41, state: 'OPEN', checks: [{ name: 'test', state: 'running' }] });
+  });
+
+  it('joins simultaneous reads of the same PR into one gh call', async () => {
+    let release: (value: string) => void = () => {};
+    const gh: GhRunner = vi.fn(() => new Promise<string>(resolve => { release = resolve; }));
+    const reader = createPrReader({ gh, now: () => 0 });
+    const url = 'https://github.com/metelskiwiktor/desk-panel/pull/41';
+    const first = reader.read(url);
+    const second = reader.read(url);
+    release(JSON.stringify({ number: 41, title: 'Paski', state: 'OPEN', headRefName: 'cez/x', statusCheckRollup: [] }));
+    const [one, two] = await Promise.all([first, second]);
+    expect(gh).toHaveBeenCalledTimes(1);
+    expect(one).toBe(two);
   });
 });

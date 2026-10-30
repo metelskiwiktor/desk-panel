@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatError } from './agent-chat';
-import { createObservers, ObserverError, resolveObserverTime } from './observers';
+import { createObservers, ObserverError, prSignature, resolveObserverTime } from './observers';
 import { MAX_ACTIVE_OBSERVERS, OBSERVER_TTL_MS } from '../src/observers-contract';
 import type { CockpitPrView } from '../src/cockpit-contract';
 
@@ -93,6 +93,17 @@ describe('Cezar observers', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('fires when a task created while paused later runs and then waits for the user', async () => {
+    tasks[TASK] = { id: 'x', status: 'paused' };
+    const observers = make();
+    await observers.create({ chatId: 'chat-1', kind: 'cezar', target: TASK, instruction: 'Zapytaj o decyzję.' });
+    await observers.active([{ id: TASK, status: 'running' } as never]);
+    expect(sent).toHaveLength(0);
+    await observers.active([{ id: TASK, title: 'Paski', status: 'needs-input' }] as never);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain('Zapytaj o decyzję.');
+  });
+
   it('fires once when the task finishes, and not for a task already done at creation', async () => {
     tasks[TASK] = { id: 'x', status: 'running' };
     const observers = make();
@@ -137,6 +148,48 @@ describe('PR observers', () => {
     await observers.tick();
     expect(sent).toHaveLength(0);
   });
+
+  it('treats the same checks in another order as the same signature', () => {
+    const one = pr('OPEN', [{ name: 'lint', state: 'pass' }, { name: 'test', state: 'running' }]);
+    const other = pr('OPEN', [{ name: 'test', state: 'running' }, { name: 'lint', state: 'pass' }]);
+    expect(prSignature(one)).toBe(prSignature(other));
+  });
+
+  it('does not fire an observer cancelled while its PR read was still running', async () => {
+    let calls = 0;
+    let release: (value: CockpitPrView) => void = () => {};
+    const readPr = () => {
+      calls++;
+      if (calls === 1) return Promise.resolve(pr('OPEN', [{ name: 'test', state: 'running' }]));
+      return new Promise<CockpitPrView>(resolve => { release = resolve; });
+    };
+    const observers = make({ readPr });
+    const created = await observers.create({ chatId: 'chat-1', kind: 'pr', target: PR, instruction: 'x' });
+    const running = observers.tick();
+    while (calls < 2) await new Promise(resolve => setTimeout(resolve, 0));
+    await observers.cancel(created.id);
+    release(pr('MERGED', []));
+    await running;
+    expect(sent).toHaveLength(0);
+  });
+
+  it('serializes the clock: overlapping ticks send one turn', async () => {
+    let calls = 0;
+    let release: (value: CockpitPrView) => void = () => {};
+    const readPr = () => {
+      calls++;
+      if (calls === 1) return Promise.resolve(pr('OPEN', [{ name: 'test', state: 'running' }]));
+      return new Promise<CockpitPrView>(resolve => { release = resolve; });
+    };
+    const observers = make({ readPr });
+    await observers.create({ chatId: 'chat-1', kind: 'pr', target: PR, instruction: 'x' });
+    const first = observers.tick();
+    const second = observers.tick();
+    while (calls < 2) await new Promise(resolve => setTimeout(resolve, 0));
+    release(pr('MERGED', []));
+    await Promise.all([first, second]);
+    expect(sent).toHaveLength(1);
+  });
 });
 
 describe('limit, expiry, restart and the switch', () => {
@@ -145,6 +198,15 @@ describe('limit, expiry, restart and the switch', () => {
     const observers = make();
     for (let i = 0; i < MAX_ACTIVE_OBSERVERS; i++) await observers.create({ chatId: 'chat-1', kind: 'time', target: 'za 30 minut', instruction: `o${i}` });
     await expect(observers.create({ chatId: 'chat-1', kind: 'time', target: 'za 30 minut', instruction: 'za dużo' })).rejects.toThrow(/Limit aktywnych obserwatorów/);
+    expect(JSON.parse(readFileSync(join(dir, 'observers.json'), 'utf8')).observers).toHaveLength(MAX_ACTIVE_OBSERVERS);
+  });
+
+  it('holds the active limit when observers are created at the same time', async () => {
+    tasks[TASK] = { status: 'running' };
+    const observers = make({ readTask: async id => { await new Promise(resolve => setTimeout(resolve, 5)); return tasks[id] ?? null; } });
+    const results = await Promise.allSettled(Array.from({ length: MAX_ACTIVE_OBSERVERS + 1 }, (_, i) =>
+      observers.create({ chatId: 'chat-1', kind: 'cezar', target: TASK, instruction: `o${i}` })));
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(MAX_ACTIVE_OBSERVERS);
     expect(JSON.parse(readFileSync(join(dir, 'observers.json'), 'utf8')).observers).toHaveLength(MAX_ACTIVE_OBSERVERS);
   });
 
@@ -210,6 +272,28 @@ describe('delivery', () => {
     expect(sent[0].text).toContain('x');
     expect(sendAutomation).toHaveBeenCalledTimes(2);
     expect(created.id).toMatch(/^o-/);
+  });
+
+  it('keeps a pending delivery across a restart and sends it once the conversation is free', async () => {
+    let busy = true;
+    const sendAutomation = vi.fn(async (id: string, input: { text: string; automation: { source: string; reason: string } }) => {
+      if (busy) throw new ChatError(409);
+      sent.push({ id, ...input });
+    });
+    const created = await make({ chat: { sendAutomation } }).create({ chatId: 'chat-1', kind: 'time', target: 'za 1 minutę', instruction: 'x' });
+    clock = NOW + 2 * 60_000;
+    await make({ chat: { sendAutomation } }).tick();
+    expect(sent).toHaveLength(0);
+
+    busy = false;
+    const restarted = make({ chat: { sendAutomation } });
+    await restarted.tick();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain('x');
+    expect(JSON.parse(readFileSync(join(dir, 'observers.json'), 'utf8')).observers.find((o: { id: string }) => o.id === created.id)).toMatchObject({ status: 'fired' });
+
+    await make({ chat: { sendAutomation } }).tick();
+    expect(sent).toHaveLength(1);
   });
 
   it('heads the turn as an automation of its kind and carries the instruction verbatim', async () => {

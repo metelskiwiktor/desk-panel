@@ -131,14 +131,21 @@ Druga automatyka — jednorazowe obserwatory Wektora (`panel_observe`, `server/o
   czekający na odpowiedź), PR na GitHubie (stan, scalenie, CI) albo moment w czasie (ISO 8601 lub „za 10 minut”,
   „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”, liczone w Europe/Warsaw).
 - Rozmowę bierze z tury, w której trwa wywołanie (`activeTurns` w usłudze czatu), nigdy od modelu i nigdy z argumentów.
-  Zapis jest tylko lokalny (`~/.desk-panel/observers.json`, poza Gitem): id, rozmowa, rodzaj, cel, polecenie, czasy, stan
-  i początkowa migawka. Trzyma stany, nie usuwa wpisów, więc restart nie wysyła obserwatora drugi raz.
+  Wiąże się to z jedyną aktywną turą Hermesa: przy kilku równoległych turach `panel_observe` odmawia (409), a narzędzia MCP
+  woła tylko Hermes z tokenem panelu. Zapis jest tylko lokalny (`~/.desk-panel/observers.json`, poza Gitem): id, rozmowa,
+  rodzaj, cel, polecenie, czasy, stan i początkowa migawka. Trzyma stany, nie usuwa wpisów, więc restart nie wysyła
+  obserwatora drugi raz.
 - Obserwator jest jednorazowy: po zadziałaniu panel wysyła do tej rozmowy dokładnie jedną turę
   `[Automatyka · Obserwator] <powód>` z poleceniem zapisanym przy tworzeniu (dosłownie), a obserwator znika z listy. Gdy
-  rozmowa jest w trakcie tury (409), wysyłka czeka i idzie przy następnym przebiegu, raz.
-- Taski Cezara jadą na odczytach, których panel już dokonuje (`onActive`/`onFinished`); migawka stanu z chwili utworzenia
-  sprawia, że task już zakończony albo już czekający nie zadziała, a późniejsza zmiana tak. PR czyta współdzielony,
-  cache'owany odczyt jednego PR (`createPrReader` w `server/github.ts`, ten sam co kokpit), nie nowe `gh` na obserwator.
+  rozmowa jest w trakcie tury (409), wysyłka czeka: stan „do dostarczenia” jest zapisany w `observers.json`, więc także po
+  restarcie zaległa tura idzie raz, a `fired` powstaje dopiero po udanym `sendAutomation`. Cały przebieg zegara jest
+  serializowany (jeden tick naraz), a po każdym odczycie PR panel sprawdza, czy obserwator nie został anulowany albo nie
+  wygasł.
+- Taski Cezara jadą na odczytach, których panel już dokonuje (`onActive`/`onFinished`); migawka ostatnio widzianego stanu
+  sprawia, że task już zakończony albo już czekający nie zadziała, a późniejsze przejście (także `paused → running →
+  needs-input` albo do zakończenia) tak. PR czyta współdzielony, cache'owany odczyt jednego PR (`createPrReader` w
+  `server/github.ts`, ta sama instancja co w kokpicie), nie nowe `gh` na obserwator: 30 s przy trwających checkach, 90 s po
+  ich ustabilizowaniu, a równoczesne odczyty czekają na jedno żądanie.
 - Zegar serwera chodzi co minutę tylko wtedy, gdy jest aktywny obserwator czasu albo PR (bez nich nie ma interwału; po
   ostatnim jest czyszczony). Każdy obserwator ma domyślne wygaśnięcie: 24 h, a obserwator czasu moment + 1 h; wygasły
   znika bez tury. Aktywnych może być najwyżej `MAX_ACTIVE_OBSERVERS` (10); kolejny jest odrzucany z powodem i nic się nie

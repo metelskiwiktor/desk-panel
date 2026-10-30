@@ -148,6 +148,18 @@ describe('the cockpit of a conversation', () => {
     expect(view.pr).toMatchObject({ number: 32, checks: [{ name: 'check', state: 'pass' }] });
   });
 
+  it('reads a PR through the reader handed in, so observers and the cockpit share one cache', async () => {
+    const sources = {
+      cezarRun: vi.fn(async () => raw({ status: 'done', pullRequestUrl: 'https://github.com/metelskiwiktor/desk-panel/pull/32' })),
+    } as unknown as PanelSources;
+    const url = 'https://github.com/metelskiwiktor/desk-panel/pull/32';
+    const reader = { read: vi.fn(async () => ({ number: 32, title: 'Paski', branch: 'cez/f2c9501e', url, state: 'OPEN' as const, checks: [] })) };
+    const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: CEZAR, reader });
+    const view = await cockpit.view(CHAT, [tool('panel_cezar_watch', 'w1', { id: RUN })]);
+    expect(reader.read).toHaveBeenCalledWith(url, { title: 'Paski stref', branch: 'cez/f2c9501e' });
+    expect(view.pr).toMatchObject({ number: 32, state: 'OPEN' });
+  });
+
   it('dispatches only on the user\'s answer, once, with the prompt as the user left it, and touches no to-do list', async () => {
     const { cockpit, created, file, todos, gh } = setup();
     const answer = { toolCallId: 'call_1', decision: 'dispatch' as const, title: 'Paski stref', prompt: PROMPT, workflow: 'analysis' as const };

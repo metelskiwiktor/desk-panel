@@ -40,8 +40,10 @@ const recordSchema = z.object({
   instruction: z.string().min(1).max(2000),
   createdAt: z.number(),
   expiresAt: z.number(),
-  status: z.enum(['active', 'fired', 'cancelled', 'expired']).default('active'),
+  status: z.enum(['active', 'pending', 'fired', 'cancelled', 'expired']).default('active'),
   firedAt: z.number().optional(),
+  /** A fired observer not yet delivered: kept in the file, so a restart sends the one turn it owes. */
+  delivery: z.object({ text: z.string(), reason: z.string() }).optional(),
   /** What the watched thing looked like at creation: a Cezar task's state, a PR's signature, a moment. */
   snapshot: z.record(z.string(), z.unknown()).default({}),
 });
@@ -61,12 +63,14 @@ export function cezarStateOf(raw: Record<string, any> | null): string {
   const status = String(raw.status ?? '').toLowerCase();
   if (FAILED.has(status)) return 'failed';
   if (FINISHED.has(status)) return 'done';
-  if (status === 'paused' || raw.waitingForInput || raw.currentStepId === 'ask') return 'needs-input';
+  if (status === 'paused' || status === 'needs-input' || raw.waitingForInput || raw.currentStepId === 'ask') return 'needs-input';
   return 'running';
 }
 /** What a changed PR looks like: its state (merged is MERGED), whether it merged, and its CI rollup. */
 export function prSignature(pr: CockpitPrView): string {
-  return `${pr.state}|merged:${pr.state === 'MERGED'}|${pr.checks.map(c => `${c.name}:${c.state}`).join(',')}`;
+  // GitHub may list the same checks in another order: sort them, so the signature only changes with the checks.
+  const checks = pr.checks.map(c => `${c.name}:${c.state}`).sort().join(',');
+  return `${pr.state}|merged:${pr.state === 'MERGED'}|${checks}`;
 }
 
 const local = (at: number) => DateTime.fromMillis(at, { zone: ZONE }).toFormat('yyyy-LL-dd HH:mm');
@@ -144,9 +148,11 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
   };
   const view = (o: StoredObserver): ObserverView => ({ id: o.id, kind: o.kind, target: o.target, instruction: o.instruction, createdAt: o.createdAt, expiresAt: o.expiresAt });
   const active = () => store.observers.filter(o => o.status === 'active');
-  const pending = new Map<string, { chatId: string; text: string; reason: string }>();
+  /** Fired observers whose one turn is not delivered yet: durable, so a restart still owes it. */
+  const queued = () => store.observers.filter(o => o.status === 'pending');
   let timer: ReturnType<typeof setInterval> | undefined;
   let flushing: Promise<void> = Promise.resolve();
+  let ticking: Promise<void> | undefined;
 
   /** Drops what is past its expiry: no turn, and it disappears from the list. */
   function dropExpired(): boolean {
@@ -157,7 +163,7 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
     return changed;
   }
 
-  const needsClock = () => enabled && (active().some(o => o.kind === 'time' || o.kind === 'pr') || pending.size > 0);
+  const needsClock = () => enabled && (active().some(o => o.kind === 'time' || o.kind === 'pr') || queued().length > 0);
   function ensureClock() {
     if (!needsClock()) { stop(); return; }
     if (timer) return;
@@ -170,21 +176,34 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
   }
 
   async function sendPending(): Promise<void> {
-    for (const [id, delivery] of [...pending]) {
-      if (!enabled) { pending.delete(id); continue; }
+    // Automations off stops delivery too: the queue stays in the file for when they are back on.
+    if (!enabled) return;
+    for (const o of [...queued()]) {
+      if (o.status !== 'pending' || !o.delivery) continue;
       if (!chat.sendAutomation) {
-        pending.delete(id);
-        writeLog(`pominięto ${id}: ten silnik nie przyjmuje tur automatyki.`);
+        o.status = 'fired';
+        o.firedAt = now();
+        delete o.delivery;
+        save();
+        writeLog(`pominięto ${o.id}: ten silnik nie przyjmuje tur automatyki.`);
         continue;
       }
       try {
-        await chat.sendAutomation(delivery.chatId, { text: delivery.text, automation: { source: 'observer', reason: delivery.reason } });
-        pending.delete(id);
-        writeLog(`wysłano turę automatyki do rozmowy ${delivery.chatId} (${id}).`);
+        await chat.sendAutomation(o.chatId, { text: o.delivery.text, automation: { source: 'observer', reason: o.delivery.reason } });
+        // Cancelled while the send was running: the turn may exist, but the observer is not marked as delivered.
+        if (o.status !== 'pending') continue;
+        o.status = 'fired';
+        o.firedAt = now();
+        delete o.delivery;
+        save();
+        writeLog(`wysłano turę automatyki do rozmowy ${o.chatId} (${o.id}).`);
       } catch (error) {
         if (error instanceof ChatError && error.status === 409) continue; // the conversation is mid-turn: at the next flush, once
-        pending.delete(id);
-        writeLog(`pominięto ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        o.status = 'fired';
+        o.firedAt = now();
+        delete o.delivery;
+        save();
+        writeLog(`pominięto ${o.id}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
@@ -193,35 +212,43 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
     return flushing;
   };
 
-  /** One turn: the instruction exactly as stored, plus the fact that made the observer fire. */
+  /** One turn: the instruction exactly as stored, plus the fact that made the observer fire. It is only delivered, never lost. */
   function fire(o: StoredObserver, detail: string, reason: string) {
-    o.status = 'fired';
-    o.firedAt = now();
+    if (o.status !== 'active') return;
+    if (now() >= o.expiresAt) {
+      o.status = 'expired';
+      save();
+      return;
+    }
+    o.status = 'pending';
+    o.delivery = { text: `${o.instruction}\n\n${detail}`, reason };
     save();
-    pending.set(o.id, { chatId: o.chatId, text: `${o.instruction}\n\n${detail}`, reason });
     writeLog(`zadziałał ${o.id} (${o.kind}: ${o.target}).`);
     ensureClock();
   }
 
-  async function tick(): Promise<void> {
+  async function runTick(): Promise<void> {
     if (!enabled) return;
     dropExpired();
     const at = now();
-    for (const o of active()) if (o.kind === 'time') {
+    for (const o of [...active()]) if (o.kind === 'time') {
       const moment = Number(o.snapshot.at);
       if (!Number.isFinite(moment) || at < moment) continue;
       fire(o, `Minął moment obserwatora: ${local(moment)} (${zone}).`, `obserwator czasu: ${local(moment)}`);
     }
-    for (const o of active()) if (o.kind === 'pr' && readPr) {
+    for (const o of [...active()]) if (o.kind === 'pr' && readPr) {
       let pr: CockpitPrView;
       try { pr = await readPr(o.target); }
       catch (error) { writeLog(`nie udało się odczytać PR ${o.target}: ${error instanceof Error ? error.message : String(error)}`); continue; }
+      // The read may take a while: the observer can be cancelled or expire meanwhile, or another path may have fired it.
+      if (o.status !== 'active') continue;
+      if (now() >= o.expiresAt) { o.status = 'expired'; save(); continue; }
       // GitHub unreachable or refused: not a change of the PR.
       if (pr.state === 'UNKNOWN') continue;
       const signature = prSignature(pr);
-      if (typeof o.snapshot.signature !== 'string') { o.snapshot = { signature }; save(); continue; }
+      if (typeof o.snapshot.signature !== 'string') { o.snapshot = { ...o.snapshot, signature }; save(); continue; }
       if (o.snapshot.signature === signature) continue;
-      o.snapshot = { signature };
+      o.snapshot = { ...o.snapshot, signature };
       const checks = pr.checks.length ? pr.checks.map(c => `${c.name}: ${c.state}`).join(', ') : pr.checksError ?? 'brak checków';
       fire(o, `PR ${o.target}: stan ${pr.state}${pr.state === 'MERGED' ? ' (scalony)' : pr.state === 'CLOSED' ? ' (zamknięty bez scalenia)' : ''}, CI: ${checks}.`, `obserwator PR: ${o.target}`);
     }
@@ -229,48 +256,67 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
     ensureClock();
   }
 
+  /** One tick at a time: a minute clock that fires while the previous read still runs waits for that run, never doubles it. */
+  function tick(): Promise<void> {
+    if (ticking) return ticking;
+    ticking = runTick()
+      .catch(error => writeLog(`błąd: ${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => { ticking = undefined; });
+    return ticking;
+  }
+
   function assertEnabled() {
     if (!enabled) throw new ObserverError(409, 'Automatyki panelu są wyłączone (DESK_AUTOMATIONS=0), więc obserwator nie powstanie.');
   }
 
+  // Creation reads a task or a PR before it can store the observer: one critical section makes the limit check true.
+  let creating: Promise<unknown> = Promise.resolve();
+  function serialize<T>(work: () => Promise<T>): Promise<T> {
+    const run = creating.then(work, work);
+    creating = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  async function createOne({ chatId, kind, target, instruction }: { chatId: string; kind: ObserverKind; target: string; instruction: string }): Promise<ObserverView> {
+    assertEnabled();
+    dropExpired();
+    if (active().length >= MAX_ACTIVE_OBSERVERS) {
+      throw new ObserverError(409, `Limit aktywnych obserwatorów to ${MAX_ACTIVE_OBSERVERS}. Anuluj któryś w Ustawieniach i spróbuj ponownie.`);
+    }
+    const at = now();
+    const snapshot: Record<string, unknown> = {};
+    let expiresAt = at + OBSERVER_TTL_MS;
+    if (kind === 'cezar') {
+      if (!readTask) throw new ObserverError(503, 'Odczyt Cezara nie jest dostępny.');
+      const raw = await readTask(target).catch(() => null);
+      if (!raw) throw new ObserverError(404, `Cezar nie zna taska ${target}.`);
+      snapshot.state = cezarStateOf(raw);
+    } else if (kind === 'pr') {
+      if (!PR_URL.test(target)) throw new ObserverError(400, 'target to pełny adres PR: https://github.com/owner/repo/pull/n.');
+      if (!readPr) throw new ObserverError(503, 'Odczyt PR nie jest dostępny.');
+      try {
+        // An unreadable PR (UNKNOWN) is no baseline: the first real read becomes one, not a change.
+        const first = await readPr(target);
+        if (first.state !== 'UNKNOWN') snapshot.signature = prSignature(first);
+      } catch { /* GitHub missing: the first successful read becomes the baseline */ }
+    } else {
+      const moment = resolveObserverTime(target, at, zone);
+      if (moment === null) throw new ObserverError(400, 'Nie rozumiem tego momentu: podaj ISO 8601 albo „za 10 minut”, „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”.');
+      if (moment < at) throw new ObserverError(400, 'Ten moment już minął: podaj przyszły czas.');
+      snapshot.at = moment;
+      expiresAt = moment + OBSERVER_TIME_EXTRA_MS;
+      target = DateTime.fromMillis(moment, { zone }).toFormat("yyyy-LL-dd'T'HH:mm ZZ");
+    }
+    const record: StoredObserver = { id: `o-${randomBytes(6).toString('hex')}`, chatId, kind, target, instruction, createdAt: at, expiresAt, status: 'active', snapshot };
+    store.observers.push(record);
+    save();
+    writeLog(`utworzono ${record.id} (${kind}: ${target}) w rozmowie ${chatId}.`);
+    ensureClock();
+    return view(record);
+  }
+
   return {
-    async create({ chatId, kind, target, instruction }) {
-      assertEnabled();
-      dropExpired();
-      if (active().length >= MAX_ACTIVE_OBSERVERS) {
-        throw new ObserverError(409, `Limit aktywnych obserwatorów to ${MAX_ACTIVE_OBSERVERS}. Anuluj któryś w Ustawieniach i spróbuj ponownie.`);
-      }
-      const at = now();
-      const snapshot: Record<string, unknown> = {};
-      let expiresAt = at + OBSERVER_TTL_MS;
-      if (kind === 'cezar') {
-        if (!readTask) throw new ObserverError(503, 'Odczyt Cezara nie jest dostępny.');
-        const raw = await readTask(target).catch(() => null);
-        if (!raw) throw new ObserverError(404, `Cezar nie zna taska ${target}.`);
-        snapshot.state = cezarStateOf(raw);
-      } else if (kind === 'pr') {
-        if (!PR_URL.test(target)) throw new ObserverError(400, 'target to pełny adres PR: https://github.com/owner/repo/pull/n.');
-        if (!readPr) throw new ObserverError(503, 'Odczyt PR nie jest dostępny.');
-        try {
-          // An unreadable PR (UNKNOWN) is no baseline: the first real read becomes one, not a change.
-          const first = await readPr(target);
-          if (first.state !== 'UNKNOWN') snapshot.signature = prSignature(first);
-        } catch { /* GitHub missing: the first successful read becomes the baseline */ }
-      } else {
-        const moment = resolveObserverTime(target, at, zone);
-        if (moment === null) throw new ObserverError(400, 'Nie rozumiem tego momentu: podaj ISO 8601 albo „za 10 minut”, „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”.');
-        if (moment < at) throw new ObserverError(400, 'Ten moment już minął: podaj przyszły czas.');
-        snapshot.at = moment;
-        expiresAt = moment + OBSERVER_TIME_EXTRA_MS;
-        target = DateTime.fromMillis(moment, { zone }).toFormat("yyyy-LL-dd'T'HH:mm ZZ");
-      }
-      const record: StoredObserver = { id: `o-${randomBytes(6).toString('hex')}`, chatId, kind, target, instruction, createdAt: at, expiresAt, status: 'active', snapshot };
-      store.observers.push(record);
-      save();
-      writeLog(`utworzono ${record.id} (${kind}: ${target}) w rozmowie ${chatId}.`);
-      ensureClock();
-      return view(record);
-    },
+    create(input) { return serialize(() => createOne(input)); },
 
     async list() {
       dropExpired();
@@ -279,8 +325,9 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
 
     async cancel(id) {
       const found = store.observers.find(o => o.id === id);
-      if (found?.status === 'active') {
+      if (found && (found.status === 'active' || found.status === 'pending')) {
         found.status = 'cancelled';
+        delete found.delivery;
         save();
         writeLog(`anulowano ${id}.`);
       }
@@ -295,9 +342,14 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
         if (o.kind !== 'cezar') continue;
         const task = tasks.find(t => t.id === o.target);
         if (!task) continue;
-        const state = String(task.status ?? '').toLowerCase();
-        if (state !== 'needs-input' || o.snapshot.state === 'needs-input') continue;
-        o.snapshot = { state };
+        const seen = String(o.snapshot.state ?? '');
+        const state = cezarStateOf(task as unknown as Record<string, any>);
+        // Keep the last state seen, so a task created while paused still reports its later wait for the user.
+        if (seen !== state) {
+          o.snapshot = { ...o.snapshot, state };
+          save();
+        }
+        if (state !== 'needs-input' || seen === 'needs-input') continue;
         fire(o, `Task Cezara ${o.target} czeka na odpowiedź użytkownika.`, `obserwator taska Cezara: ${o.target}`);
       }
       await flush();
@@ -312,7 +364,7 @@ export function createObservers({ file, chat, readTask, readPr, enabled = true, 
         if (!task) continue;
         const state = String(task.status ?? '').toLowerCase();
         if (!FINISHED.has(state) || o.snapshot.state === 'done') continue;
-        o.snapshot = { state };
+        o.snapshot = { ...o.snapshot, state: 'done' };
         fire(o, `Task Cezara ${o.target} (${task.title ?? o.target}) jest zakończony${task.pullRequestUrl ? `; PR: ${task.pullRequestUrl}` : ''}.`, `obserwator taska Cezara: ${o.target}`);
       }
       await flush();

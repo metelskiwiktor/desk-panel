@@ -12,7 +12,7 @@ import { BankPlanError, planPreview } from './bank-plan';
 import { assignMarks, assignPreview } from './bank-assign';
 import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
 import { SourceError, type PanelSources } from './sources';
-import { PR_URL, type GhRunner, runGh, checkState, prFromGh, createPrReader } from './github';
+import { PR_URL, type GhRunner, type PrReader, runGh, checkState, prFromGh, createPrReader } from './github';
 
 export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
 
@@ -130,8 +130,8 @@ export interface Cockpit {
   smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
 }
 
-export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
-  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number;
+export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader }: {
+  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number; reader?: PrReader;
 }): Cockpit {
   const load = (): Store => {
     try { if (existsSync(file)) return storeSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* a broken file starts over */ }
@@ -192,7 +192,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   }
 
   // The same cached read the PR observers use (`server/github.ts`): GitHub is asked gently, never once per card.
-  const reader = createPrReader({ gh, now });
+  const reader = injectedReader ?? createPrReader({ gh, now });
   const prOf = (url: string, fallback: { title: string; branch?: string }) => reader.read(url, fallback);
 
   return {
