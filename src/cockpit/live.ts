@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ContextItem } from '../chat-contract';
 import { cardRefusal, COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
+import { rememberSnapshot } from '../chat-snapshots';
 import { APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, MAIL_LIST, RECON, SHOW, SMART_RULE, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
 const IDLE: CockpitState = { watching: false };
@@ -77,40 +78,43 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 
 /** The cockpit of the open conversation, read again while it shows something that changes. */
 function useCockpitView(chatId: string | null, items: readonly ChatMessage[]) {
-  const [view, setView] = useState<CockpitView | null>(null);
-  const [error, setError] = useState('');
+  const snapshots = useRef(new Map<string, CockpitView>());
+  const selection = useMemo(() => ({ chatId }), [chatId]);
+  const [snapshot, setSnapshot] = useState<{ selection: typeof selection; error?: string } | null>(null);
+  const view = chatId ? snapshots.current.get(chatId) ?? null : null;
+  const error = snapshot?.selection === selection ? snapshot.error ?? '' : '';
   const [tick, setTick] = useState(0);
   /** Grows with every message and step: a watch call inside a running answer counts too. */
   const steps = items.reduce((n, m) => n + 1 + (m.parts?.length ?? 0), 0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
-  useEffect(() => { setView(null); setError(''); }, [chatId]);
   useEffect(() => {
     if (!chatId) return;
     let gone = false;
     // Which task is watched the server decides from the conversation (the cockpit contract): read again as it grows.
     call(`/api/chats/${chatId}/cockpit`).then(
-      value => { if (!gone) { setView(value as CockpitView); setError(''); } },
-      e => { if (!gone) setError(e instanceof Error ? e.message : 'Kokpit jest niedostępny.'); },
+      value => { if (!gone) { rememberSnapshot(snapshots.current, chatId, value as CockpitView); setSnapshot({ selection }); } },
+      e => { if (!gone) setSnapshot({ selection, error: e instanceof Error ? e.message : 'Kokpit jest niedostępny.' }); },
     );
     return () => { gone = true; };
-  }, [chatId, steps, tick]);
+  }, [chatId, selection, steps, tick]);
   const busy = !!view && ((view.task && ACTIVE.has(view.task.status)) || view.pr?.checks.some(c => c.state === 'running' || c.state === 'pending'));
   useEffect(() => {
     if (!chatId) return;
     const t = window.setTimeout(refresh, busy ? ACTIVE_MS : IDLE_MS);
     return () => window.clearTimeout(t);
   }, [chatId, busy, view, refresh]);
-  return { view, error, refresh };
+  return { view, error, refresh, loading: !!chatId && snapshot?.selection !== selection };
 }
 
 /** The real chat, on Hermes only: conversations of the other engine stay on the server but are not listed here. */
 export function useLiveCockpit(): CockpitSource {
   const chat = useChat('hermes');
+  const active = chat.active?.id === chat.activeId ? chat.active : null;
   /** One per draft: a message retried after an error is the same message to the server. */
   const nonce = useRef<string | null>(null);
   const down = chat.engines?.find(e => e.engine === 'hermes' && !e.available);
-  const items = useMemo(() => chat.active && engineOf(chat.active) === 'hermes' ? chat.active.items : [], [chat.active]);
-  const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, items);
+  const items = useMemo(() => active && engineOf(active) === 'hermes' ? active.items : [], [active]);
+  const { view, error: cockpitError, refresh, loading: cockpitLoading } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
   const bankPlans = view?.bankPlans;
   const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans)), [items, dispatches, view?.legacyUnresolved, bankPlans]);
@@ -129,12 +133,14 @@ export function useLiveCockpit(): CockpitSource {
 
   return {
     mode: 'live',
-    title: chat.active?.title ?? 'Nowy czat',
+    title: active?.title ?? chat.chats?.find(c => c.id === chat.activeId)?.title ?? 'Nowy czat',
     messages,
-    running: chat.active?.running ?? false,
+    running: active?.running ?? false,
     hermes: { up: !down, checking: false, error: down?.error },
     unavailable: chat.unavailable,
-    loading: !!chat.activeId && !chat.active,
+    loading: !!chat.activeId && !active,
+    refreshing: chat.syncing || cockpitLoading,
+    cockpitLoading,
     error: chat.error,
     clearError: chat.clearError,
     async send(text: string, context: ContextItem[]) {
@@ -146,6 +152,7 @@ export function useLiveCockpit(): CockpitSource {
     stop: () => void chat.stop(),
     retry: () => void chat.refresh(),
     async respond(id: string, response: unknown) {
+      if (chat.syncing || cockpitLoading) throw new Error('Rozmowa jeszcze się odświeża. Spróbuj za chwilę.');
       if (response === 'approve' || response === 'deny') { await chat.approve(id, response); return; }
       const eventResponse = response as { kind?: string; action?: unknown } | null;
       if (eventResponse?.kind === 'appointment' || eventResponse?.kind === 'calendarPlan') {
@@ -173,8 +180,9 @@ export function useLiveCockpit(): CockpitSource {
       await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.model ? { model: r.model } : {}), ...(r.steps ? { steps: r.steps } : {}) });
       refresh();
     },
-    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, updatedAt: c.updatedAt })) ?? null,
+    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, createdAt: c.createdAt, updatedAt: c.updatedAt })) ?? null,
     activeId,
+    createdAt: active?.createdAt,
     open: (id: string | null) => { nonce.current = null; if (id) chat.open(id); else chat.startNew(); },
     remove: () => void chat.remove(),
     cockpit,

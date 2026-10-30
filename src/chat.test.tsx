@@ -275,7 +275,7 @@ describe('Hermes only', () => {
     const list = screen.getByRole('group', { name: 'Poprzednie rozmowy' });
     expect(await within(list).findByRole('button', { name: /Hermesowa/ })).toBeTruthy();
     expect(within(list).queryByRole('button', { name: /Stara z agy/ })).toBeNull();
-    await user.click(within(list).getByRole('button', { name: /Nowy czat/ }));
+    await user.click(within(screen.getByRole('complementary', { name: 'Historia rozmów' })).getByRole('button', { name: /Nowy czat/ }));
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Cześć{Enter}');
     await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({ text: 'Cześć', engine: 'hermes' }));
     expect(calls.some(c => c.method === 'PUT')).toBe(false);
@@ -351,33 +351,80 @@ describe('CHAT_SKILLS', () => {
   });
 });
 
-describe('chat resizing, minimizing, and draft preservation', () => {
-  it('minimizes the chat window via minimize button', async () => {
+describe('chat presentation and drafts', () => {
+  it('resizes history by dragging or keyboard and remembers its width after reopening', async () => {
+    mockServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await listed();
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    const handle = screen.getByRole('separator', { name: 'Szerokość historii' });
+    fireEvent.pointerDown(handle, { clientX: 232, button: 0 });
+    fireEvent.pointerMove(handle, { clientX: 340 });
+    fireEvent.pointerUp(handle, { clientX: 340 });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('340');
+    fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('330');
+    await user.click(screen.getByRole('button', { name: 'Ukryj historię' }));
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    expect(screen.getByRole('separator', { name: 'Szerokość historii' }).getAttribute('aria-valuenow')).toBe('330');
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Szerokość historii' }), { key: 'Home' });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('200');
+    fireEvent.doubleClick(screen.getByRole('separator', { name: 'Szerokość historii' }));
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('232');
+  });
+
+  it('minimizes to a working conversation and maximizes without losing the draft', async () => {
     mockServer();
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatWindow onClose={onClose} />);
     await listed();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Szkic');
     await user.click(screen.getByRole('button', { name: 'Zminimalizuj czat' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Czat z agentem' })).toBeTruthy();
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic');
+    await user.click(screen.getByRole('button', { name: 'Maksymalizuj czat' }));
+    expect(screen.getByRole('dialog', { name: 'Czat z agentem' })).toBeTruthy();
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic');
   });
 
-  it('renders interactive resize handle and supports dragging to resize', async () => {
-    mockServer();
+  it('isolates drafts and picked skills per conversation, searches history by title and ID, and restores on return', async () => {
+    const second = '2b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
+    const calls = mockServer([summary(), summary({ id: second, title: 'Plan tygodnia' })]);
+    const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
     await listed();
-    const handle = screen.getByTestId('chat-resize-handle');
-    expect(handle).toBeTruthy();
-    const dialog = screen.getByRole('dialog', { name: 'Czat z agentem' });
-    expect(dialog).toBeTruthy();
-
-    fireEvent.pointerDown(handle, { clientX: 500, clientY: 400 });
-    fireEvent.pointerMove(window, { clientX: 600, clientY: 450 });
-    fireEvent.pointerUp(window, { clientX: 600, clientY: 450 });
-
-    const saved = JSON.parse(localStorage.getItem('desk-panel:chat-size') || '{}');
-    expect(saved.width).toBeGreaterThanOrEqual(400);
-    expect(saved.height).toBeGreaterThanOrEqual(300);
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Nowa rozmowa');
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), '@bank{Enter}Szkic dla Anny');
+    expect(getChatDraft(ID).text).toBe('Szkic dla Anny');
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    const search = screen.getByRole('textbox', { name: 'Szukaj rozmów' });
+    await user.type(search, second);
+    expect(screen.queryByRole('button', { name: /Zadanie z maila/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Plan tygodnia/ }));
+    expect(screen.queryByText('Zrób z tego zadanie na jutro.')).toBeNull();
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([], { id: second, title: 'Plan tygodnia' }) });
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Usuń z kontekstu: Bank' })).toBeNull();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Drugi szkic');
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    await user.type(screen.getByRole('textbox', { name: 'Szukaj rozmów' }), 'anny');
+    await user.click(screen.getByRole('button', { name: /Zadanie z maila/ }));
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic dla Anny');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Bank' })).toBeTruthy();
+    expect(getChatDraft(second).text).toBe('Drugi szkic');
+    expect(getChatDraft().text).toBe('Nowa rozmowa');
+    expect(calls.some(c => c.method !== 'GET')).toBe(false);
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), '{Enter}');
+    await waitFor(() => expect(getChatDraft(ID).text).toBe(''));
+    expect(getChatDraft(second).text).toBe('Drugi szkic');
+    expect(getChatDraft().text).toBe('Nowa rozmowa');
   });
 
   it('keeps the unsent text and its context chips when the window closes and opens again', async () => {

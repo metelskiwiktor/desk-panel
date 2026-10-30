@@ -1,5 +1,7 @@
 # Czat z agentem
 
+Mapa frontendu, zasady zmian GUI i powtarzalne przepływy przeglądarkowe: [wektor-ui.md](wektor-ui.md).
+
 Wektor ma też kartę wyboru dnia i godziny wizyty ZnanyLekarz oraz kartę zgody na nowe wydarzenie Google Calendar.
 Przepływ i granice potwierdzeń opisują [znanylekarz.md](znanylekarz.md) i [calendar.md](calendar.md). Samo wywołanie narzędzia
 niczego nie rezerwuje ani nie tworzy w Google; zapis jest osobnym kliknięciem użytkownika, powiązanym z zakończoną kartą
@@ -14,11 +16,34 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
 
 ## Jak się tego używa
 
-- **Okno (kokpit)**: duże, modalne, w dwóch kolumnach (`src/ChatWindow.tsx`, `src/cockpit/`). Po lewej (60%) rozmowa;
-  po prawej (40%) **kokpit taska**: czy Wektor monitoruje task, aktywny task Cezara (ID, status RUNNING/REVIEW/DONE, repo,
-  worktree, tokeny, „Otwórz w Cezarze”) i pull request z checkami CI. Tytuł w nagłówku rozwija listę rozmów i „Nowy
-  czat”; wybranie rozmowy ją **kontynuuje** (agent pamięta wcześniejsze wiadomości, także po restarcie panelu). `Esc`
-  kończy wskazywanie, potem zamyka okno. Na wąskim ekranie kolumny są zakładkami „Czat” / „Kokpit”.
+- **Przestrzeń Wektora** (`src/ChatWindow.tsx`, `src/cockpit/`): pełny ekran przeglądarki, boczna historia i rozmowa
+  wykorzystująca pozostałą szerokość. Historia jest przeszukiwana lokalnie po nazwie lub ID (bez odczytywania treści wszystkich
+  rozmów), grupowana według ostatniej aktywności i zwijana przyciskiem. Jej prawą krawędź można przeciągać; szerokość jest
+  zapamiętywana lokalnie. Separator obsługuje też strzałki (Shift przyspiesza), Home/End i dwuklik przywracający domyślną szerokość.
+  Na małym ekranie historia otwiera się jako szuflada.
+  Wybranie rozmowy ją **kontynuuje**. Ostatnia rozmowa Hermesa jest pamiętana lokalnie również po przeładowaniu strony.
+  Powrót do niedawno otwartej rozmowy pokazuje jej własny podgląd z pamięci bieżącego okna (do 8 rozmów i kokpitów;
+  odczyty kart do 32). SSE i kokpit nadal odświeżają dane z serwera. Zgody i wysyłanie czekają na aktualny stan;
+  wybór i zapis wizyty dodatkowo czekają na świeży odczyt jej karty. Podglądy nie trafiają do localStorage.
+  Układ automatycznego kokpitu pozostaje zarezerwowany podczas odczytu następnej rozmowy, bez pokazywania poprzedniego taska.
+- **Kokpit**: domyślnie automatyczny — zajmuje miejsce dopiero przy wizycie, jawnym monitorowaniu taska/PR-a lub błędzie
+  odczytu. Ma też tryby pełny, skrócony i ukryty; wybór jest zapamiętywany. Szczegóły rozmowy (ID, rozpoczęcie i czas ostatniej
+  wiadomości) można otworzyć przyciskiem po prawej nawet bez taska. Karty zgody są częścią rozmowy; kokpit mieści podglądy,
+  metadane i wybór terminów na tle kalendarza. Na wąskim ekranie oraz w widoku kompaktowym są zakładki „Czat” / „Kokpit”.
+- **Widoki i klawiatura**: minus przechodzi do kompaktowego, działającego czatu obok pulpitu, ikona rozwinięcia wraca do
+  pełnego ekranu, a `×` ukrywa Wektora. `Alt+W` przełącza: ukryty → kompaktowy → pełny → ukryty. **Lewy Ctrl + lewy Alt**
+  natychmiast przełącza wskazywanie włącz/wyłącz (obie kolejności klawiszy działają, autorepeat nie przełącza wielokrotnie).
+  Puszczenie klawiszy nie wyłącza wskazywania; po jego zakończeniu Wektor zostaje po prawej w widoku kompaktowym.
+  Wskazywanie i widok kompaktowy mają identyczne położenie i rozmiar: prawie pełną wysokość ekranu na komputerze i 72% na telefonie.
+  Sam Ctrl, sam Alt i kombinacje Ctrl+C/V/A nie zmieniają widoku. Prawy Alt (AltGr) pozostaje do polskich znaków.
+  Utrata fokusu czyści stan fizycznych klawiszy, bez zmiany przełącznika wskazywania. „Gotowe”, Esc i zamknięcie czatu kończą
+  wskazywanie, a Alt+W je kończy i przełącza widok. Kliknięcia dodają
+  kontekst do szkicu, nigdy same nie wysyłają wiadomości.
+  `Esc` zamyka najpierw menu skillów, wskazywanie albo szufladę historii, potem ukrywa okno. Pełny ekran zatrzymuje fokus
+  klawiatury w oknie; animacje respektują `prefers-reduced-motion`.
+- **Szkice**: tekst i wskazane elementy są zapisywane lokalnie osobno dla każdej rozmowy oraz dla nowej, jeszcze niewysłanej
+  rozmowy (`src/chat-draft.ts`). Zmiana rozmowy ani widoku nie przenosi szkicu do innego czatu. Przyjęcie wiadomości przez
+  serwer czyści tylko wysłany szkic; błąd go zachowuje. Stary wspólny szkic jest jednorazowo przenoszony do nowej rozmowy.
 - **Rozmowa to gotowe komponenty assistant-ui**: `Thread` z ich rejestru shadcn (`src/components/thread.aui.tsx` i to, czego
   używa: markdown, wiersz narzędzia, grupa narzędzi, `src/components/ui/*`), skopiowany do repo i dopasowany: polskie
   etykiety, bez załączników, edycji, ponawiania i gałęzi (runtime panelu ich nie ma) i ze slotami na rzeczy panelu
@@ -53,20 +78,21 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   `&cockpitSpeed=0.3` szybciej); `just screenshots standard --pages pulpit --open cockpit-approval` (także `cockpit`,
   `cockpit-recon`, `cockpit-watch`, `cockpit-review`). Prawdziwy przebieg na zastępczym Hermesie scenariusza, z runem
   i PR-em zmyślonymi przez scenariusz: `--open chat-dispatch`, `chat-dispatched`, `chat-review`.
-- **Style**: tylko okno czatu używa Tailwind CSS v4 (`src/cockpit/cockpit.css`): klasy z prefiksem `tw:`, bez preflight,
+- **Style**: powłoka, historia, kokpit i menu skillów mają wspólne style i tokeny w `src/cockpit/wektor.css`; istniejące karty
+  i assistant-ui nadal używają Tailwind CSS v4 (`src/cockpit/cockpit.css`), bez nowej biblioteki: klasy z prefiksem `tw:`, bez preflight,
   utilities jako `!important`, skanowane tylko `src/cockpit`, `src/ChatWindow.tsx`, `src/components` i `src/lib`. Kolory
   shadcn (`background`, `muted`, `primary`…) są paletą panelu jako zmienne `--ck-…` (panel ma własne `--muted`), a wariant
   `dark:` działa w czacie zawsze; reszta panelu ma swoje style bez zmian.
-- **Wskaż element**: okno zwija się do samej rozmowy przyklejonej do prawej krawędzi, a pulpit **zsuwa się w lewo** obok niego (tylko
-  w tym trybie; górny pasek zawija się pod zegar). Każdy kliknięty element (mail, zadanie Cezara, spotkanie, trening albo cały
+- **Wskaż element**: Wektor przechodzi do widoku kompaktowego przy prawej krawędzi, a pulpit mieści się obok niego
+  (górny pasek zawija się pod zegar). Każdy kliknięty element (mail, zadanie Cezara, spotkanie, trening albo cały
   kafelek: Poczta, Cezar, limity, pasek dnia, cała strefa „Najbliższe dni” i pojedynczy dzień w niej) trafia do wiadomości
   jako chip. Kliknięcie jeszcze raz zdejmuje go z kontekstu. W tym trybie kliknięcia **nie uruchamiają** niczego na pulpicie,
   z wyjątkiem elementów oznaczonych `data-pick-through` (menu pulpitów wirtualnych): można przełączyć pulpit i wskazać kafelek
-  z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i wracają do pełnego okna.
+  z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i pozostawiają czat w widoku kompaktowym.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
-- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` działa jako dyspozytor: robi szybki rekonesans tylko do odczytu w repozytorium, wypisuje krótki plan po polsku + gotowy blok `Executor Prompt` po angielsku, pyta „Zlecić na Cezarze?”, a po potwierdzeniu wysyła `POST /api/cezar/runs` i zwraca link do zadania w Cezarze.
+- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` robi rekonesans tylko do odczytu i proponuje zlecenie kartą zgody. Agent sam nie uruchamia Cezara: dopiero kliknięcie użytkownika wysyła z panelu `POST /api/chats/:id/dispatch`; backend odczytuje propozycję z tej rozmowy i zwraca powiązanie z taskiem.
 - Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia); zmiany nazwy w tym oknie nie ma.
-- Wąski ekran (telefon przez Tailscale): okno zajmuje cały ekran, a panel wskazywania jest u dołu.
+- Wąski ekran (telefon przez Tailscale): pełny widok zajmuje cały ekran, kompaktowy i wskazywanie są u dołu.
 
 ## Co widzi agent
 

@@ -13,7 +13,7 @@ import { fillFromHistory, stabilizeBankCards } from './hermes-chat';
 import type { ChatDetail, ChatMessage, ChatPart } from '../src/chat-contract';
 
 let server: Server | undefined, chat: Awaited<ReturnType<typeof createScenarioChat>> | undefined;
-afterEach(async () => { chat?.dispose(); if (server) { server.closeAllConnections(); await new Promise(r => server!.close(r)); } });
+afterEach(async () => { await chat?.dispose(); if (server) { server.closeAllConnections(); await new Promise(r => server!.close(r)); } });
 async function setup() {
   const sources = createScenarioSources('scenarios/wizyty.json');
   const act = vi.spyOn(sources.appointments!, 'act'), confirm = vi.spyOn(sources.appointments!, 'calendarConfirm');

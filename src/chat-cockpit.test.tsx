@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ChatMessage, ChatPart } from './chat-contract';
 import { CARD_SHOWN } from './cockpit-contract';
@@ -18,13 +18,14 @@ describe('the cockpit on its mock (?cockpit=mock)', () => {
   it('runs @Zaimplementuj zadanie: recon, the approval card, then Cezar watched up to a PR in review', async () => {
     const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
-    expect(screen.getByText('Brak aktywnego monitorowania')).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: 'Kokpit taska' })).toBeNull();
     await user.type(screen.getByLabelText('Wiadomość do agenta'), '@zaimpl{Enter}Dodaj chip statusu{Enter}');
     const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
     const approval = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
+    expect(approval.closest('.wektor-conversation')).toBeTruthy();
     expect(within(recon).getByText('src/ChatWindow.tsx')).toBeTruthy();
     expect(within(recon).getByText('UI')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('Żaden task');
+    expect(screen.queryByRole('complementary', { name: 'Kokpit taska' })).toBeNull();
 
     // Correct the prompt, then dispatch the corrected one.
     await user.click(within(approval).getByRole('button', { name: 'Edytuj prompt' }));
@@ -154,6 +155,66 @@ describe('the live cockpit (Hermes and the panel)', () => {
     }));
     return calls;
   }
+
+  it('keeps automatic cockpit space during switches, restores the destination snapshot and waits for fresh consent state', async () => {
+    const B = '2b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
+    const hold = new Set<string>([B]);
+    const pending = new Map<string, ((value: Response) => void)[]>();
+    const calls: Call[] = [];
+    const reply = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      calls.push({ url, method });
+      if (url === '/api/chats') return reply({ chats: [summary({ id: H, title: 'Pierwszy czat' }), summary({ id: B, title: 'Drugi czat' })] });
+      const id = /^\/api\/chats\/([^/]+)\/cockpit$/.exec(url)?.[1];
+      if (id && hold.has(id)) return new Promise<Response>(resolve => pending.set(id, [...pending.get(id) ?? [], resolve]));
+      if (id) return reply(view({ task: { ...running, title: id === H ? 'Zadanie A' : 'Zadanie B' } }));
+      return reply({ ok: true });
+    }));
+    const approval: ChatMessage = { id: 'approval-message', role: 'agent', at: NOW, status: 'streaming', parts: [{ type: 'approval', id: 'approval-A', tool: 'terminal', detail: 'Odczyt syntetyczny', state: 'pending', at: NOW }] };
+    const text = (value: string): ChatMessage => ({ id: 'answer', role: 'agent', at: NOW, status: 'done', parts: [{ type: 'text', text: value }] });
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Pierwszy czat/);
+    const streamA = FakeSource.instances.at(-1)!;
+    streamA.emit({ type: 'state', chat: detail([text('Rozmowa A'), approval], { id: H, title: 'Pierwszy czat', running: true }) });
+    await screen.findByText('Zadanie A');
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Zezwól' }) as HTMLButtonElement).disabled).toBe(false));
+    await openConversation(user, /Drugi czat/);
+    expect(document.querySelector('.wektor-workspace')?.getAttribute('data-inspector')).toBe('full');
+    expect(screen.queryByText('Zadanie A')).toBeNull();
+    expect(screen.queryByText('Rozmowa A')).toBeNull();
+    expect(screen.getByRole('status', { name: 'Wczytywanie kokpitu' })).toBeTruthy();
+    const streamB = FakeSource.instances.at(-1)!;
+    streamB.emit({ type: 'state', chat: detail([text('Rozmowa B')], { id: B, title: 'Drugi czat' }) });
+    expect(document.querySelector('.wektor-workspace')?.getAttribute('data-inspector')).toBe('full');
+    await act(async () => { for (const resolve of pending.get(B) ?? []) resolve(reply(view({ task: { ...running, title: 'Zadanie B' } }))); });
+    await screen.findByText('Zadanie B');
+    hold.add(H);
+    await openConversation(user, /Pierwszy czat/);
+    expect(screen.getByText('Rozmowa A')).toBeTruthy();
+    expect(screen.getByText('Zadanie A')).toBeTruthy();
+    expect(screen.queryByText('Zadanie B')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Zezwól' }) as HTMLButtonElement).disabled).toBe(true);
+    streamB.emit({ type: 'state', chat: detail([text('Spóźniona rozmowa B')], { id: B, title: 'Drugi czat' }) });
+    expect(screen.queryByText('Spóźniona rozmowa B')).toBeNull();
+    await act(async () => { for (const resolve of pending.get(H) ?? []) resolve(reply(view({ task: { ...running, title: 'Zadanie A aktualne' } }))); });
+    expect((screen.getByRole('button', { name: 'Zezwól' }) as HTMLButtonElement).disabled).toBe(true);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([text('Rozmowa A aktualna'), { ...approval, status: 'done', parts: [{ type: 'approval', id: 'approval-A', tool: 'terminal', detail: 'Odczyt syntetyczny', state: 'denied', at: NOW }] }], { id: H, title: 'Pierwszy czat' }) });
+    expect(await screen.findByText('Odmówiono')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Zezwól' })).toBeNull();
+    expect(screen.getByText('Zadanie A aktualne')).toBeTruthy();
+    // A → B → A before B's read finishes still needs a new authoritative cockpit read for A.
+    await openConversation(user, /Drugi czat/);
+    expect(screen.getByText('Rozmowa B')).toBeTruthy();
+    expect(screen.getByText('Zadanie B')).toBeTruthy();
+    await openConversation(user, /Pierwszy czat/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([text('Rozmowa A'), approval], { id: H, title: 'Pierwszy czat', running: true }) });
+    expect((screen.getByRole('button', { name: 'Zezwól' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { for (const resolve of pending.get(H) ?? []) resolve(reply(view({ task: { ...running, title: 'Zadanie A aktualne' } }))); });
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Zezwól' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(calls.every(c => c.method === 'GET')).toBe(true);
+  });
 
   it('shows the recon and dispatch cards of Hermes, and dispatches through the panel only when the user clicks', async () => {
     const calls = liveServer();

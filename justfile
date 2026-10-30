@@ -23,6 +23,11 @@ screenshots name="standard" *args:
     node scripts/ensure-deps.mjs
     npm run scenario -- {{name}} --shot {{args}}
 
+# Synthetic browser flows for Wektor: composer, keyboard, history, switching, or all. No real agent or provider.
+wektor-ui case="all" *args:
+    node scripts/ensure-deps.mjs
+    npx tsx scripts/wektor-ui.ts {{case}} {{args}}
+
 # Target screens from devices.json with derived CSS sizes and Chrome DevTools values.
 devices:
     npx tsx scripts/devices.ts

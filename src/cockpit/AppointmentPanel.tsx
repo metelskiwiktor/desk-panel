@@ -5,9 +5,12 @@ import { useAppointmentWorkspace, type VisitWorkspaceEntry } from './appointment
 import { calendarDay, dayBounds, lanes, slotConflicts, timeAxis, visitDay, visitTime, visitSlotTime } from './appointment-timeline';
 import { btn } from './cards';
 import './appointment-panel.css';
+import { useConversationCache } from './conversation-cache';
+import { rememberSnapshot } from '../chat-snapshots';
 
 function useCalendar(enabled: boolean, savedId?: string) {
-  const [source, setSource] = useState<CalendarSource | null>(null);
+  const cache = useConversationCache()?.cards;
+  const [source, setSource] = useState<CalendarSource | null>(() => cache?.get('/api/calendar') as CalendarSource ?? null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!enabled) return;
@@ -22,10 +25,14 @@ function useCalendar(enabled: boolean, savedId?: string) {
     fetch('/api/calendar', { signal: controller.signal, cache: 'no-store' }).then(async r => {
       if (!r.ok) throw new Error('calendar');
       const value = calendarSourceSchema.parse(await r.json());
-      if (!controller.signal.aborted) setSource(value);
-    }).catch(() => { if (!controller.signal.aborted) setSource(previous => previous ? { ...previous, status: 'offline' } : { name: 'Google Calendar', live: true, calendarId: '', status: 'offline', observedAt: null, data: null }); });
+      if (!controller.signal.aborted) { if (cache) rememberSnapshot(cache, '/api/calendar', value, 32); setSource(value); }
+    }).catch(() => { if (!controller.signal.aborted) setSource(previous => {
+      const unavailable: CalendarSource = previous ? { ...previous, status: 'offline' } : { name: 'Google Calendar', live: true, calendarId: '', status: 'offline', observedAt: null, data: null };
+      if (cache) rememberSnapshot(cache, '/api/calendar', unavailable, 32);
+      return unavailable;
+    }); });
     return () => controller.abort();
-  }, [enabled, tick, savedId]);
+  }, [enabled, tick, savedId, cache]);
   return source;
 }
 

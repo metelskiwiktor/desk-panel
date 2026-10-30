@@ -2,6 +2,9 @@
 
 You are the executor. Follow the sequence in your workflow prompt exactly.
 
+General Wektor frontend ownership and browser checks are in [wektor-ui.md](../wektor-ui.md). The procedure below is for
+a Cezar executor; it does not prescribe commits, deployment or service restarts for an ordinary GUI task outside that workflow.
+
 Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `address` run on `codex` (`gpt-6.1-terra`, the
 user's Codex subscription; `fix` and `address` continue the `implement` session), `review` on `agy` (`claude-opus-5-5-low`). A
 step's own runner and model win over the run's, so the dispatch card lists these pinned steps with their own runner and

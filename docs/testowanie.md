@@ -25,6 +25,8 @@ just screenshots standard --nav                        # keep the bottom navigat
 npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
+just screenshots standard --pages pulpit --open chat-skills     # nowe menu umiejętności Wektora
+just screenshots standard --pages pulpit --open chat-compact    # czat obok pulpitu
 just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
 just screenshots wizyty --pages pulpit --open chat-appointment-selected # automatycznie wypełniony kalendarz
 just screenshots wizyty --pages pulpit --open chat-appointment-saved # zapis do atrapy Google
@@ -58,6 +60,11 @@ prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`
 
 
 ## Weryfikacja
+
+Interakcje GUI Wektora: `just wektor-ui all` lub pojedynczy przypadek `composer`, `keyboard`, `history`, `switching`.
+To syntetyczna przeglądarka na tym samym środowisku co scenariusze, bez prawdziwego agenta i zapisów na kontach użytkownika.
+Szczegóły i mapa frontendu: [wektor-ui.md](wektor-ui.md). Runner zapisuje raport, zrzuty i trace przy błędzie w `output/wektor-ui`.
+Nie zastępuje oceny wyglądu ani pełnego `just check`.
 
 ```powershell
 just test-fast   # w trakcie pracy: tylko testy, których dotyczą niezacommitowane zmiany (vitest --changed)
@@ -108,4 +115,9 @@ Nie podnoś automatycznie timeoutów i nie uznawaj każdego błędu za problem o
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci` i `scripts/check.mjs` na Ubuntu i Windows (tylko tam działa test DPAPI).
+
+Runner zrzutów przerywa działanie przy `pageerror` (wyjątek JavaScript), także gdy oczekuje na element strony.
+Oczekiwane HTTP 503 w scenariuszu offline są osobnymi logami konsoli. Nazwy zrzutów uwzględniają `--open`, zapytanie,
+stan Hermesa, ekran i skalowanie. `--file` wymaga jednej strony i jednego ekranu/skalowania; dla macierzy używaj `--out`,
+żeby kolejne widoki nie nadpisywały jednego pliku.
 

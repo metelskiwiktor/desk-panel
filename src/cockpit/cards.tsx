@@ -12,7 +12,7 @@ import { watchAnswerTask } from '../cockpit-contract';
  * What a card can do and see: answer on behalf of the user (a promise that fails says why), whether the thread is busy
  * (cards wait then), and the task the cockpit watches now, so a watch card shows it live.
  */
-export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask; chatId?: string | null }>({ respond: () => {}, running: false });
+export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; refreshing?: boolean; watched?: CockpitTask; chatId?: string | null }>({ respond: () => {}, running: false });
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
 
 /** One card that cannot render says so in its place; without this, React drops the whole chat window (a black screen). */
@@ -352,7 +352,7 @@ const DECIDED: Record<Exclude<HermesApprovalArgs['state'], 'pending'>, string> =
 
 /** Hermes asks before running a tool; its run waits for the answer (or its own timeout). */
 export function HermesApprovalCard({ toolCallId, args }: ToolCallMessagePartProps<HermesApprovalArgs>) {
-  const { respond } = useContext(CardActions);
+  const { respond, refreshing } = useContext(CardActions);
   const pending = args.state === 'pending';
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -371,8 +371,8 @@ export function HermesApprovalCard({ toolCallId, args }: ToolCallMessagePartProp
       {pending && <>
         <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Odpowiedź czeka na Twoją decyzję · {elapsed(now - args.at)}</p>
         <div className="tw:flex tw:gap-2">
-          <button type="button" className={`${btn} tw:bg-ck-green tw:text-ck-bg tw:hover:bg-[#8de0ae]`} onClick={() => respond(toolCallId, 'approve')}>Zezwól</button>
-          <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} onClick={() => respond(toolCallId, 'deny')}>Odmów</button>
+          <button type="button" className={`${btn} tw:bg-ck-green tw:text-ck-bg tw:hover:bg-[#8de0ae]`} disabled={refreshing} onClick={() => respond(toolCallId, 'approve')}>Zezwól</button>
+          <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={refreshing} onClick={() => respond(toolCallId, 'deny')}>Odmów</button>
         </div>
       </>}
     </div>

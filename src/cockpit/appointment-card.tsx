@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { appointmentViewSchema, calendarPlanViewSchema, type AppointmentView, type CalendarDraft, type CalendarSaved } from '../appointment-contract';
 import { CardActions, btn, card, head, refusedNote } from './cards';
 import { useAppointmentWorkspace } from './appointment-workspace';
+import { useConversationCache } from './conversation-cache';
+import { rememberSnapshot } from '../chat-snapshots';
 
 export interface AppointmentArgs { refused?: string }
 const money = (p: AppointmentView['preview']) => p.price === null ? 'Cena niepodana' : `${p.priceFrom ? 'od ' : ''}${p.price.toLocaleString('pl-PL')} zł`;
@@ -22,21 +24,27 @@ async function json(path: string, schema: z.ZodType, signal?: AbortSignal) {
 }
 function useCard<T>(suffix: string, toolCallId: string, schema: z.ZodType<T>, ready: boolean) {
   const { chatId } = useContext(CardActions);
+  const cache = useConversationCache()?.cards;
   const path = chatId ? `/api/chats/${chatId}/${suffix}?toolCallId=${encodeURIComponent(toolCallId)}` : '';
-  const [value, setValue] = useState<T | null>(null), [error, setError] = useState(''), [tick, setTick] = useState(0);
-  const refresh = useCallback(() => { setError(''); setTick(n => n + 1); }, []);
-  useEffect(() => { setValue(null); setError(''); }, [path, ready]);
+  const [value, setValue] = useState<T | null>(() => ready ? cache?.get(path) as T ?? null : null), [error, setError] = useState(''), [tick, setTick] = useState(0);
+  const [fresh, setFresh] = useState(false);
+  const refresh = useCallback(() => { setError(''); setFresh(false); setTick(n => n + 1); }, []);
+  useEffect(() => { setValue(ready ? cache?.get(path) as T ?? null : null); setError(''); setFresh(false); }, [path, ready, cache]);
   useEffect(() => {
     if (!path || !ready) return;
     const controller = new AbortController();
-    json(path, schema, controller.signal).then(v => { if (!controller.signal.aborted) setValue(v as T); }, e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Nie udało się odczytać karty.'); });
+    json(path, schema, controller.signal).then(v => {
+      if (controller.signal.aborted) return;
+      if (cache) rememberSnapshot(cache, path, v, 32);
+      setValue(v as T); setFresh(true);
+    }, e => { if (!controller.signal.aborted) { setError(e instanceof Error ? e.message : 'Nie udało się odczytać karty.'); setFresh(true); } });
     return () => controller.abort();
-  }, [path, schema, ready, tick]);
+  }, [path, schema, ready, tick, cache]);
   useEffect(() => {
     if (!ready) return;
     const focus = () => refresh(); window.addEventListener('focus', focus); return () => window.removeEventListener('focus', focus);
   }, [ready, refresh]);
-  return { value, error, setError, refresh, chatId };
+  return { value, error, setError, refresh, chatId, refreshing: !!path && ready && !fresh };
 }
 function Saved({ saved }: { saved: CalendarSaved }) {
   return <div className="tw:grid tw:gap-2 tw:rounded-xl tw:border tw:border-ck-green/40 tw:bg-ck-green/10 tw:p-3" role="status">
@@ -77,14 +85,17 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
   const summary = useRef<HTMLElement>(null);
   const openSummary = workspace?.openSummary;
   const ready = status.type !== 'running' && !args.refused && toolCallId.includes(':v-');
-  const { value: view, error, setError, refresh } = useCard('appointment', toolCallId, appointmentViewSchema, !!ready);
+  const { value: view, error, setError, refresh, refreshing } = useCard('appointment', toolCallId, appointmentViewSchema, !!ready);
   const [day, setDay] = useState(''), [picked, setPicked] = useState(''), [busy, setBusy] = useState(false);
   const [title, setTitle] = useState(''), [end, setEnd] = useState('');
+  const initializedSelection = useRef<string | null>(null);
   useEffect(() => {
-    if (!view?.selection) return;
+    if (!view?.selection) { initializedSelection.current = null; return; }
+    if (refreshing || initializedSelection.current === view.selection.id) return;
+    initializedSelection.current = view.selection.id;
     setTitle(view.selection.draft?.title ?? `Wizyta — ${view.preview.doctor}`);
     setEnd(view.selection.draft ? time(view.selection.draft.endAt, view.preview.timeZone) : '');
-  }, [view?.selection?.id]);
+  }, [view?.selection?.id, refreshing]);
   const answer = async (action: unknown) => { setBusy(true); setError(''); try { await respond(toolCallId, { kind: 'appointment', action }); refresh(); } catch (e) { refresh(); setError(e instanceof Error ? e.message : 'Nie udało się zapisać decyzji.'); } finally { setBusy(false); } };
   const p = view?.preview, selection = view?.selection;
   const days = p ? [...new Set(p.slots.map(s => dayKey(s.startAt, p.timeZone)))] : [];
@@ -93,9 +104,12 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
   const url = selection ? safeBookingUrl(selection.slot.bookingUrl) : null;
   const endAt = selection && p ? endFromTime(end, selection.draft?.endAt ?? selection.slot.startAt, p.timeZone) : null;
   const put = workspace?.put, remove = workspace?.remove, show = workspace?.show, offer = workspace?.offer;
+  const settle = workspace?.settle;
+  useEffect(() => { if (view || error || args.refused) settle?.(toolCallId); }, [view, error, args.refused, settle, toolCallId]);
+  const locked = busy || running || refreshing || !!error;
   useEffect(() => {
     if (!view) { remove?.(toolCallId); return; }
-    put?.(toolCallId, { view, day: day || (selection ? dayKey(selection.slot.startAt, view.preview.timeZone) : active), picked, disabled: busy || running, endAt,
+    put?.(toolCallId, { view, day: day || (selection ? dayKey(selection.slot.startAt, view.preview.timeZone) : active), picked, disabled: locked, endAt,
       chooseDay: d => { setDay(d); setPicked(''); }, chooseSlot: setPicked,
       review: () => {
         openSummary?.();
@@ -107,7 +121,7 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
           target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }, 0);
       } });
-  }, [put, remove, toolCallId, view, active, day, picked, busy, running, selection, endAt, openSummary]);
+  }, [put, remove, toolCallId, view, active, day, picked, locked, selection, endAt, openSummary]);
   useEffect(() => { if (view) offer?.(toolCallId, view.preview.observedAt); }, [!!view, offer, toolCallId]);
   useEffect(() => () => remove?.(toolCallId), [remove, toolCallId]);
   return <section ref={summary} tabIndex={-1} className={card} aria-label="Umów wizytę">
@@ -119,17 +133,17 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
         <div><p className="tw:m-0 tw:text-base tw:font-medium tw:text-ck-text">{p.doctor}</p><p className="tw:m-0 tw:text-sm tw:text-ck-muted">{p.service}</p><p className="tw:mt-1 tw:mb-0 tw:text-sm">{p.location} · {money(p)}{p.durationMinutes ? ` · ${p.durationMinutes} min` : ''}</p></div>
         {view.saved ? <Saved saved={view.saved} /> : selection ? <>
           <div className="tw:border-l-[3px] tw:border-ck-cal tw:pl-3"><p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybrany termin</p><p className="tw:my-1 tw:text-base tw:font-medium">{format(selection.slot.startAt, p.timeZone, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p><p className="tw:m-0 tw:text-sm">{time(selection.slot.startAt, p.timeZone)} · {p.location} · {money(p)}</p></div>
-          <div className="tw:flex tw:flex-wrap tw:gap-2">{url && <a className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action href={url} target="_blank" rel="noopener noreferrer">Otwórz ZnanyLekarz <ExternalLink size={14} /></a>}<button type="button" className={`${btn} tw:border tw:border-ck-line-2`} disabled={busy || running || view.writeStarted} onClick={() => void answer({ action: 'reset', selectionId: selection.id })}>Zmień termin</button></div>
+          <div className="tw:flex tw:flex-wrap tw:gap-2">{url && <a className={`${btn} tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action href={url} target="_blank" rel="noopener noreferrer">Otwórz ZnanyLekarz <ExternalLink size={14} /></a>}<button type="button" className={`${btn} tw:border tw:border-ck-line-2`} disabled={locked || view.writeStarted} onClick={() => void answer({ action: 'reset', selectionId: selection.id })}>Zmień termin</button></div>
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Dokończ rezerwację i ewentualną płatność na stronie lekarza, a potem wróć do tej karty. Samo otwarcie linku nie potwierdza wizyty.</p>
           <hr className="tw:m-0 tw:border-ck-line" />
-          <CalendarFields draft={selection.draft} startAt={selection.slot.startAt} zone={p.timeZone} title={title} setTitle={setTitle} end={end} setEnd={setEnd} locked={view.writeStarted} />
+          <CalendarFields draft={selection.draft} startAt={selection.slot.startAt} zone={p.timeZone} title={title} setTitle={setTitle} end={end} setEnd={setEnd} locked={view.writeStarted || refreshing} />
           <GoogleConsent available={view.canWriteCalendar} refresh={refresh} />
-          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={busy || running || !view.canWriteCalendar || !url || !title.trim() || !endAt || endAt <= selection.slot.startAt} onClick={() => void answer({ action: 'confirm', selectionId: selection.id, choice: { title, endAt } })}><CalendarCheck size={16} />{busy ? 'Zapisuję…' : 'Zarezerwowałem ten termin — zapisz'}</button>
+          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={locked || !view.canWriteCalendar || !url || !title.trim() || !endAt || endAt <= selection.slot.startAt} onClick={() => void answer({ action: 'confirm', selectionId: selection.id, choice: { title, endAt } })}><CalendarCheck size={16} />{busy ? 'Zapisuję…' : 'Zarezerwowałem ten termin — zapisz'}</button>
         </> : <>
           {!!days.length && <div className="tw:grid tw:gap-2 tw:rounded-xl tw:border tw:border-ck-cal/30 tw:bg-ck-cal/5 tw:p-3"><span className="tw:text-xs tw:text-ck-muted">{slot ? 'Podgląd wybranego terminu' : 'Terminy i Twój kalendarz'}</span><b className="tw:text-base tw:font-medium">{slot ? `${format(slot.startAt, p.timeZone, { weekday: 'long', day: 'numeric', month: 'long' })} · ${time(slot.startAt, p.timeZone)}${p.durationMinutes ? `–${time(slot.startAt + p.durationMinutes * 60_000, p.timeZone)}` : ''}` : 'Wybierz godzinę na osi dnia'}</b><button type="button" className={`${btn} tw:w-fit tw:bg-ck-surface-2`} onClick={() => { show?.(toolCallId); workspace?.openTimeline(); }}>Pokaż terminy i kalendarz</button></div>}
           {!days.length && <p className="tw:m-0 tw:text-sm">Brak wspólnych dostępnych terminów w tym zakresie.{p.query.firstVisit === undefined ? ' Powiedz Wektorowi, czy to pierwsza czy kolejna wizyta — dostępność może się różnić.' : ''}</p>}
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{p.slots.length} terminów · {p.from} – {p.to}. Odczyt {format(p.observedAt, p.timeZone, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.{p.query.firstVisit === undefined ? ' Wspólne dla pierwszej i kolejnej wizyty.' : p.query.firstVisit ? ' Pierwsza wizyta.' : ' Kolejna wizyta.'}</p>
-          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action disabled={!slot || busy || running} onClick={() => slot && void answer({ action: 'select', slotId: slot.id })}>{busy ? 'Sprawdzam dostępność…' : `Wybieram ${slot ? time(slot.startAt, p.timeZone) : 'termin'}`}</button>
+          <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} data-visit-summary-action disabled={!slot || locked} onClick={() => slot && void answer({ action: 'select', slotId: slot.id })}>{busy ? 'Sprawdzam dostępność…' : `Wybieram ${slot ? time(slot.startAt, p.timeZone) : 'termin'}`}</button>
           <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybór w panelu nie rezerwuje wizyty. Dostępność sprawdzimy ponownie.</p>
         </>}
       </>}
@@ -141,7 +155,7 @@ export function AppointmentCard({ args, toolCallId, status }: ToolCallMessagePar
 export function CalendarPlanCard({ args, toolCallId, status }: ToolCallMessagePartProps<AppointmentArgs, unknown>) {
   const { respond, running } = useContext(CardActions);
   const ready = status.type !== 'running' && !args.refused && toolCallId.includes(':v-');
-  const { value: view, error, setError, refresh } = useCard('calendar-plan', toolCallId, calendarPlanViewSchema, !!ready);
+  const { value: view, error, setError, refresh, refreshing } = useCard('calendar-plan', toolCallId, calendarPlanViewSchema, !!ready);
   const [title, setTitle] = useState(''), [end, setEnd] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => { if (view) { setTitle(view.draft.title); setEnd(time(view.draft.endAt, view.draft.timeZone)); } }, [view?.draft.title, view?.draft.endAt]);
   const draft = view?.draft;
@@ -153,9 +167,9 @@ export function CalendarPlanCard({ args, toolCallId, status }: ToolCallMessagePa
     {view?.saved ? <Saved saved={view.saved} /> : draft && <>
       <p className="tw:m-0 tw:text-sm">{format(draft.startAt, draft.timeZone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · {time(draft.startAt, draft.timeZone)}–{time(draft.endAt, draft.timeZone)} · {draft.timeZone}</p>
       {draft.location && <p className="tw:m-0 tw:text-sm">{draft.location}</p>}{draft.description && <p className="tw:m-0 tw:whitespace-pre-wrap tw:text-sm tw:text-ck-muted">{draft.description}</p>}
-      <CalendarFields draft={draft} startAt={draft.startAt} zone={draft.timeZone} title={title} setTitle={setTitle} end={end} setEnd={setEnd} locked={view!.writeStarted} />
+      <CalendarFields draft={draft} startAt={draft.startAt} zone={draft.timeZone} title={title} setTitle={setTitle} end={end} setEnd={setEnd} locked={view!.writeStarted || refreshing} />
       <GoogleConsent available={view!.canWriteCalendar} refresh={refresh} />
-      <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={busy || running || !view!.canWriteCalendar || !title.trim() || !endAt || endAt <= draft.startAt} onClick={() => void confirm()}><CalendarCheck size={16} />{busy ? 'Zapisuję…' : 'Dodaj do Google Calendar'}</button>
+      <button type="button" className={`${btn} tw:justify-center tw:bg-ck-cal tw:text-ck-bg`} disabled={busy || running || refreshing || !!error || !view!.canWriteCalendar || !title.trim() || !endAt || endAt <= draft.startAt} onClick={() => void confirm()}><CalendarCheck size={16} />{busy ? 'Zapisuję…' : 'Dodaj do Google Calendar'}</button>
       <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wydarzenie zapisze się dopiero po Twoim kliknięciu.</p>
     </>}
     {error && <p className="tw:m-0 tw:rounded-lg tw:bg-ck-red/10 tw:p-3 tw:text-sm tw:text-ck-red" role="alert">{error}</p>}

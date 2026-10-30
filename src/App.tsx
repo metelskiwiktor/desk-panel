@@ -58,6 +58,7 @@ import { sortSnapshots } from './quota-pace';
 import { PulpitMenu } from './PulpitMenu';
 import { usePulpits } from './pulpits';
 import './chat.css';
+import { useChatPresentation } from './useChatPresentation';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
@@ -98,7 +99,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useChatPresentation();
+  const chatOpen = chat.view !== 'hidden' || chat.picking;
   const pulpits = usePulpits();
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -492,7 +494,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           DESK PANEL <span>Limity AI bez wywołań modelu</span>
         </footer>
       )}
-      {chatOpen && <Suspense fallback={null}><ChatWindow onClose={() => setChatOpen(false)} /></Suspense>}
+      {chat.loaded && <Suspense fallback={null}><ChatWindow view={chat.view} picking={chat.picking} onPickingChange={chat.setPicking} onViewChange={chat.show} onClose={chat.close} /></Suspense>}
       <button
         type="button"
         className="chat-toggle-fab"
@@ -500,8 +502,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
         aria-label="Otwórz czat z agentem"
         aria-haspopup="dialog"
         aria-expanded={chatOpen}
-        title="Czat z agentem"
-        onClick={() => setChatOpen((open) => !open)}
+        title="Wektor · Alt+W"
+        onClick={() => chat.show(chatOpen ? 'hidden' : 'full')}
       >
         <MessageSquare size={22} aria-hidden="true" />
       </button>

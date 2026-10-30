@@ -102,7 +102,8 @@ Dotknięcie wiersza otwiera szczegół; osobny przycisk otwiera źródło. Widoc
 Pulpitu zapisuje się w localStorage (Ustawienia → Pulpit); wyłączona sekcja (albo limit w „Widoczności limitów AI”)
 znika też z kafelków i z ikon w pustych kafelkach. Brak procentów postępu, ETA i danych dysku.
 
-Wszystkie karty korzystają z podłączonych źródeł; panel nie ma trybu ani danych
-demonstracyjnych. Null oznacza brak pomiaru; historia to dyskretne obserwacje.
+W usłudze wszystkie karty korzystają z podłączonych źródeł; nie podstawiają danych demonstracyjnych przy błędzie.
+Osobny `just scenario` uruchamia syntetyczne źródła do pracy nad UI, zob. [testowanie.md](testowanie.md).
+Null oznacza brak pomiaru; historia to dyskretne obserwacje.
 Zdarzenia korzystają z tych samych źródeł co karty. Offline lub stare dane nie
 tworzą nowych alertów.

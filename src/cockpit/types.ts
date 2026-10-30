@@ -86,7 +86,7 @@ export interface CockpitState {
   pr?: CockpitPr;
 }
 
-export interface CockpitChat { id: string; title: string; running: boolean; updatedAt: number }
+export interface CockpitChat { id: string; title: string; running: boolean; createdAt?: number; updatedAt: number }
 
 /** Where the window gets its conversation and cockpit: the mock (scenarios, `?cockpit=mock`) or Hermes. */
 export interface CockpitSource {
@@ -100,6 +100,9 @@ export interface CockpitSource {
   unavailable: boolean;
   /** Loading the conversation that was picked. */
   loading: boolean;
+  /** A cached conversation may render immediately; decisions wait for the current server state. */
+  refreshing?: boolean;
+  cockpitLoading?: boolean;
   error: string;
   clearError(): void;
   /** False when the message was not taken: the composer keeps it. */
@@ -110,6 +113,7 @@ export interface CockpitSource {
   respond(toolCallId: string, response: unknown): void | Promise<void>;
   chats: CockpitChat[] | null;
   activeId: string | null;
+  createdAt?: number;
   open(id: string | null): void;
   remove(): void;
   cockpit: CockpitState;

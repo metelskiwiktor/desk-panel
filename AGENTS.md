@@ -25,6 +25,9 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
   port) and take Playwright screenshots into output/screenshots. Use this to
   check UI changes visually on the target screens. `--query ambient=day|night` shoots the
   idle clock instead of walking the pages.
+- Wektor GUI: read `docs/wektor-ui.md` for frontend ownership, styling and loading invariants. `just wektor-ui
+  [all|composer|keyboard|history|switching]` runs synthetic browser flows; use targeted checks while iterating and
+  `just check` at the end. This GUI workflow does not imply deployment or a Hermes restart.
 - `just devices`: target screens from devices.json with derived CSS sizes.
   Screen sizes live only there; the layout is fluid and never reads it.
 - `just kiosk [DISPLAY]` / `just kiosk-autostart ON|OFF|STATUS` / `just kiosk-taskbar HIDE|SHOW|STATUS`: the dashboard as a bare full-screen Chrome

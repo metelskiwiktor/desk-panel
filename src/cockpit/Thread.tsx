@@ -125,13 +125,14 @@ function ComposerHeader() {
   const { source, matching, active, pick } = usePanel();
   const down = !source.hermes.up;
   return <>
-    {matching.length > 0 && <div role="listbox" aria-label="Wybór skillów" className="tw:absolute tw:inset-x-0 tw:bottom-full tw:z-10 tw:mb-2 tw:grid tw:gap-1 tw:rounded-2xl tw:border tw:border-ck-line-2 tw:bg-ck-surface tw:p-1.5 tw:shadow-2xl">
+    {matching.length > 0 && <div role="listbox" id="wektor-skills" aria-label="Wybór skillów" className="wektor-skills">
+      <div className="wektor-skills-heading"><span>Umiejętności Wektora</span><span>↑ ↓ wybierz · Enter dodaj · Esc zamknij</span></div>
       {matching.map((s, i) => <button key={s.id} type="button" role="option" aria-selected={i === active}
-        className={`tw:flex tw:min-h-12 tw:items-center tw:gap-3 tw:rounded-xl tw:px-3 tw:py-2 ${i === active ? 'tw:bg-ck-agent/15' : 'tw:hover:bg-ck-surface-2'}`}
+        id={`wektor-skill-${s.id}`} className="wektor-skill"
         onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}>
-        <Wrench size={15} className="tw:text-ck-agent" aria-hidden="true" />
-        <span className="tw:font-semibold tw:text-ck-text">@{s.title}</span>
-        <span className="tw:truncate tw:text-xs tw:text-ck-muted">{s.description}</span>
+        <span className="wektor-skill-icon"><Wrench size={16} aria-hidden="true" /></span>
+        <span className="wektor-skill-label"><b>@{s.title}</b><small>{s.description}</small></span>
+        {i === active && <kbd>↵</kbd>}
       </button>)}
     </div>}
     {source.error && <p className="tw:mb-2 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-xl tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-[#ffd3d4]" role="alert">
@@ -148,11 +149,10 @@ function ComposerHeader() {
 
 /** Inside the composer, above the field: the picked elements. */
 function ComposerTop() {
-  const { context, setContext, picking } = usePanel();
-  if (!context.length && !picking) return null;
+  const { context, setContext } = usePanel();
+  if (!context.length) return null;
   return <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5 tw:px-1" aria-label="Wskazane elementy">
     {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
-    {picking && <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-xs tw:text-ck-cal"><Crosshair size={14} aria-hidden="true" />{context.length ? 'Kliknij kolejny element na pulpicie' : 'Kliknij element na pulpicie'}</span>}
   </div>;
 }
 
@@ -195,7 +195,7 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
   const running = useAuiState(s => s.thread.isRunning);
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const initialDraft = useRef(getChatDraft().text);
+  const initialDraft = useRef(getChatDraft(source.activeId).text);
   const hasRestored = useRef(false);
 
   useEffect(() => {
@@ -209,12 +209,13 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     if (initialDraft.current && draft === '') return;
     initialDraft.current = '';
     hasRestored.current = true;
-    setChatDraftText(draft);
+    setChatDraftText(draft, source.activeId);
   }, [draft]);
 
   const at = detectAtSkill(draft);
   const matching = at && dismissed !== at.token ? CHAT_SKILLS.filter(s => !at.query || fold(s.title).includes(fold(at.query)) || s.id.includes(fold(at.query))) : [];
   const active = matching.length ? Math.min(index, matching.length - 1) : 0;
+  useEffect(() => { if (matching[active]) document.getElementById(`wektor-skill-${matching[active].id}`)?.scrollIntoView?.({ block: 'nearest' }); }, [active, matching[active]?.id]);
   const skill = context.find(c => c.kind === 'skill');
   const down = !source.hermes.up;
 
@@ -225,7 +226,7 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
       const before = draft.slice(0, at.start).replace(/\s+$/, '');
       const nextText = before ? `${before} ` : '';
       aui.composer().setText(nextText);
-      setChatDraftText(nextText);
+      setChatDraftText(nextText, source.activeId);
     }
     setDismissed(null);
     setIndex(0);
@@ -248,10 +249,14 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
         hasRestored.current = true;
         setDismissed(null);
         setIndex(0);
-        setChatDraftText((e.target as HTMLTextAreaElement).value);
+        initialDraft.current = '';
+        setChatDraftText((e.target as HTMLTextAreaElement).value, source.activeId);
       },
       'aria-label': 'Wiadomość do agenta',
-      placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora lub wpisz @ aby wybrać skill…',
+      'aria-controls': matching.length ? 'wektor-skills' : undefined,
+      'aria-expanded': matching.length > 0,
+      'aria-activedescendant': matching[active] ? `wektor-skill-${matching[active].id}` : undefined,
+      placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora…',
     },
   };
   return <Panel.Provider value={{ ...props, matching, active, pick }}>
@@ -274,10 +279,10 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     // On failure the draft and the picked elements stay, so nothing is lost while Hermes is down.
     if (await source.send(text, contextRef.current)) {
       setContext(() => []);
-      clearChatDraft();
+      clearChatDraft(source.activeId);
     } else {
       runtimeRef.current?.thread.composer.setText(text);
-      setChatDraftText(text);
+      setChatDraftText(text, source.activeId);
     }
   };
   const runtime = useExternalStoreRuntime<CockpitMessage>({
@@ -285,12 +290,12 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     convertMessage: toThreadMessage,
     isRunning: source.running,
     isDisabled: source.unavailable,
-    isSendDisabled: !source.hermes.up,
+    isSendDisabled: !source.hermes.up || source.loading || source.refreshing,
     onNew,
     onCancel: async () => source.stop(),
   });
   runtimeRef.current = runtime;
-  const actions = useMemo(() => ({ respond: source.respond, running: source.running, watched: source.cockpit.task, chatId: source.activeId }), [source.respond, source.running, source.cockpit.task, source.activeId]);
+  const actions = useMemo(() => ({ respond: source.respond, running: source.running || !!source.refreshing, refreshing: source.refreshing, watched: source.cockpit.task, chatId: source.activeId }), [source.respond, source.running, source.refreshing, source.cockpit.task, source.activeId]);
 
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>
