@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** What the user pointed at on the dashboard: one row (mail, task, meeting, workout), a whole tile, or a skill picked with `@`. */
-export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo', 'skill'] as const;
+export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo', 'skill', 'smartAction', 'smartRule', 'bankOp'] as const;
 export type ContextKind = typeof contextKinds[number];
 export const contextItemSchema = z.object({
   kind: z.enum(contextKinds),
@@ -77,6 +77,20 @@ export const PANEL_GUIDES = {
     core: 'opinia z liczb, potem dane na karcie panel_show; zmiany tylko kartą zgody po zgodzie użytkownika',
     lines: BANK_GUIDE,
   },
+  smart: {
+    when: 'Smart Actions: alerty i reguły (maile z przyciskiem akcji, przelewy z podpowiedzią), szukanie maili pod regułę',
+    core: 'reguły czytaj panel_smart_rules, maile szukaj panel_mail_search w całej skrzynce, testuj panel_smart_rule_test; zmianę zapisuje dopiero kliknięcie na karcie panel_smart_rule_propose',
+    lines: [
+      'Reguły i alerty czytasz panel_smart_rules (każda reguła jako JSON). Wskazany alert albo reguła przychodzi w [Kontekst] z id; zaczynaj od nich.',
+      'Mail, o który chodzi, znajdź panel_mail_search w całej skrzynce, także przeczytany: po temacie (subject:"…") albo nadawcy (from:…), które podał użytkownik. Treść i linki jednego maila daje panel_mail_read. Nie proś użytkownika o oznaczanie maili jako nieprzeczytane ani o wklejanie treści: przeczytaj sam.',
+      'Reguła ma łapać tylko maile, o które chodzi. Przed propozycją sprawdź ją panel_smart_rule_test na mailach tego nadawcy z dłuższego okresu (inne tematy też): wszystkie właściwe mają być ZŁAPIE, pozostałe pominie. Zawężaj warunkami, które są tylko w tych mailach (dokładny adres nadawcy, fraza tematu), a podobne maile wyklucz subjectNot albo bodyNot. Słowa wspólne dla wielu maili nadawcy nie wystarczą.',
+      'Fałszywy albo brakujący alert: ustal, która reguła go dała (ruleId), porównaj ten mail z mailami, które ma łapać, i popraw tę regułę (to samo id), zamiast dodawać nową. W teście pokaż oba rodzaje maili.',
+      'Przycisk otwiera link z maila: domain to domena linku z panel_mail_read (link spoza niej nie przejdzie), contains to słowo z tekstu przycisku albo adresu, które wybiera właściwy link. Gdy test mówi „bez przycisku”, popraw domain lub contains; gdy mail nie ma takiego linku, powiedz to i zaproponuj regułę bez przycisku.',
+      'Przelewy: reguła z source "bank" pokazuje operacje z podpowiedzią (suggestion "dowolna" albo "pewna"); każda podpowiedź jest przyciskiem, który oznacza operację kliknięciem użytkownika.',
+      'Zmianę reguły (nowa, poprawka, włączenie, wyłączenie, usunięcie) zapisuje tylko karta panel_smart_rule_propose, z tym samym q co test. Gdy użytkownik prosi o regułę, przetestuj i pokaż kartę; gdy tylko pyta o radę, najpierw opisz zmianę słowami. Nie mów, że zapisałeś.',
+      'Odpowiedź po karcie: jedno, dwa zdania: ile maili z testu złapie, czego nie złapie i dokąd prowadzi przycisk. Bez listy maili w tekście; gdy użytkownik chce je zobaczyć, panel_mail_show.',
+    ],
+  },
 } as const satisfies Record<string, { when: string; core: string; lines: readonly string[] }>;
 export type GuideTopic = keyof typeof PANEL_GUIDES;
 export const GUIDE_TOPICS = Object.keys(PANEL_GUIDES) as [GuideTopic, ...GuideTopic[]];
@@ -128,6 +142,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
   },
   { id: 'wizyty', title: 'Wizyty', description: 'Terminy ZnanyLekarz, wybór dnia i godziny oraz zapis potwierdzonej wizyty do Google', prompt: PANEL_GUIDES.wizyty.lines.join('\n') },
   { id: 'kalendarz', title: 'Kalendarz', description: 'Agenda i propozycja nowego wydarzenia z Twoim potwierdzeniem na karcie', prompt: PANEL_GUIDES.kalendarz.lines.join('\n') },
+  { id: 'smart', title: 'Smart Actions', description: 'Reguły alertów z maili i przelewów: szukanie maili, test reguły na poczcie, zmiana z Twoją zgodą', prompt: PANEL_GUIDES.smart.lines.join('\n') },
   {
     id: 'nasluchuj-cezara',
     title: 'Nasłuchuj Cezara',
@@ -243,6 +258,9 @@ export function withContext(text: string, context: ContextItem[]): string {
     todoList: 'Lista zadań',
     todo: 'Zadanie z listy',
     skill: 'Skill',
+    smartAction: 'Alert Smart Actions',
+    smartRule: 'Reguła Smart Actions',
+    bankOp: 'Operacja na koncie',
   };
   const blocks = context.map((item, i) => `${i + 1}. ${kinds[item.kind]}: ${item.title}\n${item.text.split('\n').map(line => `   ${line}`).join('\n')}`);
   return `[Kontekst: elementy pulpitu wskazane przez użytkownika]\n${blocks.join('\n')}\n\n[Wiadomość]\n${text}`;

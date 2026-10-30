@@ -3,6 +3,7 @@ import { todoTaskId } from './todo-contract';
 import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
 import type { BankPlanOutcome } from './bank-plan-contract';
 import type { BankAssignOutcome } from './bank-assign-contract';
+import type { SmartRuleOutcome } from './smart-rules-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -50,8 +51,8 @@ export interface CockpitView {
   pr: CockpitPrView | null;
   /** The user's answer on each dispatch card of the conversation, by its tool call id. */
   dispatches: Record<string, DispatchOutcome>;
-  /** The user's answer on each bank change card of the conversation, by its tool call id. */
-  bankPlans: Record<string, BankPlanOutcome | BankAssignOutcome>;
+  /** The user's answer on each consent card of the conversation (bank changes, Smart Actions rules), by its tool call id. */
+  bankPlans: Record<string, BankPlanOutcome | BankAssignOutcome | SmartRuleOutcome>;
   /** A historical decision cannot be attributed safely to a single card. */
   legacyUnresolved?: boolean;
 }
@@ -95,7 +96,7 @@ export interface CockpitTool {
   /** What the user sees and what the cockpit does after the call. */
   effect: string;
   /** The card the chat shows for the call, if any. */
-  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign' | 'appointment' | 'calendarPlan';
+  card?: 'recon' | 'dispatch' | 'watch' | 'show' | 'bankPlan' | 'bankAssign' | 'appointment' | 'calendarPlan' | 'mailList' | 'smartRule';
 }
 
 export const COCKPIT_TOOLS = {
@@ -147,6 +148,18 @@ export const COCKPIT_TOOLS = {
     effect: 'użytkownik widzi kartę z odbiorcami (ile operacji, jaka suma, szablony oznaczeń z ich wcześniejszych operacji; odbiorca, którego operacje zawsze dostawały to samo, jest zaznaczony, pozostałych użytkownik oznacza szablonem albo dowolną kategorią, także pojedynczą operację) i przyciskami „Wykonaj” i „Odrzuć”; panel oznacza dopiero po jego kliknięciu, i tylko to, co jest zaznaczone lub wybrane. Nie pisz, że oznaczyłeś. Zakończ odpowiedź jednym zdaniem.',
     card: 'bankAssign',
   },
+  panel_mail_show: {
+    purpose: 'Karta z listą maili w rozmowie: wynik zapytania Gmail (q, składnia wyszukiwarki Gmaila, np. from:inea.com.pl newer_than:180d) z całej skrzynki, przeczytanych i nie.',
+    when: 'gdy użytkownik chce zobaczyć znalezione maile („pokaż je”) albo gdy lista czyta się łatwiej na karcie niż w tekście. Do samego szukania używaj panel_mail_search. Nie powtarzaj w tekście wierszy z karty.',
+    effect: 'użytkownik widzi kartę z mailami (data, nadawca, temat, przeczytany czy nie), które panel czyta sam; wiersz otwiera mail w Gmailu. Karta niczego nie zmienia.',
+    card: 'mailList',
+  },
+  panel_smart_rule_propose: {
+    purpose: 'Karta zgody na zmianę reguł Smart Actions: zapis reguły (rule: cała reguła, nowa albo z id istniejącej) albo usunięcie (remove: id); q: zapytanie Gmail, na którym karta pokaże test.',
+    when: 'gdy użytkownik chce dodać, zmienić, włączyć, wyłączyć albo usunąć regułę, po tym jak przetestowałeś ją panel_smart_rule_test i wynik się zgadza. Przedtem przeczytaj panel_guide: smart.',
+    effect: 'użytkownik widzi kartę z regułą przed i po oraz testem na jego poczcie (które maile złapie, których nie, dokąd prowadzi przycisk) i przyciskami „Wykonaj” i „Odrzuć”; panel zapisuje regułę dopiero po jego kliknięciu. Nie pisz, że zmieniłeś. Zakończ odpowiedź jednym zdaniem.',
+    card: 'smartRule',
+  },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
     when: 'gdy użytkownik prosi, by przestać obserwować task, albo wyraźnie zmienia temat na coś niezwiązanego z obserwowanym taskiem.',
@@ -161,7 +174,7 @@ export type CockpitToolName = keyof typeof COCKPIT_TOOLS;
  * „Zleć”, and the dispatch route refuses it too. Read from the answer's text, since a part read back from the session
  * history keeps the text but not the error flag.
  */
-export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika', appointment: 'Karta terminów jest u użytkownika', calendarPlan: 'Karta wydarzenia jest u użytkownika' } as const;
+export const CARD_SHOWN = { recon: 'Karta rekonesansu jest u użytkownika', dispatch: 'Karta „Zlecić na Cezarze?” jest u użytkownika', show: 'Karta z danymi jest u użytkownika', bankPlan: 'Karta zgody na zmianę w koncie jest u użytkownika', bankAssign: 'Karta zgody na masowe oznaczenie jest u użytkownika', appointment: 'Karta terminów jest u użytkownika', calendarPlan: 'Karta wydarzenia jest u użytkownika', mailList: 'Karta z mailami jest u użytkownika', smartRule: 'Karta zgody na regułę Smart Actions jest u użytkownika' } as const;
 /** Why the panel refused a card call, or null when it accepted it or has not answered yet (no text: nothing to judge). */
 export function cardRefusal(card: keyof typeof CARD_SHOWN, output: unknown, error?: boolean): string | null {
   // Stored as Hermes keeps an MCP answer (`{"result": "…"}`, maybe with „” escaped): read the answer itself.

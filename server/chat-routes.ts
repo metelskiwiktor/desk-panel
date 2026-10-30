@@ -7,10 +7,12 @@ import type { AppointmentService } from './appointments';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
 import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
+import { smartRulePlanOf } from '../src/smart-rules-contract';
 import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
+import { SmartRuleError } from './smart-rules';
 
 /** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
 const MAX_BODY = 512 * 1024;
@@ -57,7 +59,7 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
 export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
@@ -167,6 +169,20 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       let plan;
       try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
       return json(res, 200, await cockpit.bankPlan(id, input, plan)), true;
+    } else if (action === 'smart-rule' && req.method === 'POST') {
+      // The user's answer on a Smart Actions rule card: the only way the chat changes the rules. The rule comes from the
+      // conversation's own tool call, never from the request.
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(bankPlanDecisionSchema.pick({ toolCallId: true, decision: true }).strict(), await readBody(req));
+      const conversation = await chat.get(id);
+      const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_smart_rule_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+      if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      if (cardRefusal('smartRule', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      const plan = smartRulePlanOf(card.input);
+      if (!plan) throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+      return json(res, 200, await cockpit.smartRule(id, input, plan)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;
@@ -186,7 +202,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     }
     res.writeHead(405).end();
   } catch (error) {
-    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : 500;
     const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
       ? error.message
       : undefined;

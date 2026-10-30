@@ -63,6 +63,13 @@ export const APPOINTMENT = 'appointment';
 export const CALENDAR_PLAN = 'calendar_plan';
 export interface BankAssignArgs { tytul?: unknown; from?: unknown; to?: unknown; refused?: string }
 
+/** The mail list card (`panel_mail_show`): the Gmail query; the rows the card reads itself. */
+export const MAIL_LIST = 'mail_list';
+export interface MailListArgs { q?: unknown; tytul?: unknown; refused?: string }
+/** The consent card for a Smart Actions rule (`panel_smart_rule_propose`): the plan as the model wrote it (checked by the card). */
+export const SMART_RULE = 'smart_rule';
+export interface SmartRuleArgs { tytul?: unknown; rule?: unknown; remove?: unknown; q?: unknown; refused?: string }
+
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
 export interface HermesApprovalArgs { tool: string; detail: string; state: 'pending' | 'approved' | 'denied' | 'expired'; at: number }

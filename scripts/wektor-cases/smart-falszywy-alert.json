@@ -1,0 +1,19 @@
+{
+  "description": "Fałszywy alert Smart Actions: reguła łapie mail, który nie jest prośbą o potwierdzenie. Wektor ustala regułę, porównuje z mailami, które ma łapać, testuje poprawkę tej samej reguły (to samo id) i pokazuje kartę zgody; nie dodaje nowej reguły i nie mówi, że zmienił.",
+  "turns": [
+    {
+      "say": "W Smart Actions mam „❗Ważne: sprawdź, czy szczegóły wizyty się zgadzają” z przyciskiem potwierdzenia wizyty, a to nie jest prośba o potwierdzenie. Popraw to, żeby alert był tylko dla maili, w których mam potwierdzić wizytę.",
+      "expect": {
+        "calls": ["panel_smart_rules", "panel_smart_rule_test", "panel_smart_rule_propose"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action", "panel_mail_show"],
+        "textNot": ["zmieniłem", "poprawiłem", "zapisałem"],
+        "maxTools": 14,
+        "maxSeconds": 180
+      },
+      "soft": [
+        { "name": "poprawia istniejącą regułę", "text": "znanylekarz-confirm|tę samą reguł|istniejąc" },
+        { "name": "mówi, co przestanie łapać", "text": "przestanie|nie złapie|pominie" }
+      ]
+    }
+  ]
+}

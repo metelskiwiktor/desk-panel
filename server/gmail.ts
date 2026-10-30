@@ -97,11 +97,14 @@ export function sender(from: string) {
   const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
   return (match ? match[1].trim() || match[2] : from).trim() || 'Nieznany nadawca';
 }
+/** `"Jan Kowalski" <jan@x.pl>` → `jan@x.pl`; a bare address stays as is. */
+export const address = (from: string) => (/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase();
 export function projectThread(email: string, raw: unknown): MailThread {
   const thread = threadDetail.parse(raw);
   const latest = [...thread.messages].reverse().find(m => m.labelIds?.includes('UNREAD')) ?? thread.messages.at(-1)!;
   const get = (name: string) => latest.payload?.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
-  return { id: `${email}:${thread.id}`, account: email, threadId: thread.id, from: sender(get('From')),
+  return { id: `${email}:${thread.id}`, account: email, threadId: thread.id, from: sender(get('From')), address: address(get('From')),
+    unread: thread.messages.some(m => m.labelIds?.includes('UNREAD')),
     subject: get('Subject').trim() || '(bez tematu)', snippet: decode(latest.snippet ?? ''), body: extractBody(latest) || decode(latest.snippet ?? ''),
     receivedAt: Number(latest.internalDate), messages: thread.messages.length,
     sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox/${thread.id}` };
@@ -161,7 +164,43 @@ export function createMailReader(accounts: Account[], now = Date.now) {
         : 'Nie udało się odczytać Gmaila. Ponowię połączenie.';
     }
   }
+  /** Conversations a search read, by `email:threadId` (same historyId: no new request), and recent answers by query. */
+  const found = new Map<string, { historyId: string; thread: MailThread }>();
+  const searches = new Map<string, { at: number; threads: MailThread[] }>();
+  async function full(account: Account, id: string, historyId?: string): Promise<MailThread> {
+    const key = `${account.email}:${id}`, known = found.get(key);
+    if (known && historyId && known.historyId === historyId) return known.thread;
+    const raw = await account.request('mail', `${BASE}/threads/${id}`, { params: { format: 'full' } });
+    const thread = projectThread(account.email, raw);
+    if (found.size > 500) found.clear();
+    found.set(key, { historyId: threadDetail.parse(raw).historyId, thread });
+    return thread;
+  }
   return {
+    /**
+     * Conversations of the whole mailbox (read or not) matching a Gmail query, newest first, at most `limit` per account.
+     * Read-only: Wektor uses it to see what a Smart Actions rule would catch. Answers are kept for two minutes.
+     */
+    async search(q: string, limit: number): Promise<MailThread[]> {
+      const key = `${limit}:${q}`, known = searches.get(key);
+      if (known && now() - known.at < 120_000) return known.threads;
+      const threads: MailThread[] = [];
+      for (const account of accounts) {
+        const page = threadList.parse(await account.request('mail', `${BASE}/threads`, { params: { q, maxResults: String(limit) } }));
+        const listed = page.threads ?? [];
+        for (let i = 0; i < listed.length; i += 10) threads.push(...await Promise.all(listed.slice(i, i + 10).map(t => full(account, t.id, t.historyId))));
+      }
+      threads.sort((a, b) => b.receivedAt - a.receivedAt);
+      if (searches.size > 50) searches.clear();
+      searches.set(key, { at: now(), threads });
+      return threads;
+    },
+    /** One conversation by account and id, read or not. */
+    async thread(email: string, threadId: string): Promise<MailThread> {
+      const account = accounts.find(a => a.email === email);
+      if (!account || !/^[0-9a-f]+$/i.test(threadId)) throw new Error('Unknown conversation');
+      return full(account, threadId);
+    },
     /** Drop a pre-login failure immediately after successful consent. Keep quota backoff. */
     invalidate() { lastAttempt = -Infinity; },
     async read(limit: number): Promise<MailSource> {

@@ -1,4 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import type { SmartRuleOutcome, SmartRulePlan, SmartRulePreview } from '../src/smart-rules-contract';
+import { previewPlan, SmartRuleError } from './smart-rules';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
@@ -112,6 +114,8 @@ export interface Cockpit {
   bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
   /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
   bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign): Promise<BankAssignOutcome>;
+  /** The user's answer on a Smart Actions rule card: the rule is saved (or removed) once, as worked out now. */
+  smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
@@ -132,9 +136,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, updatedAt: now() };
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
   const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
-  const pendingAssigns = new Map<string, Promise<BankAssignOutcome>>();
+  const pendingAssigns = new Map<string, Promise<BankAssignOutcome | SmartRuleOutcome>>();
   /** A bank card is answered once: the kept answer, one still being worked, or the work (kept when it finishes). */
-  async function decideBankCard<T extends BankAssignOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
+  async function decideBankCard<T extends BankAssignOutcome | SmartRuleOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
     const chat = chatOf(chatId);
     const known = chat.bankPlans[toolCallId];
     if (known) return known as unknown as T;
@@ -242,6 +246,19 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         if (!items.length) throw new BankPlanError(409, 'Nic nie jest zaznaczone ani wybrane: nie ma czego oznaczyć.');
         const result = await sources.bankLabelAction({ action: 'markMany', create, items });
         return { decision: 'applied', at: now(), assigned: result.assigned ?? items.length, choice, preview };
+      });
+    },
+
+    async smartRule(chatId, input, plan) {
+      return decideBankCard<SmartRuleOutcome>(chatId, input.toolCallId, async () => {
+        if (!sources.smartRules) throw new SourceError(503);
+        // Worked out again now: the card shows the outcome with the test it had, and the rules may have changed meanwhile.
+        let preview: SmartRulePreview | undefined;
+        try { preview = await previewPlan(sources, plan); } catch { /* Gmail unreachable: the decision stands without the test */ }
+        if (input.decision === 'reject') return { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        if (preview?.problems.length) throw new SmartRuleError(409, preview.problems.join(' '));
+        sources.smartRules.apply(plan);
+        return { decision: 'applied', at: now(), ...(preview ? { preview } : {}) };
       });
     },
 

@@ -4,7 +4,8 @@ import type { BankLedger } from './bank-labels';
 import type { CezarAction, CezarCreateRunInput, CezarCreatedRun, CezarSnapshot } from '../src/cezar-contract';
 import type { CalendarSource } from '../src/calendar-contract';
 import type { GoogleAccountStatus } from '../src/google-contract';
-import { MAIL_PAGE, type MailAction, type MailSource } from '../src/mail-contract';
+import { MAIL_PAGE, type MailAction, type MailSource, type MailThread } from '../src/mail-contract';
+import type { SmartRuleStore } from './smart-rules';
 import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
 import type { TrainingSource } from '../src/training-contract';
@@ -37,6 +38,12 @@ export interface PanelSources {
   /** First `limit` unread inbox conversations of all mail accounts, newest first. */
   mail(limit: number): Promise<MailSource>;
   mailAction(account: string, threadId: string, action: MailAction): Promise<void>;
+  /** Read-only: conversations of the whole mailbox for a Gmail query (Smart Actions rules are tested on them). */
+  mailSearch?(q: string, limit: number): Promise<MailThread[]>;
+  /** Read-only: one conversation, read or not. */
+  mailThread?(account: string, threadId: string): Promise<MailThread>;
+  /** Smart Actions rules: changed only by the user (the tile's switch, or his click on Wektor's card). */
+  smartRules?: SmartRuleStore;
   googleAccounts(): Promise<GoogleAccountStatus[]>;
   system(): Promise<SystemSource>;
   quotas(): Promise<QuotaSource>;

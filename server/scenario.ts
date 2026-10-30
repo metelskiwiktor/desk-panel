@@ -7,7 +7,8 @@ import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
 import { trainingSourceSchema } from '../src/training-contract';
-import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
+import { MAIL_WINDOW_MS, mailSourceSchema, type MailThread } from '../src/mail-contract';
+import { createSmartRuleStore } from './smart-rules';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { todoSourceSchema } from '../src/todo-contract';
@@ -227,6 +228,18 @@ export function createScenarioSources(file: string): PanelSources {
       const all = source.data?.filter(t => t.receivedAt >= cutoff && !handled.has(t.id)) ?? null;
       return { ...source, data: all && all.slice(0, limit), total: all?.length ?? 0 };
     },
+    /** A scenario's search: every word of the query (Gmail operators dropped) in the sender, subject or text. */
+    async mailSearch(q, limit) {
+      const words = q.toLowerCase().replace(/\b(?:newer_than|older_than|in|is|label):\S+/g, ' ').replace(/\b(?:from|subject):/g, ' ').split(/[\s()"]+/).filter(w => w && w !== 'or');
+      const text = (t: MailThread) => `${t.from} ${t.address ?? ''} ${t.subject} ${t.body ?? t.snippet}`.toLowerCase();
+      return ((await serve('mail')).data ?? []).filter(t => !words.length || words.some(w => text(t).includes(w))).slice(0, limit);
+    },
+    async mailThread(account, threadId) {
+      const thread = (await serve('mail')).data?.find(t => t.id === `${account}:${threadId}`);
+      if (!thread) throw new SourceError(404);
+      return thread;
+    },
+    smartRules: createSmartRuleStore(null),
     async mailAction(account, threadId, action) {
       const id = `${account}:${threadId}`;
       if (!(await serve('mail')).data?.some(t => t.id === id)) throw new SourceError(404);

@@ -14,6 +14,7 @@ import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
 import { createMailReader } from './gmail';
+import { createSmartRuleStore } from './smart-rules';
 import { createSystemReader } from './system';
 import { createTodoStore } from './todos';
 import { createQuotaReader } from './quotas';
@@ -60,6 +61,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const bankLabels = createBankLabelStore({ operations: () => bank.cached(), persistence: privateFile(join(dir, 'bank-labels.dpapi'), { read: readPrivate, write: writePrivate }) });
   const readSystem = createSystemReader();
   const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
+  const smartRules = createSmartRuleStore(join(dir, 'smart-rules.json'));
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const readUsageBreakdown = createUsageBreakdownReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -124,6 +126,15 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       try { await mail.act(account, threadId, action); }
       catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : 502); }
     },
+    async mailSearch(q, limit) {
+      try { return await mail.search(q, limit); }
+      catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : 502); }
+    },
+    async mailThread(account, threadId) {
+      try { return await mail.thread(account, threadId); }
+      catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : error instanceof Error && error.message === 'Unknown conversation' ? 404 : 502); }
+    },
+    smartRules,
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),

@@ -4,7 +4,7 @@ import {
   type AppendMessage, type ThreadMessageLike,
 } from '@assistant-ui/react';
 import {
-  Activity, Bot, CalendarDays, Crosshair, LayoutGrid, ListChecks, Mail, RefreshCw, SquareCheck, Wrench, X, type LucideIcon,
+  Activity, Bot, CalendarDays, Crosshair, Landmark, LayoutGrid, ListChecks, Mail, RefreshCw, SquareCheck, Wrench, X, Zap, type LucideIcon,
 } from 'lucide-react';
 import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.aui';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -13,10 +13,11 @@ import { sameContext } from '../chat-context';
 import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
+import { MailListCard, SmartRuleCard } from './smart-cards';
 import { BankAssignCard } from './assign-card';
 import { AppointmentCard, CalendarPlanCard, type AppointmentArgs } from './appointment-card';
 import {
-  APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, RECON, SHOW, WATCH,
+  APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, MAIL_LIST, RECON, SHOW, SMART_RULE, WATCH, type MailListArgs, type SmartRuleArgs,
   type BankAssignArgs, type BankPlanArgs, type CockpitMessage, type CockpitSource, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type WatchArgs,
 } from './types';
 
@@ -35,6 +36,9 @@ const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   todoList: { label: 'Lista', icon: ListChecks },
   todo: { label: 'Zadanie', icon: SquareCheck },
   skill: { label: 'Skill', icon: Wrench },
+  smartAction: { label: 'Alert', icon: Zap },
+  smartRule: { label: 'Reguła', icon: Zap },
+  bankOp: { label: 'Operacja', icon: Landmark },
 };
 const KIND_COLOR: Partial<Record<ContextKind, string>> = {
   mail: 'tw:border-ck-mail/50 tw:text-ck-mail', event: 'tw:border-ck-cal/50 tw:text-ck-cal', task: 'tw:border-ck-agent/50 tw:text-ck-agent',
@@ -80,6 +84,8 @@ const BankPlanUI = makeAssistantToolUI<BankPlanArgs, unknown>({ toolName: BANK_P
 const BankAssignUI = makeAssistantToolUI<BankAssignArgs, unknown>({ toolName: BANK_ASSIGN, display: 'standalone', render: props => <CardBoundary><BankAssignCard {...props} /></CardBoundary> });
 const AppointmentUI = makeAssistantToolUI<AppointmentArgs, unknown>({ toolName: APPOINTMENT, display: 'standalone', render: props => <CardBoundary><AppointmentCard {...props} /></CardBoundary> });
 const CalendarPlanUI = makeAssistantToolUI<AppointmentArgs, unknown>({ toolName: CALENDAR_PLAN, display: 'standalone', render: props => <CardBoundary><CalendarPlanCard {...props} /></CardBoundary> });
+const MailListUI = makeAssistantToolUI<MailListArgs, unknown>({ toolName: MAIL_LIST, display: 'standalone', render: props => <CardBoundary><MailListCard {...props} /></CardBoundary> });
+const SmartRuleUI = makeAssistantToolUI<SmartRuleArgs, unknown>({ toolName: SMART_RULE, display: 'standalone', render: props => <CardBoundary><SmartRuleCard {...props} /></CardBoundary> });
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
@@ -289,7 +295,7 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>
       <CardActions.Provider value={actions}>
-        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><ApprovalUI />
+        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><MailListUI /><SmartRuleUI /><ApprovalUI />
         <div className="tw:relative tw:min-h-0 tw:flex-1">
           <Conversation {...props} />
         </div>

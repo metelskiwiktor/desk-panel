@@ -1149,6 +1149,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 }
 .sa-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -1283,6 +1284,52 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   color: var(--quota-red);
 }
 
+.sa-problem {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sa-amount {
+  margin-right: 6px;
+  font-weight: 600;
+}
+.sa-opts {
+  flex-basis: 100%;
+  order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 22px;
+}
+.sa-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px dashed #3b485d;
+  background: transparent;
+  color: #dbe3ee;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sa-opt:hover:not(:disabled) {
+  background: #202c3e;
+}
+.sa-opt.sure {
+  border: 1px solid rgba(117, 212, 155, 0.5);
+  background: rgba(117, 212, 155, 0.16);
+  color: #ffffff;
+}
+.sa-opt:disabled {
+  opacity: 0.5;
+}
+.sa-opt-note {
+  font-size: 11px;
+  color: var(--muted);
+}
 .smart-actions:not(.wide) .sa-item {
   flex-wrap: wrap;
   row-gap: 4px;

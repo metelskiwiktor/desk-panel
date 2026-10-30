@@ -1,0 +1,18 @@
+{
+  "description": "Reguła Smart Actions dla przelewów z podpowiedzią przypisania: Wektor proponuje regułę źródła bank (dowolna podpowiedź) kartą zgody i mówi, ile operacji pokaże teraz. Nie oznacza operacji sam i nie proponuje masowego przypisania.",
+  "turns": [
+    {
+      "say": "Chcę, żeby w Smart Actions pojawiały się przelewy, które mają jakąkolwiek podpowiedź przypisania.",
+      "expect": {
+        "calls": ["panel_smart_rule_propose"],
+        "notCalls": ["panel_bank_assign", "panel_bank_propose", "panel_todo_action"],
+        "textNot": ["zapisałem", "dodałem reguł", "oznaczyłem"],
+        "maxTools": 10,
+        "maxSeconds": 150
+      },
+      "soft": [
+        { "name": "mówi, ile operacji pokaże", "text": "\\d+ (operacj|przelew)|żadn|brak" }
+      ]
+    }
+  ]
+}
