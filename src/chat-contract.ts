@@ -261,7 +261,7 @@ export type MessageStatus = 'streaming' | 'done' | 'error' | 'stopped';
  * together), `cached` the tokens read from its prompt cache on top of that, `thinking` is part of `output`.
  * `calls` is how many times the model was called and `tools` how many commands it ran.
  */
-export interface ChatUsage { costUsd?: number; input: number; output: number; thinking: number; cached: number; calls: number; tools: number }
+export interface ChatUsage { costStatus?: 'actual'; costUsd?: number; input: number; output: number; thinking: number; cached: number; calls: number; tools: number }
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent';

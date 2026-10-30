@@ -123,7 +123,7 @@ interface ThreadProps {
   empty: ReactNode;
   localMessage?(text: string): void;
   resetLocal?(): void;
-  commandRef?: { current: ((id: string) => Promise<void>) | null };
+  commandRef?: { current: ((id: string) => Promise<boolean>) | null };
 }
 interface Shared extends ThreadProps {
   commandMenu: ReactNode;
@@ -146,7 +146,7 @@ function ComposerHeader() {
     {source.temporary && <div className="wektor-temporary-banner"><div><b>Rozmowa tymczasowa</b><p>Nie trafi do historii; Wektor dostał polecenie, by nic z niej nie zapamiętywał. Zniknie po zamknięciu.</p></div><button type="button" className="wektor-text-button" onClick={source.keep}>Zachowaj rozmowę</button></div>}
     {commandMenu}
     {matching.length > 0 && <div role="listbox" id="wektor-skills" aria-label="Wybór skillów" className="wektor-skills">
-      <div className="wektor-skills-heading"><span>Umiejętności Wektora</span><span>↑ ↓ wybierz · Enter dodaj · Esc zamknij</span></div>
+      <div role="presentation" className="wektor-skills-heading"><span>Umiejętności Wektora</span><span>↑ ↓ wybierz · Enter dodaj · Esc zamknij</span></div>
       {matching.map((s, i) => <button key={s.id} type="button" role="option" aria-selected={i === active}
         id={`wektor-skill-${s.id}`} className="wektor-skill"
         onMouseDown={e => e.preventDefault()} onClick={() => pick(s)}>
@@ -224,6 +224,8 @@ function Conversation(props: ThreadProps) {
   const draft = useAuiState(s => s.composer.text);
   const running = useAuiState(s => s.thread.isRunning);
   const [index, setIndex] = useState(0);
+  const [arrowChoice, setArrowChoice] = useState(false);
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const initialDraft = useRef(getChatDraft(source.activeId).text);
   const hasRestored = useRef(false);
@@ -256,10 +258,15 @@ function Conversation(props: ThreadProps) {
   }, [draft]);
 
   const slash = /^\/([^\n]*)$/.exec(draft);
-  const commands = slash && dismissed !== draft ? COMMANDS.filter(c => fold(`${c.id} ${c.label}`).includes(fold(slash[1]))) : [];
-  const choices = commands.filter(c => !c.disabled && (c.id !== 'archiwizuj' || source.activeId && !source.temporary));
+  const commands = slash && dismissed !== draft ? COMMANDS.filter(c => c.id.startsWith(fold(slash[1]))) : [];
+  const disabledCommand = (c: typeof COMMANDS[number]) => !!c.disabled || ['archiwizuj', 'zadanie', 'automat'].includes(c.id) && (!source.activeId || !!source.temporary);
+  const choices = commands.filter(c => !disabledCommand(c));
   const commandActive = choices.length ? Math.min(index, choices.length - 1) : 0;
-  const command = async (id: string) => {
+  const command = async (id: string, confirmed = false) => {
+    const entry = COMMANDS.find(c => c.id === id);
+    if (!entry || disabledCommand(entry)) return;
+    if (!confirmed && source.temporary && ['nowa', 'tymczasowa'].includes(id)) { setPendingCommand(id); return; }
+    setPendingCommand(null); setArrowChoice(false);
     aui.composer().setText(''); setChatDraftText('', source.activeId); setDismissed(null); setIndex(0);
     if (id === 'nowa') { setContext(() => []); props.resetLocal?.(); source.open(null); return; }
     if (id === 'tymczasowa') { setContext(() => []); props.resetLocal?.(); source.startTemporary?.(); return; }
@@ -273,14 +280,20 @@ function Conversation(props: ThreadProps) {
     aui.composer().setText(text); setChatDraftText(text, source.activeId);
     if (!running && !source.refreshing && !source.loading && source.hermes.up) queueMicrotask(() => aui.composer().send());
   };
-  if (props.commandRef) props.commandRef.current = command;
+  if (props.commandRef) props.commandRef.current = async text => {
+    if (dismissed?.trim() === text) return false;
+    const entry = COMMANDS.find(c => text === `/${c.id}`);
+    if (!entry) return false;
+    if (disabledCommand(entry)) { aui.composer().setText(text); return true; }
+    await command(entry.id); return true;
+  };
   let commandSection = '';
   const commandMenu = commands.length > 0 ? <div className="wektor-skills wektor-commands" role="listbox" id="wektor-commands" aria-label="Komendy rozmowy">
     {commands.map(c => {
       const heading = commandSection !== c.section; commandSection = c.section;
-      const disabled = c.disabled || c.id === 'archiwizuj' && (!source.activeId || source.temporary);
-      return <div key={c.id}>{heading && <div className="wektor-skills-heading">{c.section}</div>}<button type="button" role="option" id={`wektor-command-${c.id}`} aria-selected={choices[commandActive]?.id === c.id} aria-disabled={disabled || undefined} disabled={disabled} className="wektor-skill" onMouseDown={e => e.preventDefault()} onClick={() => void command(c.id)}><code>/{c.id}</code><span>{c.label}</span>{c.disabled && <small>później</small>}</button></div>;
-    })}<div className="wektor-skills-heading">Skille pod @ · ↑↓ wybór · Enter · Esc</div>
+      const disabled = disabledCommand(c);
+      return <div role="presentation" key={c.id}>{heading && <div role="presentation" className="wektor-skills-heading">{c.section}</div>}<button type="button" role="option" id={`wektor-command-${c.id}`} aria-selected={(arrowChoice || draft === `/${c.id}`) && choices[commandActive]?.id === c.id} aria-disabled={disabled || undefined} disabled={disabled} className="wektor-skill" onMouseDown={e => e.preventDefault()} onClick={() => void command(c.id)}><code>/{c.id}</code><span>{c.label}</span>{c.disabled && <small>później</small>}</button></div>;
+    })}<div role="presentation" className="wektor-skills-heading">Skille pod @ · ↑↓ wybór · Enter · Esc</div>
   </div> : null;
   useEffect(() => { document.getElementById(`wektor-command-${choices[commandActive]?.id}`)?.scrollIntoView?.({ block: 'nearest' }); }, [commandActive, choices[commandActive]?.id]);
   const at = detectAtSkill(draft);
@@ -305,8 +318,8 @@ function Conversation(props: ThreadProps) {
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (commands.length) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDismissed(draft); return; }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => choices.length ? (i + (e.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : 0); return; }
-      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (choices[commandActive]) void command(choices[commandActive].id); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => choices.length ? (arrowChoice ? i + (e.key === 'ArrowDown' ? 1 : -1) + choices.length : e.key === 'ArrowDown' ? 0 : choices.length - 1) % choices.length : 0); setArrowChoice(true); return; }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); const chosen = arrowChoice ? choices[commandActive] : choices.find(c => draft === `/${c.id}`); if (chosen) void command(chosen.id); return; }
     }
     if (matching.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setIndex(i => (i + 1) % matching.length); return; }
@@ -323,19 +336,22 @@ function Conversation(props: ThreadProps) {
       onKeyDown, cancelOnEscape: false, disabled: source.unavailable,
       onChange: (e) => {
         hasRestored.current = true;
-        setDismissed(null);
+        setDismissed(null); setArrowChoice(false); setPendingCommand(null);
         setIndex(0);
         initialDraft.current = '';
         setChatDraftText((e.target as HTMLTextAreaElement).value, source.activeId);
       },
+      role: 'combobox',
+      'aria-autocomplete': 'list',
+      'aria-haspopup': 'listbox',
       'aria-label': 'Wiadomość do agenta',
       'aria-controls': commands.length ? 'wektor-commands' : matching.length ? 'wektor-skills' : undefined,
       'aria-expanded': matching.length > 0 || commands.length > 0,
-      'aria-activedescendant': commands.length && choices[commandActive] ? `wektor-command-${choices[commandActive].id}` : matching[active] ? `wektor-skill-${matching[active].id}` : undefined,
+      'aria-activedescendant': commands.length && arrowChoice && choices[commandActive] ? `wektor-command-${choices[commandActive].id}` : matching[active] ? `wektor-skill-${matching[active].id}` : undefined,
       placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora…',
     },
   };
-  return <Panel.Provider value={{ ...props, matching, active, pick, commandMenu }}>
+  return <Panel.Provider value={{ ...props, matching, active, pick, commandMenu: <>{pendingCommand && <div role="alert" className="wektor-temporary-banner"><p>Opuścić rozmowę tymczasową? Jej treść zostanie usunięta.</p><button type="button" onClick={() => void command(pendingCommand, true)}>Opuść rozmowę tymczasową</button><button type="button" onClick={() => setPendingCommand(null)}>Anuluj</button></div>}{commandMenu}</> }}>
     <AuiThread components={components} />
   </Panel.Provider>;
 }
@@ -347,20 +363,14 @@ function Conversation(props: ThreadProps) {
 export function Thread(props: ThreadProps) {
   const { source, setContext } = props;
   const [localMessages, setLocalMessages] = useState<CockpitMessage[]>([]);
-  const commandRef = useRef<((id: string) => Promise<void>) | null>(null);
+  const commandRef = useRef<((id: string) => Promise<boolean>) | null>(null);
   const contextRef = useRef(props.context);
   contextRef.current = props.context;
   const runtimeRef = useRef<ReturnType<typeof useExternalStoreRuntime> | null>(null);
   const onNew = async (message: AppendMessage) => {
     const text = message.content.map(p => p.type === 'text' ? p.text : '').join('').trim();
     if (!text) return;
-    const slash = /^\/([a-z]+)$/.exec(text);
-    const command = slash && COMMANDS.find(c => c.id === slash[1]);
-    if (command) {
-      if (!command.disabled && (command.id !== 'archiwizuj' || source.activeId && !source.temporary)) await commandRef.current?.(command.id);
-      else runtimeRef.current?.thread.composer.setText(text);
-      return;
-    }
+    if (await commandRef.current?.(text)) return;
     // On failure the draft and the picked elements stay, so nothing is lost while Hermes is down.
     if (await source.send(text, contextRef.current)) {
       setContext(() => []);

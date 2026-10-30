@@ -86,7 +86,7 @@ interface Turn {
   error?: string;
   usage?: ChatMessage['usage'];
 }
-interface Stored { archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+interface Stored { keepUnarchived?: boolean; previousSessions?: string[]; archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
 
 interface Live {
   record: Stored;
@@ -320,7 +320,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const writes = new Map<string, Promise<void>>();
   const save = (record: Stored, strict = false) => {
     const bytes = JSON.stringify(record);
-    const turn = (writes.get(record.id) ?? Promise.resolve())
+    const turn = (writes.get(record.id) ?? Promise.resolve()).catch(() => {})
       .then(async () => {
         if (records.get(record.id) !== record || !record.turns.length) return;
         await mkdir(chatsDir, { recursive: true });
@@ -352,10 +352,31 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     if (!client.deleteSession) return;
     const runs = record.turns.filter(t => t.status === 'streaming' && t.run).map(t => t.run!);
     await mkdir(cleanupDir, { recursive: true });
-    const marker = path.join(cleanupDir, `${record.id}.json`);
-    await writeFile(`${marker}.tmp`, JSON.stringify({ session: record.session, runs }), 'utf8');
-    await rename(`${marker}.tmp`, marker);
-    void cleanupSession(record.id, record.session, runs);
+    for (const session of new Set([...(record.previousSessions ?? []), record.session].filter(s => typeof s === 'string' && HERMES_ID.test(s)))) {
+      const cleanupId = session === record.session ? record.id : createHash('sha256').update(record.id + session).digest('hex').slice(0, 32).replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+      const marker = path.join(cleanupDir, `${cleanupId}.json`);
+      await writeFile(`${marker}.tmp`, JSON.stringify({ session, runs }), 'utf8');
+      await rename(`${marker}.tmp`, marker);
+      void cleanupSession(cleanupId, session, runs);
+    }
+  };
+  const mutations = new Map<string, Promise<unknown>>();
+  const mutate = <T,>(id: string, work: () => Promise<T>): Promise<T> => {
+    const next = (mutations.get(id) ?? Promise.resolve()).catch(() => {}).then(work);
+    mutations.set(id, next);
+    void next.finally(() => { if (mutations.get(id) === next) mutations.delete(id); }).catch(() => {});
+    return next;
+  };
+  const editMetadata = (record: Stored, changes: Partial<Pick<Stored, 'archived' | 'archivedAt' | 'temporary' | 'keepUnarchived'>>) => mutate(record.id, async () => {
+    const previous = { archived: record.archived, archivedAt: record.archivedAt, temporary: record.temporary, keepUnarchived: record.keepUnarchived };
+    Object.assign(record, changes);
+    try { await save(record, true); } catch (error) { Object.assign(record, previous); throw error; }
+  });
+  const changeSession = (record: Stored, session: string) => {
+    if (session !== record.session) {
+      record.previousSessions = [...new Set([...(record.previousSessions ?? []), record.session])];
+      record.session = session;
+    }
   };
   const notifyTurn = (record: Stored, turn: Turn, ended: boolean) => {
     if (turn.automation && turn.nonce && turn.run) options.onAutomationTurn?.({ chatId: record.id, turnId: turn.id, runId: turn.run, ended });
@@ -374,16 +395,15 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       if (!name.endsWith('.json')) continue;
       try {
         const value = JSON.parse(await readFile(path.join(chatsDir, name), 'utf8')) as Stored;
-        if (value.engine !== 'hermes' || typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.turns) || typeof value.session !== 'string' || !HERMES_ID.test(value.session) || typeof value.title !== 'string') continue;
+        if (value.engine !== 'hermes' || typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.turns) || typeof value.session !== 'string' || !HERMES_ID.test(value.session) || typeof value.title !== 'string') { log.trace(ID.test(value.id) ? value.id : '00000000-0000-0000-0000-000000000000', { src: 'panel', kind: 'mapping-skipped', file: name, reason: 'invalid mapping fields' }); continue; }
         if (value.temporary === true) {
           await queueSessionCleanup(value);
           await rm(file(value.id), { force: true });
           continue;
         }
         records.set(value.id, value);
-      } catch { /* a damaged file is not a chat */ }
+      } catch { log.trace('00000000-0000-0000-0000-000000000000', { src: 'panel', kind: 'mapping-skipped', file: name, reason: 'mapping read or cleanup failed' }); }
     }
-    await archiveTests();
     // A turn that was running when the panel stopped goes on in Hermes: follow it again (or say it never got there).
     for (const record of records.values()) {
       const turn = record.turns.at(-1);
@@ -392,7 +412,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         try {
           const started = await client.startRun(turn.request);
           turn.run = started.run;
-          if (started.session) record.session = started.session;
+          if (started.session) changeSession(record, started.session);
           await save(record, true);
         } catch { continue; } // uncertain acceptance: never issue a different key or request
       }
@@ -403,18 +423,17 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'resume', run: turn.run });
       void follow(live);
     }
+    await archiveTests();
   })();
   const archiveTests = async () => {
     for (const record of records.values()) {
-      if (!record.archived && !record.temporary && record.title.startsWith('[test]') && !lives.has(record.id) && record.turns.at(-1)?.status !== 'streaming' && now() - record.updatedAt >= 7 * 86_400_000) {
-        record.archived = true; record.archivedAt = now(); await save(record, true);
+      if (!record.keepUnarchived && !record.archived && !record.temporary && record.title.startsWith('[test]') && !lives.has(record.id) && record.turns.at(-1)?.status !== 'streaming' && now() - record.updatedAt >= 7 * 86_400_000) {
+        await editMetadata(record, { archived: true, archivedAt: now() }).catch(() => { log.trace(record.id, { src: 'panel', kind: 'autoarchive-failed' }); });
       }
     }
   };
   const maintenance = () => later(86_400_000, () => { void load().then(archiveTests).catch(() => {}).finally(maintenance); });
   maintenance();
-  // Load at startup, including orphan cleanup; no user turn is created.
-  void Promise.resolve().then(load).catch(() => {});
   const need = async (id: string) => {
     await load();
     const record = ID.test(id) ? records.get(id) : undefined;
@@ -650,7 +669,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     clearInterval(live.watchdog);
     live.abort.abort();
     const { record, turn, message } = live;
-    if (status.session && status.session !== record.session) record.session = status.session;
+    if (status.session && status.session !== record.session) changeSession(record, status.session);
     let parts = message.parts ?? [];
     const streamed = parts.filter((p): p is Extract<ChatPart, { type: 'text' }> => p.type === 'text').map(p => p.text).join('');
     let answer: MessageStatus = 'done', error: string | undefined;
@@ -687,9 +706,9 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     message.notice = undefined;
     if (error) message.error = error; else delete message.error;
     usage ??= status.usage;
-    if (usage && [usage.input_tokens ?? usage.prompt_tokens, usage.output_tokens ?? usage.completion_tokens].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0)) {
+    if (usage) {
       const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
-      message.usage = { ...(typeof usage.cost_usd === 'number' && Number.isFinite(usage.cost_usd) && usage.cost_usd >= 0 ? { costUsd: usage.cost_usd } : {}), input: n(usage.input_tokens ?? usage.prompt_tokens), output: n(usage.output_tokens ?? usage.completion_tokens), thinking: n(usage.reasoning_tokens), cached: n(usage.cache_read_tokens ?? usage.cached_tokens), calls: n(usage.api_calls), tools: tools(live).length };
+      message.usage = { ...(usage.cost_status === 'actual' && typeof usage.cost_usd === 'number' && Number.isFinite(usage.cost_usd) && usage.cost_usd >= 0 ? { costUsd: usage.cost_usd, costStatus: 'actual' as const } : {}), input: n(usage.input_tokens ?? usage.prompt_tokens), output: n(usage.output_tokens ?? usage.completion_tokens), thinking: n(usage.reasoning_tokens), cached: n(usage.cache_read_tokens ?? usage.cached_tokens), calls: n(usage.api_calls), tools: tools(live).length };
     }
     turn.status = answer;
     turn.usage = message.usage;
@@ -751,7 +770,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
           await save(record, true);
           const started = await client.startRun(existing.request);
           existing.run = started.run;
-          if (started.session) record.session = started.session;
+          if (started.session) changeSession(record, started.session);
           await save(record, true);
         } catch (error) { lives.delete(id); throw unavailable(error); }
         void follow(live);
@@ -779,7 +798,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     }
     health = { at: now(), value: { available: true } };
     turn.run = started.run;
-    if (started.session && started.session !== record.session) record.session = started.session;
+    if (started.session && started.session !== record.session) changeSession(record, started.session);
     if (!nonce) record.turns.push(turn);
     record.updatedAt = at;
     await save(record, !!nonce);
@@ -870,32 +889,36 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     },
     async update(id, changes) {
       const record = await need(id);
-      if (changes.archived !== undefined) {
-        if (record.temporary) throw new ChatError(409, 'Najpierw zachowaj rozmowę tymczasową.');
-        record.archived = changes.archived;
-        if (changes.archived) record.archivedAt = now(); else delete record.archivedAt;
-      }
-      if (changes.temporary === false) record.temporary = false;
-      await save(record, true);
+      if (changes.archived !== undefined && record.temporary) throw new ChatError(409, 'Najpierw zachowaj rozmowę tymczasową.');
+      await editMetadata(record, {
+        ...changes,
+        ...(changes.archived === true ? { archivedAt: now() } : {}),
+        ...(changes.archived === false ? { archivedAt: undefined, keepUnarchived: true } : {}),
+      });
       sendState(record);
     },
-    async remove(id) {
-      const record = await need(id);
-      const live = lives.get(id);
-      if (live) {
-        live.done = true;
-        clearInterval(live.watchdog);
-        live.abort.abort();
-        lives.delete(id);
-        if (live.turn.run && !record.temporary) void client.cancel(live.turn.run).catch(() => {});
-      }
-      if (record.temporary) await queueSessionCleanup(record);
-      log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'chat-deleted' });
-      records.delete(id);
-      histories.delete(id);
-      for (const turn of record.turns) finished.delete(turn.agent);
-      await writes.get(id);
-      await rm(file(id), { force: true });
+    async remove(id, options) {
+      await load();
+      await mutate(id, async () => {
+        const record = records.get(id);
+        if (options?.temporary && !record?.temporary) return;
+        if (!record) throw new ChatError(404);
+        const live = lives.get(id);
+        if (live) {
+          live.done = true;
+          clearInterval(live.watchdog);
+          live.abort.abort();
+          lives.delete(id);
+          if (live.turn.run && !record.temporary) void client.cancel(live.turn.run).catch(() => {});
+        }
+        if (record.temporary) await queueSessionCleanup(record);
+        log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'chat-deleted' });
+        records.delete(id);
+        histories.delete(id);
+        for (const turn of record.turns) finished.delete(turn.agent);
+        await writes.get(id);
+        await rm(file(id), { force: true });
+      });
     },
     async subscribe(id, listener) {
       const record = await need(id);

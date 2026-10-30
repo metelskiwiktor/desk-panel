@@ -119,7 +119,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         if (title !== undefined) await chat.rename(id, title);
         return json(res, 200, { ok: true }), true;
       }
-      if (req.method === 'DELETE') { await chat.remove(id); return json(res, 200, { ok: true }), true; }
+      if (req.method === 'DELETE') { await chat.remove(id, { temporary: url.searchParams.get('temporary') === '1' }); return json(res, 200, { ok: true }), true; }
     } else if (action === 'messages' && req.method === 'POST') {
       await chat.send(id, parse(chatSendSchema, await readBody(req)));
       return json(res, 202, { ok: true }), true;

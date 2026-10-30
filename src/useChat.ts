@@ -147,7 +147,7 @@ export function useChat(fixed?: ChatEngine) {
     else {
       const created = await call('/api/chats', 'POST', { text, context, engine: preferredRef.current, ...(temp ? { temporary: true } : {}), ...(nonce ? { nonce } : {}) }) as { id: string };
       if (selected !== selection.current) {
-        if (temp) await call(`/api/chats/${created.id}`, 'DELETE');
+        if (temp) await call(`/api/chats/${created.id}?temporary=1`, 'DELETE');
         return true;
       }
       if (temp) { temporaryIds.current.add(created.id); setChatDraftTemporary(created.id, true); }
@@ -196,8 +196,8 @@ export function useChat(fixed?: ChatEngine) {
     const id = activeRef.current;
     if (id && temporaryIds.current.has(id)) {
       let cleanup = cleanups.current.get(id);
-      if (!cleanup) { cleanup = call(`/api/chats/${id}`, 'DELETE'); cleanups.current.set(id, cleanup); }
-      try { await cleanup; } finally { cleanups.current.delete(id); }
+      if (!cleanup) { cleanup = call(`/api/chats/${id}?temporary=1`, 'DELETE'); cleanups.current.set(id, cleanup); }
+      try { await cleanup; } catch { /* durable startup cleanup remains the backstop */ } finally { cleanups.current.delete(id); }
       temporaryIds.current.delete(id);
       snapshots.current.delete(id);
       clearChatDraft(id); setChatDraftTemporary(id, false);
@@ -215,7 +215,9 @@ export function useChat(fixed?: ChatEngine) {
     setError(''); setActive(id ? snapshots.current.get(id) ?? null : null); setSyncedId(null); setActiveId(id);
   }), [guard, leaveTemporary]);
   const update = useCallback((id: string, changes: { archived?: boolean; temporary?: false }) => guard(async () => {
-    await call(`/api/chats/${id}`, 'PATCH', changes);
+    const wasTemporary = changes.temporary === false && temporaryIds.current.delete(id);
+    try { await call(`/api/chats/${id}`, 'PATCH', changes); }
+    catch (error) { if (wasTemporary) temporaryIds.current.add(id); throw error; }
     if (changes.temporary === false) {
       temporaryIds.current.delete(id); setChatDraftTemporary(id, false);
       if (activeRef.current === id) { temporaryRef.current = false; setTemporary(false); setChatDraftTemporary(null, false); }
@@ -225,9 +227,9 @@ export function useChat(fixed?: ChatEngine) {
   }), [guard, refresh]);
   // Page exit is best effort; startup cleanup is the durable backstop.
   useEffect(() => {
-    const cleanup = () => { for (const id of temporaryIds.current) { clearChatDraft(id); void fetch(`/api/chats/${id}`, { method: 'DELETE', keepalive: true }).catch(() => {}); } };
+    const cleanup = () => { for (const id of temporaryIds.current) { clearChatDraft(id); void fetch(`/api/chats/${id}?temporary=1`, { method: 'DELETE', keepalive: true }).catch(() => {}); } };
     window.addEventListener('pagehide', cleanup);
-    return () => window.removeEventListener('pagehide', cleanup);
+    return () => { window.removeEventListener('pagehide', cleanup); cleanup(); };
   }, []);
 
   return {

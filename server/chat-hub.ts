@@ -103,7 +103,16 @@ export function createChatHub(options: ChatHubOptions): ChatService {
     async stop(id) { return (await find(id)).stop(id); },
     async rename(id, title) { return (await find(id)).rename(id, title); },
     async update(id, changes) { const service = await find(id); if (!service.update) throw new ChatError(409, 'Ten silnik nie obsługuje archiwum.'); await service.update(id, changes); },
-    async remove(id) { const service = await find(id); await service.remove(id); owner.delete(id); },
+    async remove(id, options) {
+      try {
+        const service = await find(id);
+        if (options?.temporary && (await service.get(id)).engine !== 'hermes') return;
+        await service.remove(id, options);
+        if (!options?.temporary) owner.delete(id);
+      } catch (error) {
+        if (!(options?.temporary && error instanceof ChatError && error.status === 404)) throw error;
+      }
+    },
     async approve(id, approval) {
       const service = await find(id);
       if (!service.approve) throw new ChatError(409, 'Ten silnik nie pyta o zgodę.');

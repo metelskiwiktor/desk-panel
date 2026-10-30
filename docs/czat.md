@@ -351,10 +351,13 @@ Akcje trwającego runu automatu wykonuje panel_automation_act tylko w granicach 
 
 ## Komendy, archiwum i rozmowy tymczasowe
 
-Wpisanie `/` na początku pola otwiera menu nad kompozytorem, z sekcjami „Rozmowa” i „Zrób z tego”. Tekst filtruje nazwy
-oraz opisy (także bez polskich znaków); ↑↓ wybiera aktywną pozycję, Enter lub kliknięcie wykonuje, Esc zamyka menu.
+Wpisanie `/` na początku pola otwiera menu nad kompozytorem, z sekcjami „Rozmowa” i „Zrób z tego”. Tekst filtruje prefiksy identyfikatorów komend; ↑↓ jawnie wybiera pozycję. Enter wykonuje tylko dokładnie wpisaną
+komendę lub pozycję wybraną strzałką, kliknięcie wykonuje wskazaną pozycję. Samo `/` lub niepełny prefiks z Enterem
+pozostaje w polu. Esc zamyka menu; Enter wysyła wtedy tekst (także znaną komendę) jako zwykłą wiadomość.
 `/nowa` otwiera nowy czat, `/tymczasowa` nowy tymczasowy, `/archiwizuj` archiwizuje bieżący zapisany czat. Bez bieżącej
 rozmowy oraz w trybie tymczasowym archiwizacja jest wyłączona. `/notatka` jest widoczna, nieaktywna, z etykietą „później”.
+`/nowa` i `/tymczasowa` w aktywnym trybie tymczasowym wymagają potwierdzenia inline przed usunięciem treści.
+`/zadanie` i `/automat` są nieaktywne bez bieżącej zapisanej rozmowy oraz w trybie tymczasowym.
 `/zadanie` rozwija prośbę o zadanie na liście panelu (nie Cezara), `/automat` prośbę o propozycję automatu z kartą zgody.
 Wybór i Enter/kliknięcie są działaniem użytkownika: prośba jest wysyłana jak jego zwykła wiadomość. Jeżeli trwa odpowiedź
 lub odświeżanie, pozostaje w polu do wysłania. Same renderowanie i otwarcie menu nie wysyłają tury.
@@ -365,7 +368,8 @@ komendy panelu; API i proces AGY pozostają bez zmian. Nieznany tekst `/…` jes
 `/koszt` dopisuje wyłącznie lokalną odpowiedź panelu w tej rozmowie, bez wysłania wiadomości, modelu i dodatkowego kosztu.
 Czyta `items[].usage` z GET bieżącej rozmowy: tokeny zakończonych runów Hermesa, zapisane przy turach mapowania. Podaje
 liczbę tur objętych danymi; brak danych lub częściowe dane są jawne. Kwotę USD pokazuje wyłącznie przy pełnym pokryciu
-jawnym `cost_usd` z runów; przypięty Hermes zwykle zwraca tylko tokeny. Nie wycenia tokenów według cennika.
+jawnym `cost_usd` ze statusem `cost_status: actual` z runów (także dla kwoty 0); szacunek, brak statusu i status unknown
+nie dają kwoty. Stare zapisy bez potwierdzenia rzeczywistego kosztu też jej nie dają. Przypięty Hermes zwraca w usage tylko liczniki tokenów. Nie wycenia tokenów według cennika.
 Cache kafelka OpenRouter (`server/openrouter.ts`, [openrouter.md](openrouter.md)) zachowuje generację, model, dzień i koszt,
 ale nie powiązanie z sesją/runem, więc nie wolno przypisać sumy dnia tej rozmowie. `/koszt` nie czyta logów użytkownika,
 nie odpytuje OpenRoutera ani `/api/v1/activity`. Lokalna odpowiedź nie jest zapisywana w historii serwera i znika przy zmianie rozmowy.
@@ -374,12 +378,15 @@ Historia ma zakładki „Rozmowy” i „Archiwum · N”. Licznik obejmuje cał
 Przycisk przy wierszu pozwala archiwizować/przywracać; jest widoczny po hoverze/fokusie, stale na ekranie dotykowym i zawsze
 osiągalny Tabem. Origin-checked PATCH `/api/chats/:id` przyjmuje opcjonalne `title`, `archived: boolean` i `temporary: false`
 (co najmniej jedno pole). Hermes zapisuje `archived` i `archivedAt` w mapowaniu; stare pliki bez pól oznaczają aktywną rozmowę.
-Archiwizacja nie usuwa ani nie przerywa runu. Przy starcie serwera i co 24 h tylko nieaktywne rozmowy o tytule zaczynającym
+Archiwizacja nie usuwa ani nie przerywa runu. Przy pierwszym odczycie czatu po starcie (lazy load) i co 24 h tylko nieaktywne rozmowy o tytule zaczynającym
 się dokładnie od `[test]` i ostatniej aktywności sprzed co najmniej 7 dni trafiają do archiwum. Bieżąca tura jest pomijana.
+Ręczne przywrócenie zapisuje `keepUnarchived: true` i trwale wyłącza autoarchiwizację tej rozmowy, także po restarcie.
 Zwykły automat ani jego run nie są samodzielnym powodem archiwizacji; podlegają wyłącznie tej samej regule `[test]`.
 
 Rozmowa tymczasowa jest wyborem nowej rozmowy; pierwsza wiadomość tworzy ją przez POST z `temporary: true`. Ma przerywane
 ramki i baner z „Zachowaj rozmowę”. Serwer wyklucza ją z listy, a klient także z aktualizacji SSE i ostatniej rozmowy w
-localStorage. Szkic tymczasowy jest tylko w pamięci okna przeglądarki, bez zapisu w localStorage. Przełączenie, nowa rozmowa lub ukrycie okna usuwa mapowanie; opuszczenie strony wysyła best-effort DELETE.
+localStorage. Szkic tymczasowy jest tylko w pamięci okna przeglądarki, bez zapisu w localStorage. Przełączenie, nowa rozmowa, ukrycie lub odmontowanie okna sprząta mapowanie; opuszczenie strony wysyła best-effort DELETE
+z `?temporary=1`. Serwer usuwa nim wyłącznie nadal tymczasową rozmowę; dla zachowanej lub brakującej zwraca 200 bez zmian.
+Błąd DELETE nie blokuje przełączenia; jeśli żądanie nie dotarło do serwera, osierocony plik czeka na lazy load po restarcie.
 Restart serwera sprząta osierocone mapowania. „Zachowaj” zdejmuje flagę przez PATCH i rozmowa trafia do zwykłej historii;
 przed pierwszą wiadomością zmienia jedynie tryb nowego czatu. Szczegóły sprzątania sesji i ograniczenie pamięci: [hermes.md](hermes.md#rozmowy-tymczasowe).

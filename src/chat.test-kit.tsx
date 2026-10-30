@@ -59,7 +59,7 @@ export function chatHooks() {
 /** The conversations sit behind the title of the window. */
 export async function openConversation(user: ReturnType<typeof userEvent.setup>, title: RegExp) {
   await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
-  await user.click(await within(screen.getByRole('group', { name: 'Poprzednie rozmowy' })).findByRole('button', { name: title }));
+  await user.click(await within(screen.getByRole('tabpanel')).findByRole('button', { name: (name, element) => element.classList.contains('wektor-history-item') && title.test(name) }));
 }
 /** The list has loaded (the window asks for it when it opens). */
 export const listed = () => waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/chats')).toBe(true));

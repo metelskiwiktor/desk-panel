@@ -172,7 +172,7 @@
 .wektor-root .wektor-title-edit { flex:none; }
 
 /* Commands and conversation lifecycle share the existing Wektor palette. */
-.wektor-history-tabs { display: flex; gap: 4px; padding: 8px 0; }
+.wektor-history-tabs { margin: 0 14px; display: flex; gap: 4px; padding: 8px 0; }
 .wektor-root .wektor-history-tabs button { flex: 1; padding: 8px 4px; border-radius: 20px; color: var(--wk-muted); background: var(--wk-raised); font-size: 12px; }
 .wektor-root .wektor-history-tabs button[aria-selected="true"] { color: var(--wk-text); background: var(--wk-line); }
 .wektor-history-row { display: flex; align-items: center; gap: 2px; }

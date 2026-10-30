@@ -146,7 +146,7 @@ export function useLiveCockpit(): CockpitSource {
       const usage = turns.flatMap(m => m.usage ? [m.usage] : []);
       if (!usage.length) return 'Brak danych o tokenach i koszcie tej rozmowy.';
       const sum = (key: 'input' | 'output') => usage.reduce((n, u) => n + u[key], 0).toLocaleString('pl-PL');
-      const costs = usage.flatMap(u => u.costUsd === undefined ? [] : [u.costUsd]);
+      const costs = usage.flatMap(u => u.costStatus !== 'actual' || u.costUsd === undefined ? [] : [u.costUsd]);
       return `Tokeny: wejście ${sum('input')}, wyjście ${sum('output')}. Dane dla ${usage.length}/${turns.length} tur. ${costs.length === turns.length ? `Koszt: ${costs.reduce((a, b) => a + b, 0).toFixed(6)} USD.` : 'Brak pełnych danych o koszcie tej rozmowy.'}`;
     },
     title: active?.title ?? chat.chats?.find(c => c.id === chat.activeId)?.title ?? 'Nowy czat',

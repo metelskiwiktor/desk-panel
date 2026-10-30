@@ -108,7 +108,7 @@ przesyłany do przeglądarki nie może zależeć od helperów wstrzykiwanych prz
 Testy przeglądarkowe mają sprawdzać trwałe zachowania i granice, zgodnie z [testowanie.md](testowanie.md).
 
 
-Komendy, lokalny komunikat `/koszt` i baner trybu tymczasowego należą do `src/cockpit/Thread.tsx`; zakładki, licznik i
+Komendy, lokalny komunikat `/koszt` i baner trybu tymczasowego należą do `src/cockpit/Thread.tsx`; zakładki (strzałki, Home/End, roving tabindex i tabpanel), licznik i
 akcje wiersza do `ConversationSidebar.tsx`; wybór/opuszczenie/zachowanie do `useChat.ts` przez `cockpit/live.ts`.
 Powłoka `ChatWindow.tsx` sprząta tryb tymczasowy również przy ukryciu skrótem Alt+W i dostaje `data-temporary` do ramek.
 `wektor.css` używa istniejących tokenów `--wk-*`; nie kopiuje stylów statycznych makiet.
@@ -122,3 +122,7 @@ just screenshots standard --pages pulpit --open chat-temporary
 ```
 
 Pełne zachowanie i ograniczenia pamięci opisuje [czat.md](czat.md#komendy-archiwum-i-rozmowy-tymczasowe).
+
+Pole kompozytora ma rolę combobox z aria-controls/expanded/activedescendant dla menu komend i skillów.
+Enter bez dokładnej nazwy ani jawnego wyboru strzałką niczego nie wykonuje; Esc pozwala wysłać komendę jako tekst.
+Nagłówki i kontenery listbox są prezentacyjne. Zakładki historii mają te same boczne marginesy 14 px co „Nowy czat” i wyszukiwarka.
