@@ -206,6 +206,28 @@ export const chatApprovalSchema = z.object({
 }).strict();
 export type ChatApproval = z.infer<typeof chatApprovalSchema>;
 
+/** A turn the panel starts itself: never the user's message, always labelled as such in the conversation. */
+export const automationSources = ['cezar'] as const;
+export type AutomationSource = typeof automationSources[number];
+export interface ChatAutomation {
+  source: AutomationSource;
+  /** Why the panel wrote this turn, in a few words (shown next to the label and written to the server log). */
+  reason: string;
+}
+/** What a panel automation sends: the facts as text plus the marker that makes it visibly not the user. */
+export interface ChatAutomationInput {
+  text: string;
+  automation: ChatAutomation;
+  context?: ContextItem[];
+}
+export function automationLabel(automation: ChatAutomation): string {
+  return automation.source === 'cezar' ? 'Automatyka · Cezar' : `Automatyka · ${automation.source}`;
+}
+/** What the model reads: the same text, behind a prefix that says the panel wrote it, not the user. */
+export function automationPrompt(text: string, automation: ChatAutomation): string {
+  return `[${automationLabel(automation)}] ${automation.reason}\n${text}`;
+}
+
 /** The agent's answer is a sequence of text, tool and approval steps, in the order they happened. */
 export type ChatPart =
   | { type: 'text'; text: string }
@@ -227,6 +249,8 @@ export interface ChatMessage {
   at: number;
   /** User messages: what was typed. */
   text?: string;
+  /** User messages: set only when the panel started this turn, so the window can mark it as automation. */
+  automation?: ChatAutomation;
   context?: ContextItem[];
   /** Agent messages: the steps. */
   parts?: ChatPart[];

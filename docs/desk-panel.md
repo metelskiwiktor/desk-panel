@@ -14,6 +14,7 @@ Opcjonalne zmienne środowiska (nie trzeba tworzyć `.env`):
 | `DESK_GOOGLE_OAUTH_CLIENT_FILE` | `~/.desk-panel/google-oauth-client.json` | Pobrany klient OAuth Desktop lub Web, tylko backend |
 | `DESK_BANK_APP_ID`, `DESK_BANK_KEY_FILE`, `DESK_BANK_REDIRECT_URL` | brak | Konto bankowe przez Enable Banking, zob. [bank.md](bank.md) |
 | `DESK_ADAPTER_ENV_FILE` | `../cezar-adapter/.env` względem projektu | Backend odczytuje istniejący port i klucz właściciela adaptera |
+| `DESK_AUTOMATIONS` | włączone | `0` (albo `false`, `no`, `off`) wyłącza wszystkie tury automatyki w czacie; opis w [czat.md](czat.md) |
 
 Usługa Windows czyta dodatkowo opcjonalny plik `%USERPROFILE%\.desk-panel\panel.env`
 (poza Gitem; linie `KLUCZ=wartość`, `#` to komentarz), np. z prywatnymi adresami:

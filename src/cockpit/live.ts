@@ -48,7 +48,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
 export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}): CockpitMessage {
-  if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, status: 'done' };
+  if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, ...(m.automation ? { automation: m.automation } : {}), status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
     status: m.status === 'streaming' ? 'running' : m.status ?? 'done',

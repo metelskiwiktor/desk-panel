@@ -841,16 +841,20 @@ const UserImagePart: ImageMessagePartComponent = (part) => (
 
 const UserMessage: FC = () => {
   const { UserMessageHeader } = useContext(ThreadComponentsContext);
+  const automation = useAuiState(
+    (s) => (s.message.metadata.custom as { automation?: { source?: string } } | undefined)?.automation,
+  );
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       className="tw:fade-in tw:slide-in-from-bottom-1 tw:animate-in tw:grid tw:auto-rows-auto tw:grid-cols-[minmax(72px,1fr)_auto] tw:content-start tw:gap-y-2 tw:px-2 tw:duration-150 tw:[contain-intrinsic-size:auto_200px] tw:[content-visibility:auto] tw:[&:where(>*)]:col-start-2"
       data-role="user"
+      data-automation={automation?.source}
     >
       {UserMessageHeader && <div className="tw:col-start-2 tw:flex tw:justify-end"><UserMessageHeader /></div>}
 
       <div className="tw:aui-user-message-content-wrapper tw:relative tw:col-start-2 tw:min-w-0">
-        <div className="tw:aui-user-message-content tw:peer tw:bg-muted tw:text-foreground tw:rounded-(--composer-radius) tw:px-4 tw:py-2 tw:wrap-break-word tw:empty:hidden">
+        <div className={`tw:aui-user-message-content tw:peer tw:text-foreground tw:rounded-(--composer-radius) tw:px-4 tw:py-2 tw:wrap-break-word tw:empty:hidden ${automation ? "tw:border tw:border-dashed tw:border-ck-agent/40 tw:bg-ck-agent/10" : "tw:bg-muted"}`}>
           <MessagePrimitive.Parts
             components={{ File: UserFilePart, Image: UserImagePart }}
           />

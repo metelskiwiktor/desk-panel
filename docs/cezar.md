@@ -45,6 +45,12 @@ ustawia „W realizacji” z autorem `panel`; błąd powiązania nie psuje zlece
 czatu i bez nowego odpytywania. Stan zadania pozostaje niezależny od taska Cezara i PR-a, bez dalszych automatycznych przejść
 ([zadania.md](zadania.md)).
 
+Task zlecony z rozmowy wraca do niej raz, gdy Cezar zacznie czekać na użytkownika albo task się skończy (zakończony,
+nieudany lub anulowany): panel wysyła wtedy turę automatyki z id, tytułem, stanem, krokiem, błędem i PR-em. Korzysta
+z odczytów Cezara, których panel już dokonuje (`onActive`/`onFinished`), a wysłane zdarzenia (`taskId|stan`) trzyma
+w `cockpit.json`; szczegóły i wyłącznik `DESK_AUTOMATIONS` opisuje [czat.md](czat.md). Automatyka nie zmienia taska ani
+stanu zadania z listy.
+
 ## Limity AI
 
 Panel czyta `/panel/v1/quotas/live` w cezar-adapter co 15 s (cache serwera 10 s,

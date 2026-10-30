@@ -1,4 +1,4 @@
-import type { ContextItem } from '../chat-contract';
+import type { ChatAutomation, ContextItem } from '../chat-contract';
 import type { CezarStatus, CheckState, CockpitPrView, CockpitTaskView, StepState } from '../cockpit-contract';
 
 export type { CezarStatus, CheckState, StepState };
@@ -17,6 +17,8 @@ export interface CockpitMessage {
   at: number;
   parts: CockpitPart[];
   context?: ContextItem[];
+  /** Set only when the panel, not the user, started this turn: the window labels it as automation. */
+  automation?: ChatAutomation;
   status: 'running' | 'done' | 'error' | 'stopped';
   error?: string;
   /** While running: what the panel is doing about the run (reconnecting…), in Polish. */

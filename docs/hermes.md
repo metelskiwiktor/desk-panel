@@ -31,6 +31,10 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
   skonfigurujesz (panel nie wyłącza niczego). Tury tej samej sesji napisane poza panelem (np. w CLI) są pokazywane na końcu rozmowy.
 - **Pierwsza wiadomość sesji** zaczyna się od instrukcji `hermesPreamble()` (jak `preamble()` agy, ale z narzędziami panelu zamiast
   `curl`), potem blok `[Kontekst]` ze wskazanymi elementami i pytanie (`withContext`, ten sam co dla agy).
+- **Tura automatyki**: panel może zacząć turę sam (pierwsza automatyka: zakończony task Cezara wraca do rozmowy, która go
+  zleciła; zob. [czat.md](czat.md)). Hermes dostaje ją jako zwykły tekst z prefiksem `[Automatyka · Cezar] <powód>`, a
+  preambuła mówi, że to fakt panelu, nie użytkownik: podsumować i zaproponować następny krok, bez zlecania i zapisów bez karty.
+  Taka wiadomość jest oznaczona w rozmowie („Automatyka · Cezar”) i nie uruchamia nazewnika nazwy rozmowy.
 - **Strumień i odporność.** Delty tekstu, kroki narzędzi (z czasem trwania), prośby o zgodę, postęp (`notice` w wiadomości),
   koniec przebiegu. Gdy strumień się urwie, panel czyta stan przebiegu i łączy się ponownie z `Last-Event-ID` (zdarzenie o znanym id
   nie jest stosowane drugi raz; bez id strumień zaczyna od początku, więc pokazany fragment jest czyszczony zamiast dublowany). Po

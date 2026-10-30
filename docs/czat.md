@@ -97,6 +97,33 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
 - Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia). Nazwę zmienia się w nagłówku rozmowy (Enter zapisuje, Esc anuluje, pusta lub niezmieniona się nie zapisuje); tak nadanej nazwy panel już nie nadpisuje.
 - Wąski ekran (telefon przez Tailscale): pełny widok zajmuje cały ekran, kompaktowy i wskazywanie są u dołu.
 
+## Automatyka
+
+Turę Wektora zaczyna wiadomość użytkownika albo automatyka panelu. Tura automatyki jest w rozmowie oznaczona
+(`automation: {source, reason}` na wiadomości, etykieta „Automatyka · Cezar” i inny wygląd niż wiadomość użytkownika
+w `src/cockpit/Thread.tsx`), w treści ma powód, a serwer loguje jej wysłanie. Wszystkie automatyki wyłącza
+`DESK_AUTOMATIONS=0` (albo `false`, `no`, `off`) w `panel.env`; domyślnie są włączone. Tryb scenariusza nie tworzy
+obserwatora, więc zrzuty ekranu nie wysyłają tur automatycznych. Limity AI dalej nie wysyłają promptów, a agent nadal
+nie zleca Cezara sam: dispatch jest tylko z karty, zapisy przez karty zgody.
+
+Pierwsza automatyka — obserwator Cezara:
+
+- Dotyczy tylko tasków zleconych z rozmowy: panel bierze `taskId` z zapisanych dispatchy (`~/.desk-panel/cockpit.json`,
+  `cockpit.dispatched()`).
+- Zdarzenia pochodzą z odczytów Cezara, których panel już dokonuje: aktywne z `sources.cezar().tasks`
+  (`needs-input` = czeka na użytkownika), zakończone z `onFinished`. Nie ma nowego odpytywania; szczegóły jednego taska
+  (krok, błąd, PR) czyta istniejący `cezarRun`.
+- Jedno zdarzenie na task i stan: klucz `taskId|stan` (`input`, `done`, `failed`) jest zapisany w `cockpit.json`, więc
+  ponowny odczyt i restart nie wysyłają go drugi raz.
+- Po starcie panelu raportowane są tylko taski, które ten proces zobaczył jako aktywne; zakończone wcześniej, stare wpisy
+  nie zalewają rozmów. Zakończony task, którego panel nie zdążył zobaczyć jako aktywnego, nie jest raportowany.
+- Gdy rozmowa jest w trakcie tury, panel nie przerywa: zdarzenie czeka i jest wysyłane przy następnym odczycie, gdy
+  rozmowa będzie wolna. Rozmowa usunięta albo silnik niedostępny są pomijane z wpisem w logu.
+- Treść niesie id i tytuł taska, stan, krok, błąd (gdy nieudany) i PR, jeśli jest, i kończy się prośbą: podsumuj wynik,
+  zaproponuj następny krok, nic nie zlecaj sam.
+- Do Hermesa trafia jako zwykły tekst z prefiksem `[Automatyka · Cezar] <powód>`, a preambuła mówi, jak na taką turę
+  odpowiadać.
+
 ## Co widzi agent
 
 Pierwsza wiadomość rozmowy zaczyna się od instrukcji (`preamble()` w `server/agent-chat.ts`: kim jest, czym jest Desk Panel,
@@ -216,7 +243,7 @@ kształt odpowiedzi i przeliczać czasy.
   `--dangerously-skip-permissions` (`agyPermissionArgs`; jak `run_command`, który i tak działał bez pytania). Zmienia to tylko argumenty uruchomienia,
   nigdy ustawień `agy`; `DESK_AGY_SKIP_PERMISSIONS=0` (albo `false`, `no`, `off`) wyłącza flagę, wtedy odmowy wracają i widać je w oknie oraz w `denied`.
 - `-p` zjada następny token, stąd `-p ''` na końcu argumentów. Pomoc drukuje na stderr. Zamknięcie stdin kończy proces.
-- Każda wiadomość zużywa limit konta `agy`. Po pierwszej zakończonej odpowiedzi panel raz w tle prosi agy o krótką polską nazwę rozmowy (bez narzędzi: nazewnik uruchamia agy bez `--dangerously-skip-permissions`, więc odmawia on każdego narzędzia, nawet gdy pierwsza odpowiedź cytuje obcy tekst, np. maila; z limitem 20 s); model wybiera `DESK_AGY_TITLE_MODEL`, a domyślnie `DESK_AGY_MODEL`. Przy błędzie zostaje nazwa z pierwszej wiadomości. Użytkownik może zmienić nazwę w nagłówku; jego nazwa nie jest nadpisywana. Poza tym wywołaniem tura zaczyna się tylko od wiadomości użytkownika.
+- Każda wiadomość zużywa limit konta `agy`. Po pierwszej zakończonej odpowiedzi panel raz w tle prosi agy o krótką polską nazwę rozmowy (bez narzędzi: nazewnik uruchamia agy bez `--dangerously-skip-permissions`, więc odmawia on każdego narzędzia, nawet gdy pierwsza odpowiedź cytuje obcy tekst, np. maila; z limitem 20 s); model wybiera `DESK_AGY_TITLE_MODEL`, a domyślnie `DESK_AGY_MODEL`. Przy błędzie zostaje nazwa z pierwszej wiadomości. Użytkownik może zmienić nazwę w nagłówku; jego nazwa nie jest nadpisywana. Poza tym wywołaniem turę zaczyna wiadomość użytkownika albo automatyka panelu (zob. „Automatyka”).
 
 ## Szwy do rozszerzania
 
@@ -275,6 +302,9 @@ Wszystko poza odczytem wymaga nagłówka `Origin` równego adresowi panelu (jak 
 | `POST /api/chats/<id>/approval` | `{ approvalId, decision: "approve" \| "deny" }`: odpowiedź na prośbę o zgodę (tylko Hermes); `409`, gdy nieaktualna |
 | `POST /api/chats/<id>/stop` | zatrzymuje odpowiedź |
 | `GET /api/chats/<id>/events` | strumień SSE |
+
+Turę automatyki zaczyna tylko serwer (metoda `sendAutomation` w hubie czatu, `server/chat-automation.ts`); HTTP nie
+przyjmuje pola `automation` — `POST /api/chats…` dalej przyjmuje wyłącznie wiadomości użytkownika.
 
 Bez usługi czatu (np. testy serwera bez `agy`) trasy odpowiadają `503`, a UI pokazuje „Czat jest niedostępny”.
 

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.aui';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { CHAT_SKILLS, MAX_CONTEXT, skillItem, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
+import { CHAT_SKILLS, MAX_CONTEXT, automationLabel, skillItem, type ChatAutomation, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
@@ -71,7 +71,7 @@ export function toThreadMessage(m: CockpitMessage): ThreadMessageLike {
       ? { type: 'text' as const, text: p.text }
       : { type: 'tool-call' as const, toolCallId: p.id, toolName: p.name, args: p.args as never, argsText: JSON.stringify(p.args), ...(p.result !== undefined ? { result: p.result } : {}), ...(p.error ? { isError: true } : {}) }),
     ...(m.role === 'assistant' ? { status: m.status === 'error' ? { type: 'incomplete', reason: 'error', error: m.error || 'Agent nie odpowiedział.' } : STATUS[m.status] } : {}),
-    metadata: { custom: { context: m.context ?? [], notice: m.notice, status: m.status } },
+    metadata: { custom: { context: m.context ?? [], notice: m.notice, status: m.status, ...(m.automation ? { automation: m.automation } : {}) } },
   };
 }
 
@@ -89,7 +89,7 @@ const SmartRuleUI = makeAssistantToolUI<SmartRuleArgs, unknown>({ toolName: SMAR
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
-type Custom = { context: ContextItem[]; notice?: string; status: CockpitMessage['status'] };
+type Custom = { context: ContextItem[]; notice?: string; status: CockpitMessage['status']; automation?: ChatAutomation };
 const useCustom = () => useAuiState(s => s.message.metadata.custom) as Custom;
 
 /** Detects a trailing `@query` token so typing `@` opens the skill picker. */
@@ -171,10 +171,20 @@ function ComposerExtra() {
   </>;
 }
 
+/** The small label of a turn the panel started itself: visibly not the user's message. */
+export function AutomationLabel({ automation }: { automation: ChatAutomation }) {
+  return <span title={automation.reason} className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:border tw:border-ck-agent/40 tw:bg-ck-agent/10 tw:px-2 tw:py-0.5 tw:text-[11px] tw:font-semibold tw:text-ck-agent">
+    {automationLabel(automation)}
+  </span>;
+}
+
 function UserMessageHeader() {
-  const { context } = useCustom();
-  if (!context?.length) return null;
-  return <div className="tw:flex tw:max-w-full tw:flex-wrap tw:justify-end tw:gap-1.5">{context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}</div>;
+  const { context, automation } = useCustom();
+  if (!context?.length && !automation) return null;
+  return <div className="tw:flex tw:max-w-full tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5">
+    {automation && <AutomationLabel automation={automation} />}
+    {context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}
+  </div>;
 }
 
 /** What the panel says about a run (reconnecting, an approval sent), or that the answer was stopped. */

@@ -41,6 +41,8 @@ const storeSchema = z.object({
     dispatches: z.record(z.string(), outcomeSchema).default({}),
     /** The user's answers on bank change cards, by tool call id: what was done, so the card shows it again. */
     bankPlans: z.record(z.string(), bankPlanOutcomeSchema).default({}),
+    /** Automation turns already handled, by `taskId|state`: a restart never reports the same event twice. */
+    automations: z.record(z.string(), z.number()).default({}),
     updatedAt: z.number().default(0),
   })),
 });
@@ -106,10 +108,18 @@ export function cezarTaskView(id: string, raw: Record<string, any>, cezarUrl: st
 /** Kept as long as a check runs, longer once all are settled: GitHub is asked gently. */
 const PR_TTL_MS = 20_000, PR_SETTLED_TTL_MS = 5 * 60_000;
 
+export interface DispatchedTask { chatId: string; taskId: string; at: number; todoId?: string }
+
 export interface Cockpit {
   /** `items`: the conversation as the chat has it; the watched task follows from it by the contract (`watchedTask`). */
   view(chatId: string, items: Parameters<typeof watchedTask>[0], decisions?: Record<string, DispatchOutcome>): Promise<CockpitView>;
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
+  /** Every task the panel dispatched from a conversation, oldest first: what the automation observer follows. */
+  dispatched(): DispatchedTask[];
+  /** Whether an automation turn for this task and state was already sent (or deliberately skipped). */
+  automationReported(chatId: string, taskId: string, state: string): boolean;
+  /** Keeps the fact in `cockpit.json`, so a restart never sends the same automation turn twice. */
+  markAutomationReported(chatId: string, taskId: string, state: string): void;
   /**
    * The PR of a finished Cezar task, linked once to the to-do item it was dispatched from (`link` is idempotent).
    * The to-do id comes from the kept dispatch, so this works after a restart and with no chat open.
@@ -138,7 +148,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     writeFileSync(`${file}.tmp`, JSON.stringify(store, null, 2), 'utf8');
     renameSync(`${file}.tmp`, file);
   };
-  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, updatedAt: now() };
+  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, automations: {}, updatedAt: now() };
   /** PR links already tried, so a read every few seconds does not write the same link again (the action itself is idempotent). */
   const linkedPrs = new Set<string>();
   /** The to-do a run was dispatched from, kept with the dispatch: it survives a restart and needs no open chat. */
@@ -268,6 +278,25 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
 
     async linkPrs(tasks) {
       for (const task of tasks) if (task.pullRequestUrl) await linkPr(task.id, task.pullRequestUrl, task.title);
+    },
+
+    dispatched() {
+      const out: DispatchedTask[] = [];
+      for (const [chatId, chat] of Object.entries(store.chats))
+        for (const outcome of Object.values(chat.dispatches))
+          if (outcome.decision === 'dispatched') out.push({ chatId, taskId: outcome.taskId, at: outcome.at, ...(outcome.todoId ? { todoId: outcome.todoId } : {}) });
+      return out.sort((a, b) => a.at - b.at);
+    },
+
+    automationReported(chatId, taskId, state) {
+      return !!store.chats[chatId]?.automations[`${taskId}|${state}`];
+    },
+
+    markAutomationReported(chatId, taskId, state) {
+      const chat = chatOf(chatId);
+      chat.automations[`${taskId}|${state}`] = now();
+      chat.updatedAt = now();
+      save();
     },
 
     async bankAssign(chatId, input, plan) {

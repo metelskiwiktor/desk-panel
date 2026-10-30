@@ -109,7 +109,8 @@ link `pr` (pełny URL, tytuł, jeśli jest pod ręką) z `by: panel`, a stanu ni
 (`~/.desk-panel/cockpit.json`), więc link działa też po restarcie i przy zamkniętym oknie czatu; PR pochodzi z istniejącego odczytu
 zakończonych zadań Cezara, bez nowego odpytywania. Nieistniejące/usunięte zadanie, błąd zapisu i limit 20 powiązań są tylko logowane
 i nie unieważniają udanego dispatchu; powtórzenie istniejącego linku nic nie dopisuje do historii. Bez `todoId` listy pozostają
-nietknięte. Nie ma innych automatycznych przejść ani startowania agenta. Samo proponowanie karty nic nie zmienia.
+nietknięte. Nie ma innych automatycznych przejść; automat obserwatora Cezara może po zakończeniu taska wysłać turę do jego
+rozmowy ([czat.md](czat.md)), ale nie zmienia stanu zadania z listy. Samo proponowanie karty nic nie zmienia.
 
 ## Wskazywanie w czacie
 

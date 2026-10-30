@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { ChatError, type ChatService } from './agent-chat';
-import { chatEngines, DEFAULT_ENGINE, type ChatEngine, type EngineStatus } from '../src/chat-contract';
+import { chatEngines, DEFAULT_ENGINE, type ChatAutomationInput, type ChatEngine, type EngineStatus } from '../src/chat-contract';
 
 /** A chat service of one engine, which can say whether it can take a message now. */
 export type EngineService = ChatService & { status?(): Promise<{ available: boolean; error?: string }> };
@@ -83,6 +83,11 @@ export function createChatHub(options: ChatHubOptions): ChatService {
     async send(id, input) {
       const service = await find(id);
       return once(input.nonce, () => service.send(id, input));
+    },
+    async sendAutomation(id: string, input: ChatAutomationInput) {
+      const service = await find(id);
+      if (!service.sendAutomation) throw new ChatError(503, `Silnik ${owner.get(id) ?? 'rozmowy'} nie przyjmuje tur automatyki.`);
+      return service.sendAutomation(id, input);
     },
     async stop(id) { return (await find(id)).stop(id); },
     async rename(id, title) { return (await find(id)).rename(id, title); },

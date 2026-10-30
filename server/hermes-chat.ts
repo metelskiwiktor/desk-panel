@@ -13,8 +13,8 @@ import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
 import { HermesError, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
 import {
-  titleFrom, withContext,
-  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
+  automationPrompt, titleFrom, withContext,
+  type ChatAutomation, type ChatAutomationInput, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ContextItem, type MessageStatus,
 } from '../src/chat-contract';
 
 /**
@@ -57,6 +57,7 @@ export function hermesPreamble(): string {
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
     ...guideRules(),
+    'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
 }
@@ -72,6 +73,8 @@ interface Turn {
   agent: string;
   at: number;
   text: string;
+  /** Set only when the panel started this turn itself, never the user. */
+  automation?: ChatAutomation;
   context?: ContextItem[];
   nonce?: string;
   run: string | null;
@@ -339,7 +342,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     const out: ChatMessage[] = [];
     let g = 0;
     for (const turn of record.turns) {
-      out.push({ id: turn.id, role: 'user', at: turn.at, text: turn.text, ...(turn.context?.length ? { context: turn.context } : {}) });
+      out.push({ id: turn.id, role: 'user', at: turn.at, text: turn.text, ...(turn.automation ? { automation: turn.automation } : {}), ...(turn.context?.length ? { context: turn.context } : {}) });
       const group = turn.run ? groups[g++] : undefined;
       const live = lives.get(record.id);
       if (live?.turn === turn) { out.push(live.message); continue; }
@@ -602,7 +605,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     histories.delete(record.id);
     save(record);
     touch(record, message, true);
-    if (answer === 'done' && record.turns.length === 1 && !record.userNamed && !record.titleAttempted && options.namer) {
+    if (answer === 'done' && record.turns.length === 1 && !turn.automation && !record.userNamed && !record.titleAttempted && options.namer) {
       record.titleAttempted = true;
       save(record);
       const text = message.parts.filter(p => p.type === 'text').map(p => p.text).join(' ');
@@ -640,6 +643,37 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       `Nie udało się: Hermes jest niedostępny (${reason}). Wiadomość nie została wysłana; możesz spróbować ponownie albo wybrać AGY.`);
   };
 
+  /** One turn for either the user or the panel (an automation): the same session and storage, with the marker kept. */
+  const deliver = async (id: string, input: ChatSend | ChatAutomationInput, automation?: ChatAutomation) => {
+    const record = await need(id);
+    const nonce = 'nonce' in input ? input.nonce : undefined;
+    if (nonce && record.turns.some(t => t.nonce === nonce)) return;
+    if (lives.has(id)) throw new ChatError(409, 'Agent jeszcze odpowiada.');
+    const at = now();
+    const context = input.context ?? [];
+    const turn: Turn = { id: randomUUID(), agent: randomUUID(), at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
+    const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
+    const first = !record.turns.some(t => t.run);
+    const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, context);
+    let started: { run: string; session?: string };
+    try { started = await client.startRun({ input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session }); }
+    catch (error) {
+      lives.delete(id);
+      log.trace(id, { turn: record.turns.length + 1, src: 'panel', kind: 'start-failed', error: error instanceof Error ? error.message : null });
+      throw unavailable(error);
+    }
+    health = { at: now(), value: { available: true } };
+    turn.run = started.run;
+    if (started.session && started.session !== record.session) record.session = started.session;
+    record.turns.push(turn);
+    record.updatedAt = at;
+    save(record);
+    log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'sent', run: started.run, preamble: first, contextItems: context.length, chars: prompt.length, ...(automation ? { automation: automation.source } : {}) });
+    sendState(record);
+    if (live.stopping) void client.cancel(started.run).catch(() => {});
+    void follow(live);
+  };
+
   const service: ChatService & { status(): Promise<{ available: boolean; error?: string }> } = {
     async status() {
       if (health && now() - health.at < 5000) return health.value;
@@ -660,34 +694,8 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       catch (error) { records.delete(id); throw error; }
       return { id };
     },
-    async send(id, input) {
-      const record = await need(id);
-      if (input.nonce && record.turns.some(t => t.nonce === input.nonce)) return;
-      if (lives.has(id)) throw new ChatError(409, 'Agent jeszcze odpowiada.');
-      const at = now();
-      const context = input.context ?? [];
-      const turn: Turn = { id: randomUUID(), agent: randomUUID(), at, text: input.text, ...(context.length ? { context } : {}), ...(input.nonce ? { nonce: input.nonce } : {}), run: null, status: 'streaming' };
-      const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
-      const first = !record.turns.some(t => t.run);
-      const prompt = withContext(input.text, context);
-      let started: { run: string; session?: string };
-      try { started = await client.startRun({ input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session }); }
-      catch (error) {
-        lives.delete(id);
-        log.trace(id, { turn: record.turns.length + 1, src: 'panel', kind: 'start-failed', error: error instanceof Error ? error.message : null });
-        throw unavailable(error);
-      }
-      health = { at: now(), value: { available: true } };
-      turn.run = started.run;
-      if (started.session && started.session !== record.session) record.session = started.session;
-      record.turns.push(turn);
-      record.updatedAt = at;
-      save(record);
-      log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'sent', run: started.run, preamble: first, contextItems: context.length, chars: prompt.length });
-      sendState(record);
-      if (live.stopping) void client.cancel(started.run).catch(() => {});
-      void follow(live);
-    },
+    async send(id, input) { await deliver(id, input); },
+    async sendAutomation(id, input) { await deliver(id, input, input.automation); },
     async stop(id) {
       await need(id);
       const live = lives.get(id);

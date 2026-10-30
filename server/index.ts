@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentChat } from './agent-chat';
 import { createPanelServer } from './app';
+import { automationsEnabled, createChatAutomation } from './chat-automation';
 import { createChatHub } from './chat-hub';
 import { createCockpit } from './cockpit';
 import { createHermesClient, hermesUrl } from './hermes-api';
@@ -23,9 +24,12 @@ const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
 // Gmail accounts shown in the mail list; the calendar account by default.
 const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
 let cockpit: ReturnType<typeof createCockpit> | undefined;
+let automation: ReturnType<typeof createChatAutomation> | undefined;
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env,
+  // The same reads that feed the dashboard also feed the automations: an active task waiting for the user, a finished one.
+  onActive: tasks => automation?.active(tasks),
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
-  onFinished: tasks => cockpit?.linkPrs(tasks) });
+  onFinished: tasks => { cockpit?.linkPrs(tasks); automation?.finished(tasks); } });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
 const namer = createAgyNamer();
@@ -38,6 +42,9 @@ const hermes = createHermesChat({
 const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ namer, panelUrl: `http://127.0.0.1:${port}` }) } });
 // The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
 cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
+// The first automation: a task dispatched from a chat reports its waiting/finished state back to that chat, once.
+// `DESK_AUTOMATIONS=0` turns every automation off; the scenario mode does not create this observer at all.
+if (automationsEnabled(process.env)) automation = createChatAutomation({ chat, cockpit, sources });
 const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

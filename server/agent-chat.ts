@@ -7,8 +7,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { createChatLog, type ChatLog, type TurnSummary, type TurnTool } from './chat-log';
 import {
-  titleFrom, withContext,
-  type ChatApproval, type ChatDetail, type ChatEngine, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
+  automationPrompt, titleFrom, withContext,
+  type ChatApproval, type ChatAutomation, type ChatAutomationInput, type ChatDetail, type ChatEngine, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
   type EngineStatus,
 } from '../src/chat-contract';
 
@@ -45,6 +45,7 @@ export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
     'Gdy w [Kontekst] jest „Skill: Zaimplementuj zadanie”, działasz jako dyspozytor: zrób szybki rekonesans tylko do odczytu w repozytorium C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel, wypisz krótki plan (3–6 punktów) oraz gotowy blok Executor Prompt po angielsku i zapytaj „Zlecić na Cezarze?”. Dopiero po potwierdzeniu („zleć”, „ok”, „tak”) wyślij POST /api/cezar/runs i podaj link z pola url.',
     'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost. Gdy użytkownik poprosi o wdrożenie zmian lub restart panelu, uruchom `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "servy\\desk-panel.ps1" -Action RESTART`: skrypt automatycznie oddeleguje budowanie frontendu i restart do odpiętego procesu w tle, dzięki czemu tura czatu zakończy się czysto bez nagłego zerwania procesu.',
+    'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
   ].join('\n');
 }
 
@@ -150,6 +151,8 @@ export interface ChatService {
   get(id: string): Promise<ChatDetail>;
   create(input: ChatSend): Promise<{ id: string }>;
   send(id: string, input: ChatSend): Promise<void>;
+  /** A turn the panel starts itself (never the user's message); the conversation marks it as automation. */
+  sendAutomation?(id: string, input: ChatAutomationInput): Promise<void>;
   stop(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -324,7 +327,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     chat.updatedAt = now();
     save(chat);
     touch(chat, agent, true);
-    if (status === 'done' && chat.items.length === 2 && !chat.userNamed && !chat.titleAttempted && options.namer) {
+    if (status === 'done' && chat.items.length === 2 && !chat.items[0]?.automation && !chat.userNamed && !chat.titleAttempted && options.namer) {
       chat.titleAttempted = true;
       save(chat);
       const text = agent.parts.filter(p => p.type === 'text').map(p => p.text).join(' ');
@@ -411,6 +414,32 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     return session;
   };
 
+  /** One turn for either the user or the panel (an automation): the same storage, with the marker when it is not the user. */
+  const deliver = async (id: string, input: ChatSend | ChatAutomationInput, automation?: ChatAutomation) => {
+    const chat = await need(id);
+    if (sessions.get(id)?.agent) throw new ChatError(409, 'Agent jeszcze odpowiada.');
+    const at = now();
+    const context = input.context ?? [];
+    const user: ChatMessage = { id: randomUUID(), role: 'user', at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}) };
+    const agent: ChatMessage = { id: randomUUID(), role: 'agent', at, parts: [], status: 'streaming' };
+    chat.items.push(user, agent);
+    chat.updatedAt = at;
+    await mkdir(agentDir, { recursive: true });
+    const session = sessions.get(id) ?? open(chat);
+    clearTimeout(session.idle);
+    session.agent = agent;
+    session.stopping = false;
+    session.steps.clear();
+    save(chat);
+    touch(chat, user);
+    touch(chat, agent, true);
+    const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, context);
+    const content = chat.agy ? prompt : `${intro}\n\n${prompt}`;
+    session.turn = { number: chat.items.filter(m => m.role === 'user').length, startedAt: at, ask: input.text.replace(/\s+/g, ' ').slice(0, 200), context: context.map(c => c.kind), lastStep: null, result: null, outputChars: new Map(), toolErrors: new Map(), denied: [] };
+    log.trace(id, { turn: session.turn.number, src: 'panel', kind: 'sent', chars: content.length, preamble: !chat.agy, contextItems: context.length, ask: session.turn.ask, ...(automation ? { automation: automation.source } : {}) });
+    session.proc.write(`${JSON.stringify({ event: 'user', message: { content } })}\n`);
+  };
+
   const service: ChatService = {
     async list() { await load(); return [...chats.values()].map(summary).sort((a, b) => b.updatedAt - a.updatedAt); },
     async get(id) { return detail(await need(id)); },
@@ -423,28 +452,10 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
       return { id: chat.id };
     },
     async send(id, input) {
-      const chat = await need(id);
-      if (sessions.get(id)?.agent) throw new ChatError(409, 'Agent jeszcze odpowiada.');
-      const at = now();
-      const context = input.context ?? [];
-      const user: ChatMessage = { id: randomUUID(), role: 'user', at, text: input.text, ...(context.length ? { context } : {}) };
-      const agent: ChatMessage = { id: randomUUID(), role: 'agent', at, parts: [], status: 'streaming' };
-      chat.items.push(user, agent);
-      chat.updatedAt = at;
-      await mkdir(agentDir, { recursive: true });
-      const session = sessions.get(id) ?? open(chat);
-      clearTimeout(session.idle);
-      session.agent = agent;
-      session.stopping = false;
-      session.steps.clear();
-      save(chat);
-      touch(chat, user);
-      touch(chat, agent, true);
-      const prompt = withContext(input.text, context);
-      const content = chat.agy ? prompt : `${intro}\n\n${prompt}`;
-      session.turn = { number: chat.items.filter(m => m.role === 'user').length, startedAt: at, ask: input.text.replace(/\s+/g, ' ').slice(0, 200), context: context.map(c => c.kind), lastStep: null, result: null, outputChars: new Map(), toolErrors: new Map(), denied: [] };
-      log.trace(id, { turn: session.turn.number, src: 'panel', kind: 'sent', chars: content.length, preamble: !chat.agy, contextItems: context.length, ask: session.turn.ask });
-      session.proc.write(`${JSON.stringify({ event: 'user', message: { content } })}\n`);
+      await deliver(id, input);
+    },
+    async sendAutomation(id, input) {
+      await deliver(id, input, input.automation);
     },
     async stop(id) {
       await need(id);
