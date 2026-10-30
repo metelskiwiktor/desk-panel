@@ -120,6 +120,8 @@ export const automationDecisionSchema = z.object({
   decision: z.enum(['create', 'reject']),
   /** Only narrows what the conversation's card proposed: an unticked action is left out. The plan itself still comes from the tool call. */
   actions: z.array(automationActionSchema).max(20).optional(),
+  /** Only narrows the plan: unticking „learn” turns it off, ticking it cannot turn it on. */
+  learn: z.boolean().optional(),
 }).strict();
 
 /** The user's answer on a card, kept in `cockpit.json`: answered twice, done once and shown after a reload. */
@@ -130,6 +132,8 @@ export const automationOutcomeSchema = z.discriminatedUnion('decision', [
 export type AutomationOutcome = z.infer<typeof automationOutcomeSchema>;
 
 export const automationReportSchema = z.object({
+  /** The run id the panel put in the automation turn: it binds the report to that one run. */
+  runId: z.string().regex(/^run-[0-9a-f]{12}$/),
   outcome: z.enum(RUN_OUTCOMES),
   summary: z.string().trim().min(1).max(1000),
   notebook: z.string().max(MAX_NOTEBOOK).optional(),

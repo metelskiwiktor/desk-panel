@@ -1,12 +1,17 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAutomations } from './automations';
 import { createCockpit } from './cockpit';
 import { PANEL_TOOLS } from './panel-mcp';
 import { createScenarioSources } from './scenario';
 import { handleChatRoute } from './chat-routes';
+import { createPanelServer } from './app';
+import { createHermesChat } from './hermes-chat';
+import { createHermesClient } from './hermes-api';
+import { startMockHermes } from './hermes-mock';
 
 let dir: string;
 let clock = Date.parse('2026-10-30T12:00:00+01:00');
@@ -18,6 +23,7 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'desk-auto-mcp-')); sent = [
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const make = (over: Partial<Parameters<typeof createAutomations>[0]> = {}) => createAutomations({ file: join(dir, 'automations.json'), chat, now: () => clock, log: () => {}, ...over });
+const pendingId = () => JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8')).pending[0].id as string;
 
 describe('automation tools', () => {
   it('proposes a card and saves nothing', async () => {
@@ -38,7 +44,7 @@ describe('automation tools', () => {
     clock += 2 * 60_000;
     await automations.tick();
     expect(sent).toHaveLength(1);
-    const output = await PANEL_TOOLS.panel_automation_report.run({ outcome: 'done', summary: 'Cel osiągnięty.' }, ctx);
+    const output = await PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), outcome: 'done', summary: 'Cel osiągnięty.' }, ctx);
     expect(output).toContain('Raport zapisany');
     const list = await PANEL_TOOLS.panel_automations.run({ id }, ctx);
     expect(list).toContain('Cel osiągnięty.');
@@ -55,6 +61,43 @@ describe('automation tools', () => {
     expect((await automations.get(created.id))!.status).toBe('active');
     await PANEL_TOOLS.panel_automation_update.run({ id: created.id, action: 'cancel' }, ctx);
     expect((await automations.get(created.id))!.status).toBe('cancelled');
+  });
+
+  it('accepts the report of an open run in one of several active conversations', async () => {
+    const automations = make();
+    const created = await automations.createFromPlan('origin', { name: 'Ceny', goal: 'Sprawdź.', trigger: { kind: 'once', at: clock + 60_000 }, actions: [{ kind: 'message' }], learn: false });
+    clock += 60_000;
+    await automations.tick();
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['origin', 'other'] };
+    await expect(PANEL_TOOLS.panel_automation_report.run({ runId: pendingId(), outcome: 'done', summary: 'Cel osiągnięty.' }, ctx)).resolves.toContain('Raport zapisany');
+    expect((await automations.get(created.id))!.runs).toHaveLength(1);
+  });
+
+  it('refuses a report in an ordinary turn that names no open run', async () => {
+    const automations = make();
+    const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => ['origin'] };
+    await expect(PANEL_TOOLS.panel_automation_report.run({ runId: 'run-000000000000', outcome: 'done', summary: 'Zwykła tura.' }, ctx)).rejects.toThrow(/nie należy do runu/);
+  });
+});
+
+describe('automation HTTP action', () => {
+  it('calls automationAction for an allowed origin and refuses a foreign one', async () => {
+    const sources = createScenarioSources(join(process.cwd(), 'scenarios', 'standard.json'));
+    const action = vi.fn(async (input: { id: string }) => ({ id: input.id, status: 'paused' }));
+    sources.automationAction = action as unknown as NonNullable<typeof sources.automationAction>;
+    const server = createPanelServer(sources, process.cwd());
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const payload = JSON.stringify({ id: 'a-111111111111', action: 'pause' });
+      const denied = await fetch(`${origin}/api/automations/action`, { method: 'POST', headers: { Origin: 'http://evil' }, body: payload });
+      expect(denied.status).toBe(403);
+      expect(action).not.toHaveBeenCalled();
+      const allowed = await fetch(`${origin}/api/automations/action`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: payload });
+      expect(allowed.status).toBe(200);
+      expect(await allowed.json()).toMatchObject({ id: 'a-111111111111', status: 'paused' });
+      expect(action).toHaveBeenCalledWith({ id: 'a-111111111111', action: 'pause' });
+    } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   });
 });
 
@@ -111,5 +154,53 @@ describe('automation card route', () => {
     expect(view.automationCards['m1:call1']).toEqual({ decision: 'created', at: created.at, automationId: created.automationId, name: 'Ceny' });
     const restarted = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
     expect((await restarted.view(chatId, (conversation() as unknown as { items: never }).items)).automationCards['m1:call1']).toEqual(view.automationCards['m1:call1']);
+  });
+});
+
+describe('an automation card from real Hermes history', () => {
+  it('is identifiable live and after a restart, and the HTTP click creates the automation', async () => {
+    const mock = await startMockHermes({ stepMs: 1, streamToolArgs: false });
+    const services: ReturnType<typeof createHermesChat>[] = [];
+    const makeChat = () => {
+      const service = createHermesChat({ dir, client: createHermesClient({ url: mock.url }), log: { trace() {}, turn() {}, async drain() {} } as never });
+      services.push(service);
+      return service;
+    };
+    const automations = createAutomations({ file: join(dir, 'automations.json'), chat: makeChat(), log: () => {} });
+    const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    const chat = services[0];
+    const server = createPanelServer(sources, dir, undefined, chat, { automations, cockpit });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { id } = await chat.create({ text: 'Zaproponuj automat' });
+      let detail = await chat.get(id);
+      for (let i = 0; i < 300 && (detail.running || !detail.items[1]?.parts?.some(p => p.type === 'tool' && p.input.includes('Ceny'))); i++) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        detail = await chat.get(id);
+      }
+      expect(detail.running).toBe(false);
+      const agent = detail.items.find(m => m.role === 'agent')!;
+      const tool = agent.parts!.find(p => p.type === 'tool')!;
+      expect(tool.id.startsWith('pending:')).toBe(false);
+      expect(tool.id).toMatch(new RegExp(`^${agent.id}:x-[0-9a-f]{16}$`));
+      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const res = await fetch(`${origin}/api/chats/${id}/automation`, {
+        method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ toolCallId: tool.id, decision: 'create' }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ decision: 'created' });
+      expect(await automations.list()).toHaveLength(1);
+
+      await chat.drain(); chat.close();
+      const restored = await makeChat().get(id);
+      const restoredAgent = restored.items.find(m => m.role === 'agent')!;
+      const restoredTool = restoredAgent.parts!.find(p => p.type === 'tool')!;
+      expect(restoredTool.id).toBe(tool.id);
+    } finally {
+      automations.stop();
+      for (const service of services) { service.close(); await service.drain().catch(() => {}); }
+      await mock.close();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
   });
 });

@@ -2,6 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AutomationsView } from './AutomationsView';
+import { AutomationCard } from './cockpit/automation-card';
+import { CardActions } from './cockpit/cards';
 import { scenarioFetch } from './test-fixtures';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); });
@@ -42,6 +44,24 @@ describe('Automaty view', () => {
     await user.click(screen.getByRole('tab', { name: 'Cel i akcje' }));
     expect(screen.getByText(/Sprawdzaj codziennie rano/)).toBeTruthy();
     expect(screen.getAllByText('Wiadomość w tej rozmowie').length).toBeGreaterThan(0);
+  });
+
+  it('sends the caretaker switch from the consent card, so a run can be told not to learn', async () => {
+    const respond = vi.fn(async () => {});
+    const user = userEvent.setup({ delay: null });
+    const props: any = {
+      toolCallId: 'message:call', args: { name: 'Ceny', goal: 'Sprawdź', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: true },
+      status: { type: 'complete' }, result: undefined,
+    };
+    render(<CardActions.Provider value={{ respond, running: false }}>
+      <AutomationCard {...props} />
+    </CardActions.Provider>);
+    const toggle = screen.getByRole('checkbox', { name: /Ucz się/ });
+    expect((toggle as HTMLInputElement).checked).toBe(true);
+    await user.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Utwórz automat' }));
+    expect(respond).toHaveBeenCalledWith('message:call', { kind: 'automation', decision: 'create', actions: [{ kind: 'message' }], learn: false });
   });
 
   it('pauses and resumes through the Origin-checked action', async () => {

@@ -199,7 +199,7 @@ describe('interaktywny panel', () => {
     renderWith();
     await user.click(nav('Ustawienia'));
     await user.click(await screen.findByRole('button', { name: 'Otwórz Automaty' }));
-    expect((await screen.findAllByRole('heading', { name: 'Automaty' })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('heading', { name: 'Automaty' })).length).toBe(1);
     expect((await screen.findAllByText('Ceny prądu u dostawcy')).length).toBeGreaterThan(0);
   });
   it('komunikuje brak możliwości zapisania ustawień', async () => {

@@ -7,6 +7,7 @@ import { PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
+import { automationPlanSchema } from '../src/automation-contract';
 import { stableAppointmentCardId } from './appointment-cards';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
@@ -203,6 +204,13 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  * from Hermes's history gives the same id, so the user's decision stays with the card, and two different plans never share one.
  */
 export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign') || name.includes('panel_smart_rule_propose');
+export const isAutomationCard = (name: string) => name.includes('panel_automation_propose');
+/** The automation consent card's identity is the plan it proposes, so live, kept and restored reads agree. */
+export function stableAutomationCardId(messageId: string, input: string): string | null {
+  let plan;
+  try { plan = automationPlanSchema.parse(JSON.parse(input)); } catch { return null; }
+  return `${messageId}:x-${createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0, 16)}`;
+}
 export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
   if (name.includes('panel_smart_rule_propose')) {
     const plan = smartRulePlanOf(input);
@@ -223,7 +231,8 @@ export function stabilizeBankCards(message: ChatMessage): boolean {
   let changed = false;
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool') continue;
-    const id = isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
+    const id = isAutomationCard(p.name) ? stableAutomationCardId(message.id, p.input)
+      : isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
     if (id && p.id !== id) { p.id = id; changed = true; }
   }
   return changed;

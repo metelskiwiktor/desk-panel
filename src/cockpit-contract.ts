@@ -185,7 +185,7 @@ export const COCKPIT_TOOLS = {
     effect: 'zmiana jest natychmiastowa i lokalna; runNow uruchamia run teraz, reszta tylko zmienia stan.',
   },
   panel_automation_report: {
-    purpose: 'Raport runu automatu: outcome (not-yet/done/error/skipped), summary (1–2 zdania) i opcjonalnie notebook (gdy automat się uczy).',
+    purpose: 'Raport runu automatu: runId z treści tury automatyki, outcome (not-yet/done/error/skipped), summary (1–2 zdania) i opcjonalnie notebook (gdy automat się uczy).',
     when: 'tylko w turze automatyki, na końcu runu, zgodnie z poleceniem w treści runu. Poza runem panel odmawia.',
     effect: 'panel zapisuje run w historii automatu, podmienia notatnik tylko przy learn=true, a outcome done kończy cel i harmonogram. Przy done/error panel wysyła krótką wiadomość do rozmowy automatu. Sam nic więcej nie zapisujesz.',
   },

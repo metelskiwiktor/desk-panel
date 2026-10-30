@@ -32,7 +32,7 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
   const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
   const answer = async (decision: 'create' | 'reject') => {
     setSending(true); setError('');
-    try { await respond(toolCallId, { kind: 'automation', decision, ...(decision === 'create' ? { actions } : {}) }); }
+    try { await respond(toolCallId, { kind: 'automation', decision, ...(decision === 'create' ? { actions, learn } : {}) }); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };

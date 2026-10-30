@@ -129,7 +129,7 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_automation_propose` | karta „Nowy automat”: `name`, `goal`, `trigger`, `doneWhen?`, `actions`, `learn`, `replaces?`; zapis dopiero po kliknięciu (`POST /api/chats/:id/automation`, plan z rozmowy) |
 | `panel_automations` | lista albo szczegóły automatu (`id`): harmonogram, stan, notatnik, ostatnie runy |
 | `panel_automation_update` | bez karty: `pause`/`resume`/`cancel`/`runNow`, `notebook?`, `name?` |
-| `panel_automation_report` | tylko w turze automatyki: `outcome`, `summary`, `notebook?`; zapisuje run i kończy cel przy `done` |
+| `panel_automation_report` | tylko w turze automatyki z tym `runId`: `outcome`, `summary`, `notebook?`; zapisuje run i kończy cel przy `done` |
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 

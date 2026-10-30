@@ -26,7 +26,7 @@ import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 import { observerCancelSchema } from '../src/observers-contract';
 import { automationUpdateSchema } from '../src/automation-contract';
-import type { Automations } from './automations';
+import { AutomationError, type Automations } from './automations';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, maxBytes = 4096): Promise<T> {
@@ -104,6 +104,10 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         } else if (url.pathname === '/api/todos/action') {
           res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
+        } else if (url.pathname === '/api/automations/action') {
+          // The Automaty view's buttons: pause, resume, cancel, run now and the notebook, local only.
+          if (!sources.automationAction) throw new SourceError(503);
+          res.end(JSON.stringify(await sources.automationAction(await readJson(req, automationUpdateSchema))));
         } else if (url.pathname === '/api/observers/cancel') {
           // The user's cancel on the settings card: local only, the observer never fires.
           if (!sources.observerCancel) throw new SourceError(503);
@@ -122,7 +126,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         }
       } catch (error) {
-        const status = error instanceof SourceError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
+        const status = error instanceof SourceError || error instanceof SmartRuleError || error instanceof AutomationError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
         // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
         const reason = error instanceof TodoError || error instanceof BankLabelError || error instanceof SmartRuleError ? error.message
           : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'

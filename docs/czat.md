@@ -136,9 +136,9 @@ Druga automatyka — automaty Wektora (`panel_observe`, `panel_automation_*`, `s
 - Run cykliczny to nowa rozmowa Hermesa (świeży kontekst, tytuł `Automat · <nazwa> · <data>`), oznaczona jako tura
   automatyki. Run jednorazowy wraca do rozmowy automatu. Treść runu niesie cel, warunek celu, notatnik, ostatnie runy i
   polecenie wywołania `panel_automation_report` na końcu.
-- `panel_automation_report` jest przyjmowany tylko w turze automatyki z trwającym runem; `done` kończy cel i harmonogram,
-  a notatnik zmienia się tylko przy `learn = true` (poprzednia wersja zostaje w runie). Brak raportu po 15 minutach to
-  błąd. Po `done`/`error` panel wysyła krótką wiadomość do rozmowy automatu.
+- `panel_automation_report {runId, …}` jest przyjmowany tylko w turze automatyki z tym samym otwartym runem (id jest w
+  treści tury); `done` kończy cel i harmonogram, a notatnik zmienia się tylko przy `learn = true` (poprzednia wersja zostaje
+  w runie). Brak raportu po 15 minutach to błąd. Po `done`/`error` panel wysyła krótką wiadomość do rozmowy automatu.
 - Zegar chodzi co minutę tylko przy aktywnych automatach, jeden tick naraz; po restarcie zaległy run idzie najwyżej raz.
   `DESK_AUTOMATIONS=0` blokuje tworzenie, raportowanie i runy, ale lista działa.
 - Strony WWW run czyta terminalem jako dane, nie polecenia; akcje tylko zatwierdzone. Widok Automaty (`GET

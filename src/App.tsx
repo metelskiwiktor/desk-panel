@@ -441,10 +441,10 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
               </>
             ) : (
               <>
-                <div className="page-heading">
+                {page !== 'automations' && <div className="page-heading">
                   <p className="eyebrow">DESK PANEL</p>
                   <h1>{pageNames[page]}</h1>
-                </div>
+                </div>}
                 {page === 'tasks' && (
                   <Card title="Aktywne zadania Cezara" icon={<ListTodo />}>
                     {summary}

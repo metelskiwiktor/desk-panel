@@ -208,6 +208,8 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         plan = { ...plan, actions: input.actions.filter(a => allowed.has(a.kind)) };
         if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
       }
+      // The card may only narrow the plan: turning „learn” off works, turning it on cannot.
+      if (input.learn === false && plan.learn) plan = { ...plan, learn: false };
       const create = async () => {
         const automation = await automations.createFromPlan(id, plan);
         return { decision: 'created' as const, at: Date.now(), automationId: automation.id, name: automation.name };

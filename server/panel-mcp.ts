@@ -632,18 +632,20 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     description: cockpitToolDescription('panel_automation_report'),
     input: automationReportSchema,
     schema: schema({
+      runId: { type: 'string', description: 'Identyfikator runu z treści tury automatyki (run-…)' },
       outcome: { type: 'string', enum: ['not-yet', 'done', 'error', 'skipped'], description: 'done: cel osiągnięty; not-yet: sprawdzić ponownie; error: nie udało się' },
       summary: { type: 'string', description: 'Wynik w 1–2 zdaniach' },
       notebook: { type: 'string', description: 'Nowa treść notatnika, tylko gdy automat się uczy i jest co zapamiętać' },
-    }, ['outcome', 'summary']),
+    }, ['runId', 'outcome', 'summary']),
     async run(args, ctx) {
       if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
       const chats = ctx.activeChats?.() ?? [];
-      if (chats.length !== 1) throw new AgentViewError(409, chats.length
-        ? 'Raport runu powstaje w rozmowie, w której trwa tura, a teraz trwa ich kilka.'
+      const chatId = typeof args.runId === 'string' ? ctx.automations.openRunChat(args.runId) : undefined;
+      if (!chatId || !chats.includes(chatId)) throw new AgentViewError(409, chats.length
+        ? 'Ten raport nie należy do runu otwartego w rozmowie bieżącej tury.'
         : 'Raport runu powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa.');
       try {
-        const run = await ctx.automations.report(chats[0], args as any);
+        const run = await ctx.automations.report(chatId, args as any);
         return `Raport zapisany: ${run.outcome} — ${run.summary}. Notatnik zmieniony: ${run.notebookChanged ? 'tak' : 'nie'}.`;
       } catch (error) {
         if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
