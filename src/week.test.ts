@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent } from './model';
 import type { TrainingActivity, TrainingWorkout } from './training-contract';
-import { dayOf, mondayOf, monthDays, weekDays, withoutPlanDuplicates } from './week';
+import { dayOf, dayText, dayTitle, mondayOf, monthDays, weekDays, withoutPlanDuplicates } from './week';
 
 const zone = 'Europe/Warsaw';
 const now = Date.parse('2026-10-24T09:20:00Z'); // Saturday 11:20 in Warsaw
@@ -44,6 +44,23 @@ describe('week', () => {
     const events = [allDay('copy', 'Długa jazda', '2026-10-24', '2026-10-25'), allDay('other', 'Urlop', '2026-10-24', '2026-10-25'), allDay('elsewhere', 'Długa jazda', '2026-10-30', '2026-10-31')];
     expect(withoutPlanDuplicates(events, [workout({})]).map(e => e.id)).toEqual(['other', 'elsewhere']);
     expect(withoutPlanDuplicates(events, []).map(e => e.id)).toEqual(['copy', 'other', 'elsewhere']);
+  });
+});
+
+describe('a day as the agent reads it', () => {
+  it('names the day and lists what is planned in it, and a free day has no items', () => {
+    const [today, tomorrow, free] = weekDays({ now, timeZone: zone,
+      events: [allDay('urlop', 'Urlop', '2026-10-24', '2026-10-26'), event({ id: 'meet', title: 'Spotkanie' })],
+      workouts: [workout({ id: 'long' })], activities: [] });
+    expect(dayTitle(today)).toBe('Sob 24, dziś');
+    expect(dayText(today)).toBe([
+      'Dzień: 2026-10-24 (Sob 24, dziś)',
+      '- Urlop, cały dzień',
+      '- Trening: Długa jazda, 1 h 30',
+      '- Spotkanie, 14:45',
+    ].join('\n'));
+    expect(dayText(tomorrow)).toBe('Dzień: 2026-10-25 (Nd 25)\n- Urlop, cały dzień');
+    expect(dayText(free)).toBe('Dzień: 2026-10-26 (Pn 26)');
   });
 });
 

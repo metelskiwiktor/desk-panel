@@ -90,6 +90,8 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   jako chip. Kliknięcie jeszcze raz zdejmuje go z kontekstu. W tym trybie kliknięcia **nie uruchamiają** niczego na pulpicie,
   z wyjątkiem elementów oznaczonych `data-pick-through` (menu pulpitów wirtualnych): można przełączyć pulpit i wskazać kafelek
   z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i pozostawiają czat w widoku kompaktowym.
+  Cała strefa „Najbliższe dni” niesie w kontekście każdy widoczny dzień z jego wydarzeniami i treningami (pusty dzień bez
+  pozycji), w zakresie zgodnym z rozmiarem: siedem dni albo pięć tygodni.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
 - **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` robi rekonesans tylko do odczytu i proponuje zlecenie kartą zgody. Agent sam nie uruchamia Cezara: dopiero kliknięcie użytkownika wysyła z panelu `POST /api/chats/:id/dispatch`; backend odczytuje propozycję z tej rozmowy i zwraca powiązanie z taskiem.
 - Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia). Nazwę zmienia się w nagłówku rozmowy (Enter zapisuje, Esc anuluje, pusta lub niezmieniona się nie zapisuje); tak nadanej nazwy panel już nie nadpisuje.

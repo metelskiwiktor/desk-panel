@@ -3,16 +3,15 @@ import type { Detail } from './model';
 import { LevelBars } from './TrainingCard';
 import { formatDuration } from './training-view';
 import type { WeekDay, WeekItem } from './week';
+import { dayText, dayTitle } from './week';
 import { ctx } from './chat-context';
 
 const MAX_ITEMS = 3;
 const stateTitle: Partial<Record<NonNullable<WeekItem['state']>, string>> = { done: 'wykonany', partial: 'częściowo', missed: 'nie zrobiony' };
-const dayTitle = (day: WeekDay) => `${day.label} ${day.dayOfMonth}${day.today ? ', dziś' : ''}`;
 
 /** What the agent is told when a day is pointed at: its date and what is planned in it. */
 function dayContext(day: WeekDay) {
-  const lines = day.items.map(i => `- ${i.workout ? 'Trening: ' : ''}${i.title}${i.at ? `, ${i.at}` : i.workout ? '' : ', cały dzień'}${i.workout?.durationSec ? `, ${formatDuration(i.workout.durationSec)}` : ''}`);
-  return ctx('tile', `day:${day.date}`, `Dzień: ${dayTitle(day)}`, [`Dzień: ${day.date} (${dayTitle(day)})`, ...(lines.length ? lines : ['Brak pozycji'])].join('\n'));
+  return ctx('tile', `day:${day.date}`, `Dzień: ${dayTitle(day)}`, dayText(day));
 }
 /** A workout or a meeting inside a day: pointed at on its own, it wins over the day. */
 function itemContext(item: WeekItem) {

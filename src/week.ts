@@ -1,6 +1,7 @@
 import type { CalendarEvent } from './model';
 import type { TrainingActivity, TrainingWorkout } from './training-contract';
 import { addDays, localDate, workoutProgress, type WorkoutState } from './training-progress';
+import { formatDuration } from './training-view';
 
 export interface WeekItem {
   kind: 'allDay' | 'event' | 'workout';
@@ -23,6 +24,17 @@ export interface WeekDay {
   /** Before today: shown, but the sources are read from today on. */
   past: boolean;
   items: WeekItem[];
+}
+
+/** "Śr 14, dziś": the day as the panel names it. */
+export function dayTitle(day: WeekDay): string {
+  return `${day.label} ${day.dayOfMonth}${day.today ? ', dziś' : ''}`;
+}
+
+/** One day for the agent: its date and weekday, then a line per planned item (a free day has none). */
+export function dayText(day: WeekDay): string {
+  const lines = day.items.map(i => `- ${i.workout ? 'Trening: ' : ''}${i.title}${i.at ? `, ${i.at}` : i.workout ? '' : ', cały dzień'}${i.workout?.durationSec ? `, ${formatDuration(i.workout.durationSec)}` : ''}`);
+  return [`Dzień: ${day.date} (${dayTitle(day)})`, ...lines].join('\n');
 }
 
 const clock = (at: number, timeZone: string) => new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
