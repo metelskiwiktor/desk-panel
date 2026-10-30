@@ -62,12 +62,21 @@ export function buttonLink(button: SmartButton, thread: MailThread): { url?: str
   return { url: (best ?? links[0]).url };
 }
 
-export function mailAlert(rule: Extract<SmartRule, { source: 'mail' }>, thread: MailThread): SmartAlert {
-  const link = rule.button ? buttonLink(rule.button, thread) : {};
+type MailRule = Extract<SmartRule, { source: 'mail' }>;
+/** What a mail rule does with a mail: an alert only when its conditions hold and the button has a link to open. */
+export function verdict(rule: MailRule, thread: MailThread): { caught: boolean; url?: string; noLink?: string } {
+  if (!matchesMail(rule.match, thread)) return { caught: false };
+  const link = buttonLink(rule.button, thread);
+  return link.url ? { caught: true, url: link.url } : { caught: false, noLink: `pasuje, ale ${link.noLink}` };
+}
+
+/** The alert of a mail the rule gives one for (see `verdict`), or null. */
+export function mailAlert(rule: MailRule, thread: MailThread): SmartAlert | null {
+  const { url } = verdict(rule, thread);
+  if (!url) return null;
   return {
     id: `mail:${thread.id}`, ruleId: rule.id, source: 'mail', badge: rule.badge, title: thread.subject, snippet: thread.snippet,
-    category: rule.category, priority: rule.priority, at: thread.receivedAt,
-    ...(link.url ? { url: link.url, label: rule.button!.label } : {}), ...(link.noLink ? { noLink: link.noLink } : {}),
+    category: rule.category, priority: rule.priority, at: thread.receivedAt, url, label: rule.button.label,
     mail: { account: thread.account, threadId: thread.threadId, sourceUrl: thread.sourceUrl },
   };
 }
@@ -100,10 +109,10 @@ const WEIGHT = { high: 3, medium: 2, low: 1 } as const;
 /** Every alert of the enabled rules: the first rule that catches a mail wins it. Highest priority, then newest first. */
 export function alertsOf(rules: SmartRule[], mail: MailThread[] | null, bank?: { bank: BankSource; labels: BankLabelsSource }): SmartAlert[] {
   const alerts: SmartAlert[] = [];
-  const mailRules = rules.filter((r): r is Extract<SmartRule, { source: 'mail' }> => r.enabled && r.source === 'mail');
+  const mailRules = rules.filter((r): r is MailRule => r.enabled && r.source === 'mail');
   for (const thread of mail ?? []) {
-    const rule = mailRules.find(r => matchesMail(r.match, thread));
-    if (rule) alerts.push(mailAlert(rule, thread));
+    const alert = mailRules.map(r => mailAlert(r, thread)).find(Boolean);
+    if (alert) alerts.push(alert);
   }
   const seen = new Set<string>();
   if (bank) for (const rule of rules) if (rule.enabled && rule.source === 'bank') for (const a of bankAlerts(rule, bank.bank, bank.labels)) if (!seen.has(a.id)) { seen.add(a.id); alerts.push(a); }
@@ -137,11 +146,9 @@ export function rulePreview(rules: SmartRule[], plan: SmartRulePlan, test: { que
   const after = plan.rule, before = rules.find(r => r.id === after.id) ?? null;
   if (!before && rules.length >= SMART_LIMITS.rules) problems.push(`Jest już ${SMART_LIMITS.rules} reguł: zmień albo usuń którąś.`);
   if (before && before.source !== after.source) problems.push('Reguła nie zmienia źródła: nadaj nowej regule inne id.');
-  const rows: SmartTestRow[] = after.source === 'mail' ? (test?.threads ?? []).map(t => {
-    const caught = matchesMail(after.match, t);
-    const link = caught && after.button ? buttonLink(after.button, t) : {};
-    return { ...mailRow(t), caught, ...(before?.source === 'mail' ? { caughtNow: before.enabled && matchesMail(before.match, t) } : {}), ...link };
-  }) : [];
+  const rows: SmartTestRow[] = after.source === 'mail' ? (test?.threads ?? []).map(t => ({
+    ...mailRow(t), ...verdict(after, t), ...(before?.source === 'mail' ? { caughtNow: before.enabled && verdict(before, t).caught } : {}),
+  })) : [];
   const bankCount = after.source === 'bank' && bank ? bankAlerts(after, bank.bank, bank.labels).length : undefined;
   return { kind: before ? 'change' : 'new', before, after, query: test?.query ?? null, rows, ...(bankCount !== undefined ? { bankCount } : {}), problems };
 }

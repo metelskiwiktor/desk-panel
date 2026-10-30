@@ -10,6 +10,9 @@ import { z } from 'zod';
  * substrings), and no word of a `…Not` list may. A button opens a link from the mail itself, only one whose host is the
  * rule's `domain` (or its subdomain): a mail cannot send the user anywhere else. A bank rule shows operations the panel
  * has a suggestion for, with the suggestions as buttons.
+ *
+ * Smart Actions are only what can be done: a mail rule always has a button, and a mail it matches without a link for that
+ * button gives no alert (the test shows it as skipped, with the reason).
  */
 
 export const SMART_CATEGORIES = ['appointment', 'payment', 'task_alert', 'pr_review', 'other'] as const;
@@ -52,7 +55,7 @@ const base = {
   badge: z.string().trim().min(1).max(24),
 };
 export const smartRuleSchema = z.discriminatedUnion('source', [
-  z.object({ ...base, source: z.literal('mail'), match: smartMailMatchSchema, button: smartButtonSchema.optional() }).strict(),
+  z.object({ ...base, source: z.literal('mail'), match: smartMailMatchSchema, button: smartButtonSchema }).strict(),
   /** Operations of the account with a suggestion: any (`dowolna`) or only a sure one (`pewna`). */
   z.object({ ...base, source: z.literal('bank'), suggestion: z.enum(SMART_SUGGESTION).default('dowolna') }).strict(),
 ]);
@@ -91,8 +94,6 @@ export interface SmartAlert {
   /** The button: a checked link from the mail. */
   url?: string;
   label?: string;
-  /** Why there is no button although the rule has one (no link on its domain). */
-  noLink?: string;
   mail?: { account: string; threadId: string; sourceUrl: string };
   bank?: { tx: string; amount: number; currency: string; options: SmartBankOption[] };
 }
@@ -116,10 +117,11 @@ export interface SmartMailRow {
   sourceUrl: string;
 }
 export interface SmartTestRow extends SmartMailRow {
-  /** What the proposed rule does with it, and what the rule saved now does. */
+  /** Whether the proposed rule gives an alert for it, and whether the rule saved now does. */
   caught: boolean;
   caughtNow?: boolean;
   url?: string;
+  /** The conditions hold but the mail has no link for the button: no alert, and this says why. */
   noLink?: string;
 }
 export interface SmartRulePreview {

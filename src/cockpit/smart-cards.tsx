@@ -24,9 +24,10 @@ const host = (url: string) => { try { return new URL(url).hostname; } catch { re
 function Verdict({ row }: { row: SmartTestRow }) {
   if (row.caught) return <span className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1">
     <span className={green}><Check size={11} aria-hidden="true" />{row.caughtNow === false ? 'zacznie łapać' : 'złapie'}</span>
-    {row.url ? <span className={grey} title={row.url}>→ {host(row.url)}</span> : row.noLink ? <span className={amber} title={row.noLink}>bez przycisku</span> : null}
+    {row.url && <span className={grey} title={row.url}>→ {host(row.url)}</span>}
   </span>;
-  return row.caughtNow ? <span className={red}><X size={11} aria-hidden="true" />przestanie łapać</span> : <span className={grey}>pominie</span>;
+  if (row.caughtNow) return <span className={red}><X size={11} aria-hidden="true" />przestanie łapać</span>;
+  return row.noLink ? <span className={amber} title={row.noLink}>pominie: brak linku</span> : <span className={grey}>pominie</span>;
 }
 
 /** Mails as rows: day, subject and sender, and on the right whether it is unread, or what a rule does with it. */
@@ -101,7 +102,7 @@ function Changed({ label, before, after }: { label: string; before?: ReactNode; 
     {after !== undefined && <span className={green}>+ {after}</span>}
   </div>;
 }
-const buttonText = (r: SmartRule | null) => r?.source === 'mail' && r.button ? `${r.button.label} → ${r.button.domain}${r.button.contains ? ` („${r.button.contains}”)` : ''}` : undefined;
+const buttonText = (r: SmartRule | null) => r?.source === 'mail' ? `${r.button.label} → ${r.button.domain}${r.button.contains ? ` („${r.button.contains}”)` : ''}` : undefined;
 
 /** A rule's change as conditions and a test on mails: the counts on top, then each mail with what the rule does with it. */
 export function RuleBody({ preview, state = 'open' }: { preview: SmartRulePreview; state?: 'open' | 'applied' | 'rejected' }) {
@@ -187,7 +188,7 @@ export function SmartRuleCard({ toolCallId, args, result }: ToolCallMessagePartP
     footnote={open && ok ? <p className="tw:m-0 tw:flex tw:flex-wrap tw:items-center tw:gap-x-3 tw:gap-y-1 tw:text-xs tw:text-ck-muted">
       <span className={green}>+ słowo</span>dochodzi
       <span className={`${chip} tw:border tw:border-dashed tw:border-ck-red/50 tw:line-through`}>słowo</span>znika
-      <span className="tw:basis-full">Reguła działa na nieprzeczytanych mailach. Nic nie idzie do Gmaila; przycisk prowadzi tylko do linku z maila na swojej domenie.</span>
+      <span className="tw:basis-full">Reguła działa na nieprzeczytanych mailach i daje alert tylko, gdy przycisk ma link z maila na swojej domenie. Nic nie idzie do Gmaila.</span>
     </p> : undefined}
     outcome={decided?.decision === 'applied'
       ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />{preview?.kind === 'remove' ? 'Reguła usunięta.' : 'Reguła zapisana; kafelek Smart Actions pokaże jej alerty.'}</p>

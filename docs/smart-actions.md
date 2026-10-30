@@ -10,8 +10,9 @@ konta z podpowiedzią oznaczenia i zadania Cezara czekające na użytkownika.
 - Reguła poczty patrzy na nieprzeczytane maile ze skrzynki odbiorczej. Każda podana lista (`from`, `subject`, `body`) musi
   pasować choć jednym słowem, a żadne słowo z `subjectNot` ani `bodyNot` nie może. Pierwsza pasująca reguła bierze mail.
 - Przycisk otwiera link z treści maila, ale tylko taki, którego host to `button.domain` albo jej subdomena. Spośród nich
-  wygrywa link z `contains` w tekście lub adresie. Mail nie może więc wysłać użytkownika na obcą stronę. Bez takiego linku
-  alert pokazuje się bez przycisku i z powodem (`noLink`).
+  wygrywa link z `contains` w tekście lub adresie. Mail nie może więc wysłać użytkownika na obcą stronę.
+- Smart Actions to tylko to, co da się wykonać (decyzja użytkownika, 30.10.2026): reguła poczty zawsze ma przycisk, a mail,
+  który pasuje do warunków, ale nie ma linku dla przycisku, nie daje alertu. Test pokazuje go jako „pominie: brak linku”.
 - Reguła konta (`source: "bank"`) pokazuje operacje niezakończone z podpowiedzią (`dowolna` albo `pewna`). Każda opcja
   podpowiedzi (do 3) to osobny przycisk; klik to `accept` w `POST /api/bank/labels/action`, lokalnie. Alerty czytają
   zapisany odczyt banku (`sources.bank()`, limit odczytów jak w kafelku), nigdy nie wywołują nowego.

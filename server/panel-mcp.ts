@@ -174,7 +174,7 @@ const RULE_SCHEMA = { type: 'object', description: 'Cała reguła Smart Actions 
   match: { type: 'object', additionalProperties: false, description: 'Tylko poczta. Każda podana lista musi pasować (choć jedno słowo, bez wielkości liter), żadne słowo z …Not nie może', properties: {
     from: words('Adres albo nazwa nadawcy zawiera, np. e-rachunek@inea.com.pl'), subject: words('Temat zawiera'), subjectNot: words('Temat nie zawiera'), body: words('Temat lub treść zawiera'), bodyNot: words('Temat lub treść nie zawiera'),
   } },
-  button: { type: 'object', additionalProperties: false, required: ['label', 'domain'], description: 'Tylko poczta: przycisk otwiera link z maila', properties: {
+  button: { type: 'object', additionalProperties: false, required: ['label', 'domain'], description: 'Wymagany dla poczty: przycisk otwiera link z maila; mail bez takiego linku nie daje alertu', properties: {
     label: { type: 'string', description: 'Np. Zapłać rachunek' }, domain: { type: 'string', description: 'Domena linku, np. inea.com.pl; link spoza niej nie przejdzie' }, contains: { type: 'string', description: 'Wybierz link, którego tekst lub adres to zawiera' },
   } },
   suggestion: { type: 'string', enum: [...SMART_SUGGESTION], description: 'Tylko bank: operacje z dowolną albo tylko z pewną podpowiedzią' },
@@ -195,7 +195,7 @@ function testSummary(p: SmartRulePreview): string {
   const caught = p.rows.filter(r => r.caught);
   const changed = p.rows.filter(r => r.caughtNow !== undefined && r.caughtNow !== r.caught);
   return [`${head} Test na „${p.query}”: ${p.rows.length} maili, złapie ${caught.length}${p.before ? `, zmieni wynik dla ${changed.length}` : ''}.`,
-    ...p.rows.slice(0, 20).map(r => `${r.caught ? 'ZŁAPIE' : 'pominie'}${r.caughtNow === undefined || r.caughtNow === r.caught ? '' : r.caught ? ' (teraz nie łapie)' : ' (teraz łapie)'} · ${localTime(r.at)} · ${r.address || r.from} · ${r.subject}${r.url ? ` · przycisk → ${new URL(r.url).hostname}` : ''}${r.noLink ? ` · ${r.noLink}` : ''}`)].join('\n');
+    ...p.rows.slice(0, 20).map(r => `${r.caught ? 'ZŁAPIE' : 'pominie'}${r.caughtNow === undefined || r.caughtNow === r.caught ? '' : r.caught ? ' (teraz nie łapie)' : ' (teraz łapie)'} · ${localTime(r.at)} · ${r.address || r.from} · ${r.subject}${r.url ? ` · przycisk → ${new URL(r.url).hostname}` : ''}${r.noLink ? ` · ${r.noLink}, więc bez alertu` : ''}`)].join('\n');
 }
 
 export const PANEL_TOOLS: Record<string, Tool> = {
@@ -339,7 +339,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       const view = await smartView(sources);
       return ['Rozmowa o Smart Actions: jeśli nie czytałeś jeszcze w tej rozmowie przewodnika, wywołaj panel_guide z tematem smart.',
         `Reguły (${view.rules.length}):`, ...view.rules.map(r => JSON.stringify(r)),
-        `Alerty teraz (${view.alerts.length}):`, ...view.alerts.map(a => `${a.id} · reguła ${a.ruleId} · ${a.title}${a.url ? ` · przycisk „${a.label}” → ${new URL(a.url).hostname}` : ''}${a.noLink ? ` · bez przycisku: ${a.noLink}` : ''}${a.bank ? ` · ${a.bank.amount} ${a.bank.currency} · podpowiedzi: ${a.bank.options.map(o => o.label).join(' | ')}` : ''}`),
+        `Alerty teraz (${view.alerts.length}):`, ...view.alerts.map(a => `${a.id} · reguła ${a.ruleId} · ${a.title}${a.url ? ` · przycisk „${a.label}” → ${new URL(a.url).hostname}` : ''}${a.bank ? ` · ${a.bank.amount} ${a.bank.currency} · podpowiedzi: ${a.bank.options.map(o => o.label).join(' | ')}` : ''}`),
         ...view.problems].join('\n');
     },
   },

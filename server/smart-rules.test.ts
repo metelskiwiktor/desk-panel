@@ -23,9 +23,11 @@ describe('Smart Actions rules', () => {
     const visit = thread({ address: 'noreply@znanylekarz.pl', subject: '❗Ważne: sprawdź, czy szczegóły wizyty się zgadzają' });
     const [seed] = SEED_RULES;
     // The seed is the rule the panel had in code: it catches this mail too (the bug the user asked Wektor to fix).
-    expect(alertsOf(SEED_RULES, [visit])).toHaveLength(1);
+    expect(alertsOf(SEED_RULES, [{ ...visit, body: 'Szczegóły (https://d.znanylekarz.pl/a)' }])).toHaveLength(1);
     const fixed = { ...seed, match: { ...(seed as Extract<SmartRule, { source: 'mail' }>).match, subjectNot: ['sprawdź, czy szczegóły'] } } as SmartRule;
     expect(alertsOf([fixed], [visit])).toEqual([]);
+    // Only what can be done: a mail that matches but has no link for the button gives no alert.
+    expect(alertsOf([inea], [{ ...bill, body: 'Termin płatności mija jutro. Numer konta 12 3456.' }])).toEqual([]);
     expect(alertsOf([inea], [bill, offer]).map(a => a.id)).toEqual(['mail:me@x.pl:b1']);
     expect(alertsOf([{ ...inea, enabled: false }], [bill])).toEqual([]);
   });
@@ -61,10 +63,14 @@ describe('Smart Actions rules', () => {
 
   it('a preview tells what the change does to each test mail, compared with the rule saved now', () => {
     const before = { ...inea, match: { from: ['inea.com.pl'] } } as SmartRule;
-    const preview = rulePreview([before], { rule: inea }, { query: defaultQuery(inea), threads: [bill, offer] });
+    const offerWithLink = { ...offer, body: 'Oferta (https://moja.inea.com.pl/oferta)' };
+    const reminder = thread({ threadId: 'b3', address: 'e-rachunek@inea.com.pl', subject: 'Przypomnienie: rachunek', body: 'Numer konta 12 3456.' });
+    const preview = rulePreview([before], { rule: inea }, { query: defaultQuery(inea), threads: [bill, offerWithLink, reminder] });
     expect(preview.kind).toBe('change');
     expect(preview.query).toBe('(from:e-rachunek@inea.com.pl) newer_than:180d');
-    expect(preview.rows.map(r => [r.threadId, r.caught, r.caughtNow])).toEqual([['b1', true, true], ['b2', false, true]]);
+    expect(preview.rows.map(r => [r.threadId, r.caught, r.caughtNow, r.noLink])).toEqual([
+      ['b1', true, true, undefined], ['b2', false, true, undefined], ['b3', false, false, 'pasuje, ale w mailu nie ma linku z domeny inea.com.pl'],
+    ]);
     expect(rulePreview([], { remove: 'nope' }, null).problems[0]).toMatch(/Nie ma reguły nope/);
   });
 

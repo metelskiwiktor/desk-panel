@@ -51,7 +51,6 @@ function alertText(a: TileAlert): string {
     a.snippet && `Początek: ${a.snippet.slice(0, 300)}`,
     a.mail && `Mail: ${a.mail.account}:${a.mail.threadId}`,
     a.url && `Przycisk „${a.label}” → ${hostOf(a.url)}`,
-    a.noLink && `Bez przycisku: ${a.noLink}`,
     a.bank && `Operacja ${a.bank.tx}: ${pln(a.bank.amount, a.bank.currency)}; podpowiedzi: ${a.bank.options.map(o => `${o.label}${o.sure ? ' (pewna)' : ''}`).join(' | ')}`,
   ].filter(Boolean).join('\n');
 }
@@ -111,7 +110,7 @@ export function SmartActionRulesDialog({ rules, onToggleRule, onClose }: SmartAc
                   {match?.subjectNot?.length ? <span className="sa-rule-meta-tag">Temat nie: <code>{match.subjectNot.join(', ')}</code></span> : null}
                   {match?.body?.length ? <span className="sa-rule-meta-tag">Treść: <code>{match.body.join(', ')}</code></span> : null}
                   {match?.bodyNot?.length ? <span className="sa-rule-meta-tag">Treść nie: <code>{match.bodyNot.join(', ')}</code></span> : null}
-                  {rule.source === 'mail' && rule.button && <span className="sa-rule-meta-tag">Przycisk: <strong>{rule.button.label}</strong> → <code>{rule.button.domain}</code></span>}
+                  {rule.source === 'mail' && <span className="sa-rule-meta-tag">Przycisk: <strong>{rule.button.label}</strong> → <code>{rule.button.domain}</code></span>}
                   {rule.source === 'bank' && <span className="sa-rule-meta-tag">Podpowiedź: <strong>{rule.suggestion}</strong></span>}
                 </div>
               </div>
