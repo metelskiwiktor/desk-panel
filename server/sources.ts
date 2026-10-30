@@ -16,6 +16,7 @@ import type { GitHubPrSource } from '../src/types';
 import type { OpenRouterUsage } from '../src/openrouter-contract';
 import type { AppointmentService } from './appointments';
 import type { ObserverList } from '../src/observers-contract';
+import type { Automation, AutomationList, AutomationUpdate } from '../src/automation-contract';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
@@ -71,6 +72,9 @@ export interface PanelSources {
   observers?(): Promise<ObserverList>;
   /** Cancels one observer, so it never fires; answers with the active list. */
   observerCancel?(id: string): Promise<ObserverList>;
+  /** Wektor's automations: the panel's own scheduled tasks (read-only here; changed by an Origin-checked action). */
+  automations?(): Promise<AutomationList>;
+  automationAction?(input: AutomationUpdate): Promise<Automation>;
   /** Starts Google sign-in for one configured account and resolves to the authorization URL. */
   googleConnect(email: string): Promise<string>;
   googleCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;
@@ -103,6 +107,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/bank': () => sources.bank(),
     '/api/bank/labels': () => sources.bankLabels(),
     '/api/observers': () => sources.observers ? sources.observers() : Promise.resolve({ observers: [] }),
+    '/api/automations': () => sources.automations ? sources.automations() : Promise.resolve({ automations: [] }),
     '/api/github/prs': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
     '/api/openrouter': () => { if (!sources.openrouterUsage) throw new SourceError(503); return sources.openrouterUsage(); },
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },

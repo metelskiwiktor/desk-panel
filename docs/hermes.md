@@ -126,7 +126,10 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
 | `panel_observe` | bez karty, akcje `create`/`list`/`cancel`: jednorazowy obserwator rozmowy — kind `cezar` (target `projekt/uuid`), `pr` (pełny URL PR) albo `time` (ISO 8601 lub „za 10 minut”, „jutro o 9”); instruction trafia dosłownie do jednej tury automatyki; rozmowę bierze z trwającej tury ([czat.md](czat.md)) |
-
+| `panel_automation_propose` | karta „Nowy automat”: `name`, `goal`, `trigger`, `doneWhen?`, `actions`, `learn`, `replaces?`; zapis dopiero po kliknięciu (`POST /api/chats/:id/automation`, plan z rozmowy) |
+| `panel_automations` | lista albo szczegóły automatu (`id`): harmonogram, stan, notatnik, ostatnie runy |
+| `panel_automation_update` | bez karty: `pause`/`resume`/`cancel`/`runNow`, `notebook?`, `name?` |
+| `panel_automation_report` | tylko w turze automatyki: `outcome`, `summary`, `notebook?`; zapisuje run i kończy cel przy `done` |
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 

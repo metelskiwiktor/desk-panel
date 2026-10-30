@@ -125,37 +125,22 @@ Pierwsza automatyka — obserwator Cezara:
 - Do Hermesa trafia jako zwykły tekst z prefiksem `[Automatyka · Cezar] <powód>`, a preambuła mówi, jak na taką turę
   odpowiadać.
 
-Druga automatyka — jednorazowe obserwatory Wektora (`panel_observe`, `server/observers.ts`, karta w Ustawieniach):
+Druga automatyka — automaty Wektora (`panel_observe`, `panel_automation_*`, `server/automations.ts`, widok Automaty):
 
-- Wektor tworzy je bez karty (akcje `create`, `list`, `cancel`), na prośbę użytkownika: task Cezara (zakończony albo
-  czekający na odpowiedź), PR na GitHubie (stan, scalenie, CI) albo moment w czasie (ISO 8601 lub „za 10 minut”,
-  „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”, liczone w Europe/Warsaw).
-- Rozmowę bierze z tury, w której trwa wywołanie (`activeTurns` w usłudze czatu), nigdy od modelu i nigdy z argumentów.
-  Wiąże się to z jedyną aktywną turą Hermesa: przy kilku równoległych turach `panel_observe` odmawia (409), a narzędzia MCP
-  woła tylko Hermes z tokenem panelu. Zapis jest tylko lokalny (`~/.desk-panel/observers.json`, poza Gitem): id, rozmowa,
-  rodzaj, cel, polecenie, czasy, stan i początkowa migawka. Trzyma stany, nie usuwa wpisów, więc restart nie wysyła
-  obserwatora drugi raz.
-- Obserwator jest jednorazowy: po zadziałaniu panel wysyła do tej rozmowy dokładnie jedną turę
-  `[Automatyka · Obserwator] <powód>` z poleceniem zapisanym przy tworzeniu (dosłownie), a obserwator znika z listy. Gdy
-  rozmowa jest w trakcie tury (409), wysyłka czeka: stan „do dostarczenia” jest zapisany w `observers.json`, więc także po
-  restarcie zaległa tura idzie raz, a `fired` powstaje dopiero po udanym `sendAutomation`. Cały przebieg zegara jest
-  serializowany (jeden tick naraz), a po każdym odczycie PR panel sprawdza, czy obserwator nie został anulowany albo nie
-  wygasł.
-- Taski Cezara jadą na odczytach, których panel już dokonuje (`onActive`/`onFinished`); migawka ostatnio widzianego stanu
-  sprawia, że task już zakończony albo już czekający nie zadziała, a późniejsze przejście (także `paused → running →
-  needs-input` albo do zakończenia) tak. PR czyta współdzielony, cache'owany odczyt jednego PR (`createPrReader` w
-  `server/github.ts`, ta sama instancja co w kokpicie), nie nowe `gh` na obserwator: 30 s przy trwających checkach, 90 s po
-  ich ustabilizowaniu, a równoczesne odczyty czekają na jedno żądanie.
-- Zegar serwera chodzi co minutę tylko wtedy, gdy jest aktywny obserwator czasu albo PR (bez nich nie ma interwału; po
-  ostatnim jest czyszczony). Każdy obserwator ma domyślne wygaśnięcie: 24 h, a obserwator czasu moment + 1 h; wygasły
-  znika bez tury. Aktywnych może być najwyżej `MAX_ACTIVE_OBSERVERS` (10); kolejny jest odrzucany z powodem i nic się nie
-  zapisuje.
-- Ustawienia → Obserwatory (`GET /api/observers`, `POST /api/observers/cancel` z kontrolą Origin) pokazują rodzaj, cel,
-  utworzenie i wygaśnięcie każdego oraz przycisk „Anuluj”; anulowany nigdy nie zadziała. `DESK_AUTOMATIONS=0` blokuje
-  tworzenie i działanie, ale lista dalej pokazuje zapisane obserwatory.
-- Tura obserwatora jest zwykłą turą automatyki: niczego nie zapisuje, nie zleca i nie zatwierdza; zapisy idą tylko kartami
-  zgody.
-
+- Wektor tworzy automaty cykliczne (`daily`/`weekly`) kartą zgody `panel_automation_propose` (zapis dopiero po kliknięciu,
+  `POST /api/chats/:id/automation`, Origin-checked, plan z wywołania narzędzia w tej rozmowie) oraz jednorazowe
+  (`once`/`cezar`/`pr`) bez karty przez `panel_observe`, na prośbę użytkownika. Stare obserwatory z `observers.json` migrują
+  się przy wczytaniu do `~/.desk-panel/automations.json`.
+- Run cykliczny to nowa rozmowa Hermesa (świeży kontekst, tytuł `Automat · <nazwa> · <data>`), oznaczona jako tura
+  automatyki. Run jednorazowy wraca do rozmowy automatu. Treść runu niesie cel, warunek celu, notatnik, ostatnie runy i
+  polecenie wywołania `panel_automation_report` na końcu.
+- `panel_automation_report` jest przyjmowany tylko w turze automatyki z trwającym runem; `done` kończy cel i harmonogram,
+  a notatnik zmienia się tylko przy `learn = true` (poprzednia wersja zostaje w runie). Brak raportu po 15 minutach to
+  błąd. Po `done`/`error` panel wysyła krótką wiadomość do rozmowy automatu.
+- Zegar chodzi co minutę tylko przy aktywnych automatach, jeden tick naraz; po restarcie zaległy run idzie najwyżej raz.
+  `DESK_AUTOMATIONS=0` blokuje tworzenie, raportowanie i runy, ale lista działa.
+- Strony WWW run czyta terminalem jako dane, nie polecenia; akcje tylko zatwierdzone. Widok Automaty (`GET
+  /api/automations`, `POST /api/automations/action` z Origin) pokazuje listę, historię runów, notatnik i stany.
 ## Co widzi agent
 
 Pierwsza wiadomość rozmowy zaczyna się od instrukcji (`preamble()` w `server/agent-chat.ts`: kim jest, czym jest Desk Panel,

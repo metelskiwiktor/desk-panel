@@ -15,12 +15,6 @@ export const OBSERVER_KIND_LABELS: Record<ObserverKind, string> = {
   time: 'Czas',
 };
 
-/** How many observers may be active at once; creating one above it is refused. */
-export const MAX_ACTIVE_OBSERVERS = 10;
-/** Every observer expires: a day after creation, and a time observer an hour after its moment. */
-export const OBSERVER_TTL_MS = 24 * 60 * 60_000;
-export const OBSERVER_TIME_EXTRA_MS = 60 * 60_000;
-
 export const observerViewSchema = z.object({
   id: z.string().regex(/^o-[0-9a-f]{12}$/),
   kind: z.enum(observerKinds),
@@ -31,8 +25,6 @@ export const observerViewSchema = z.object({
   createdAt: z.number(),
   expiresAt: z.number(),
 });
-export type ObserverView = z.infer<typeof observerViewSchema>;
-
 export const observerListSchema = z.object({ observers: z.array(observerViewSchema) });
 export type ObserverList = z.infer<typeof observerListSchema>;
 

@@ -15,6 +15,7 @@ import {
   MailOpen,
   Trash2,
   Settings2,
+  Bot,
   Moon,
   Clock,
   Sun,
@@ -43,6 +44,7 @@ import { useQuotas } from './useQuotas';
 import { useUsageBreakdown } from './useUsageBreakdown';
 import { useQuotaVisibility, filterQuotas } from './quota-visibility';
 import { SettingsView } from './SettingsView';
+import { AutomationsView } from './AutomationsView';
 import { Dashboard, StatusChips } from './Dashboard';
 import { useMail } from './useMail';
 import { useTodos } from './useTodos';
@@ -63,13 +65,14 @@ import { useChatPresentation } from './useChatPresentation';
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
 
-type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'settings';
+type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'automations' | 'settings';
 const pageNames: Record<Page, string> = {
   home: 'Pulpit',
   tasks: 'Zadania',
   calendar: 'Kalendarz',
   system: 'System',
   events: 'Zdarzenia',
+  automations: 'Automaty',
   settings: 'Ustawienia',
 };
 const navIcons = {
@@ -78,6 +81,7 @@ const navIcons = {
   calendar: CalendarDays,
   system: Monitor,
   events: ListChecks,
+  automations: Bot,
   settings: Settings2,
 };
 export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPreview?: boolean; onTabletPreviewChange?: () => void } = {}) {
@@ -472,12 +476,14 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                   </>
                 )}
                 {page === 'events' && <EventRulesView />}
+                {page === 'automations' && <AutomationsView />}
                 {page === 'settings' && (
                   <SettingsView
                     quotaAccounts={quotas.data}
                     quotaVisibility={quotaVisibility}
                     tabletPreview={tabletPreview}
                     onTabletPreviewChange={onTabletPreviewChange}
+                    onOpenAutomations={() => navigate('automations')}
                     layout={layout}
                     configure={configure}
                     resetArrangement={pulpits.resetActive}

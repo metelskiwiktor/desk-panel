@@ -3,7 +3,7 @@ import type { ChatMessage, ContextItem } from '../chat-contract';
 import { cardRefusal, COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
 import { rememberSnapshot } from '../chat-snapshots';
-import { APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, MAIL_LIST, RECON, SHOW, SMART_RULE, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
+import { APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, MAIL_LIST, RECON, SHOW, SMART_RULE, AUTOMATION, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
 const IDLE: CockpitState = { watching: false };
 /** While the task runs (or a check does) the cockpit is read often; otherwise now and then. */
@@ -36,7 +36,7 @@ export function cardArgs(raw: Record<string, unknown>): Record<string, unknown> 
 }
 
 /** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
-const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN, bankAssign: BANK_ASSIGN, appointment: APPOINTMENT, calendarPlan: CALENDAR_PLAN, mailList: MAIL_LIST, smartRule: SMART_RULE } as const;
+const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN, bankAssign: BANK_ASSIGN, appointment: APPOINTMENT, calendarPlan: CALENDAR_PLAN, mailList: MAIL_LIST, smartRule: SMART_RULE, automation: AUTOMATION } as const;
 export const cardOf = (name: string) => {
   const tool = COCKPIT_TOOLS[panelToolName(name) as CockpitToolName] as { card?: keyof typeof CARDS } | undefined;
   return tool?.card ? CARDS[tool.card] : name;
@@ -58,7 +58,7 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
       const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : p.output;
-      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : null;
+      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : name === AUTOMATION ? 'automation' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
       const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
       return { type: 'tool', id: p.id, name, args: { ...args, ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
@@ -165,6 +165,11 @@ export function useLiveCockpit(): CockpitSource {
         if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
         await call(`/api/chats/${activeId}/smart-rule`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision });
         refresh();
+        return;
+      }
+      if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'automation') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/automation`, 'POST', { toolCallId: id, decision: (response as { decision: 'create' | 'reject' }).decision });
         return;
       }
       // A bank change card: the panel changes the categories (or not) as the user answered; the card shows the outcome from the cockpit.

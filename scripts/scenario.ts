@@ -17,7 +17,7 @@ import { devices } from '../src/devices';
 import { launchChromium, selectViewports, startScenario } from './scenario-runtime';
 import { screenshotPath, validateSingleScreenshot, withPageErrors } from './browser-checks';
 
-const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', ustawienia: 'Ustawienia' } as const;
+const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', automaty: 'Automaty', ustawienia: 'Ustawienia' } as const;
 type PageName = keyof typeof PAGES;
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -181,7 +181,12 @@ if (!values.shot) {
                 }
               }
               await visit.scrollIntoViewIfNeeded();
-            } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
+            } else if (values.open === 'automation-card') {
+              await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+              await page.getByLabel('Wiadomość do agenta').fill('Zaproponuj automat, który codziennie sprawdza cennik prądu');
+              await page.getByLabel('Wiadomość do agenta').press('Enter');
+              await page.getByRole('button', { name: 'Utwórz automat' }).waitFor({ timeout: 20_000 });
+              await page.waitForTimeout(300);            } else if (values.open === 'chat-answer' || values.open === 'chat-approval') {
               // A Hermes turn of the stand-in: an answer with a tool step, or one waiting for the user's approval.
               await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
               await page.getByLabel('Wiadomość do agenta').fill(values.open === 'chat-approval' ? 'Pokaż procesy, potrzebna zgoda na polecenie' : 'Co mam dziś do zrobienia?');

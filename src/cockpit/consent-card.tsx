@@ -28,6 +28,8 @@ interface ShellProps {
   onReject: () => void;
   sending: boolean;
   error: string;
+  /** The apply button's label (default „Wykonaj”). */
+  applyLabel?: string;
 }
 
 export function ConsentShell(p: ShellProps) {
@@ -42,7 +44,7 @@ export function ConsentShell(p: ShellProps) {
       {p.body}
       {p.footnote}
       {!p.outcome && <div className="tw:flex tw:flex-wrap tw:gap-2">
-        <button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg tw:hover:bg-[#9bbcff]`} disabled={!p.canApply || p.sending} onClick={p.onApply}><Check size={15} aria-hidden="true" />Wykonaj</button>
+        <button type="button" className={`${btn} tw:bg-ck-cal tw:text-ck-bg tw:hover:bg-[#9bbcff]`} disabled={!p.canApply || p.sending} onClick={p.onApply}><Check size={15} aria-hidden="true" />{p.applyLabel ?? 'Wykonaj'}</button>
         <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={!p.canReject || p.sending} onClick={p.onReject}><X size={15} aria-hidden="true" />Odrzuć</button>
       </div>}
       {p.sending && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zapisuję decyzję…</p>}

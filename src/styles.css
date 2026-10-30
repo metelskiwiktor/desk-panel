@@ -2009,3 +2009,46 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 }
 
 
+
+/* Automaty: lista, kropki runow, szczegoly */
+.automation-view { display: grid; gap: 16px; }
+.automation-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.automation-side { display: grid; gap: 18px; min-width: 0; }
+.automation-group h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.automation-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.automation-row { width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.automation-row:hover { background: rgba(255,255,255,.04); }
+.automation-row.active { border-color: var(--line); background: rgba(255,255,255,.06); }
+.automation-row-main { display: grid; gap: 2px; min-width: 0; }
+.automation-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); display: inline-block; }
+.automation-dot.ok { background: #4cc38a; }
+.automation-dot.wait { background: #9aa7b8; }
+.automation-dot.bad { background: #f85149; }
+.automation-dot.skip { background: var(--amber); }
+.automation-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.automation-dots { display: inline-flex; gap: 3px; }
+.automation-dashboard { display: grid; gap: 16px; }
+.automation-detail { display: grid; gap: 14px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.automation-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.automation-head h2 { margin: 0 0 3px; font-size: 18px; }
+.automation-head p { margin: 0; }
+.automation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.automation-actions .button { display: inline-flex; align-items: center; gap: 6px; }
+.automation-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+.automation-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 10px; cursor: pointer; font: inherit; }
+.automation-tabs button.active { color: inherit; border-bottom-color: var(--amber); }
+.automation-tab { display: grid; gap: 10px; }
+.automation-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.automation-runs li { display: grid; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.automation-runs li.newest { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.03); }
+.automation-run-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.automation-run-when { font-variant-numeric: tabular-nums; }
+.automation-run-outcome { font-weight: 600; }
+.automation-run-summary { margin: 0; }
+.link-button { justify-self: start; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; padding: 0; color: var(--amber); cursor: pointer; font: inherit; }
+.automation-goal { margin: 0; white-space: pre-wrap; }
+.automation-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.automation-chip { border-radius: 999px; background: rgba(255,255,255,.08); padding: 2px 10px; font-size: 12px; }
+.automation-tab textarea { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: rgba(0,0,0,.2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+@media (max-width: 900px) { .automation-layout { grid-template-columns: minmax(0, 1fr); } }

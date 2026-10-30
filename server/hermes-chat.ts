@@ -696,6 +696,16 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     },
     async send(id, input) { await deliver(id, input); },
     async sendAutomation(id, input) { await deliver(id, input, input.automation); },
+    async createAutomation(input) {
+      const at = now();
+      const id = randomUUID();
+      // A fresh session of its own; the title is the panel's (a cyclic automation's date), so the namer never renames it.
+      const record: Stored = { schema: 1, id, engine: 'hermes', title: (input.title || titleFrom(input.text)).slice(0, 120), userNamed: true, createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
+      records.set(id, record);
+      try { await deliver(id, input, input.automation); }
+      catch (error) { records.delete(id); throw error; }
+      return { id };
+    },
     activeTurns() { return [...lives.entries()].filter(([, live]) => !live.done).map(([id]) => id); },
     async stop(id) {
       await need(id);

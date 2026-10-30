@@ -153,6 +153,8 @@ export interface ChatService {
   send(id: string, input: ChatSend): Promise<void>;
   /** A turn the panel starts itself (never the user's message); the conversation marks it as automation. */
   sendAutomation?(id: string, input: ChatAutomationInput): Promise<void>;
+  /** A fresh conversation whose first turn the panel starts itself (a cyclic automation's run). */
+  createAutomation?(input: ChatAutomationInput): Promise<{ id: string }>;
   /** The conversations with a turn running right now: a card-free panel tool belongs to the turn that called it. */
   activeTurns?(): string[];
   stop(id: string): Promise<void>;
