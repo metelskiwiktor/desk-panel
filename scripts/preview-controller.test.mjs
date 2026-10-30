@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, mkdirSync, existsSync, rmSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -45,7 +46,9 @@ describe('preview state directory', () => {
     const dir = mkdtempSync(join(tmpdir(), 'preview-recovery-'));
     const root = join(dir, 'root'), stateDir = join(root, 'pr-123');
     mkdirSync(stateDir, { recursive: true });
-    const marker = 'a'.repeat(64);
+    // Unique per run: the helper finds a worker by its marker among all node.exe processes, so a second copy of this
+    // test running at the same time (or a worker left by an interrupted run) must not look like ours.
+    const marker = randomBytes(32).toString('hex');
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', marker], { stdio: 'ignore', windowsHide: true });
     const helper = resolve('scripts/preview-process.ps1');
     const identify = () => spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Operation', 'identify', '-ProcessId', String(child.pid), '-Marker', marker], { encoding: 'utf8', timeout: 20000 });

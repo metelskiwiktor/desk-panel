@@ -166,6 +166,9 @@ błędem zamiast wybierać kolejne porty. Uruchom podgląd ponownie po `stop`.
 Worker jest kopiowany do `scripts/` checkoutu PR-a, więc importy `../server/...` wskazują
 te same moduły podczas analizy statycznej i działania. Test workera tworzy fixture z bieżących
 plików roboczych (także niezacommitowanych i nieignorowanych nowych), a nie z HEAD.
+Testy kontrolera dają każdemu przebiegowi własny losowy znacznik procesu: pomocnik szuka workera po znaczniku wśród
+wszystkich procesów `node.exe`, więc równoległy przebieg tego samego pliku (albo worker porzucony przez przerwany
+przebieg) nie może zostać wzięty za nasz i zablokować sprzątania.
 To osobne procesy, bez restartowania usługi i bez odczytu jej konfiguracji. Scenariusz i interfejsy
 serwera wybranego PR muszą być zgodne z kontrolerem; niezgodność jest zgłaszana w logu.
 

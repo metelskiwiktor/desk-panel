@@ -503,10 +503,15 @@ describe('Hermes chat', () => {
   });
 
   it('does not count a running tool as silence', async () => {
-    // The mock's tool runs three steps (150 ms) with no event, longer than the silence limit; the rest is quicker.
-    mock.configure({ stepMs: 50 });
-    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 25, silenceMs: 125 });
+    // The mock's tool runs three steps (900 ms) with no event, longer than the silence limit. A virtual clock makes the
+    // silence independent of the machine: real time is advanced only while the tool runs, so a loaded PC cannot turn a
+    // gap between two timers into a silence the panel does not have.
+    let clock = 1_000_000;
+    mock.configure({ stepMs: 300, toolScript: async () => ({ tools: [{ name: 'mcp_desk-panel_panel_todos', args: { list: 'Zadania' }, output: 'Lista „Zadania” (l-1): 2 do zrobienia.' }], answer: 'Gotowe.' }) });
+    const service = hermes({ now: () => clock, turnTimeoutMs: 60_000, stallMs: 25, silenceMs: 250 });
     const { id } = await service.create({ text: 'Co mam na listach?' });
+    await until(() => service.get(id), chat => (chat.items[1].parts ?? []).some(p => p.type === 'tool' && p.state === 'running'));
+    clock += 10_000;
     const chat = await finishedChat(service, id);
     expect(chat.items[1].status).toBe('done');
     expect(mock.requests.some(r => r.path.endsWith('/cancel'))).toBe(false);
