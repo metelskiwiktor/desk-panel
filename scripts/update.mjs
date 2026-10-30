@@ -108,7 +108,13 @@ if (!checked) {
 }
 rmSync('dist.old', { recursive: true, force: true });
 if (existsSync('dist')) renameSync('dist', 'dist.old');
-renameSync('dist.next', 'dist');
+try { renameSync('dist.next', 'dist'); }
+catch (error) {
+  // Never leave the service without a frontend: put the served one back (a scenario server often holds dist.next).
+  if (existsSync('dist.old')) renameSync('dist.old', 'dist');
+  if (stopped) service('START');
+  fail(`Nie udało się podmienić dist (${error.code}); usługa dalej serwuje poprzednią wersję. Zatrzymaj serwery scenariuszy (servy/README.md) i ponów.`);
+}
 rmSync('dist.old', { recursive: true, force: true });
 
 // 4. Restart and confirm the API answers.
