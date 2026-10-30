@@ -11,11 +11,13 @@ const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
 const map = agents.slice(agents.indexOf('## Where knowledge lives'), agents.indexOf('## Commands'));
 /** The "Where" column of each row. */
 const cells = map.split('\n').filter(line => line.startsWith('|') && !/^\|\s*(What|---)/.test(line)).map(line => line.split('|')[2] ?? '');
-/** Every path a cell names: `src/x.ts`, `servy/README.md`, `.claude/skills/x`; a bare `bank.md` is a file in docs/. */
+/** Every path a cell names: `src/x.ts`, `servy/README.md`, `skills/x/SKILL.md`; a bare `bank.md` is a file in docs/. */
 const named = cells.flatMap(cell => [...cell.matchAll(/(?<![\w/.])\.?[\w-]+(?:\/[\w.-]+)*\.?[\w-]*(?:\.(?:md|ts|tsx|yaml))?/g)]
   .map(([token]) => token)
   .filter(token => token.includes('/') || /\.(md|ts|tsx|yaml)$/.test(token))
-  .map(token => token.includes('/') || token === 'README.md' ? token : `docs/${token}`));
+  .map(token => token.includes('/') || token === 'README.md' ? token : `docs/${token}`))
+  // Local links made by `just setup` (scripts/link-skills.mjs), absent in a fresh clone and in CI.
+  .filter(path => path !== '.claude/skills' && path !== '.agents/skills');
 
 describe('the map of AGENTS.md', () => {
   it('names only paths that exist', () => {

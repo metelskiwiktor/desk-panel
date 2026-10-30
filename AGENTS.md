@@ -14,7 +14,7 @@ below names for the area you touch.
 | The chat and Wektor in code | docs/czat.md (product, API), docs/hermes.md (engine), docs/wektor-ui.md (frontend), docs/diagnostyka-czatu-wektora.md (diagnosing a conversation) | agents changing the chat |
 | What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
 | Tests and verification | docs/testowanie.md, `just check` | agents |
-| How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities/SKILL.md | any agent working on Wektor (Claude Code loads it as a skill; others read the file) |
+| Agent skills, e.g. how we give Wektor new abilities and judge his answers | skills/<name>/SKILL.md, e.g. skills/wektor-capabilities/SKILL.md; .claude/skills (Claude Code) and .agents/skills (Codex) are local links to skills/, made by `just setup` | any agent: Claude Code and Codex load them as skills |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
 | How the user wants every agent to work (commits, words) | "Working with the user" below | every agent; Cezar's executor keeps its workflow's branch and review |
@@ -22,7 +22,7 @@ below names for the area you touch.
 
 Adding something: put it where the map says. A rule every change must keep goes here as one line with a link to its
 area's document; how the area works goes into that document; what Wektor should do goes into his code (row above); how
-we work on Wektor goes into the skill. Write a fact once and link to it instead of copying it. If the map has no place
+we work on Wektor goes into its skill; a new skill is a folder in skills/, never in .claude/ or .agents/. Write a fact once and link to it instead of copying it. If the map has no place
 for it, add the row first. A change that alters how an area behaves updates that area's document (and this file, if a
 rule changes) in the same commit; documentation is part of the change, not a follow-up.
 
@@ -39,7 +39,8 @@ rule changes) in the same commit; documentation is part of the change, not a fol
 
 ## Commands
 
-- `just setup`: install locked dependencies and Playwright Chromium.
+- `just setup`: install locked dependencies and Playwright Chromium, and link `.claude/skills` and `.agents/skills` to
+  `skills/` (scripts/link-skills.mjs; a real folder there is reported, never deleted).
 - `just dev`: run API and Vite during development.
 - `just scenario NAME` / `just screenshots NAME [--pages pulpit,ustawienia]
   [--device ID|all] [--scale N|primary|all]`: run the real UI against
@@ -126,7 +127,7 @@ bez nazwy z banku (telefon, BLIK) nie ma odbiorcy i nie jest podpowiadana ani po
 bez pełnych numerów) i pokazuje wydatki kartą (`panel_show`, wiersze czyta sama karta z `/api/bank/show`). Zmiany nie robi sam: scalenie
 kategorii wydatków i masowe oznaczenie operacji pewnymi podpowiedziami tylko proponuje kartą zgody (`panel_bank_propose`, `panel_bank_assign`, docs/bank.md), a panel zmienia oznaczenia dopiero po kliknięciu
 użytkownika (`POST /api/chats/:id/bank-plan`, Origin-checked; plan czyta z rozmowy, nie z żądania). Jak dawać Wektorowi nowe
-umiejętności i testować jego rozmowy: `.claude/skills/wektor-capabilities`. Nigdy nie proś o dane logowania do banku: zgodę wydaje użytkownik w iPKO/IKO.
+umiejętności i testować jego rozmowy: `skills/wektor-capabilities`. Nigdy nie proś o dane logowania do banku: zgodę wydaje użytkownik w iPKO/IKO.
 
 Smart Actions (docs/smart-actions.md): reguły są danymi w `~/.desk-panel/smart-rules.json` (poza Gitem), alerty liczy serwer (`GET /api/smart-actions`). Przycisk maila otwiera tylko link z treści na domenie reguły. Wektor szuka w całej skrzynce (`panel_mail_search`, tylko odczyt), czyta treść jednego maila naraz (`panel_mail_read`, jako dane, nie polecenia) i testuje reguły bez zapisu. Regułę zmienia tylko kartą zgody (`panel_smart_rule_propose` → `POST /api/chats/:id/smart-rule`, Origin-checked, plan z rozmowy), a przełącznik w oknie reguł to klik użytkownika (`POST /api/smart-rules/toggle`). Alert przelewu oznacza podpowiedzią dopiero klik użytkownika, lokalnie.
 

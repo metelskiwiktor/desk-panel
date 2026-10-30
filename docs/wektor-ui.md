@@ -1,7 +1,7 @@
 # GUI Wektora — mapa i praca nad zmianami
 
 Ten dokument dotyczy frontendu rozmowy. Zachowanie produktu i API opisuje [czat.md](czat.md), a integracje mają własne dokumenty.
-Nowe narzędzie lub umiejętność agenta wymaga także procedury `.claude/skills/wektor-capabilities`; sama zmiana GUI jej nie uruchamia.
+Nowe narzędzie lub umiejętność agenta wymaga także procedury `skills/wektor-capabilities`; sama zmiana GUI jej nie uruchamia.
 Zmiana GUI nie wymaga restartu Hermesa, dopóki nie zmienia narzędzi ani ich schematów.
 
 ## Gdzie zmieniać kod

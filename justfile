@@ -9,6 +9,7 @@ setup:
     npm ci
     node scripts/dependencies.mjs
     npx playwright install chromium
+    node scripts/link-skills.mjs
 
 # Start API and Vite for development.
 dev:
