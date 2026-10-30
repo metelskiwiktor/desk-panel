@@ -1,0 +1,19 @@
+{
+  "description": "Dalszy ciąg rozmowy o regule (uruchamiany z --chat), gdy część łapanych maili nie ma linku do akcji: użytkownik mówi, że Smart Actions to tylko to, co da się wykonać. Wektor zawęża tę samą regułę tak, żeby nie łapała maili bez linku, testuje ją i pokazuje nową kartę; nie proponuje reguły bez przycisku i nie mówi, że zapisał.",
+  "turns": [
+    {
+      "say": "Moim zdaniem w Smart Actions powinno być tylko to, co można wykonać. W takim razie te przypomnienia nie nadają się na Smart Action.",
+      "expect": {
+        "calls": ["panel_smart_rule_test", "panel_smart_rule_propose"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action"],
+        "textNot": ["zapisałem", "zmieniłem", "bez przycisku.*doda", "drugą reguł"],
+        "maxTools": 12,
+        "maxSeconds": 180
+      },
+      "soft": [
+        { "name": "mówi, co zostaje (rachunki, wezwania)", "text": "rachun|wezwa" },
+        { "name": "mówi, że przypomnienia odpadają", "text": "przypomnie" }
+      ]
+    }
+  ]
+}
