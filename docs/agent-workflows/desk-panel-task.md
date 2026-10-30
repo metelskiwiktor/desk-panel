@@ -5,8 +5,8 @@ You are the executor. Follow the sequence in your workflow prompt exactly.
 General Wektor frontend ownership and browser checks are in [wektor-ui.md](../wektor-ui.md). The procedure below is for
 a Cezar executor; it does not prescribe commits, deployment or service restarts for an ordinary GUI task outside that workflow.
 
-Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `address` run on `opencode` (`openrouter/deepseek/deepseek-v4.1-flash-1017`,
-Wektor's model, since 30.10.2026 to keep the Codex subscription free; `fix` and `address` continue the `implement` session), `review` on `agy` (`claude-opus-5-5-low`). A
+Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `address` run on `codex` (`gpt-6.1-terra`, the
+user's Codex subscription; `fix` and `address` continue the `implement` session), `review` on `agy` (`claude-opus-5-5-low`). A
 step's own runner and model win over the run's, so the dispatch card lists these pinned steps with their own runner and
 model choice for that one task (Cezar's `stepOverrides`, spec `2026-10-28-step-overrides` in the cezar repo; `fix` and
 `address` follow `implement`, so its session stays on one runner); the card's general choice reaches the other steps. Gemini 3.8 Flash judged worst in the dispatcher benchmarks of 28.10.2026 (docs/hermes.md, "Model").
