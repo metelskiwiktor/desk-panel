@@ -92,7 +92,7 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   z innego. `Esc`, „Gotowe” lub strzałka w nagłówku kończą wskazywanie i pozostawiają czat w widoku kompaktowym.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
 - **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` robi rekonesans tylko do odczytu i proponuje zlecenie kartą zgody. Agent sam nie uruchamia Cezara: dopiero kliknięcie użytkownika wysyła z panelu `POST /api/chats/:id/dispatch`; backend odczytuje propozycję z tej rozmowy i zwraca powiązanie z taskiem.
-- Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia); zmiany nazwy w tym oknie nie ma.
+- Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia). Nazwę zmienia się w nagłówku rozmowy (Enter zapisuje, Esc anuluje, pusta lub niezmieniona się nie zapisuje); tak nadanej nazwy panel już nie nadpisuje.
 - Wąski ekran (telefon przez Tailscale): pełny widok zajmuje cały ekran, kompaktowy i wskazywanie są u dołu.
 
 ## Co widzi agent
@@ -214,7 +214,7 @@ kształt odpowiedzi i przeliczać czasy.
   `--dangerously-skip-permissions` (`agyPermissionArgs`; jak `run_command`, który i tak działał bez pytania). Zmienia to tylko argumenty uruchomienia,
   nigdy ustawień `agy`; `DESK_AGY_SKIP_PERMISSIONS=0` (albo `false`, `no`, `off`) wyłącza flagę, wtedy odmowy wracają i widać je w oknie oraz w `denied`.
 - `-p` zjada następny token, stąd `-p ''` na końcu argumentów. Pomoc drukuje na stderr. Zamknięcie stdin kończy proces.
-- Każda wiadomość zużywa limit konta `agy`. Po pierwszej zakończonej odpowiedzi panel raz w tle prosi agy o krótką polską nazwę rozmowy (bez narzędzi, z limitem 20 s); model wybiera `DESK_AGY_TITLE_MODEL`, a domyślnie `DESK_AGY_MODEL`. Przy błędzie zostaje nazwa z pierwszej wiadomości. Użytkownik może zmienić nazwę w nagłówku; jego nazwa nie jest nadpisywana. Poza tym wywołaniem tura zaczyna się tylko od wiadomości użytkownika.
+- Każda wiadomość zużywa limit konta `agy`. Po pierwszej zakończonej odpowiedzi panel raz w tle prosi agy o krótką polską nazwę rozmowy (bez narzędzi: nazewnik uruchamia agy bez `--dangerously-skip-permissions`, więc odmawia on każdego narzędzia, nawet gdy pierwsza odpowiedź cytuje obcy tekst, np. maila; z limitem 20 s); model wybiera `DESK_AGY_TITLE_MODEL`, a domyślnie `DESK_AGY_MODEL`. Przy błędzie zostaje nazwa z pierwszej wiadomości. Użytkownik może zmienić nazwę w nagłówku; jego nazwa nie jest nadpisywana. Poza tym wywołaniem tura zaczyna się tylko od wiadomości użytkownika.
 
 ## Szwy do rozszerzania
 

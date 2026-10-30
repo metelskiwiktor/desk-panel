@@ -7,7 +7,9 @@ export type ChatNamer = (user: string, answer: string) => Promise<string | null>
 
 export function createAgyNamer(options: { dir?: string; launch?: Launcher; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): ChatNamer {
   const env = options.env ?? process.env;
-  const launch = options.launch ?? agyLauncher({ ...env, DESK_AGY_MODEL: env.DESK_AGY_TITLE_MODEL?.trim() || env.DESK_AGY_MODEL });
+  // Naming needs no tools, and the first answer may quote untrusted text (a mail): without the skip flag headless agy
+  // denies every tool, so an instruction hidden in that text cannot run a command.
+  const launch = options.launch ?? agyLauncher({ ...env, DESK_AGY_MODEL: env.DESK_AGY_TITLE_MODEL?.trim() || env.DESK_AGY_MODEL, DESK_AGY_SKIP_PERMISSIONS: '0' });
   const root = path.join(options.dir ?? path.join(homedir(), '.desk-panel'), 'chat-title');
   return async (user, answer) => {
     let cwd: string | undefined;
