@@ -17,12 +17,25 @@ below names for the area you touch.
 | How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities | Claude Code sessions |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
-| The user's personal preferences (how he likes to work) | Claude Code memory, outside the repo; never project facts | Claude Code sessions |
+| How the user wants every agent to work (commits, words) | "Working with the user" below | every agent; Cezar's executor keeps its workflow's branch and review |
+| What only concerns working with Claude Code | Claude Code memory, outside the repo; never project facts, never a rule other agents need | Claude Code sessions |
 
 Adding something: put it where the map says. A rule every change must keep goes here as one line with a link to its
 area's document; how the area works goes into that document; what Wektor should do goes into his code (row above); how
 we work on Wektor goes into the skill. Write a fact once and link to it instead of copying it. If the map has no place
-for it, add the row first.
+for it, add the row first. A change that alters how an area behaves updates that area's document (and this file, if a
+rule changes) in the same commit; documentation is part of the change, not a follow-up.
+
+## Working with the user
+
+- In this checkout (Claude Code, Codex): commit everything in the tree and push straight to `main` once `just check`
+  passes; no branches, no pull requests. Cezar's executor works in its own worktree and leaves pushing to Cezar. If
+  origin/main moved, merge it (check overlaps with local work) and run the tests again before pushing.
+- Commit messages: conventional commits in English (`feat(chat): ...`), with no attribution lines (`Co-Authored-By`,
+  "Generated with ..."), even when a tool suggests them.
+- "Zadanie" / "zadania" is an item of the panel's to-do lists (docs/zadania.md), never a Cezar task; Cezar is meant only
+  when the user names it or points at a Cezar tile or task. In code and API to-do items are `todo`, never a bare `task`
+  (that is Cezar's). A widget is a kind (Poczta, Zadania); a kafelek is one placed on the grid.
 
 ## Commands
 
