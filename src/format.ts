@@ -66,11 +66,6 @@ export function formatElapsed(startAt?: number, now = Date.now()): ElapsedInfo |
   };
 }
 
-export function elapsed(startAt?: number, now = Date.now()): string {
-  const info = formatElapsed(startAt, now);
-  return info ? info.text : '';
-}
-
 export function cleanCommand(raw?: string): string {
   if (!raw) return '';
   let cmd = raw.trim();

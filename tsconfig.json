@@ -20,13 +20,16 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "incremental": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo"
   },
   "include": [
     "src",
     "vite.config.ts",
     "server",
     "scripts/scenario.ts",
+    "scripts/wektor-ui.ts",
     "scripts/devices.ts",
     "scripts/garmin-login.ts",
     "scripts/prompt.ts"

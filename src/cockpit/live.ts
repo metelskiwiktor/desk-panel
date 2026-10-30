@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, ContextItem } from '../chat-contract';
 import { cardRefusal, COCKPIT_TOOLS, panelToolName, type CockpitToolName, type CockpitView, type DispatchOutcome } from '../cockpit-contract';
 import { engineOf, useChat } from '../useChat';
-import { DISPATCH, HERMES_APPROVAL, RECON, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
+import { rememberSnapshot } from '../chat-snapshots';
+import { APPOINTMENT, CALENDAR_PLAN, BANK_ASSIGN, BANK_PLAN, DISPATCH, HERMES_APPROVAL, MAIL_LIST, RECON, SHOW, SMART_RULE, WATCH, type CockpitMessage, type CockpitSource, type CockpitState } from './types';
 
 const IDLE: CockpitState = { watching: false };
 /** While the task runs (or a check does) the cockpit is read often; otherwise now and then. */
@@ -17,8 +18,25 @@ const parseArgs = (input: string): Record<string, unknown> => {
   return input ? { input } : {};
 };
 
+/**
+ * A card's arguments, only the fields of the type the card renders. They come from the model as it wrote them, even a call
+ * Hermes refused: `scenario` as `{page, name, open}` (28.10.2026) put an object into the card and blanked the whole chat.
+ */
+const TEXT_FIELDS = ['scenario', 'prompt', 'title', 'repo', 'workflow', 'todoId', 'taskId', 'id'] as const;
+export function cardArgs(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of TEXT_FIELDS) if (typeof raw[key] === 'string') out[key] = raw[key];
+  if (raw.kind === 'UI' || raw.kind === 'non-UI') out.kind = raw.kind;
+  if (Array.isArray(raw.files)) {
+    out.files = raw.files.flatMap(f => f && typeof f === 'object' && typeof (f as { path?: unknown }).path === 'string'
+      ? [{ path: (f as { path: string }).path, ...(typeof (f as { note?: unknown }).note === 'string' ? { note: (f as { note: string }).note } : {}) }]
+      : []);
+  }
+  return out;
+}
+
 /** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
-const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH } as const;
+const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN, bankAssign: BANK_ASSIGN, appointment: APPOINTMENT, calendarPlan: CALENDAR_PLAN, mailList: MAIL_LIST, smartRule: SMART_RULE } as const;
 export const cardOf = (name: string) => {
   const tool = COCKPIT_TOOLS[panelToolName(name) as CockpitToolName] as { card?: keyof typeof CARDS } | undefined;
   return tool?.card ? CARDS[tool.card] : name;
@@ -29,7 +47,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
   : { decision: 'rejected' as const };
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
-export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false): CockpitMessage {
+export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}): CockpitMessage {
   if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
@@ -39,13 +57,17 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       if (p.type === 'approval') return { type: 'tool', id: p.id, name: HERMES_APPROVAL, args: { tool: p.tool, detail: p.detail, state: p.state, at: p.at }, running: p.state === 'pending' };
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
-      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : p.output;
-      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : null;
+      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : p.output;
+      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
-      return { type: 'tool', id: p.id, name, args: { ...parseArgs(p.input), ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
+      const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
+      return { type: 'tool', id: p.id, name, args: { ...args, ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
     }),
   };
 }
+
+/** What a bulk-assign card adds to its answer: the groups and operations unticked and the options picked (empty ones left out). */
+const pickAssign = (r: Record<string, unknown>) => Object.fromEntries(['skip', 'skipOps', 'groupPicks', 'picks', 'newCategories'].filter(k => Array.isArray(r[k]) && (r[k] as unknown[]).length).map(k => [k, r[k]]));
 
 async function call(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(path, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
@@ -56,42 +78,46 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 
 /** The cockpit of the open conversation, read again while it shows something that changes. */
 function useCockpitView(chatId: string | null, items: readonly ChatMessage[]) {
-  const [view, setView] = useState<CockpitView | null>(null);
-  const [error, setError] = useState('');
+  const snapshots = useRef(new Map<string, CockpitView>());
+  const selection = useMemo(() => ({ chatId }), [chatId]);
+  const [snapshot, setSnapshot] = useState<{ selection: typeof selection; error?: string } | null>(null);
+  const view = chatId ? snapshots.current.get(chatId) ?? null : null;
+  const error = snapshot?.selection === selection ? snapshot.error ?? '' : '';
   const [tick, setTick] = useState(0);
   /** Grows with every message and step: a watch call inside a running answer counts too. */
   const steps = items.reduce((n, m) => n + 1 + (m.parts?.length ?? 0), 0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
-  useEffect(() => { setView(null); setError(''); }, [chatId]);
   useEffect(() => {
     if (!chatId) return;
     let gone = false;
     // Which task is watched the server decides from the conversation (the cockpit contract): read again as it grows.
     call(`/api/chats/${chatId}/cockpit`).then(
-      value => { if (!gone) { setView(value as CockpitView); setError(''); } },
-      e => { if (!gone) setError(e instanceof Error ? e.message : 'Kokpit jest niedostępny.'); },
+      value => { if (!gone) { rememberSnapshot(snapshots.current, chatId, value as CockpitView); setSnapshot({ selection }); } },
+      e => { if (!gone) setSnapshot({ selection, error: e instanceof Error ? e.message : 'Kokpit jest niedostępny.' }); },
     );
     return () => { gone = true; };
-  }, [chatId, steps, tick]);
+  }, [chatId, selection, steps, tick]);
   const busy = !!view && ((view.task && ACTIVE.has(view.task.status)) || view.pr?.checks.some(c => c.state === 'running' || c.state === 'pending'));
   useEffect(() => {
     if (!chatId) return;
     const t = window.setTimeout(refresh, busy ? ACTIVE_MS : IDLE_MS);
     return () => window.clearTimeout(t);
   }, [chatId, busy, view, refresh]);
-  return { view, error, refresh };
+  return { view, error, refresh, loading: !!chatId && snapshot?.selection !== selection };
 }
 
 /** The real chat, on Hermes only: conversations of the other engine stay on the server but are not listed here. */
 export function useLiveCockpit(): CockpitSource {
   const chat = useChat('hermes');
+  const active = chat.active?.id === chat.activeId ? chat.active : null;
   /** One per draft: a message retried after an error is the same message to the server. */
   const nonce = useRef<string | null>(null);
   const down = chat.engines?.find(e => e.engine === 'hermes' && !e.available);
-  const items = useMemo(() => chat.active && engineOf(chat.active) === 'hermes' ? chat.active.items : [], [chat.active]);
-  const { view, error: cockpitError, refresh } = useCockpitView(chat.activeId, items);
+  const items = useMemo(() => active && engineOf(active) === 'hermes' ? active.items : [], [active]);
+  const { view, error: cockpitError, refresh, loading: cockpitLoading } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
-  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved)), [items, dispatches, view?.legacyUnresolved]);
+  const bankPlans = view?.bankPlans;
+  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans)), [items, dispatches, view?.legacyUnresolved, bankPlans]);
   const activeId = chat.activeId;
 
   const cockpit: CockpitState = useMemo(() => {
@@ -107,12 +133,14 @@ export function useLiveCockpit(): CockpitSource {
 
   return {
     mode: 'live',
-    title: chat.active?.title ?? 'Nowy czat',
+    title: active?.title ?? chat.chats?.find(c => c.id === chat.activeId)?.title ?? 'Nowy czat',
     messages,
-    running: chat.active?.running ?? false,
+    running: active?.running ?? false,
     hermes: { up: !down, checking: false, error: down?.error },
     unavailable: chat.unavailable,
-    loading: !!chat.activeId && !chat.active,
+    loading: !!chat.activeId && !active,
+    refreshing: chat.syncing || cockpitLoading,
+    cockpitLoading,
     error: chat.error,
     clearError: chat.clearError,
     async send(text: string, context: ContextItem[]) {
@@ -124,15 +152,37 @@ export function useLiveCockpit(): CockpitSource {
     stop: () => void chat.stop(),
     retry: () => void chat.refresh(),
     async respond(id: string, response: unknown) {
+      if (chat.syncing || cockpitLoading) throw new Error('Rozmowa jeszcze się odświeża. Spróbuj za chwilę.');
       if (response === 'approve' || response === 'deny') { await chat.approve(id, response); return; }
+      const eventResponse = response as { kind?: string; action?: unknown } | null;
+      if (eventResponse?.kind === 'appointment' || eventResponse?.kind === 'calendarPlan') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/${eventResponse.kind === 'appointment' ? 'appointment' : 'calendar-plan'}`, 'POST', { toolCallId: id, action: eventResponse.action });
+        return;
+      }
+      // A Smart Actions rule card: the panel saves the rule (or not) as the user answered.
+      if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'smartRule') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/smart-rule`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision });
+        refresh();
+        return;
+      }
+      // A bank change card: the panel changes the categories (or not) as the user answered; the card shows the outcome from the cockpit.
+      if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'bankPlan') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/bank-plan`, 'POST', { toolCallId: id, decision: (response as { decision: 'apply' | 'reject' }).decision, ...pickAssign(response as Record<string, unknown>) });
+        refresh();
+        return;
+      }
       // A dispatch card: the panel dispatches (or not) as the user answered; the card shows the outcome from the cockpit.
-      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string; runner?: string; model?: string };
+      const r = response as { decision: 'dispatch' | 'reject'; title: string; prompt: string; workflow?: string; todoId?: string; runner?: string; model?: string; steps?: Record<string, { runner?: string; model?: string }> };
       if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
-      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.model ? { model: r.model } : {}) });
+      await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.model ? { model: r.model } : {}), ...(r.steps ? { steps: r.steps } : {}) });
       refresh();
     },
-    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, updatedAt: c.updatedAt })) ?? null,
+    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, createdAt: c.createdAt, updatedAt: c.updatedAt })) ?? null,
     activeId,
+    createdAt: active?.createdAt,
     open: (id: string | null) => { nonce.current = null; if (id) chat.open(id); else chat.startNew(); },
     remove: () => void chat.remove(),
     cockpit,

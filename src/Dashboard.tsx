@@ -20,8 +20,6 @@ import { Workspace } from './Workspace';
 import { kindAvailable } from './workspace-kinds';
 import { BOTTOM_SIZES, TOP_CYCLE, cycleSize, useZones } from './zones';
 
-export { splitFor } from './quota-cards';
-
 /** CPU or RAM at or above this share of the machine shows the Komputer card on the dashboard. */
 export const SYSTEM_ALERT_PERCENT = 90;
 const ramPercent = (s: SystemSample) => (s.ramUsedGb / s.ramTotalGb) * 100;

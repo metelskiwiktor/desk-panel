@@ -25,6 +25,12 @@ just screenshots standard --nav                        # keep the bottom navigat
 npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
+just screenshots standard --pages pulpit --open chat-skills     # nowe menu umiejętności Wektora
+just screenshots standard --pages pulpit --open chat-compact    # czat obok pulpitu
+just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
+just screenshots wizyty --pages pulpit --open chat-appointment-selected # automatycznie wypełniony kalendarz
+just screenshots wizyty --pages pulpit --open chat-appointment-saved # zapis do atrapy Google
+just screenshots wizyty --pages pulpit --open chat-appointment-axis # oś, kolizje, dni, Cezar i powrót do podsumowania
 ```
 
 `--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.
@@ -55,11 +61,41 @@ prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`
 
 ## Weryfikacja
 
+Interakcje GUI Wektora: `just wektor-ui all` lub pojedynczy przypadek `composer`, `keyboard`, `history`, `switching`.
+To syntetyczna przeglądarka na tym samym środowisku co scenariusze, bez prawdziwego agenta i zapisów na kontach użytkownika.
+Szczegóły i mapa frontendu: [wektor-ui.md](wektor-ui.md). Runner zapisuje raport, zrzuty i trace przy błędzie w `output/wektor-ui`.
+Nie zastępuje oceny wyglądu ani pełnego `just check`.
+
 ```powershell
-npm run typecheck
-npm test
-npm run build
+just test-fast   # w trakcie pracy: tylko testy, których dotyczą niezacommitowane zmiany (vitest --changed)
+just check       # przed publikacją: testy, typy, martwy kod (knip) i build naraz (scripts/check.mjs)
 ```
+
+`scripts/check.mjs` uruchamia cztery kroki równolegle i pokazuje wyjście tylko tego, który nie przeszedł; `just update` używa
+tego samego (build idzie do `dist.next`). tsc jest przyrostowy (cache w `node_modules/.cache`). Vitest ma dwa projekty:
+`server` (server/ i scripts/, bez DOM) i `ui` (src/, jsdom). knip (`knip.json`) działa w trybie produkcyjnym: kod, którego
+używają tylko testy, też jest martwy. Wyjątkiem jest haczyk dla testów (np. reset pamięci podręcznej modułu) oznaczony `@internal`
+w JSDoc. Podkomponenty assistant-ui w `src/components` (kod wygenerowany) są z tego wyłączone.
+
+Czas testów to w większości CPU: ok. 150 s na 8 rdzeniach (było 190 s przed odchudzeniem testów renderujących cały panel),
+z czego ok. 40% to jsdom i import `App` w każdym pliku UI. `isolate: false`, happy-dom i `userEvent.setup({ delay: null })`
+sprawdzone 29.10.2026: nie skracają czasu albo psują testy z `vi.mock`. Podział pliku pomaga tylko, gdy jeden plik kończy się
+długo po reszcie (tak było z czatem: `chat.test.tsx` i `chat-cockpit.test.tsx` mają wspólne `chat.test-kit.tsx`); gdy CPU
+jest zajęte do końca, tylko dokłada narzut. Pliki `*.test-kit.tsx` to pomocnicy testów (knip ich nie liczy jako martwych).
+
+### Jak pisać testy
+
+- Test pilnuje niezmiennika, nie commita: tego, co ma zostać prawdą po refaktorze (kontrakt API, Origin-check, brak zapisu,
+  maskowanie numerów, reguła podpowiedzi, widoczny skutek kliknięcia). Wygląd sprawdza zrzut scenariusza, nie test.
+- Zmiana zachowania przepisuje istniejący test. Nowy test jest dla nowego niezmiennika; test, który sprawdza to samo co inny,
+  się scala albo usuwa (w opisie commita: co pilnuje tego dalej).
+- Czysta logika ma test na funkcji. `render(<App />)` jest dla przepływu przez kilka elementów panelu: kosztuje ok. 1 s CPU.
+  Kafelek testuje się na nim samym, z tym samym hookiem i API scenariusza (`renderTiles` w `src/todos.test.tsx`,
+  `renderFeed` w `src/mail.test.tsx`); panel zostaje dla siatki i tego, co kafelek otwiera poza sobą. Co widać na
+  standardowym ekranie przed dotknięciem, sprawdza jeden render w `src/App.test.tsx`, a stan zasiewa się w `localStorage`
+  zamiast go wyklikiwać.
+- Nie dopisuje się kodu ani eksportów po to, żeby test przeszedł. Kod, którego używa tylko test, jest martwy (knip go zgłosi).
+- Czas: wstrzykiwany zegar (`now`) albo `vi.useFakeTimers`, nie czekanie na `setTimeout` w teście.
 
 Testy obejmują interfejs (na scenariuszach z `scenarios/` podawanych przez
 to samo API co serwer scenariuszy), layout, reguły i historię zdarzeń, gesty oraz integrację:
@@ -69,11 +105,21 @@ zastępczych danych. Testy kalendarza obejmują DST, wydarzenia całodniowe, odr
 paginację, cache, awarię z zachowaniem danych oraz brak wycieku błędów autoryzacji.
 Testy OAuth pinują PKCE, konto, state, expiry i odrzucenie powtórnego callbacku.
 Build sprawdza także kod serwera.
-Katalog `.ai/` (worktree zadań Cezara: inne gałęzie, starszy kod) jest wyłączony z uruchamiania testów w `vite.config.ts`: jego testy czytają `scenarios/` tego
-checkoutu i psułyby się przy każdej zmianie schematu scenariuszy.
+Katalogi `.ai/` i `.claude/worktrees/` są wyłączone z uruchamiania testów w `vite.config.ts`: zawierają inne checkouty,
+które mogą czytać scenariusze z niewłaściwej gałęzi i ładować drugą kopię Reacta (`Invalid hook call`).
+
+Przy serii timeoutów 5 s w różnych testach UI najpierw sprawdź obciążenie i równoległość. 29.10.2026 domyślny przebieg
+miewał timeouty, a ta sama wersja przechodziła pełny zestaw z ograniczeniem `VITEST_MAX_WORKERS` do 2 lub 4. W PowerShell:
+`$env:VITEST_MAX_WORKERS='4'; just check` (tylko w bieżącej powłoce; usunięcie: `Remove-Item Env:VITEST_MAX_WORKERS`).
+Nie podnoś automatycznie timeoutów i nie uznawaj każdego błędu za problem obciążenia — porównaj konkretne błędy i wyniki.
 
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
-`npm ci`, testy i build na Ubuntu i Windows (tylko tam działa test DPAPI).
+`npm ci` i `scripts/check.mjs` na Ubuntu i Windows (tylko tam działa test DPAPI).
+
+Runner zrzutów przerywa działanie przy `pageerror` (wyjątek JavaScript), także gdy oczekuje na element strony.
+Oczekiwane HTTP 503 w scenariuszu offline są osobnymi logami konsoli. Nazwy zrzutów uwzględniają `--open`, zapytanie,
+stan Hermesa, ekran i skalowanie. `--file` wymaga jednej strony i jednego ekranu/skalowania; dla macierzy używaj `--out`,
+żeby kolejne widoki nie nadpisywały jednego pliku.
 
 
 ## Lokalny podgląd PR

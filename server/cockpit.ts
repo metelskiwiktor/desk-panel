@@ -1,9 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import type { SmartRuleOutcome, SmartRulePlan, SmartRulePreview } from '../src/smart-rules-contract';
+import { previewPlan, SmartRuleError } from './smart-rules';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import {
-  watchedTask, type CezarStatus, type CheckState, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
+  watchedTask, type CezarStatus, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
+import { stepOverridesSchema } from '../src/cezar-contract';
+import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
+import { BankPlanError, planPreview } from './bank-plan';
+import { assignMarks, assignPreview } from './bank-assign';
+import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
 import { SourceError, type PanelSources } from './sources';
 import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
 
@@ -19,8 +26,12 @@ export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
  */
 
 const outcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional() }),
+  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
+]);
+const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('applied'), at: z.number(), into: z.string().optional(), created: z.boolean().optional(), moved: z.number().optional(), assigned: z.number().optional(), choice: z.unknown().optional(), preview: z.unknown().optional() }),
+  z.object({ decision: z.literal('rejected'), at: z.number(), preview: z.unknown().optional() }),
 ]);
 const storeSchema = z.object({
   version: z.literal(1),
@@ -28,6 +39,8 @@ const storeSchema = z.object({
     /** Tasks dispatched from the conversation, oldest first: the last one is watched. */
     runs: z.array(z.string()).default([]),
     dispatches: z.record(z.string(), outcomeSchema).default({}),
+    /** The user's answers on bank change cards, by tool call id: what was done, so the card shows it again. */
+    bankPlans: z.record(z.string(), bankPlanOutcomeSchema).default({}),
     updatedAt: z.number().default(0),
   })),
 });
@@ -97,6 +110,12 @@ export interface Cockpit {
   /** `items`: the conversation as the chat has it; the watched task follows from it by the contract (`watchedTask`). */
   view(chatId: string, items: Parameters<typeof watchedTask>[0], decisions?: Record<string, DispatchOutcome>): Promise<CockpitView>;
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
+  /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. Answered twice: done once. */
+  bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
+  /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
+  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign): Promise<BankAssignOutcome>;
+  /** The user's answer on a Smart Actions rule card: the rule is saved (or removed) once, as worked out now. */
+  smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
@@ -114,8 +133,28 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     writeFileSync(`${file}.tmp`, JSON.stringify(store, null, 2), 'utf8');
     renameSync(`${file}.tmp`, file);
   };
-  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, updatedAt: now() };
+  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, updatedAt: now() };
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
+  const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
+  const pendingAssigns = new Map<string, Promise<BankAssignOutcome | SmartRuleOutcome>>();
+  /** A bank card is answered once: the kept answer, one still being worked, or the work (kept when it finishes). */
+  async function decideBankCard<T extends BankAssignOutcome | SmartRuleOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
+    const chat = chatOf(chatId);
+    const known = chat.bankPlans[toolCallId];
+    if (known) return known as unknown as T;
+    const key = `${chatId}:${toolCallId}`;
+    const pending = pendingAssigns.get(key);
+    if (pending) return pending as Promise<T>;
+    const operation = (async () => {
+      const outcome = await work();
+      chat.bankPlans[toolCallId] = outcome as unknown as typeof chat.bankPlans[string];
+      chat.updatedAt = now();
+      save();
+      return outcome;
+    })();
+    pendingAssigns.set(key, operation);
+    try { return await operation; } finally { pendingAssigns.delete(key); }
+  }
 
   const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
   async function prOf(url: string, fallback: { title: string; branch?: string }): Promise<CockpitPrView> {
@@ -150,7 +189,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           }
         }
       }
-      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches } };
+      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'] };
     },
 
     async dispatch(chatId, input) {
@@ -176,9 +215,10 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         ...(input.workflow ? { workflow: input.workflow } : {}),
         ...(input.runner ? { runner: input.runner } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}),
         ...(input.todoId ? { todoId: input.todoId } : {}),
       });
-      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}) };
+      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}), ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}) };
       chat.dispatches[input.toolCallId] = outcome;
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();
@@ -187,6 +227,71 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       })();
       pendingDispatches.set(key, operation);
       try { return await operation; } finally { pendingDispatches.delete(key); }
+    },
+
+    async bankAssign(chatId, input, plan) {
+      return decideBankCard<BankAssignOutcome>(chatId, input.toolCallId, async () => {
+        if (input.decision === 'reject') {
+          let preview: BankAssignPreview | undefined;
+          try { const worked = assignPreview(await sources.bankLedger(), plan); if (!worked.problems.length) preview = worked; } catch { /* the card then works it out anew */ }
+          return { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        }
+        if (!sources.bankLedger || !sources.bankLabelAction) throw new SourceError(503);
+        // Worked out again now, from what is kept now: the card's preview may be old, and the request can only untick groups.
+        const ledger = await sources.bankLedger();
+        const preview = assignPreview(ledger, plan);
+        if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
+        const { toolCallId: _id, decision: _decision, ...choice } = input;
+        const { items, create } = assignMarks(ledger, plan, choice);
+        if (!items.length) throw new BankPlanError(409, 'Nic nie jest zaznaczone ani wybrane: nie ma czego oznaczyć.');
+        const result = await sources.bankLabelAction({ action: 'markMany', create, items });
+        return { decision: 'applied', at: now(), assigned: result.assigned ?? items.length, choice, preview };
+      });
+    },
+
+    async smartRule(chatId, input, plan) {
+      return decideBankCard<SmartRuleOutcome>(chatId, input.toolCallId, async () => {
+        if (!sources.smartRules) throw new SourceError(503);
+        // Worked out again now: the card shows the outcome with the test it had, and the rules may have changed meanwhile.
+        let preview: SmartRulePreview | undefined;
+        try { preview = await previewPlan(sources, plan); } catch { /* Gmail unreachable: the decision stands without the test */ }
+        if (input.decision === 'reject') return { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        if (preview?.problems.length) throw new SmartRuleError(409, preview.problems.join(' '));
+        sources.smartRules.apply(plan);
+        return { decision: 'applied', at: now(), ...(preview ? { preview } : {}) };
+      });
+    },
+
+    async bankPlan(chatId, input, plan) {
+      const chat = chatOf(chatId);
+      const known = chat.bankPlans[input.toolCallId];
+      if (known) return known as BankPlanOutcome;
+      const key = `${chatId}:${input.toolCallId}`;
+      const pending = pendingBankPlans.get(key);
+      if (pending) return pending;
+      const operation = (async (): Promise<BankPlanOutcome> => {
+        let outcome: BankPlanOutcome;
+        if (input.decision === 'reject') {
+          // What was proposed stays on the card: worked out as it was when the user said no (it may not be possible any more).
+          let preview: BankPlanPreview | undefined;
+          try { const worked = planPreview(await sources.bankLedger(), plan); if (!worked.problems.length) preview = worked; } catch { /* the card then works it out anew */ }
+          outcome = { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
+        }
+        else {
+          if (!sources.bankLedger || !sources.bankLabelAction) throw new SourceError(503);
+          // Worked out again now, from what is kept now: the card's preview may be old.
+          const preview = planPreview(await sources.bankLedger(), plan);
+          if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
+          const result = await sources.bankLabelAction({ action: 'mergeInto', from: preview.sources.map(s => s.id), into: plan.into, tags: plan.tags });
+          outcome = { decision: 'applied', at: now(), into: preview.into.name, created: !!result.category?.created, moved: result.removed ?? preview.moved, preview };
+        }
+        chat.bankPlans[input.toolCallId] = outcome as typeof chat.bankPlans[string];
+        chat.updatedAt = now();
+        save();
+        return outcome;
+      })();
+      pendingBankPlans.set(key, operation);
+      try { return await operation; } finally { pendingBankPlans.delete(key); }
     },
   };
 }

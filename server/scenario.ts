@@ -7,7 +7,8 @@ import { cezarSchema } from '../src/cezar-contract';
 import { calendarSourceSchema } from '../src/calendar-contract';
 import { googleAccountsSchema } from '../src/google-contract';
 import { trainingSourceSchema } from '../src/training-contract';
-import { MAIL_WINDOW_MS, mailSourceSchema } from '../src/mail-contract';
+import { MAIL_WINDOW_MS, mailSourceSchema, type MailThread } from '../src/mail-contract';
+import { createSmartRuleStore } from './smart-rules';
 import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { todoSourceSchema } from '../src/todo-contract';
@@ -15,7 +16,11 @@ import { createTodoStore, type TodoStore } from './todos';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
+import { openrouterUsageSchema } from '../src/openrouter-contract';
 import { SourceError, type PanelSources } from './sources';
+import { appointmentPreviewSchema, calendarSavedSchema } from '../src/appointment-contract';
+import { createAppointments } from './appointments';
+import { calendarEventId } from './calendar-write';
 
 /**
  * A scenario file holds one response per API endpoint, in exactly the shape the
@@ -35,6 +40,7 @@ export const scenarioSchema = z.object({
   description: z.string().optional(),
   cezar: endpoint(cezarSchema),
   calendar: endpoint(calendarSourceSchema),
+  appointment: endpoint(appointmentPreviewSchema),
   training: endpoint(trainingSourceSchema),
   googleAccounts: endpoint(googleAccountsSchema),
   /** All listed conversations; the server applies `limit` and the actions taken in this session. */
@@ -51,6 +57,7 @@ export const scenarioSchema = z.object({
   warmupRun: endpoint(z.object({Claude:warmupRunResultSchema,Codex:warmupRunResultSchema,Gemini:warmupRunResultSchema})),
   usageBreakdown: endpoint(usageBreakdownSchema),
   githubPr: endpoint(gitHubPrSourceSchema).default({ pullRequests: [] }),
+  openrouterUsage: endpoint(openrouterUsageSchema),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
@@ -58,6 +65,7 @@ export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description'
 export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'cezar' ? z.infer<typeof cezarSchema> :
   K extends 'calendar' ? z.infer<typeof calendarSourceSchema> :
+  K extends 'appointment' ? z.infer<typeof appointmentPreviewSchema> :
   K extends 'training' ? z.infer<typeof trainingSourceSchema> :
   K extends 'googleAccounts' ? z.infer<typeof googleAccountsSchema> :
   K extends 'mail' ? z.infer<typeof mailSourceSchema> :
@@ -69,6 +77,7 @@ export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'warmupRun' ? { Claude: z.infer<typeof warmupRunResultSchema>; Codex: z.infer<typeof warmupRunResultSchema>; Gemini: z.infer<typeof warmupRunResultSchema> } :
   K extends 'usageBreakdown' ? z.infer<typeof usageBreakdownSchema> :
   K extends 'githubPr' ? GitHubPrSource :
+  K extends 'openrouterUsage' ? z.infer<typeof openrouterUsageSchema> :
   never;
 
 const UNITS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
@@ -159,6 +168,11 @@ export function createScenarioSources(file: string): PanelSources {
     return value as unknown as EndpointResult<K>;
   }
   return {
+    appointments: createAppointments({
+      read: async query => ({ ...await serve('appointment'), query }),
+      canWriteCalendar: async () => (await serve('googleAccounts')).some(a => a.canCreateEvents === true),
+      writeCalendar: async (key, draft) => calendarSavedSchema.parse({ id: calendarEventId(key), url: `https://calendar.google.com/calendar/event?eid=scenario-${calendarEventId(key)}`, at: Date.now(), draft }),
+    }),
     async cezar() {
       const source = await serve('cezar');
       if (!('finished' in source)) return source;
@@ -214,6 +228,18 @@ export function createScenarioSources(file: string): PanelSources {
       const all = source.data?.filter(t => t.receivedAt >= cutoff && !handled.has(t.id)) ?? null;
       return { ...source, data: all && all.slice(0, limit), total: all?.length ?? 0 };
     },
+    /** A scenario's search: every word of the query (Gmail operators dropped) in the sender, subject or text. */
+    async mailSearch(q, limit) {
+      const words = q.toLowerCase().replace(/\b(?:newer_than|older_than|in|is|label):\S+/g, ' ').replace(/\b(?:from|subject):/g, ' ').split(/[\s()"]+/).filter(w => w && w !== 'or');
+      const text = (t: MailThread) => `${t.from} ${t.address ?? ''} ${t.subject} ${t.body ?? t.snippet}`.toLowerCase();
+      return ((await serve('mail')).data ?? []).filter(t => !words.length || words.some(w => text(t).includes(w))).slice(0, limit);
+    },
+    async mailThread(account, threadId) {
+      const thread = (await serve('mail')).data?.find(t => t.id === `${account}:${threadId}`);
+      if (!thread) throw new SourceError(404);
+      return thread;
+    },
+    smartRules: createSmartRuleStore(null),
     async mailAction(account, threadId, action) {
       const id = `${account}:${threadId}`;
       if (!(await serve('mail')).data?.some(t => t.id === id)) throw new SourceError(404);
@@ -225,6 +251,7 @@ export function createScenarioSources(file: string): PanelSources {
     async todoAction(action) { return (await todos()).apply(action); },
     usageBreakdown: () => serve('usageBreakdown'),
     githubPr: async () => serve('githubPr') as Promise<GitHubPrSource>,
+    openrouterUsage: () => serve('openrouterUsage'),
     async bank() { const source = await serve('bank'); return source.data ? { ...source, data: { ...source.data, transactions: source.data.transactions.map(publicTransaction) } } : source; },
     bankLabels: () => labels().read(),
     bankLabelAction: action => labels().apply(action),

@@ -11,13 +11,14 @@ body[data-picking] .chat-root button, body[data-picking] .chat-root summary, bod
 body[data-picking] .chat-root textarea, body[data-picking] .chat-root input { cursor: text; }
 body[data-picking] .wk-grip, body[data-picking] .wk-x, body[data-picking] .wk-rz { visibility: hidden; }
 
-/* While pointing the chat docks to the right edge and the dashboard narrows beside it; on a narrow screen it is a sheet at the bottom. */
-body[data-chat-dock] { padding-right: min(460px, 100vw); box-sizing: border-box; }
+/* The compact chat and pointing mode leave the dashboard usable beside them. */
+body { transition:padding 220ms ease; }
+body[data-chat-dock] { padding-right: min(480px, 100vw); box-sizing: border-box; }
 /* Beside the docked chat the top bar is narrow: its buttons drop under the clock instead of onto it. */
 body[data-chat-dock] .top-bar { flex-wrap: wrap; row-gap: 6px; }
 body[data-chat-dock] .top-right { margin-left: auto; }
-@media (max-width: 899px) {
-  body[data-chat-dock] { padding-right: 0; padding-bottom: 52dvh; }
+@media (max-width: 599px) {
+  body[data-chat-dock] { padding-right: 0; padding-bottom: calc(72dvh + 16px); }
 }
 
 /* ── Chat toggle floating action button (bottom-right) ── */
@@ -38,6 +39,8 @@ body[data-chat-dock] .top-right { margin-left: auto; }
   cursor: pointer;
   transition: transform 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
+/* The open dialog owns its close controls; the launcher must not cover its resize handle. */
+.chat-toggle-fab[aria-expanded="true"] { visibility: hidden; }
 .chat-toggle-fab:hover {
   background: #223044;
   color: #ffffff;
@@ -57,42 +60,4 @@ body[data-chat-dock] .chat-toggle-fab {
   display: none;
 }
 
-/* ── Resizable chat window ── */
-@media (min-width: 900px) {
-  .chat-root[data-mode="window"] section[role="dialog"] {
-    inset: 0 !important;
-    margin: auto !important;
-    width: min(1200px, calc(100vw - 64px));
-    height: min(800px, calc(100dvh - 40px));
-    min-width: 400px;
-    min-height: 300px;
-    max-width: calc(100vw - 32px);
-    max-height: calc(100dvh - 32px);
-    resize: both;
-    overflow: hidden;
-  }
-}
-
-.chat-resize-handle {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  cursor: nwse-resize;
-  z-index: 20;
-  user-select: none;
-  touch-action: none;
-  color: #5c6b84;
-  transition: color 0.15s ease;
-}
-.chat-resize-handle:hover {
-  color: #a7cbff;
-}
-@media (max-width: 899px) {
-  .chat-resize-handle {
-    display: none;
-  }
-}
+@media (prefers-reduced-motion:reduce) { body { transition:none; } }

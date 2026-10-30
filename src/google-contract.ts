@@ -5,6 +5,7 @@ const service = z.enum(['calendar', 'mail']);
 export const googleAccountSchema = z.object({
   email: z.string(), status: z.enum(['connected', 'unavailable']), reason: z.string().optional(),
   services: z.array(service), missing: z.array(service),
+  canCreateEvents: z.boolean().optional(),
 });
 export const googleAccountsSchema = z.array(googleAccountSchema);
 export type GoogleAccountStatus = z.infer<typeof googleAccountSchema>;

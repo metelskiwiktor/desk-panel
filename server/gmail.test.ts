@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { createMailReader, MAIL_QUERY, projectThread, sender } from './gmail';
+import { createMailReader, MAIL_QUERY, mailFailure, projectThread, sender } from './gmail';
 import { GoogleAuthError, type GoogleService } from './google-oauth';
+import { SourceError, sourceFailure } from './sources';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 type Init = { method?: string; params?: Record<string, string | string[]>; data?: unknown };
@@ -278,5 +279,40 @@ describe('Gmail reader', () => {
       }],
     };
     expect(projectThread('user@gmail.com', rawNestedMultipart).body).toBe('Zagnieżdżony tekst plain');
+  });
+});
+
+describe('Gmail search (Smart Actions)', () => {
+  const limitedBy = { response: { status: 429, data: { error: { errors: [{ reason: 'rateLimitExceeded' }] } } } };
+  /** An account whose search finds `ids` (newest is the highest `at`); `refuse` maps an id to how many times Gmail refuses it. */
+  const searchable = (email: string, ids: Record<string, number>, refuse: Record<string, number> = {}) => vi.fn(async (_service: GoogleService, url: string, init: Init = {}) => {
+    if (url === `${BASE}/threads`) return { threads: Object.keys(ids).map(id => ({ id, historyId: '1' })) };
+    const id = url.split('/').at(-1)!;
+    if ((refuse[id] ?? 0) > 0) { refuse[id]--; throw limitedBy; }
+    expect(init.params).toMatchObject({ format: 'full' });
+    return { id, historyId: '1', messages: [message('INEA <e-rachunek@inea.com.pl>', `Rachunek ${id}`, ids[id], false)] };
+  });
+
+  it('reads once for the same query asked twice, newest first and at most the limit of all accounts together', async () => {
+    const a = searchable('a@x.pl', { a1: 4, a2: 1 }), b = searchable('b@x.pl', { b1: 3, b2: 2 });
+    const reader = createMailReader([{ email: 'a@x.pl', request: a }, { email: 'b@x.pl', request: b }]);
+    const [first, again] = await Promise.all([reader.search('from:inea.com.pl', 3), reader.search('from:inea.com.pl', 3)]);
+    expect(first).toBe(again);
+    expect(first.map(t => [t.threadId, t.address, t.unread])).toEqual([['a1', 'e-rachunek@inea.com.pl', false], ['b1', 'e-rachunek@inea.com.pl', false], ['b2', 'e-rachunek@inea.com.pl', false]]);
+    expect(a.mock.calls.filter(([, url]) => url === `${BASE}/threads`)).toHaveLength(1);
+  });
+
+  it('waits 2 s and 5 s when Gmail limits the rate, then fails with the cause named', async () => {
+    const waits: number[] = [];
+    const wait = async (ms: number) => { waits.push(ms); };
+    const twice = searchable('me@x.pl', { b1: 1 }, { b1: 2 });
+    expect((await createMailReader([{ email: 'me@x.pl', request: twice }], Date.now, wait).search('q', 30)).map(t => t.threadId)).toEqual(['b1']);
+    expect(waits).toEqual([2_000, 5_000]);
+    const always = searchable('me@x.pl', { b1: 1 }, { b1: 9 });
+    const error = await createMailReader([{ email: 'me@x.pl', request: always }], Date.now, wait).search('q', 30).catch(e => e);
+    expect(mailFailure(error)).toEqual({ kind: 'rate', detail: 'HTTP 429 rateLimitExceeded' });
+    expect(mailFailure(new GoogleAuthError('token_expired'))).toEqual({ kind: 'auth', detail: 'auth token_expired' });
+    // Wektor is told what happened and what to do, not a bare 502 (he retried three times and slept 70 s, 30.10.2026).
+    expect(sourceFailure(new SourceError(429, mailFailure(error).detail))).toMatch(/^Gmail chwilowo ogranicza liczbę zapytań \(HTTP 429 rateLimitExceeded\)[\s\S]*wywołaj narzędzie raz/);
   });
 });

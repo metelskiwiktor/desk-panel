@@ -1,0 +1,19 @@
+{
+  "description": "Wyrazna prosba o masowe oznaczenie nieoznaczonych operacji tym, co panel podpowiada: karta panel_bank_assign (grupy), nie tabela i nie reczne wyliczanie. Karty nie klikamy (dane prawdziwe). Jesli nie ma juz operacji z pewna podpowiedzia, narzedzie odmowi i Wektor ma to powiedziec.",
+  "turns": [
+    {
+      "say": "Przypisz hurtem nieoznaczone operacje do tego, co panel podpowiada",
+      "expect": {
+        "calls": ["panel_guide"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action", "panel_cezar_propose", "panel_recon_report", "panel_bank_propose"],
+        "maxTools": 8,
+        "textNot": ["oznaczyłem", "przypisałem", "zmieniłem"],
+        "order": [["panel_guide", "panel_bank_assign"]]
+      },
+      "soft": [
+        { "name": "nie liczy w terminalu", "text": "^(?![\\s\\S]*(python|execute_code))" },
+        { "name": "krótko (do 5 zdań)", "text": "^(?:[^.!?]*[.!?]){0,5}[^.!?]*$" }
+      ]
+    }
+  ]
+}

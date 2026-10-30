@@ -110,17 +110,11 @@ Okno nie wylicza wszystkiego: druga strona pokazuje wybraną albo pole z nazwą 
 pasujących); etykiety pokazują wybrane i osiem najczęstszych, resztę znajduje wpisywanie. Wpisana nazwa równa zapisanej stronie to ta strona;
 „to ktoś inny” robi nową o tej samej nazwie. Podgląd surowej odpowiedzi po najechaniu na wiersz został.
 
-Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo bank oddaje tylko 35 dni, więc salda rozliczeń i przyszłe widoki
-operacji cyklicznych mają całą historię bez migracji. Pliki wcześniejszych wersji są przenoszone same przy odczycie, bez pytania:
+Oznaczenie trzyma kopię swojej operacji (dzień, kwota, nazwa, sposób), bo panel czyta z banku 90 dni (a gdy bank odrzuci taki okres, 35), więc salda rozliczeń i przyszłe widoki
+operacji cyklicznych mają całą historię bez migracji. Plik ma wersję 4 (ruch, jedna oś, druga strona bez rodzaju). Kod, który przenosił pliki
+wersji 1–3 przy odczycie, usunięto po przeniesieniu jedynego pliku; starszy plik trafia do kopii obok i oznaczenia zaczynają się od zera
+(historia gita ma ten kod, commit przed `6c9634d`).
 
-| Wcześniej | Teraz |
-| --- | --- |
-| kategoria | jej ruch: kategoria używana wyłącznie przy wpływach staje się źródłem przychodu, każda inna kategorią wydatku |
-| kategoria „Pożyczka” (wersje 1–2), cel pożyczka, zwrot, dług bez kategorii | Rozliczenie z tą osobą |
-| strona „Ja” i wpływ | Przychód ze źródła „Pensja” (tworzonego, gdy go nie ma) |
-| strona „Ja” i wypływ | Przełożenie |
-| inny cel (dokładka, prezent) | etykieta; ruch z kategorii albo, bez niej, Wydatek lub Przychód według znaku |
-| rodzaj strony (osoba, firma, Ja) | znika; identyfikatory zostają |
 ### Druga strona i jej identyfikatory
 
 Druga strona (`k-…`; `p-…` i `m-…` to osoby i sprzedawcy z wcześniejszych wersji) to encja z listą identyfikatorów. Co bank faktycznie
@@ -183,7 +177,7 @@ w 3 z 33.
 | Trasa | Co robi |
 | --- | --- |
 | `GET /api/bank/labels` | kategorie wydatków, źródła przychodu i kieszenie (`move`), nawyk drugiej strony przy nieoznaczonych (`habits`), etykiety, drugie strony (identyfikatory w postaci uciętej), oznaczenia operacji z ostatniego odczytu, rozpoznana druga strona (`known`), podpowiedzi, lista „do przypisania”, salda rozliczeń (`balances`; `src/bank-labels-contract.ts`) |
-| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label` (ruch, kategoria, druga strona, etykiety, cykliczne, opis; kategoria musi być z listy ruchu, rozliczenie wymaga drugiej strony), `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `renameTag`, `deleteTag`, `createParty`, `updateParty` (nazwa), `deleteParty`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
+| `POST /api/bank/labels/action` | jedna akcja, sprawdzana po `Origin` jak inne zapisy: `label` (ruch, kategoria, druga strona, etykiety, cykliczne, opis; kategoria musi być z listy ruchu, rozliczenie wymaga drugiej strony), `clear`, `accept` (z numerem możliwości), `reject`, `createCategory`, `updateCategory`, `deleteCategory`, `mergeCategory` (oznaczenia kategorii przechodzą do innej z tej samej listy, nazwa może zostać etykietą; w Ustawieniach przycisk „Scal”), `renameTag`, `deleteTag`, `createParty`, `updateParty` (nazwa), `deleteParty`, `forgetIdentifier`, `setSince`; odmowa ma pole `error` z powodem |
 | `GET /api/agent/bank` | tekst dla agenta czatu: saldo, operacje z zakresu (`from`, `to`, domyślnie 30 dni, najwyżej 400; `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane=1`), przychody, wydatki i netto, wydatki według kategorii, przychody według źródła, salda rozliczeń z całej historii; bez pełnych numerów |
 
 Przeglądarka czyta oznaczenia co minutę i zaraz po każdej akcji; to odczyt pamięci serwera, bank nie jest pytany. Agent oznaczeń nie
@@ -196,3 +190,56 @@ zmienia (instrukcja w `server/agent-chat.ts`), a to, co odczyta z `/api/agent/ba
 `recurring`, `comment`) to oznaczenia na start; drugie strony uczą się identyfikatorów z nich jak z gestu, a akcje są
 pamiętane w pamięci do restartu. Scenariusz standardowy ma rozliczenie z Anną (saldo „Anna czeka na zwrot 120 zł”), pensję z firmy i sprzedaż
 laptopa jako przychody, pewne podpowiedzi (Biedronka, Claude, Moja firma, Anna) i wybór po samej kwocie (BLIK 70,85 zł). Scenariusz nie obsługuje łączenia z bankiem.
+
+## Wektor i bank: karta danych i karta zgody
+
+Czat (Wektor, Hermes) czyta bank narzędziami `panel_bank` (tekst) i `panel_show` (karta z wierszami). Karta danych (`GET /api/bank/show`:
+`view` tabela albo słupki, `kategorie` po nazwie, `nieoznaczone`, `from`/`to`) czyta wiersze sama, a model dostaje tylko podsumowanie:
+sumy, od kiedy są oznaczenia, ile wydatków jest nieoznaczonych i nazwy operacji w pokazanych oraz w innych kategoriach.
+
+Zmianę Wektor może tylko zaproponować: `panel_bank_propose` (`merge` dokładne nazwy kategorii wydatków, `into` nazwa docelowa, nowa albo
+istniejąca, `tags` czy zostawić nazwy scalanych kategorii jako etykiety). Karta zgody pokazuje podgląd liczony przez panel
+(`GET /api/bank/plan`): wiersze „ile × kategoria, jej etykiety” po lewej, wspólną strzałkę, po prawej kategorię docelową z nowymi
+etykietami (zielone, z plusem) i tymi, które już są; kategoria, która znika, jest przekreślona z minusem. Nic się nie zmienia, dopóki
+użytkownik nie kliknie „Wykonaj”: wtedy `POST /api/chats/:id/bank-plan` (tylko id karty i decyzja) bierze plan z rozmowy, liczy go
+jeszcze raz i wykonuje jedną atomową akcją `mergeInto`. Decyzja i podgląd z chwili odpowiedzi zostają przy rozmowie
+(`~/.desk-panel/cockpit.json`), więc karta pokazuje je także później. Wektor nie pokazuje karty z własnej inicjatywy przy samej prośbie o
+radę: najpierw proponuje słowami, kartę dopiero po zgodzie albo przy wyraźnej prośbie o zmianę. Id karty to skrót z planu
+(`stableBankCardId`), bo Hermes nie daje użytecznych id wywołań. Instrukcja rozmowy o banku to `BANK_GUIDE` w `src/chat-contract.ts`
+(skill „Bank”); Wektor czyta ją narzędziem `panel_guide`, gdy rozmowa dochodzi do banku (rejestr `PANEL_GUIDES`), a preambuła ma o niej tylko jedną linijkę.
+
+Masowe oznaczanie (`panel_bank_assign`, ta sama powłoka karty zgody, inne ciało): Wektor podaje najwyżej zakres dni (`from`/`to`, tylko gdy
+użytkownik go wskazał), resztę liczy panel (`server/bank-assign.ts`, `GET /api/bank/assign`). Karta grupuje nieoznaczone operacje **według odbiorcy**
+(ten sam sklep lub osoba, po tekście w banku, rachunku, telefonie albo nazwie), a nie według oznaczenia: operacje jednego odbiorcy nie muszą mieć tego samego oznaczenia (stacja paliw: paliwo albo jedzenie). Dla odbiorcy panel pokazuje **szablony**,
+czyli oznaczenia, które dostały jego wcześniejsze operacje (ruch, kategoria, etykiety, cykliczność), od najczęstszego, z liczbą. Gdy wszystkie wcześniejsze
+operacje odbiorcy dostały to samo (co najmniej dwie), jego szablon jest domyślnie zaznaczony na karcie („zawsze to samo”); w pozostałych grupach
+(„różnie”, albo tylko jedna wcześniejsza operacja) użytkownik wybiera szablon dla całej grupy. Każdą operację można zmienić osobno: szablon z historii
+odbiorcy albo dowolna kategoria użytkownika (kategoria przychodu ustawia przychód). Karta zaczyna od zakresu dat (o co pytano i jakie dni obejmują operacje).
+Płatność, której bank nie podpisuje sklepem (telefon, BLIK, z karty), nie ma odbiorcy i nie jest podpowiadana ani po kwocie, ani po historii: leży w osobnej sekcji
+„Bez sklepu”, gdzie użytkownik zaznacza płatności (filtr po kwocie i „zaznacz widoczne” pomagają), a potem klika szablon (zestaw: ruch, kategoria, etykiety,
+ewentualnie notatka „druga strona”, liczony z jego dotychczasowych oznaczeń takich płatności, od najczęściej użytego) albo wybiera dowolną kategorię. Dokładnie ta sama kwota
+oznaczona wcześniej tak samo co najmniej dwa razy daje tylko dopisek przy płatności i pierwsze miejsce szablonu na liście tej płatności, nigdy zaznaczenie.
+Kategorię, której użytkownik jeszcze nie ma, zakłada się wprost z karty („+ Nowa kategoria…” na liście przy operacji, płatności albo odbiorcy; wydatek, kolor i ikonę
+wybiera panel): istnieje tylko na karcie, dopóki nie padnie „Wykonaj”, a wtedy `markMany` zakłada ją i oznacza w jednym zapisie (nazwa istniejącej kategorii
+wydatków to ta kategoria, bez duplikatu; odrzucony zapis nie zostawia kategorii). Żądanie niesie `newCategories` (nazwy) i odwołuje się do nich w `picks`/`groupPicks` przez `newCategory`.
+Nic nie wchodzi do zapisu bez zaznaczenia lub wyboru, a zaznaczenie na karcie nie jest zapisem: oznacza dopiero „Wykonaj”.
+`POST /api/chats/:id/bank-plan` bierze wtedy tylko wybór (`skip` odbiorców, `skipOps` operacji, `groupPicks` szablon grupy, `picks` szablon albo kategoria
+operacji; klucze `r-…`, `t-…`, id kategorii), który panel rozwiązuje jeszcze raz na tym, co trzyma w chwili kliknięcia i odrzuca to, czego już nie ma.
+Zapis to jedna atomowa akcja `markMany` (każda operacja z całym oznaczeniem; operacja już oznaczona w międzyczasie odrzuca całość), wynik, wybór i podgląd
+zostają w `cockpit.json`. Id karty to skrót zakresu dni, więc ten sam zakres to ta sama karta. Pewność podpowiedzi w oknie oznaczania zaczyna się od dwóch
+zgodnych wcześniejszych oznaczeń, nie od jednego.
+
+### Otwarte pomysły (Wektor i bank)
+
+- **Potwierdzenia zamówień z Gmaila jako wskazówka sklepu** (nie teraz): płatność telefonem lub BLIK-iem nie niesie nazwy sklepu, ale sklepy (np. pyszne.pl) wysyłają
+  mail z potwierdzeniem; data (i godzina) maila z nazwą nadawcy mogłaby wskazać, jaki to sklep, bez zgadywania po kwocie (kwoty się zmieniają: napiwek, podatek, dodatki).
+  Panel już czyta Gmail tylko do odczytu (docs/gmail.md). Do rozważenia, gdy płatności bez nazwy dalej będą problemem.
+- **Głębokość odczytu i schematy:** ustawienia `HISTORY_DAYS`, `MAX_PAGES`, `KEEP` (`server/bank.ts`) i limit w `src/bank-contract.ts` muszą iść razem (kafelek odrzuca odpowiedź, gdy operacji jest więcej niż schemat dopuszcza, i pokazuje „Nie można połączyć się z lokalnym serwerem”). Po pierwszym odczycie z 90 dniami w logu jest, ile stron przeczytano i czy bank miał więcej.
+- **Zasada podpowiedzi** (ustalona z użytkownikiem): pewność bierze się z tego, co pokazuje bank (tekst sklepu, rachunek, numer, nazwa), a wiedza użytkownika jest
+  oznaczeniem, nigdy tożsamością. Płatność bez nazwy z banku nie ma „odbiorcy” i nie dostaje podpowiedzi z kwoty; użytkownik wybiera dla niej szablon (kategoria i etykiety
+  z jego wcześniejszych oznaczeń), a sklep, jeśli go zna, wpisuje jako etykietę, nie jako drugą stronę.
+- **Kalendarz wstecz** (`panel_calendar_search`): źródło kalendarza czyta tylko od dziś 42 dni do przodu, więc Wektor nie sprawdzi wizyt z przeszłości (np. czy wizyty u podologa trwają od lipca). Szukanie po słowie w zakresie wstecz.
+- **Karta zgody z kilkoma grupami** i jednym „Wykonaj”: dziś jedna karta to jedna kategoria docelowa, dwie zmiany to dwie karty.
+- **Kolejne dziedziny** (kalendarz, zadania) jako wpisy w `PANEL_GUIDES` oraz kolejne kształty zmian (przeniesienie, usunięcie) jako ciała karty zgody.
+- **Polityka scalania** (kiedy scalać, a kiedy zostawić osobno) w słowach użytkownika, gdy się ustali; Wektor może sam zaproponować dopisek do przewodnika.
+- **Karta danych**: Wektor raz pokazuje ją sam, raz proponuje; zostawione bez wymuszania.

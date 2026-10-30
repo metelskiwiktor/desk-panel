@@ -1,0 +1,47 @@
+{
+  "description": "Użytkownik pyta, czy scalić kategorie lekarskie w jedną z etykietami. Wektor ma ocenić, pokazać wydatki kartą danych i niczego nie zmieniać.",
+  "turns": [
+    {
+      "say": "Mam sporo wydatków typu psycholog/fizjoterapeuta/podolog - może scalić to w 1 o nazwie Lekarz z tagami? Co uważasz? Pokaż je",
+      "expect": {
+        "calls": [
+          "panel_guide",
+          "panel_bank",
+          "panel_show"
+        ],
+        "notCalls": [
+          "panel_todo_action",
+          "panel_cezar_action",
+          "panel_cezar_propose",
+          "panel_recon_report",
+          "panel_bank_propose"
+        ],
+        "maxTools": 8,
+        "order": [
+          [
+            "panel_guide",
+            "panel_show"
+          ]
+        ]
+      },
+      "soft": [
+        {
+          "name": "wspomina aptekę",
+          "text": "aptek"
+        },
+        {
+          "name": "zauważa, że oznaczenia są krótkie / danych mało",
+          "text": "oznacza|nieoznaczon|mało|krótk|trudno|od kiedy|jak długo"
+        },
+        {
+          "name": "ocenia pomysł (zdrowie / lekarz / etykiety)",
+          "text": "zdrowi|lekarz|etykiet|tag"
+        },
+        {
+          "name": "nie wypisuje wierszy z karty ponownie",
+          "text": "^(?![\\s\\S]*(Gabinet|\\d{4}-\\d{2}-\\d{2}))"
+        }
+      ]
+    }
+  ]
+}

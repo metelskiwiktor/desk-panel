@@ -1,9 +1,9 @@
-# Starts the kiosk window (scripts/kiosk.ps1) when this Windows user signs in: a scheduled task of the user, no elevation.
+# Starts the kiosk window (scripts/kiosk-run.ps1 -> kiosk.ps1) when this Windows user signs in: a scheduled task of the user, no elevation.
 # Usage: scripts/kiosk-autostart.ps1 [-Action ON|OFF|STATUS] [-Display P16]
 param([ValidateSet('ON', 'OFF', 'STATUS')][string]$Action = 'STATUS', [string]$Display = 'P16')
 $ErrorActionPreference = 'Stop'
 $name = 'Desk Panel kiosk'
-$script = Join-Path $PSScriptRoot 'kiosk.ps1'
+$script = Join-Path $PSScriptRoot 'kiosk-run.ps1'
 
 switch ($Action) {
   'ON' {

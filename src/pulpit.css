@@ -797,6 +797,9 @@ button.p2-badge.bank-todo { border: 0; cursor: pointer; background: color-mix(in
 .bank-set-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .bank-set-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; }
 .bank-set-list li > .bank-cat-editor { flex: 1 1 100%; }
+.bank-set-list li > .bank-merge { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--p2-muted); }
+.bank-merge select { height: 36px; padding: 0 8px; border: 1px solid var(--p2-line); border-radius: 9px; background: var(--p2-surface); color: var(--p2-text); font: inherit; }
+.bank-merge button { height: 36px; padding: 0 12px; border-radius: 9px; background: var(--p2-surface); color: var(--p2-text); }
 .bank-set-list li > button { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 0 8px; border-radius: 9px; background: var(--p2-surface); color: var(--p2-muted); }
 .bank-set-list li > button.danger { color: var(--quota-red); }
 .bank-set-list li > button svg { margin-left: 0; }

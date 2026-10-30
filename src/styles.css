@@ -1149,6 +1149,7 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 }
 .sa-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -1283,6 +1284,52 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   color: var(--quota-red);
 }
 
+.sa-problem {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sa-amount {
+  margin-right: 6px;
+  font-weight: 600;
+}
+.sa-opts {
+  flex-basis: 100%;
+  order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 22px;
+}
+.sa-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px dashed #3b485d;
+  background: transparent;
+  color: #dbe3ee;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sa-opt:hover:not(:disabled) {
+  background: #202c3e;
+}
+.sa-opt.sure {
+  border: 1px solid rgba(117, 212, 155, 0.5);
+  background: rgba(117, 212, 155, 0.16);
+  color: #ffffff;
+}
+.sa-opt:disabled {
+  opacity: 0.5;
+}
+.sa-opt-note {
+  font-size: 11px;
+  color: var(--muted);
+}
 .smart-actions:not(.wide) .sa-item {
   flex-wrap: wrap;
   row-gap: 4px;
@@ -1674,4 +1721,253 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
 .gh-pr-tile.tall .gh-pr-list {
   gap: 8px;
 }
+
+/* — OpenRouter Spend Tile — */
+.or-tile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.or-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.or-title-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.or-icon {
+  color: #e3b341;
+}
+
+.or-hover-preview {
+  font-size: 11px;
+  color: var(--p2-muted, var(--muted));
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.or-hover-model {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.or-hover-usd {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.or-hover-sub {
+  color: #8b949e;
+}
+
+.or-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 10px 8px;
+}
+
+.or-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.or-tile.wide .or-content {
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  gap: 14px;
+  height: 100%;
+}
+
+.or-chart-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.or-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2px;
+  height: 100%;
+  min-height: 80px;
+  padding-bottom: 2px;
+}
+
+.or-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+  cursor: pointer;
+  outline: none;
+  border-radius: 3px;
+  padding: 2px 1px 0;
+  transition: background 0.15s ease;
+}
+
+.or-col:hover,
+.or-col:focus-visible,
+.or-col.active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.or-col-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 0;
+}
+
+.or-col-bar {
+  width: 100%;
+  max-width: 14px;
+  min-width: 3px;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.or-seg {
+  width: 100%;
+  min-height: 1px;
+  outline: none;
+  transition: filter 0.1s ease;
+}
+
+.or-seg:hover,
+.or-seg:focus-visible {
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.or-col-day {
+  font-size: 9px;
+  color: var(--p2-muted, var(--muted));
+  margin-top: 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.or-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.or-metrics {
+  display: flex;
+  gap: 8px;
+  justify-content: space-around;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.or-tile.wide .or-metrics {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.or-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.or-metric-label {
+  font-size: 10px;
+  color: var(--p2-muted, var(--muted));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.or-metric-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+}
+
+.or-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.or-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.or-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.or-legend-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--p2-muted, var(--muted));
+  font-size: 11px;
+}
+
+.or-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 80px;
+  gap: 6px;
+  color: var(--p2-muted, var(--muted));
+  text-align: center;
+}
+
+.or-error-icon {
+  color: #f85149;
+  opacity: 0.8;
+}
+
 

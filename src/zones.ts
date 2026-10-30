@@ -26,12 +26,6 @@ export function cycleSize<T>(order: readonly T[], current: T): T {
   return order[(order.indexOf(current) + 1) % order.length];
 }
 
-/** One step along `order`, stopping at the ends. */
-export function stepSize<T>(order: readonly T[], current: T, direction: 1 | -1): T {
-  const next = order.indexOf(current) + direction;
-  return order[Math.min(order.length - 1, Math.max(0, next))];
-}
-
 export function parseZones(raw: string | null): Zones {
   try {
     const value = JSON.parse(raw ?? 'null');
@@ -64,13 +58,3 @@ export function useZones(resetSignal: boolean) {
   };
 }
 
-/**
- * Returns whether work content is present for PR data.
- * Must be false when PR data is empty or absent, keeping zones tests green.
- */
-export function hasWorkContent(prData?: { pullRequests?: unknown[] } | unknown[] | null): boolean {
-  if (!prData) return false;
-  if (Array.isArray(prData)) return prData.length > 0;
-  if (Array.isArray(prData.pullRequests)) return prData.pullRequests.length > 0;
-  return false;
-}

@@ -9,6 +9,7 @@ setup:
     npm ci
     node scripts/dependencies.mjs
     npx playwright install chromium
+    node scripts/link-skills.mjs
 
 # Start API and Vite for development.
 dev:
@@ -22,6 +23,11 @@ scenario name="standard":
 screenshots name="standard" *args:
     node scripts/ensure-deps.mjs
     npm run scenario -- {{name}} --shot {{args}}
+
+# Synthetic browser flows for Wektor: composer, keyboard, history, switching, or all. No real agent or provider.
+wektor-ui case="all" *args:
+    node scripts/ensure-deps.mjs
+    npx tsx scripts/wektor-ui.ts {{case}} {{args}}
 
 # Target screens from devices.json with derived CSS sizes and Chrome DevTools values.
 devices:
@@ -51,11 +57,15 @@ kiosk-taskbar action="HIDE" display="P16":
 garmin-login:
     npx tsx scripts/garmin-login.ts
 
-# Run all tests, typecheck and produce the frontend served by the service.
+# Tests, typecheck, dead code (knip) and the frontend build, side by side. Run before publishing.
 check:
     node scripts/ensure-deps.mjs
-    npm test
-    npm run build
+    node scripts/check.mjs
+
+# While working: only the tests that the uncommitted changes can affect (vitest --changed).
+test-fast:
+    node scripts/ensure-deps.mjs
+    npx vitest run --changed
 
 # Bring origin/main in (stops on any conflict with local work), test, build and restart
 # the service with it, uncommitted local changes included. Pass --force to redeploy.

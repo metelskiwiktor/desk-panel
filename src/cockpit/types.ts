@@ -42,12 +42,33 @@ export interface ReconArgs {
 export const DISPATCH = 'cezar_dispatch';
 /** `refused`: why the panel refused the proposal (sent before its recon's answer); the card offers no „Zleć” then. */
 export interface DispatchArgs { title: string; repo?: string; prompt: string; workflow?: string; todoId?: string; legacyUnresolved?: boolean; refused?: string }
-export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string } | { decision: 'rejected' };
+export type DispatchResult = { decision: 'dispatched'; taskId: string; prompt: string; url?: string; runner?: string; model?: string; steps?: Record<string, { runner?: string; model?: string }> } | { decision: 'rejected' };
 
 /** `@nasłuchuj cezara`: the agent watches a running Cezar task (watchdog). */
 export const WATCH = 'cezar_watch';
 /** The mock gives the steps; Hermes gives the task id (`id`) and its tool answers with the task as JSON. */
 export interface WatchArgs { taskId?: string; id?: string; steps?: { label: string; state: StepState }[]; progress?: number }
+
+/** The data card (`panel_show`): the arguments as the model wrote them (the card checks them); the rows the card reads itself. */
+export const SHOW = 'bank_show';
+export interface ShowArgs { tytul?: unknown; view?: unknown; kategorie?: unknown; nieoznaczone?: unknown; from?: unknown; to?: unknown; refused?: string }
+
+/** The consent card for a change in the account's categories (`panel_bank_propose`): the arguments as the model wrote them (checked by the card). */
+export const BANK_PLAN = 'bank_plan';
+export interface BankPlanArgs { tytul?: unknown; merge?: unknown; into?: unknown; tags?: unknown; refused?: string }
+
+/** The consent card for marking many operations with the panel's own suggestions (`panel_bank_assign`). */
+export const BANK_ASSIGN = 'bank_assign';
+export const APPOINTMENT = 'appointment';
+export const CALENDAR_PLAN = 'calendar_plan';
+export interface BankAssignArgs { tytul?: unknown; from?: unknown; to?: unknown; refused?: string }
+
+/** The mail list card (`panel_mail_show`): the Gmail query; the rows the card reads itself. */
+export const MAIL_LIST = 'mail_list';
+export interface MailListArgs { q?: unknown; tytul?: unknown; refused?: string }
+/** The consent card for a Smart Actions rule (`panel_smart_rule_propose`): the plan as the model wrote it (checked by the card). */
+export const SMART_RULE = 'smart_rule';
+export interface SmartRuleArgs { tytul?: unknown; rule?: unknown; remove?: unknown; q?: unknown; refused?: string }
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';
@@ -65,7 +86,7 @@ export interface CockpitState {
   pr?: CockpitPr;
 }
 
-export interface CockpitChat { id: string; title: string; running: boolean; updatedAt: number }
+export interface CockpitChat { id: string; title: string; running: boolean; createdAt?: number; updatedAt: number }
 
 /** Where the window gets its conversation and cockpit: the mock (scenarios, `?cockpit=mock`) or Hermes. */
 export interface CockpitSource {
@@ -79,6 +100,9 @@ export interface CockpitSource {
   unavailable: boolean;
   /** Loading the conversation that was picked. */
   loading: boolean;
+  /** A cached conversation may render immediately; decisions wait for the current server state. */
+  refreshing?: boolean;
+  cockpitLoading?: boolean;
   error: string;
   clearError(): void;
   /** False when the message was not taken: the composer keeps it. */
@@ -89,6 +113,7 @@ export interface CockpitSource {
   respond(toolCallId: string, response: unknown): void | Promise<void>;
   chats: CockpitChat[] | null;
   activeId: string | null;
+  createdAt?: number;
   open(id: string | null): void;
   remove(): void;
   cockpit: CockpitState;

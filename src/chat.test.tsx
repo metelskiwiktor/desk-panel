@@ -1,15 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CHAT_SKILLS, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
-import { CARD_SHOWN } from './cockpit-contract';
-import { ChatWindow, groupOf, messageCount } from './ChatWindow';
+import { CHAT_SKILLS, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
+import { ChatWindow, groupOf } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
-import { clearChatDraft, getChatDraft } from './chat-draft';
-
-const ID = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b11';
-const NOW = new Date('2026-10-25T12:00:00').getTime();
+import { getChatDraft } from './chat-draft';
+import { FakeSource, ID, NOW, chatHooks, detail, history, listed, mockServer, openConversation, summary, type Call } from './chat.test-kit';
 
 describe('pointing at the dashboard', () => {
   const tile = () => {
@@ -59,9 +56,6 @@ describe('helpers', () => {
     const day = 86_400_000;
     expect([NOW, NOW - day, NOW - 3 * day, NOW - 20 * day].map(t => groupOf(t, NOW))).toEqual(['Dziś', 'Wczoraj', 'Ostatnie 7 dni', 'Starsze']);
   });
-  it('counts messages in Polish', () => {
-    expect([1, 2, 5].map(messageCount)).toEqual(['1 wiadomość', '2 wiadomości', '5 wiadomości']);
-  });
   it('replaces a message in place, or adds it', () => {
     const a = { id: 'a', role: 'user', at: 1, text: 'x' } as ChatMessage, b = { id: 'b', role: 'agent', at: 2 } as ChatMessage;
     expect(withMessage([a], b)).toEqual([a, b]);
@@ -69,59 +63,7 @@ describe('helpers', () => {
   });
 });
 
-// ── the window ──
-class FakeSource {
-  static CLOSED = 2;
-  static instances: FakeSource[] = [];
-  readyState = 1;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor(public url: string) { FakeSource.instances.push(this); }
-  close() { this.readyState = 2; }
-  emit(event: ChatEvent) { act(() => this.onmessage?.({ data: JSON.stringify(event) })); }
-}
-
-const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({ id: ID, title: 'Zadanie z maila od Anny', createdAt: NOW - 3600_000, updatedAt: NOW - 1800_000, messages: 2, running: false, engine: 'hermes', ...over });
-const detail = (items: ChatMessage[], over: Partial<ChatSummary> = {}): ChatDetail => ({ ...summary({ messages: items.length, ...over }), items });
-const mailChip = { kind: 'mail' as const, id: 't1', title: 'Anna Nowak', text: 'Od: Anna' };
-const history: ChatMessage[] = [
-  { id: 'u1', role: 'user', at: NOW - 3000_000, text: 'Zrób z tego zadanie na jutro.', context: [mailChip] },
-  { id: 'a1', role: 'agent', at: NOW - 2900_000, status: 'done', parts: [
-    { type: 'tool', id: 's1', name: 'add_todo', input: '{"title":"Odpowiedzieć Annie"}', output: 'ok', state: 'done' },
-    { type: 'text', text: 'Dodałem **zadanie** na jutro.' },
-  ] },
-];
-
-interface Call { url: string; method: string; body?: any }
-function mockServer(chats: ChatSummary[] = [summary()], status = 200) {
-  const calls: Call[] = [];
-  const reply = (value: unknown, code = 200) => new Response(JSON.stringify(value), { status: code, headers: { 'Content-Type': 'application/json' } });
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input), method = init?.method ?? 'GET';
-    calls.push({ url, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
-    if (status !== 200) return reply({ error: 'x' }, status);
-    if (url === '/api/chats' && method === 'GET') return reply({ chats });
-    if (url === '/api/chats' && method === 'POST') return reply({ id: ID }, 201);
-    return reply({ ok: true }, method === 'POST' ? 202 : 200);
-  }));
-  return calls;
-}
-
-beforeEach(() => {
-  FakeSource.instances = [];
-  vi.stubGlobal('EventSource', FakeSource);
-  vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; isPrimary = true; });
-  vi.useRealTimers();
-});
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearChatDraft(); localStorage.clear(); document.body.removeAttribute('data-picking'); document.body.removeAttribute('data-chat-dock'); window.history.replaceState(null, '', '/'); });
-
-/** The conversations sit behind the title of the window. */
-async function openConversation(user: ReturnType<typeof userEvent.setup>, title: RegExp) {
-  await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
-  await user.click(await within(screen.getByRole('group', { name: 'Poprzednie rozmowy' })).findByRole('button', { name: title }));
-}
-/** The list has loaded (the window asks for it when it opens). */
-const listed = () => waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/chats')).toBe(true));
+chatHooks();
 
 describe('ChatWindow', () => {
   it('lists conversations and continues one with its history', async () => {
@@ -333,7 +275,7 @@ describe('Hermes only', () => {
     const list = screen.getByRole('group', { name: 'Poprzednie rozmowy' });
     expect(await within(list).findByRole('button', { name: /Hermesowa/ })).toBeTruthy();
     expect(within(list).queryByRole('button', { name: /Stara z agy/ })).toBeNull();
-    await user.click(within(list).getByRole('button', { name: /Nowy czat/ }));
+    await user.click(within(screen.getByRole('complementary', { name: 'Historia rozmów' })).getByRole('button', { name: /Nowy czat/ }));
     await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Cześć{Enter}');
     await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body).toMatchObject({ text: 'Cześć', engine: 'hermes' }));
     expect(calls.some(c => c.method === 'PUT')).toBe(false);
@@ -393,189 +335,6 @@ describe('Hermes only', () => {
   });
 });
 
-describe('the cockpit on its mock (?cockpit=mock)', () => {
-  beforeEach(() => {
-    // The mock never talks to the server: any request fails the test.
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('the mock must not call the server'); }));
-    window.history.replaceState(null, '', '/?cockpit=mock&cockpitSpeed=0.01');
-  });
-
-  it('runs @Zaimplementuj zadanie: recon, the approval card, then Cezar watched up to a PR in review', async () => {
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    expect(screen.getByText('Brak aktywnego monitorowania')).toBeTruthy();
-    await user.type(screen.getByLabelText('Wiadomość do agenta'), '@zaimpl{Enter}Dodaj chip statusu{Enter}');
-    const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
-    const approval = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
-    expect(within(recon).getByText('src/ChatWindow.tsx')).toBeTruthy();
-    expect(within(recon).getByText('UI')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('Żaden task');
-
-    // Correct the prompt, then dispatch the corrected one.
-    await user.click(within(approval).getByRole('button', { name: 'Edytuj prompt' }));
-    const prompt = within(approval).getByLabelText('Prompt dla executora');
-    await user.clear(prompt);
-    await user.type(prompt, 'Task: poprawiony prompt');
-    await user.click(within(approval).getByRole('button', { name: 'Zleć z poprawkami' }));
-    expect(await within(approval).findByText('Zlecono na Cezarze')).toBeTruthy();
-    expect(within(approval).getByText('Task: poprawiony prompt')).toBeTruthy();
-
-    expect(await screen.findByRole('region', { name: 'Nasłuchiwanie Cezara' })).toBeTruthy();
-    const task = screen.getByRole('region', { name: 'Aktywny task Cezara' });
-    await waitFor(() => expect(within(task).getByText('REVIEW')).toBeTruthy(), { timeout: 5000 });
-    expect(within(task).getByText('cz-7f3a91')).toBeTruthy();
-    expect(within(task).getByRole('link', { name: /Otwórz w Cezarze/ })).toBeTruthy();
-    const pr = screen.getByRole('region', { name: 'Pull request' });
-    expect(within(pr).getByText('#42')).toBeTruthy();
-    expect(within(pr).getAllByLabelText('przeszedł')).toHaveLength(3);
-    expect(screen.getByRole('progressbar', { name: 'Postęp taska' }).getAttribute('aria-valuenow')).toBe('100');
-  });
-
-  it('rejecting sends nothing to Cezar; a watched task goes through to review', async () => {
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Zaimplementuj chip statusu{Enter}');
-    const approval = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' }, { timeout: 3000 });
-    await user.click(within(approval).getByRole('button', { name: 'Odrzuć' }));
-    expect(await screen.findByText('Odrzucone. Nic nie poszło do Cezara.')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Nasłuchiwanie Cezara' })).toBeNull();
-
-    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'nasłuchuj cezara{Enter}');
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Aktywny task Cezara' }).textContent).toContain('REVIEW'), { timeout: 5000 });
-    expect(screen.queryByRole('region', { name: 'Subtaski' })).toBeNull();
-  });
-
-  it('without Hermes shows the card, keeps the draft, and Ponów próbę brings it back', async () => {
-    window.history.replaceState(null, '', '/?cockpit=mock&cockpitSpeed=0.01&hermes=down');
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    expect(screen.getByText('Hermes nie odpowiada.')).toBeTruthy();
-    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Halo{Enter}');
-    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Halo');
-    await user.click(screen.getByRole('button', { name: 'Ponów próbę' }));
-    await waitFor(() => expect(screen.queryByText('Hermes nie odpowiada.')).toBeNull());
-    await user.click(screen.getByRole('button', { name: 'Wyślij' }));
-    expect(await screen.findByText(/To makieta Wektora/)).toBeTruthy();
-  });
-});
-
-describe('the live cockpit (Hermes and the panel)', () => {
-  const H = '1b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
-  const RUN = 'desk-panel/f2c9501e-7121-4746-8fc8-19ee3ee9d968';
-  const prompt = 'Task: Paski\nAcceptance criteria:\n- [ ] Jedno';
-  const turn: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'done', parts: [
-    { type: 'tool', id: 'r1', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/zones.ts', note: 'rozmiary' }], kind: 'UI', scenario: 'standard', prompt }), output: JSON.stringify({ result: `${CARD_SHOWN.recon}. recon: r-0123456789ab.` }), state: 'done' },
-    { type: 'text', text: 'Plan gotowy.' },
-    { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Paski stref', prompt, workflow: 'analysis', recon: 'r-0123456789ab' }), output: JSON.stringify({ result: `${CARD_SHOWN.dispatch}: decyzja należy do niego.` }), state: 'done' },
-  ] };
-  const view = (over: Record<string, unknown> = {}) => ({ observedAt: NOW, task: null, pr: null, dispatches: {}, ...over });
-  const running = {
-    id: RUN, title: 'Paski stref', status: 'RUNNING', repo: 'desk-panel', worktree: '.ai/cezar/worktrees/f2c9501e', tokens: 12_345,
-    url: 'http://127.0.0.1:4321/p/desk-panel/tasks/f2c9501e', steps: [{ label: 'Implement', state: 'running' }, { label: 'Open PR', state: 'pending' }], progress: 0.5,
-  };
-  function liveServer() {
-    const calls: Call[] = [];
-    let cockpit: ReturnType<typeof view> & { dispatches: Record<string, unknown> } = view();
-    const reply = (value: unknown, code = 200) => new Response(JSON.stringify(value), { status: code, headers: { 'Content-Type': 'application/json' } });
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input), method = init?.method ?? 'GET';
-      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-      calls.push({ url, method, body });
-      if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
-      if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false });
-      if (url.startsWith(`/api/chats/${H}/cockpit`)) return reply(cockpit);
-      if (url === `/api/chats/${H}/dispatch`) {
-        cockpit = view({ task: running, dispatches: { p1: { decision: 'dispatched', taskId: RUN, prompt: body.prompt, url: running.url, at: NOW } } });
-        return reply(cockpit.dispatches.p1);
-      }
-      return reply({ ok: true });
-    }));
-    return calls;
-  }
-
-  it('shows the recon and dispatch cards of Hermes, and dispatches through the panel only when the user clicks', async () => {
-    const calls = liveServer();
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await openConversation(user, /Zadanie z maila/);
-    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, turn], { id: H }) });
-    const recon = await screen.findByRole('region', { name: 'Rekonesans zadania' });
-    expect(within(recon).getByText('src/zones.ts')).toBeTruthy();
-    expect(within(recon).getByText('Rekonesans gotowy')).toBeTruthy();
-    const card = screen.getByRole('region', { name: 'Zgoda na zlecenie taska' });
-    expect(within(card).getByText('Zlecić na Cezarze?')).toBeTruthy();
-    expect(within(card).getByText('Workflow: analysis')).toBeTruthy();
-    expect(calls.some(c => c.url.endsWith('/dispatch') || c.url === '/api/cezar/runs')).toBe(false);
-
-    await user.selectOptions(within(card).getByLabelText('Wykonawca Cezara'), 'codex');
-    await user.selectOptions(await within(card).findByLabelText('Model Cezara'), 'gpt-6.1-sol');
-    await user.click(within(card).getByRole('button', { name: 'Zleć na Cezarze' }));
-    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/dispatch`)?.body).toEqual({ toolCallId: 'p1', decision: 'dispatch', title: 'Paski stref', prompt, workflow: 'analysis', runner: 'codex', model: 'gpt-6.1-sol' }));
-    expect(await within(card).findByText('Zlecono na Cezarze')).toBeTruthy();
-    const task = await screen.findByRole('region', { name: 'Aktywny task Cezara' });
-    await waitFor(() => expect(within(task).getByText('RUNNING')).toBeTruthy());
-    expect(within(task).getByText('12 345')).toBeTruthy();
-    expect(screen.getByText('Wektor monitoruje task')).toBeTruthy();
-
-  });
-
-  it('fills a card when Hermes streamed its tool without arguments and the panel completes them after the answer', async () => {
-    liveServer();
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await openConversation(user, /Zadanie z maila/);
-    const streamed: ChatMessage = { id: 'a2', role: 'agent', at: NOW, status: 'streaming', parts: [
-      { type: 'tool', id: 'p1', name: 'mcp__desk_panel__panel_cezar_propose', input: '{"title":"Pas', state: 'done' },
-    ] };
-    const source = FakeSource.instances.at(-1)!;
-    source.emit({ type: 'state', chat: detail([...history, streamed], { id: H, running: true }) });
-    const card = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
-    expect(within(card).getByText('Czekam na prompt od Hermesa…')).toBeTruthy();
-    expect((within(card).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(true);
-    // The answer ends; the panel sends the step again, whole, from the session.
-    source.emit({ type: 'update', chat: summary({ id: H }), message: { ...streamed, status: 'done', parts: [{ ...streamed.parts![0], input: JSON.stringify({ title: 'Paski stref', prompt }) } as ChatPart] } });
-    expect(await within(card).findByText('Paski stref')).toBeTruthy();
-    expect(within(card).queryByText('Czekam na prompt od Hermesa…')).toBeNull();
-    expect((within(card).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('shows a proposal the panel refused (sent before its recon answered) without a way to dispatch it', async () => {
-    const calls = liveServer();
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await openConversation(user, /Zadanie z maila/);
-    const blind: ChatMessage = { id: 'a4', role: 'agent', at: NOW, status: 'done', parts: [
-      { type: 'tool', id: 'r9', name: 'mcp__desk_panel__panel_recon_report', input: JSON.stringify({ files: [{ path: 'src/types.ts' }], kind: 'UI', prompt }), output: JSON.stringify({ result: 'Tych plików nie ma w repozytorium: src/types.ts.' }), state: 'done', error: true },
-      { type: 'tool', id: 'p9', name: 'mcp__desk_panel__panel_cezar_propose', input: JSON.stringify({ title: 'Widget', prompt, recon: 'r-000000000000' }), output: JSON.stringify({ result: 'Panel nie zna tego recon. Najpierw wywołaj panel_recon_report i poczekaj na jego wynik.' }), state: 'done', error: true },
-    ] };
-    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, blind], { id: H }) });
-    const card = await screen.findByRole('region', { name: 'Zgoda na zlecenie taska' });
-    expect(within(card).getByText('Propozycja odrzucona przez panel')).toBeTruthy();
-    expect(within(card).getByRole('alert').textContent).toContain('Najpierw wywołaj panel_recon_report');
-    expect(within(card).queryByRole('button', { name: 'Zleć na Cezarze' })).toBeNull();
-    const recon = screen.getByRole('region', { name: 'Rekonesans zadania' });
-    expect(within(recon).getByText('Rekonesans odrzucony')).toBeTruthy();
-    expect(within(recon).getByRole('alert').textContent).toContain('src/types.ts');
-    expect(calls.some(c => c.url.endsWith('/dispatch'))).toBe(false);
-  });
-
-  it('watches the task the conversation names, and shows the watch card live', async () => {
-    const calls = liveServer();
-    const user = userEvent.setup();
-    render(<ChatWindow onClose={() => {}} />);
-    await openConversation(user, /Zadanie z maila/);
-    const watch: ChatMessage = { id: 'a3', role: 'agent', at: NOW, status: 'done', parts: [
-      { type: 'tool', id: 'w1', name: 'mcp_desk-panel_panel_cezar_watch', input: JSON.stringify({ id: RUN }), output: JSON.stringify({ task: { ...running, status: 'QUEUED', steps: [] } }), state: 'done' },
-    ] };
-    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, watch], { id: H }) });
-    const card = await screen.findByRole('region', { name: 'Nasłuchiwanie Cezara' });
-    expect(within(card).getByText(RUN)).toBeTruthy();
-    // Which task is watched the server decides from the conversation: the window asks without a hint.
-    await waitFor(() => expect(calls.some(c => c.url === `/api/chats/${H}/cockpit`)).toBe(true));
-    expect(calls.some(c => c.url.includes('/cockpit?'))).toBe(false);
-  });
-});
-
 describe('CHAT_SKILLS', () => {
   it('defines @Zaimplementuj zadanie with two-stage analytical workflow instructions', () => {
     const skill = CHAT_SKILLS.find(s => s.id === 'zaimplementuj-zadanie');
@@ -584,47 +343,98 @@ describe('CHAT_SKILLS', () => {
     expect(skill!.prompt).toContain('Two-stage analytical workflow:');
     expect(skill!.prompt).toContain('Phase 1 (Recon and Mode Decision)');
     expect(skill!.prompt).toContain('workflow: "analysis"');
-    expect(skill!.prompt).toContain('Phase 2 (Synthesis and Implementation)');
+    expect(skill!.prompt).toContain('Phase 2 (after an analysis run)');
+    // It travels as a context item (at most 8000 characters) with every message that picks it.
+    expect(skill!.prompt.length).toBeLessThan(8000);
     expect(skill!.prompt).toContain('panel_cezar');
     expect(skill!.prompt).toContain('panel_cezar_propose');
   });
 });
 
-describe('chat resizing, minimizing, and draft preservation', () => {
-  it('minimizes the chat window via minimize button', async () => {
+describe('chat presentation and drafts', () => {
+  it('resizes history by dragging or keyboard and remembers its width after reopening', async () => {
+    mockServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await listed();
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    const handle = screen.getByRole('separator', { name: 'Szerokość historii' });
+    fireEvent.pointerDown(handle, { clientX: 232, button: 0 });
+    fireEvent.pointerMove(handle, { clientX: 340 });
+    fireEvent.pointerUp(handle, { clientX: 340 });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('340');
+    fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('330');
+    await user.click(screen.getByRole('button', { name: 'Ukryj historię' }));
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    expect(screen.getByRole('separator', { name: 'Szerokość historii' }).getAttribute('aria-valuenow')).toBe('330');
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Szerokość historii' }), { key: 'Home' });
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('200');
+    fireEvent.doubleClick(screen.getByRole('separator', { name: 'Szerokość historii' }));
+    expect(localStorage.getItem('desk-panel:wektor-history-width')).toBe('232');
+  });
+
+  it('minimizes to a working conversation and maximizes without losing the draft', async () => {
     mockServer();
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatWindow onClose={onClose} />);
     await listed();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Szkic');
     await user.click(screen.getByRole('button', { name: 'Zminimalizuj czat' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Czat z agentem' })).toBeTruthy();
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic');
+    await user.click(screen.getByRole('button', { name: 'Maksymalizuj czat' }));
+    expect(screen.getByRole('dialog', { name: 'Czat z agentem' })).toBeTruthy();
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic');
   });
 
-  it('renders interactive resize handle and supports dragging to resize', async () => {
-    mockServer();
+  it('isolates drafts and picked skills per conversation, searches history by title and ID, and restores on return', async () => {
+    const second = '2b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22';
+    const calls = mockServer([summary(), summary({ id: second, title: 'Plan tygodnia' })]);
+    const user = userEvent.setup();
     render(<ChatWindow onClose={() => {}} />);
     await listed();
-    const handle = screen.getByTestId('chat-resize-handle');
-    expect(handle).toBeTruthy();
-    const dialog = screen.getByRole('dialog', { name: 'Czat z agentem' });
-    expect(dialog).toBeTruthy();
-
-    fireEvent.pointerDown(handle, { clientX: 500, clientY: 400 });
-    fireEvent.pointerMove(window, { clientX: 600, clientY: 450 });
-    fireEvent.pointerUp(window, { clientX: 600, clientY: 450 });
-
-    const saved = JSON.parse(localStorage.getItem('desk-panel:chat-size') || '{}');
-    expect(saved.width).toBeGreaterThanOrEqual(400);
-    expect(saved.height).toBeGreaterThanOrEqual(300);
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Nowa rozmowa');
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), '@bank{Enter}Szkic dla Anny');
+    expect(getChatDraft(ID).text).toBe('Szkic dla Anny');
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    const search = screen.getByRole('textbox', { name: 'Szukaj rozmów' });
+    await user.type(search, second);
+    expect(screen.queryByRole('button', { name: /Zadanie z maila/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Plan tygodnia/ }));
+    expect(screen.queryByText('Zrób z tego zadanie na jutro.')).toBeNull();
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([], { id: second, title: 'Plan tygodnia' }) });
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Usuń z kontekstu: Bank' })).toBeNull();
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Drugi szkic');
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    await user.type(screen.getByRole('textbox', { name: 'Szukaj rozmów' }), 'anny');
+    await user.click(screen.getByRole('button', { name: /Zadanie z maila/ }));
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic dla Anny');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Bank' })).toBeTruthy();
+    expect(getChatDraft(second).text).toBe('Drugi szkic');
+    expect(getChatDraft().text).toBe('Nowa rozmowa');
+    expect(calls.some(c => c.method !== 'GET')).toBe(false);
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), '{Enter}');
+    await waitFor(() => expect(getChatDraft(ID).text).toBe(''));
+    expect(getChatDraft(second).text).toBe('Drugi szkic');
+    expect(getChatDraft().text).toBe('Nowa rozmowa');
   });
 
-  it('preserves unsent draft text in the chat input when re-rendering', async () => {
+  it('keeps the unsent text and its context chips when the window closes and opens again', async () => {
     mockServer();
     const user = userEvent.setup();
     const { unmount } = render(<ChatWindow onClose={() => {}} />);
     await listed();
     const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
+    await user.type(input, '@zaimp');
+    await user.keyboard('{Enter}');
     await user.type(input, 'Niewysłana wiadomość robocza');
     expect(input.value).toBe('Niewysłana wiadomość robocza');
     expect(getChatDraft().text).toBe('Niewysłana wiadomość robocza');
@@ -635,5 +445,6 @@ describe('chat resizing, minimizing, and draft preservation', () => {
     await listed();
     const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
     expect(reopenedInput.value).toBe('Niewysłana wiadomość robocza');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Zaimplementuj zadanie' })).toBeTruthy();
   });
 });

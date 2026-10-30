@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_ENGINE, type ChatDetail, type ChatEngine, type ChatEvent, type ChatList, type ChatMessage, type ChatSummary, type ContextItem, type EngineStatus } from './chat-contract';
+import { rememberSnapshot } from './chat-snapshots';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const messageOf = (status: number) => status === 409 ? 'Agent jeszcze odpowiada.' : status === 404 ? 'Nie ma takiej rozmowy.' : status === 503 ? 'Czat jest niedostępny.' : 'Nie udało się wykonać operacji czatu.';
@@ -15,6 +16,8 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 }
 
 const byRecent = (a: ChatSummary, b: ChatSummary) => b.updatedAt - a.updatedAt;
+const LAST_CHAT = 'desk-panel:last-hermes-chat';
+const readLastChat = () => { try { return localStorage.getItem(LAST_CHAT); } catch { return null; } };
 const summaryOf = (chat: ChatDetail): ChatSummary => ({ id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.messages, running: chat.running, ...(chat.engine ? { engine: chat.engine } : {}) });
 /** A chat from a server that predates engines is agy's. */
 export const engineOf = (chat: Pick<ChatSummary, 'engine'>): ChatEngine => chat.engine ?? 'agy';
@@ -32,8 +35,11 @@ export function withMessage(items: ChatMessage[], message: ChatMessage): ChatMes
 export function useChat(fixed?: ChatEngine) {
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(() => fixed === 'hermes' ? readLastChat() : null);
+  const restored = useRef(activeId);
   const [active, setActive] = useState<ChatDetail | null>(null);
+  const snapshots = useRef(new Map<string, ChatDetail>());
+  const [syncedId, setSyncedId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   /** Which engines can take a message (null: the server does not say), and the one new chats start on. */
@@ -49,6 +55,11 @@ export function useChat(fixed?: ChatEngine) {
     try {
       const { chats: list, engines: status, engine } = await call('/api/chats') as ChatList;
       setChats([...list].sort(byRecent));
+      if (restored.current) {
+        const id = restored.current;
+        restored.current = null;
+        if (!list.some(c => c.id === id && (!fixed || engineOf(c) === fixed))) setActiveId(current => current === id ? null : current);
+      }
       setEngines(status ?? null);
       if (engine && !fixed) setPreferred(engine);
       setUnavailable(false);
@@ -58,6 +69,10 @@ export function useChat(fixed?: ChatEngine) {
     }
   }, [fixed]);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (fixed !== 'hermes') return;
+    try { if (activeId) localStorage.setItem(LAST_CHAT, activeId); else localStorage.removeItem(LAST_CHAT); } catch { /* optional preference */ }
+  }, [activeId, fixed]);
   const listed = activeId ? chats?.find(c => c.id === activeId) : undefined;
   const engine: ChatEngine = active ? engineOf(active) : listed ? engineOf(listed) : preferred;
   const engineDown = engines?.find(e => e.engine === engine && !e.available);
@@ -70,25 +85,33 @@ export function useChat(fixed?: ChatEngine) {
 
   // The stream of the open conversation.
   useEffect(() => {
-    setActive(null);
     if (!activeId || typeof EventSource === 'undefined') return;
+    let gone = false;
     const source = new EventSource(`/api/chats/${activeId}/events`);
     source.onmessage = message => {
       let event: ChatEvent;
       try { event = JSON.parse(message.data) as ChatEvent; } catch { return; }
+      if (gone || event.chat.id !== activeId) return;
       if (event.type === 'state') {
+        rememberSnapshot(snapshots.current, activeId, event.chat);
         setActive(event.chat);
+        setSyncedId(activeId);
         setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), summaryOf(event.chat)].sort(byRecent));
       } else {
-        setActive(previous => previous && previous.id === event.chat.id ? { ...event.chat, items: withMessage(previous.items, event.message) } : previous);
+        const previous = snapshots.current.get(activeId);
+        if (previous) {
+          const next = { ...event.chat, items: withMessage(previous.items, event.message) };
+          rememberSnapshot(snapshots.current, activeId, next);
+          setActive(next);
+        }
         setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), event.chat].sort(byRecent));
       }
     };
     source.onerror = () => {
       // The browser retries by itself while the stream is merely interrupted; a closed one means the chat is gone.
-      if (source.readyState === EventSource.CLOSED) { setError(messageOf(404)); setActiveId(null); void refresh(); }
+      if (!gone && source.readyState === EventSource.CLOSED) { snapshots.current.delete(activeId); setActive(null); setError(messageOf(404)); setActiveId(null); void refresh(); }
     };
-    return () => source.close();
+    return () => { gone = true; source.close(); };
   }, [activeId, refresh]);
 
   const guard = useCallback(async <T,>(work: () => Promise<T>): Promise<T | undefined> => {
@@ -139,18 +162,23 @@ export function useChat(fixed?: ChatEngine) {
     const id = activeRef.current;
     if (!id) return;
     await call(`/api/chats/${id}`, 'DELETE');
+    snapshots.current.delete(id);
+    setActive(null);
     setActiveId(null);
     await refresh();
   }), [guard, refresh]);
 
   return {
     chats, unavailable, active, activeId, error, busy, engines, preferred,
+    syncing: !!activeId && syncedId !== activeId,
     /** The engine the composer writes to: the open chat's, or the preferred one for a new chat; and why it cannot, if so. */
     engine, engineDown,
     chooseEngine, approve,
-    open: useCallback((id: string) => { setError(''); setActiveId(id); }, []),
-    startNew: useCallback(() => { setError(''); setActiveId(null); }, []),
+    open: useCallback((id: string) => {
+      if (activeRef.current === id) return;
+      setError(''); setActive(snapshots.current.get(id) ?? null); setSyncedId(null); setActiveId(id);
+    }, []),
+    startNew: useCallback(() => { setError(''); setActive(null); setSyncedId(null); setActiveId(null); }, []),
     send, stop, rename, remove, refresh, clearError: useCallback(() => setError(''), []),
   };
 }
-export type ChatState = ReturnType<typeof useChat>;

@@ -21,3 +21,7 @@ dist.old/
 !.ai/cezar/.gitignore
 !.ai/cezar/workflows/
 !.ai/cezar/workflows/**
+
+# Local links to skills/ for Claude Code and Codex, made by `just setup` (scripts/link-skills.mjs)
+/.claude/skills
+/.agents/

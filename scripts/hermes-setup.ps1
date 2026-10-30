@@ -86,6 +86,35 @@ if ($text -match '(?m)^tool_output:') {
     Add-Content -LiteralPath $config -Value "`ntool_output:`n  max_bytes: 16000`n  max_lines: 400`n  max_line_length: 600`n" -Encoding ASCII
     Write-Host 'config.yaml: added tool_output limits.'
 }
+# No skills written by Hermes itself: every 10 tool calls it would review the turn in the background (more model calls
+# on the same quota) and save a skill that copies the panel's own instructions and goes stale when they change.
+$text=Get-Content -LiteralPath $config -Raw
+if ($text -match '(?m)^skills:') {
+    Write-Host 'config.yaml: skills already present (left as it is).'
+} else {
+    Add-Content -LiteralPath $config -Value "`nskills:`n  creation_nudge_interval: 0`n" -Encoding ASCII
+    Write-Host 'config.yaml: turned off background skill creation.'
+}
+# A turn ends after 40 model calls (Hermes then asks once more for a summary, without tools): a dispatcher that kept
+# searching made 87 tool calls in nine minutes. At half of it a tool result carries a checkpoint notice, which the
+# "Zaimplementuj zadanie" skill answers by sending its recon.
+$text=Get-Content -LiteralPath $config -Raw
+if ($text -match '(?m)^agent:') {
+    Write-Host 'config.yaml: agent already present (left as it is; the panel expects max_turns: 40, budget_warning_ratio: 0.5).'
+} else {
+    Add-Content -LiteralPath $config -Value "`nagent:`n  max_turns: 40`n  budget_warning_ratio: 0.5`n" -Encoding ASCII
+    Write-Host 'config.yaml: agent.max_turns 40, budget_warning_ratio 0.5.'
+}
+# The agent reads the user's mail, calendar and bank summaries: through OpenRouter only to hosts that do not train on them.
+# The API server applies provider_routing only per model (provider_routing.models.<id>), so the current model gets its entry.
+$text=Get-Content -LiteralPath $config -Raw
+$model=if ($text -match '(?m)^  default:\s*(\S+)') { $Matches[1] } else { $null }
+if ($text -match '(?m)^provider_routing:') {
+    Write-Host "config.yaml: provider_routing already present (left as it is; the panel expects data_collection: deny under models.$model)."
+} elseif ($model) {
+    Add-Content -LiteralPath $config -Value "`nprovider_routing:`n  data_collection: deny`n  models:`n    ${model}:`n      data_collection: deny`n" -Encoding ASCII
+    Write-Host "config.yaml: provider_routing data_collection deny for $model."
+}
 
 # 5. Lock directory and hermes.env for Servy / Windows
 $lockDir=if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes\locks' } else { Join-Path $hermesHome 'locks' }

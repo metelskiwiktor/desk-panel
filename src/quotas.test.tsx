@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, render, screen } from '@testing-library/react';
-import { QuotaCard } from './components';
+import { QuotaWindow } from './components';
 import { quotaSourceSchema } from './quota-contract';
 import { quotaState } from './model';
 import { useQuotas } from './useQuotas';
@@ -41,12 +41,12 @@ it('renders dynamic AGY groups with unknown reset, and separates auth status fro
   const now=Date.now();
   const observation={window:'future-group-limit',model:'Future Model',usedPercent:25,observedAt:now,resetAt:null,
     state:'fresh' as const,stale:false,attemptedAt:now,source:'agy-cli:/usage'};
-  render(<QuotaCard account={{provider:'AGY',snapshots:[observation],history:[]}} now={now} sourceConnected open={()=>{}} />);
+  render(<QuotaWindow snapshot={observation} now={now} sourceConnected />);
   expect(screen.getByText(/Future Model/)).toBeTruthy();expect(screen.getByText('25%')).toBeTruthy();
   expect(screen.getByText('Termin resetu nieznany')).toBeTruthy();
   expect(screen.getByRole('meter').getAttribute('aria-valuetext')).not.toContain('nieaktualna');
   cleanup();
-  render(<QuotaCard account={{provider:'Claude',snapshots:[{...observation,window:'5h',model:undefined,state:'auth_required',reason:'http_401',stale:true}],history:[]}} now={now} sourceConnected open={()=>{}} />);
+  render(<QuotaWindow snapshot={{...observation,window:'5h',model:undefined,state:'auth_required',reason:'http_401',stale:true}} now={now} sourceConnected />);
   expect(screen.getByText('Wymaga logowania')).toBeTruthy();expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('25');
   expect(screen.getByText(/Nieaktualne/)).toBeTruthy();
 });

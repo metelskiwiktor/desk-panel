@@ -1,5 +1,9 @@
 # Google Calendar
 
+Agenda zwraca `coverage` (rzeczywisty półotwarty przedział odczytu) i `busy` każdego wydarzenia, na podstawie
+Google `transparency`. Prawy panel wyboru wizyty porównuje terminy z tym odczytem; nie uznaje braku wydarzeń za wolny czas,
+jeśli dane są niepełne, nieaktualne lub nie obejmują całego dnia. Szczegóły: [znanylekarz.md](znanylekarz.md).
+
 Integracja loguje się na własne konto użytkownika przez OAuth Google.
 Nie używa klucza Google Play ani konta usługi i nie wymaga udostępniania kalendarza.
 Jednorazowe przygotowanie w Google Cloud:
@@ -7,7 +11,7 @@ Jednorazowe przygotowanie w Google Cloud:
 1. Włącz Google Calendar API i Gmail API w projekcie (np. `tabnote-cli`).
 2. W Google Auth Platform skonfiguruj Audience External; w trybie Testing dodaj
    wszystkie swoje konta (kalendarz i poczta) jako użytkowników testowych. W Data Access
-   dodaj zakresy `calendar.readonly` i `gmail.modify`.
+   dodaj zakresy `calendar.readonly`, `calendar.events.owned` i `gmail.modify`.
 3. Utwórz klienta OAuth typu **Aplikacja komputerowa / Desktop app**. Obsługiwany
    jest też klient **Web**: dodaj w Google Cloud Authorized redirect URI dokładnie
    `http://127.0.0.1:5174/api/calendar/callback` (dostosuj port przy `DESK_PORT`).
@@ -22,7 +26,7 @@ Google w trybie Testing może ograniczać trwałość zgody; jeśli dostęp wyga
 panel poprosi o ponowne logowanie. Nie wymaga publikowania ani weryfikowania
 aplikacji dla tej lokalnej konfiguracji testowego użytkownika.
 
-Serwer używa oficjalnej `google-auth-library` z zakresem `calendar.readonly`
+Serwer używa oficjalnej `google-auth-library` z zakresem `calendar.readonly` i dodatkowym `calendar.events.owned` dla konta kalendarza
 oraz openid/email do sprawdzenia tożsamości zalogowanego użytkownika. OAuth ma
 PKCE, losowy state, jednorazowy callback i dziesięciominutowy limit logowania.
 Callback działa wyłącznie na `http://127.0.0.1:5174/api/calendar/callback`
@@ -46,4 +50,27 @@ współdzieli równoległe żądania i przechowuje cache tylko w pamięci. Po b�
 ponawia po 15 sekundach, zachowując ostatnią agendę i jej czas. 403/404 i brak
 klienta OAuth pokazują brak dostępu, a nie pusty kalendarz. Surowe błędy GoogleAuth
 i tokeny nigdy nie trafiają do odpowiedzi lub logów. Stary zapis nie tworzy
-nowych zdarzeń panelu. Nie ma operacji zapisu, zapraszania ani edycji wydarzeń.
+nowych zdarzeń panelu.
+
+## Tworzenie wydarzenia po zgodzie na karcie
+
+Stan sprawdzony 29.10.2026: konto kalendarza zwraca `connected` i `canCreateEvents: true`; użytkownik potwierdził
+działający zapis po rzeczywistej rezerwacji. Wcześniejsza informacja z tej sesji, że zgoda na zapis nadal jest brakująca,
+jest już nieaktualna. Bieżące uprawnienie zawsze sprawdzaj w statusie konta, nie na podstawie tej historycznej notatki.
+
+Wektor może zaproponować jedno wydarzenie narzędziem `panel_calendar_propose` (tytuł, początek i koniec z offsetem,
+opcjonalnie miejsce i opis). Model sam niczego nie zapisuje. Karta pokazuje szczegóły; dopiero **Dodaj do Google Calendar**
+wysyła `POST /api/chats/:id/calendar-plan` (`Origin` sprawdzany, plan pochodzi z zakończonego wywołania tej rozmowy).
+Przy [wizycie ZnanyLekarz](znanylekarz.md) zapis jest w tej samej karcie co rezerwacja, po przycisku
+**Zarezerwowałem ten termin — zapisz**. Agent nie proponuje drugiej karty dla tej wizyty.
+
+Stare tokeny `calendar.readonly` nadal pozwalają czytać agendę. Zapis wymaga ponownego połączenia konta w Ustawieniach →
+Konta Google i zaznaczenia nowego uprawnienia; karta zachowuje wybrany termin do tego czasu. Nowa zgoda jest wymagana tylko
+dla konta kalendarza, nie dla osobnych kont pocztowych. [Zakres `calendar.events.owned`](https://developers.google.com/workspace/calendar/api/auth)
+dotyczy wydarzeń w kalendarzach należących do użytkownika. Kod panelu udostępnia wyłącznie utworzenie nowego wydarzenia,
+bez edycji, usuwania, gości i zaproszeń. Zapis nie tworzy konferencji Google Meet.
+
+`server/calendar-write.ts` używa `events.insert` z deterministycznym id. Ponowienie po utracie odpowiedzi odczytuje istniejące
+wydarzenie przy `409`, sprawdza jego pochodzenie i zwraca ten sam wynik. Treść zapisu zostaje zamrożona przed żądaniem Google
+w `appointments.dpapi`; błąd nie daje prawa do zmiany terminu w trakcie ponowienia. Po sukcesie cache agendy jest unieważniany,
+z zachowaniem ostatniej obserwacji na wypadek błędu następnego odczytu. Narzędzie propozycji nie wykonuje żadnych zapisów Google.

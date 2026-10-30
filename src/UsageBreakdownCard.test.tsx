@@ -1,7 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { UsageBreakdownCard, breakdownPieces } from './UsageBreakdownCard';
-import { splitFor } from './Dashboard';
+import { UsageBreakdownCard } from './UsageBreakdownCard';
 import type { UsageBreakdownState } from './useUsageBreakdown';
 
 afterEach(cleanup);
@@ -54,17 +53,6 @@ it('states loading, no data and offline without inventing numbers, and names Ant
   expect(screen.getByText('Automatyczny warmup')).toBeTruthy();
 });
 
-it('builds the quota bar parts from the timeline in the source colour, so one source can appear on both sides of another and tiny parts stay in', () => {
-  const timeline = [{ key: 'session:claude-app:desk-panel', percent: 20 }, { key: 't1', percent: 0.1 }, { key: 'session:claude-app:desk-panel', percent: 10 }];
-  const parts = breakdownPieces({ ...claude, usedPercent: 30.1, segments: [
-    { kind: 'session', id: 'session:claude-app:desk-panel', title: 'desk-panel', origin: 'claude-app', percent: 30 },
-    { kind: 'task', id: 't1', title: 'Zadanie', percent: 0.1 }], timeline });
-  expect(parts.map(p => p.percent)).toEqual([20, 0.1, 10]);
-  expect(parts[0].color).toBe(parts[2].color);
-  expect(parts[0].color).not.toBe(parts[1].color);
-  expect(parts[1].label).toBe('Cezar · Zadanie · 0,1 p.p.');
-});
-
 it('shows a time lane per source group when slices carry times, with a marker for now', () => {
   const now = Date.now(), start = now + 3600000 - 5 * 3600000;
   const provider = { ...claude, observedAt: now, resetAt: now + 3600000, usedPercent: 40, segments: [
@@ -81,17 +69,4 @@ it('shows a time lane per source group when slices carry times, with a marker fo
   const { container: bare } = render(<UsageBreakdownCard usage={usage({ providers: [{ ...provider, timeline: [{ key: 'unobserved', percent: 10 }] }] })} />);
   expect(bare.querySelector('.breakdown-lanes')).toBeNull();
   expect(screen.getByText('Cezar')).toBeTruthy();
-});
-
-it('splits the Antigravity 5h quota bar too, whatever the adapter calls its window, but not other models or windows', () => {
-  const reset = Date.now() + 3600000;
-  const agy = { ...gemini, usedPercent: 10, resetAt: reset, segments: [{ kind: 'session' as const, id: 'session:antigravity-app:x', title: 'x', origin: 'antigravity-app' as const, percent: 10 }] };
-  const state = usage({ providers: [agy] });
-  const snap = (window: string) => ({ window, usedPercent: 10, resetAt: reset }) as never;
-  const card = (title: string) => ({ provider: 'AGY', title }) as never;
-  expect(splitFor(snap('gemini-5h'), card('Gemini'), state)?.length).toBe(1);
-  expect(splitFor(snap('gemini-weekly'), card('Gemini'), state)).toBeUndefined();
-  expect(splitFor(snap('3p-5h'), card('Agy: Claude & GPT'), state)).toBeUndefined();
-  expect(splitFor(snap('gemini-5h'), card('Gemini'), usage({ status: 'offline', providers: [agy] }))).toBeUndefined();
-  expect(splitFor({ window: 'gemini-5h', usedPercent: 10, resetAt: reset + 3 * 3600000 } as never, card('Gemini'), state)).toBeUndefined();
 });

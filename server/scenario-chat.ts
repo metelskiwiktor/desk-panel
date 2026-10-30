@@ -6,7 +6,7 @@ import { createAgentChat, type AgentProcess, type ChatService, type Launcher } f
 import { createChatHub } from './chat-hub';
 import { createHermesClient } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
-import { startMockHermes } from './hermes-mock';
+import { startMockHermes, type MockHermesOptions } from './hermes-mock';
 
 /**
  * An agent that answers from a script instead of `agy`, with the same events `agy` prints (a tool step, then the answer
@@ -57,17 +57,18 @@ export function scriptedAgent(): Launcher {
  * answering from a script and Hermes from a stand-in API server on a free loopback port. `hermes: 'down'` shows the
  * window as it is when Hermes is not running.
  */
-export async function createScenarioChat(options: { hermes?: 'up' | 'down' } = {}): Promise<ChatService & { dispose(): void }> {
+export async function createScenarioChat(options: { hermes?: 'up' | 'down'; toolScript?: MockHermesOptions['toolScript'] } = {}): Promise<ChatService & { dispose(): Promise<void> }> {
   const dir = mkdtempSync(join(tmpdir(), 'desk-panel-scenario-chat-'));
-  const mock = await startMockHermes({ stepMs: 60 });
+  const mock = await startMockHermes({ stepMs: 60, toolScript: options.toolScript });
   if (options.hermes === 'down') mock.setDown(true);
   const agy = createAgentChat({ dir, launch: scriptedAgent() });
   const hermes = createHermesChat({ dir, client: createHermesClient({ url: mock.url }) });
   const chat = createChatHub({ dir, engines: { hermes, agy } });
+  let disposing: Promise<void> | undefined;
   return Object.assign(chat, {
     dispose() {
       chat.close();
-      void chat.drain().finally(() => { void mock.close(); rmSync(dir, { recursive: true, force: true }); });
+      return disposing ??= chat.drain().finally(async () => { await mock.close(); rmSync(dir, { recursive: true, force: true }); });
     },
   });
 }

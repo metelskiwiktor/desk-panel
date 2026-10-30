@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
 import { nearestSize } from './SizeGrip';
-import { BOTTOM_SIZES, DEFAULT_ZONES, TOP_CYCLE, TOP_SIZES, ZONES_KEY, cycleSize, parseZones, stepSize, useZones } from './zones';
+import { BOTTOM_SIZES, DEFAULT_ZONES, TOP_CYCLE, ZONES_KEY, cycleSize, parseZones, useZones } from './zones';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime(); // a Wednesday
 beforeEach(() => {
@@ -17,12 +17,6 @@ const renderWith = (scenario: ScenarioName = 'standard') => { vi.stubGlobal('fet
 const frame = () => document.querySelector('.p3-frame')!;
 
 describe('zone sizes', () => {
-  it('steps along the order and stops at the ends', () => {
-    expect(stepSize(TOP_SIZES, 'std', -1)).toBe('cmp');
-    expect(stepSize(TOP_SIZES, 'cmp', -1)).toBe('cmp');
-    expect(stepSize(BOTTOM_SIZES, 'mid', 1)).toBe('month');
-    expect(stepSize(BOTTOM_SIZES, 'month', 1)).toBe('month');
-  });
   it('cycles round, from the last size to the first', () => {
     expect([cycleSize(TOP_CYCLE, 'std'), cycleSize(TOP_CYCLE, 'cmp')]).toEqual(['cmp', 'std']);
     expect([cycleSize(BOTTOM_SIZES, 'short'), cycleSize(BOTTOM_SIZES, 'mid'), cycleSize(BOTTOM_SIZES, 'month')]).toEqual(['mid', 'month', 'short']);
@@ -44,19 +38,12 @@ describe('zone sizes', () => {
 });
 
 describe('three zones', () => {
-  it('starts with the compact top, the work area and the short week', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    expect(frame().getAttribute('data-top')).toBe('cmp');
-    expect(frame().getAttribute('data-bottom')).toBe('short');
-    expect(screen.getByRole('region', { name: 'Dziś' })).toBeTruthy();
-    expect(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getAllByRole('button', { name: /^Pokaż dzień:/ })).toHaveLength(7);
-  });
   it('steps the week through chips, cards and a month that takes the work area\'s place', async () => {
     const user = userEvent.setup();
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
+    expect(frame().getAttribute('data-bottom')).toBe('short'); // the default
     await user.click(grip());
     expect(frame().getAttribute('data-bottom')).toBe('mid');
     expect(screen.getByRole('region', { name: 'Claude' })).toBeTruthy();
@@ -118,7 +105,7 @@ describe('dragging the grips', () => {
   it('picks the size nearest to the height', () => {
     expect([nearestSize([40, 60, 124], 10), nearestSize([40, 60, 124], 52), nearestSize([40, 60, 124], 95), nearestSize([40, 60, 124], 900)]).toEqual([0, 1, 2, 2]);
   });
-  it('drags the top edge down to the standard strip, and up again to a line', async () => {
+  it('drags each edge to the nearest size, a drag is not also a tap, and a short move is one', async () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
@@ -131,15 +118,16 @@ describe('dragging the grips', () => {
     drag(grip(), 300, 100); // all the way up: held at the line
     expect(frame().getAttribute('data-top')).toBe('cmp');
     expect((frame() as HTMLElement).style.getPropertyValue('--p3-top')).toBe('');
-  });
-  it('drags the bottom edge up to a month and down to chips; a drag is not also a tap', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    const grip = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
-    drag(grip(), 500, 100);
+    const bottom = () => screen.getByRole('button', { name: 'Zmień rozmiar kalendarza dni' });
+    drag(bottom(), 500, 100);
     expect(frame().getAttribute('data-bottom')).toBe('month');
-    drag(grip(), 100, 700);
+    drag(bottom(), 100, 700);
     expect(frame().getAttribute('data-bottom')).toBe('short');
+    fireEvent.pointerDown(grip(), { clientY: 300, button: 0 });
+    fireEvent.pointerMove(grip(), { clientY: 302 });
+    fireEvent.pointerUp(grip(), { clientY: 302 });
+    fireEvent.click(grip(), { detail: 1 });
+    expect(frame().getAttribute('data-top')).toBe('std');
   });
   it('draws the size the drag would settle on while it goes on, and drops it when the drag is cancelled', async () => {
     renderWith();
@@ -168,15 +156,5 @@ describe('dragging the grips', () => {
     expect(frame().hasAttribute('data-dragging')).toBe(false);
     expect(frame().getAttribute('data-top')).toBe('std');
     expect(JSON.parse(localStorage.getItem(ZONES_KEY)!).top).toBe('std');
-  });
-  it('treats a short move as a tap that steps to the next size', async () => {
-    renderWith();
-    await screen.findByRole('region', { name: 'Poczta' });
-    const grip = screen.getByRole('button', { name: 'Zmień rozmiar paska dnia' });
-    fireEvent.pointerDown(grip, { clientY: 300, button: 0 });
-    fireEvent.pointerMove(grip, { clientY: 302 });
-    fireEvent.pointerUp(grip, { clientY: 302 });
-    fireEvent.click(grip, { detail: 1 });
-    expect(frame().getAttribute('data-top')).toBe('std');
   });
 });

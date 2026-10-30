@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { Check, Landmark, MessageSquare, Repeat, Settings2, X } from 'lucide-react';
 import { SourceNote } from './components';
+import { ctx } from './chat-context';
 import { MAX_AGE, fresh } from './model';
 import type { BankTransaction } from './bank-contract';
 import { isDone, type BankCategory, type BankLabel, type BankLabelsData, type BankMove } from './bank-labels-contract';
@@ -216,7 +217,12 @@ export function BankTile({ bank, now, wide = true, tall = true }: { bank: BankHo
                 const proposed = first?.category ? categories.get(first.category) : undefined;
                 const Icon = category ? ICONS[category.icon] : aside ? MOVE_ICONS[aside] : null;
                 const said = aside === 'move' && category ? `${MOVE_WORDS.move} · ${category.name}` : category ? category.name : aside ? MOVE_WORDS[aside] : move ? `${MOVE_WORDS[move]} · ${move === 'income' ? 'bez źródła' : 'bez kategorii'}` : 'Nieoznaczona';
+                // What Wektor reads when the user points at the row: what the tile shows (account numbers come cut already).
+                const told = [`Operacja ${t.id}: ${new Date(t.at).toISOString().slice(0, 10)}, ${signed(t.amount, t.currency)}, ${name}${t.note ? ` („${t.note}”)` : ''}`,
+                  `Sposób: ${howPaid(t, !!side)}. Oznaczenie: ${said}${mark?.tags.length ? `, etykiety ${mark.tags.map(tag => `#${tag}`).join(' ')}` : ''}${mark?.recurring ? ', cykliczna' : ''}${mark?.comment ? `, opis: ${mark.comment}` : ''}.`,
+                  suggestion ? `Podpowiedzi${suggestion.sure ? ' (pewna)' : ' (niepewne)'}: ${suggestion.options.map(o => `${optionText(o, labels!)} (${o.reasons.at(-1)})`).join(' | ')}` : ''].filter(Boolean).join('\n');
                 return <li key={t.id} className={`bank-row${todo ? ' todo' : ''}${done ? ' marked' : ''}${move === 'move' ? ' aside' : ''}`} style={aside ? moveTint(aside) : tint(category)} tabIndex={0}
+                  {...ctx('bankOp', t.id, `Operacja: ${name}, ${signed(t.amount, t.currency)}`, told)}
                   aria-label={`${name}, ${signed(t.amount, t.currency)}, ${said}${todo ? ', do przypisania' : ''}`}
                   onMouseEnter={e => peek(t, e.currentTarget)} onFocus={e => { if (e.target === e.currentTarget) peek(t, e.currentTarget); }} onMouseLeave={() => setPeeked(null)} onBlur={() => setPeeked(null)}
                   onClick={() => openMark(t.id)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); openMark(t.id); } }}>

@@ -8,18 +8,15 @@
 # dashboard's layout; the kiosk then has the same accounts, e.g. Gmail and the Google Calendar behind the dashboard's links.
 param([string]$Display = 'P16', [string]$Url = 'http://127.0.0.1:5174/', [int]$WaitSeconds = 300, [switch]$Setup)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'kiosk-log.ps1')
+# START without a later "Kiosk uruchomiony pomyslnie" in the log means the process died in between (e.g. a native crash).
+Write-KioskLog "START kiosk.ps1 (Display=$Display, Setup=$([bool]$Setup), Url=$Url)"
+trap {
+  Write-KioskLog "BLAD: $($_.Exception.Message) [$($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber)]"
+  exit 1
+}
 Add-Type -AssemblyName System.Windows.Forms
 . (Join-Path $PSScriptRoot 'display-helper.ps1')
-
-$logDir = Join-Path $env:USERPROFILE '.desk-panel'
-$logFile = Join-Path $logDir 'kiosk.log'
-function Write-KioskLog([string]$Message) {
-  try {
-    if (-not (Test-Path -LiteralPath $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-    $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
-    Add-Content -LiteralPath $logFile -Value $line -ErrorAction SilentlyContinue
-  } catch {}
-}
 
 $chrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") |
   Where-Object { Test-Path $_ } | Select-Object -First 1

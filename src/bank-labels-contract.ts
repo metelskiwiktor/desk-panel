@@ -148,10 +148,27 @@ export const bankLabelActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('clear'), tx: bankTxId }).strict(),
   z.object({ action: z.literal('accept'), tx: bankTxId, option: z.number().int().min(0).max(2).default(0) }).strict(),
   z.object({ action: z.literal('reject'), tx: bankTxId }).strict(),
+  /**
+   * Many operations marked in one write (the bulk card): each with its whole mark, as the panel worked it out for the user's choice.
+   * `create` are spending categories made first (one that exists is used), which items may name in `newCategory`. An operation already
+   * done refuses the lot.
+   */
+  z.object({
+    action: z.literal('markMany'),
+    create: z.array(categoryName).max(5).default([]),
+    items: z.array(z.object({
+      tx: bankTxId, move: z.enum(BANK_MOVES), category: bankCategoryId.nullable(), newCategory: categoryName.optional(), tags: tags.default([]), party: bankPartyId.nullable(), recurring: z.boolean(),
+    }).strict()).min(1).max(300),
+  }).strict(),
   z.object({ action: z.literal('createCategory'), name: categoryName, move: z.enum(BANK_CATEGORY_MOVES).default('spend'), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict(),
   z.object({ action: z.literal('updateCategory'), category: bankCategoryId, name: categoryName.optional(), color: z.enum(BANK_COLORS).optional(), icon: z.enum(BANK_ICONS).optional() }).strict()
     .refine(a => a.name !== undefined || a.color !== undefined || a.icon !== undefined, { message: 'Nothing to change' }),
   z.object({ action: z.literal('deleteCategory'), category: bankCategoryId }).strict(),
+  /** Every mark of `category` goes to `into` (of the same move) and `category` is gone; `tag` is added to those marks to keep what it said. */
+  z.object({ action: z.literal('mergeCategory'), category: bankCategoryId, into: bankCategoryId, tag: bankTag.optional() }).strict()
+    .refine(a => a.category !== a.into, { message: 'Cannot merge a category into itself' }),
+  /** A whole merge in one write (the consent card): these spending categories go to the one of this name, made when missing. */
+  z.object({ action: z.literal('mergeInto'), from: z.array(bankCategoryId).min(1).max(6), into: categoryName, tags: z.boolean() }).strict(),
   z.object({ action: z.literal('renameTag'), tag: bankTag, name: bankTag }).strict(),
   z.object({ action: z.literal('deleteTag'), tag: bankTag }).strict(),
   z.object({ action: z.literal('createParty'), name: partyName }).strict(),
@@ -164,4 +181,4 @@ export type BankLabelAction = z.input<typeof bankLabelActionSchema>;
 export type BankLabelActionParsed = z.infer<typeof bankLabelActionSchema>;
 
 /** What an action answers: the id it made, so the screen can go on (create a category or a side, then mark with it). */
-export interface BankLabelResult { ok: true; category?: { id: string; created: boolean }; party?: { id: string; created: boolean }; removed?: number }
+export interface BankLabelResult { ok: true; category?: { id: string; created: boolean }; party?: { id: string; created: boolean }; removed?: number; assigned?: number }

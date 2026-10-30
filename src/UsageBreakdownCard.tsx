@@ -85,15 +85,6 @@ function Lanes({ provider, groups }: { provider: UsageProvider; groups: Group[] 
   </div>;
 }
 
-/** The parts that filled a provider's limit, in time order when the adapter sent it, each in its source group's colour; the bar on the quota strip is drawn from these. */
-export function breakdownPieces(provider: UsageProvider) {
-  const segmentByKey = new Map(provider.segments.map(s => [keyOf(s), s] as const));
-  return (provider.timeline?.length ? provider.timeline : provider.segments.map(s => ({ key: keyOf(s), percent: s.percent }))).map(p => {
-    const s = segmentByKey.get(p.key);
-    return { percent: p.percent, color: GROUP_COLORS[s ? groupOf(s) : 'other'], label: s ? `${segmentLabel(s)} · ${pointsLabel(p.percent)}` : pointsLabel(p.percent) };
-  });
-}
-
 function ProviderRow({ provider }: { provider: UsageProvider }) {
   if (provider.usedPercent === null) return <div className="breakdown-row">
     <div className="breakdown-head"><strong>{providerNames[provider.provider]}</strong><span className="meta">brak aktualnego pomiaru</span></div></div>;

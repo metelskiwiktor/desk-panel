@@ -8,9 +8,20 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   // `@/…` is src/: the assistant-ui components (shadcn, src/components) import each other that way.
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  // DESK_API_URL lets scripts/scenario.ts point the dev server at a scenario API.
+  // DESK_API_URL can override the development API; scenario-runtime.ts supplies its own isolated proxy explicitly.
   // The Host header stays the page's own: the server compares it with Origin on actions (a string target would rewrite it).
   server: { host: '127.0.0.1', proxy: { '/api': { target: process.env.DESK_API_URL || 'http://127.0.0.1:5174', changeOrigin: false } } },
-  // `.ai/` holds task worktrees (other branches, older code): their tests read this checkout's scenarios and must not run here.
-  test: { environment: 'jsdom', setupFiles: ['src/test-setup.ts'], restoreMocks: true, exclude: [...configDefaults.exclude, '.ai/**'] },
+  // Task worktrees contain other branches and their own React; never collect their tests in this checkout.
+  test: {
+    restoreMocks: true, exclude: [...configDefaults.exclude, '.ai/**', '.claude/worktrees/**'],
+    // The panel runs on one PC in Poland and scenarios write local times (`today+2@08:00`) that cards show in Europe/Warsaw;
+    // CI runners are on UTC, so the tests keep the zone the panel lives in.
+    env: { TZ: 'Europe/Warsaw' },
+    // Server and scripts run without a DOM; only the UI pays for jsdom. A UI test that renders the whole panel takes 1–3 s
+    // of CPU, more while just check builds beside it: its limit catches a hang, not a slow machine.
+    projects: [
+      { extends: true, test: { name: 'server', include: ['server/**/*.test.ts', 'scripts/**/*.test.mjs'], environment: 'node' } },
+      { extends: true, test: { name: 'ui', include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['src/test-setup.ts'], testTimeout: 15_000 } },
+    ],
+  },
 });

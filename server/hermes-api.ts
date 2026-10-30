@@ -37,6 +37,8 @@ export class HermesError extends Error {
 
 export type RunState = 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown';
 export interface RunStatus { state: RunState; output?: string; error?: string; session?: string }
+/** What a failed run says when Hermes gave no reason. */
+export const UNFINISHED = 'Hermes nie dokończył odpowiedzi.';
 
 /** One event of a run, in the panel's own words. */
 export type HermesEvent =
@@ -47,7 +49,7 @@ export type HermesEvent =
   | { kind: 'approval'; id: string; tool: string; detail: string }
   | { kind: 'approval-resolved'; id: string; approved: boolean | null }
   | { kind: 'completed'; output?: string; session?: string; usage?: Record<string, unknown> }
-  | { kind: 'failed'; error: string }
+  | { kind: 'failed'; error: string; output?: string }
   | { kind: 'cancelled' }
   | { kind: 'ignored'; name: string };
 
@@ -156,8 +158,11 @@ export function hermesEventOf(name: string | null, data: unknown): HermesEvent {
       const output = first(payload, 'output', 'final_response', 'response', 'text');
       return { kind: 'completed', output: typeof output === 'string' ? output : str(rec(output).text), session: safeId(first(payload, 'session_id')) ?? undefined, usage: rec(payload.usage) };
     }
-    case 'run.failed': case 'run.error': case 'error': case 'response.failed':
-      return { kind: 'failed', error: errorText(first(payload, 'error', 'message')) ?? 'Hermes nie dokończył odpowiedzi.' };
+    case 'run.failed': case 'run.error': case 'error': case 'response.failed': {
+      // A run ended at its limit of model calls fails with the summary Hermes asked for as its output.
+      const output = first(payload, 'output', 'final_response', 'response');
+      return { kind: 'failed', error: errorText(first(payload, 'error', 'message')) ?? UNFINISHED, ...(typeof output === 'string' && output.trim() ? { output } : {}) };
+    }
     case 'run.cancelled': case 'run.canceled': case 'run.stopped': case 'cancelled':
       return { kind: 'cancelled' };
     default:

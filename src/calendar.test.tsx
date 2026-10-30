@@ -19,6 +19,8 @@ describe('Google Calendar', () => {
     expect(result.events[0].sourceUrl).toBe(timed.htmlLink);
     expect(result.events[1].endAt - result.events[1].startAt).toBe(23 * 3600_000);
     expect(allDayDate('2026-03-29', '2026-03-30')).toBe('29 marca');
+    expect(result.events.every(e => e.busy)).toBe(true);
+    expect(projectEvents({ items: [{ ...allDay, transparency: 'transparent' }] }, 'Europe/Warsaw').events[0].busy).toBe(false);
   });
   it('fetches recurrence instances over six weeks of calendar days, paginates and caches successful reads', async () => {
     const request = vi.fn(async (path: string, params?: Record<string, string>) => path === '' ? { timeZone: 'Europe/Warsaw' } : params?.pageToken ? { items: [timed] } : { items: [allDay], nextPageToken: 'next' });
@@ -27,6 +29,7 @@ describe('Google Calendar', () => {
     const value = await read();
     expect(value.status).toBe('connected');
     expect(value.data).toHaveLength(2);
+    expect(value.coverage).toEqual({ startAt: Date.parse('2026-03-28T23:00:00Z'), endAt: Date.parse('2026-05-09T22:00:00Z') });
     expect(request.mock.calls[1][1]).toMatchObject({ singleEvents: 'true', orderBy: 'startTime', timeMin: '2026-03-28T23:00:00.000Z', timeMax: '2026-05-09T22:00:00.000Z' });
     await read();
     expect(request).toHaveBeenCalledTimes(3);
@@ -82,14 +85,14 @@ describe('Google Calendar', () => {
   it('renders calendar rows and their source detail', async () => {
     const at = Date.now();
     const source = { status: 'connected', live: true, name: 'Google Calendar', calendarId: 'owner@gmail.com', observedAt: at,
-      data: [{ id: 'real', title: 'Rzeczywiste wydarzenie', description: 'Opis z Google', startAt: at + 3600_000, endAt: at + 7200_000, allDay: false, sourceUrl: 'https://calendar.google.com/event?eid=real' }] };
+      data: [{ id: 'real', title: 'Rzeczywiste wydarzenie', description: 'Opis z Google', startAt: at - 60_000, endAt: at + 60_000, allDay: false, sourceUrl: 'https://calendar.google.com/event?eid=real' }] };
     vi.stubGlobal('fetch', vi.fn(async path => Response.json(path === '/api/calendar' ? source : {
       tasks: [], observedAt: at, counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 }, partial: false, scheduled: 0,
     })));
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
-    // The event is on the day ribbon and in the next-days strip: either opens it.
+    // Under way now, so it is on today's ribbon at any hour (an hour ahead fell on tomorrow after 23:00).
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ }).length).toBeGreaterThan(0));
     await user.click(screen.getAllByRole('button', { name: /Rzeczywiste wydarzenie/ })[0]);
     expect(screen.getByText('Opis z Google')).toBeTruthy();

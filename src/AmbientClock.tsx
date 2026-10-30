@@ -1,5 +1,5 @@
 import { Bike, CalendarDays, ListTodo, Mail } from 'lucide-react';
-import { ambientLines, pixelShift, type AmbientLine } from './ambient-mode';
+import { pixelShift, type AmbientLine } from './ambient-mode';
 import { date, time } from './format';
 
 const icons = { meeting: CalendarDays, training: Bike, cezar: ListTodo, mail: Mail } as const;

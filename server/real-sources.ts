@@ -7,17 +7,33 @@ import { readPrivate, writePrivate } from './private-store';
 import { readCezar } from './cezar';
 import { cezarAction, createCezarRun, createFinishedReader, readCezarRun, readCezarDefaults } from './cezar-finished';
 import { createCalendarReader } from './calendar';
+import { createCalendarWriter } from './calendar-write';
+import { createZnanyLekarzReader } from './znanylekarz';
+import { createAppointments } from './appointments';
 import { createGarminApi, createGarminReader } from './garmin';
 import { garminTokenFile } from './garmin-tokens';
 import { createGoogleAccount, GoogleAuthError, type GoogleService } from './google-oauth';
-import { createMailReader } from './gmail';
+import { createMailReader, mailFailure } from './gmail';
+import { createSmartRuleStore } from './smart-rules';
 import { createSystemReader } from './system';
 import { createTodoStore } from './todos';
 import { createQuotaReader } from './quotas';
 import { createUsageBreakdownReader } from './usageBreakdown';
 import { createWarmupClient } from './warmup';
 import { createGitHubClient } from './github';
+import { createOpenRouterClient } from './openrouter';
 import { SourceError, type PanelSources } from './sources';
+
+/**
+ * A failed read of Gmail for Wektor's tools: the cause goes to the service log (servy/logs/Desk-Panel/stderr.log, with the
+ * time; never the error itself, which may carry credentials), and the status says what it was (429 Gmail limits requests,
+ * 401 sign-in, 502 anything else), so the tool can tell him what to do instead of a bare 502.
+ */
+function mailError(what: string, error: unknown): SourceError {
+  const failure = mailFailure(error);
+  console.error(`${new Date().toISOString()} gmail ${what}: ${failure.kind} (${failure.detail})`);
+  return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
+}
 
 export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
   const { calendarId, env } = options;
@@ -30,6 +46,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     // The calendar account keeps its original token file, so existing sign-ins survive the upgrade.
     tokenFile: join(dir, email === calendarId ? 'calendar-token.dpapi' : `google-${email.replace(/[^a-z0-9@._-]/gi, '_')}.dpapi`),
     services: [...(email === calendarId ? ['calendar'] : []), ...(options.mailAccounts.includes(email) ? ['mail'] : [])] as GoogleService[],
+    calendarWrite: email === calendarId,
   }));
   const calendarAccount = accounts[0];
   const calendarRequest = (id: string) => (path: string, params?: Record<string, string>) =>
@@ -37,6 +54,10 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   // Other calendars of the calendar account, e.g. a subscribed Garmin training calendar (`…@import.calendar.google.com`).
   const extraCalendars = (env.DESK_EXTRA_CALENDARS || '').split(',').map(id => id.trim()).filter(Boolean);
   const readCalendar = createCalendarReader(calendarId, calendarRequest(calendarId), Date.now, extraCalendars.map(calendarRequest));
+  const insertCalendar = createCalendarWriter((path, init) => calendarAccount.request('calendar', `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}${path}`, init));
+  const writeCalendar: typeof insertCalendar = async (key, draft) => { const saved = await insertCalendar(key, draft); readCalendar.invalidate(); return saved; };
+  const appointments = createAppointments({ read: createZnanyLekarzReader(), writeCalendar, canWriteCalendar: () => calendarAccount.canWriteCalendar(),
+    persistence: { read: () => readPrivate(join(dir, 'appointments.dpapi')), write: value => writePrivate(join(dir, 'appointments.dpapi'), value) } });
   // The plan day boundaries follow the machine's zone unless set explicitly.
   const readTraining = createGarminReader({ api: createGarminApi(garminTokenFile(env)), timeZone: env.DESK_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone });
   const mail = createMailReader(accounts.filter(a => a.services.includes('mail')));
@@ -51,12 +72,18 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const bankLabels = createBankLabelStore({ operations: () => bank.cached(), persistence: privateFile(join(dir, 'bank-labels.dpapi'), { read: readPrivate, write: writePrivate }) });
   const readSystem = createSystemReader();
   const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
+  const smartRules = createSmartRuleStore(join(dir, 'smart-rules.json'));
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const readUsageBreakdown = createUsageBreakdownReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const githubRepos = (env.DESK_GITHUB_REPOS || '').split(',').map(r => r.trim()).filter(Boolean);
   const gitHubClient = createGitHubClient({
     repos: githubRepos.length > 0 ? githubRepos : undefined,
+  });
+  const openRouterClient = createOpenRouterClient({
+    apiKey: env.OPENROUTER_API_KEY,
+    logPath: env.HERMES_LOG_PATH,
+    cacheFile: join(dir, 'openrouter-cache.json'),
   });
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
@@ -65,6 +92,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   let lastFinished: Awaited<ReturnType<typeof finishedReader.read>> = [];
   let active = new Set<string>();
   return {
+    appointments,
     async cezar() {
       if (!cache || Date.now() - fetchedAt >= 4000) {
         pending ??= readCezar(options.cezarUrl).then(value => {
@@ -109,6 +137,18 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       try { await mail.act(account, threadId, action); }
       catch (error) { throw new SourceError(error instanceof GoogleAuthError ? 401 : 502); }
     },
+    async mailSearch(q, limit) {
+      try { return await mail.search(q, limit); }
+      catch (error) { throw mailError('wyszukiwanie', error); }
+    },
+    async mailThread(account, threadId) {
+      try { return await mail.thread(account, threadId); }
+      catch (error) {
+        if (error instanceof Error && error.message === 'Unknown conversation') throw new SourceError(404);
+        throw mailError('odczyt maila', error);
+      }
+    },
+    smartRules,
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
@@ -134,6 +174,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     },
     usageBreakdown: readUsageBreakdown,
     githubPr: () => gitHubClient.read(),
+    openrouterUsage: () => openRouterClient.read(),
     warmup:warmup.read,
     saveWarmup:warmup.save,
     runWarmup:warmup.run,

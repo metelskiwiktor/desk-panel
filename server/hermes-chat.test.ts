@@ -6,7 +6,7 @@ import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract'
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
 import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
-import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules } from './hermes-chat';
+import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableBankCardId } from './hermes-chat';
 import { watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
@@ -108,6 +108,18 @@ describe('Hermes API client', () => {
 });
 
 describe('Hermes chat', () => {
+  it('restores appointment card identities after panel restart from canonical Hermes history', async () => {
+    const args = { profile: 'https://www.znanylekarz.pl/profil/anna-maj', service: 'konsultacja dermatologiczna', mode: 'online' };
+    const output = 'Karta terminów jest u użytkownika; ref=a-11111111111111111111111111111111.';
+    mock.configure({ streamToolArgs: false, toolScript: async () => ({ tools: [{ name: 'mcp_desk-panel_panel_znanylekarz', args, output }], answer: 'Wybierz godzinę.' }) });
+    const first = hermes(), { id } = await first.create({ text: 'Terminy wizyty' });
+    const before = await finishedChat(first, id);
+    const card = before.items[1].parts?.find(p => p.type === 'tool');
+    expect(card?.id).toMatch(/:v-[a-f0-9]{16}$/);
+    await first.drain(); first.close();
+    const after = await hermes().get(id);
+    expect(after.items[1].parts?.find(p => p.type === 'tool')?.id).toBe(card?.id);
+  });
   it('streams a turn: preamble and context to Hermes, tool step, text deltas, then the final answer', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'Co tu jest?', context: [tile] });
@@ -211,6 +223,63 @@ describe('Hermes chat', () => {
     expect(single.parts?.[0]).toMatchObject({ id: 'answer:call_1' });
   });
 
+  it('keeps the area guides out of the preamble: one line each says that panel_guide has them and when to read one', () => {
+    const preamble = hermesPreamble();
+    expect(preamble).toContain('panel_guide');
+    expect(preamble).toMatch(/- bank: rozmowa o koncie bankowym/);
+    // only the one sentence that matters most stays; the rest is read from the tool
+    expect(preamble).toContain('Istota: opinia z liczb, potem dane na karcie panel_show');
+    // what the guide says is read from the tool, not carried at the start of every conversation
+    expect(preamble).not.toContain('Pokrycie danych');
+    expect(preamble).not.toContain('Rozmowa o koncie bankowym (PKO BP');
+  });
+
+  it('gives a bank change card an id from its plan: apart for different plans, one for the same plan, stable across reads', () => {
+    const name = 'mcp__desk_panel__panel_bank_propose';
+    const tool = (id: string, input: string) => ({ type: 'tool' as const, id, name, input, state: 'done' as const });
+    const a = { merge: ['Psycholog', 'Podolog'], into: 'Zdrowie' }, b = { merge: ['Gry'], into: 'Gadżety' };
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 0, parts: [
+      tool('pending:answer:4', JSON.stringify({ ...a, tytul: 'x' })), tool('pending:answer:6', JSON.stringify(b)), tool('call_9', ''),
+    ] };
+    expect(stabilizeBankCards(message)).toBe(true);
+    const ids = message.parts!.map(p => p.type === 'tool' && p.id);
+    expect(ids[0]).toMatch(/^answer:b-[0-9a-f]{16}$/);
+    expect(ids[1]).toMatch(/^answer:b-[0-9a-f]{16}$/);
+    expect(ids[0]).not.toBe(ids[1]);
+    // no arguments yet (a card streamed without them): it keeps its id until they are there
+    expect(ids[2]).toBe('call_9');
+    // the title, the case of the names and Hermes's call id do not matter; the plan, the tags flag and the answer do
+    expect(stableBankCardId('answer', JSON.stringify({ merge: ['psycholog', 'PODOLOG'], into: 'zdrowie', tags: true, tytul: 'inny' }))).toBe(ids[0]);
+    expect(stableBankCardId('answer', JSON.stringify({ ...a, tags: false }))).not.toBe(ids[0]);
+    expect(stableBankCardId('other', JSON.stringify(a))).not.toBe(ids[0]);
+    expect(stableBankCardId('answer', 'not json')).toBeNull();
+    expect(stabilizeBankCards(message)).toBe(false);
+  });
+
+  it('binds the one proposal the panel accepted, past one it refused', () => {
+    const name = 'mcp__desk_panel__panel_cezar_propose';
+    const refused = '{"error": "Niepoprawne argumenty: recon"}';
+    const shown = JSON.stringify({ result: 'Karta „Zlecić na Cezarze?” jest u użytkownika.' });
+    const message: ChatMessage = { id: 'answer', role: 'agent', at: 0, parts: [
+      { type: 'tool', id: 'pending:1', name, input: '', output: `Błąd: ${refused}`, error: true, state: 'done' },
+      { type: 'tool', id: 'pending:2', name, input: '', output: shown, state: 'done' },
+    ] };
+    fillFromHistory(message, { parts: [
+      { type: 'tool', id: 'call_1', name, input: '{"prompt":"blind"}', output: refused, state: 'done' },
+      { type: 'tool', id: 'call_2', name, input: '{"prompt":"after recon"}', output: shown, state: 'done' },
+    ] });
+    expect(message.parts).toMatchObject([{ id: 'pending:1' }, { id: 'answer:call_2', input: '{"prompt":"after recon"}' }]);
+  });
+
+  it('keeps the plan written before the card when the final output is only the last sentence', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'Zaimplementuj chip statusu' });
+    await finishedChat(service, id);
+    const chat = await until(() => service.get(id), c => !!c.items[1].parts?.some(p => p.type === 'tool' && p.name.endsWith('panel_cezar_propose') && !p.id.startsWith('pending:')));
+    expect(answerOf(chat.items[1])).toMatch(/^\*\*Plan\*\*[\s\S]*Decyzja w karcie poniżej\.$/);
+    expect(chat.items[1].parts?.map(p => p.type)).toEqual(['tool', 'text', 'tool', 'text']);
+  });
+
   it('reads the history where Hermes 0.21 keeps it (/api/sessions, in pages), and where older ones did', async () => {
     const first = hermes();
     const { id } = await first.create({ text: 'Co tu jest?' });
@@ -280,6 +349,21 @@ describe('Hermes chat', () => {
     expect(chat.items[1].status).toBe('done');
     expect(answerOf(chat.items[1])).toContain('Hermes w trybie scenariusza');
     expect(mock.requests.some(r => r.method === 'GET' && /^\/v1\/runs\/[^/]+$/.test(r.path))).toBe(true);
+  });
+
+  it('a run Hermes ended at its limit of model calls still shows its summary, with what happened', async () => {
+    expect(hermesEventOf('run.failed', { output: 'Ustalenia' })).toEqual({ kind: 'failed', error: 'Hermes nie dokończył odpowiedzi.', output: 'Ustalenia' });
+    const real = createHermesClient({ url: mock.url, key: KEY });
+    const silent: HermesClient = {
+      ...real,
+      events: (_run, _on, { signal }) => new Promise(resolve => signal.addEventListener('abort', () => resolve(), { once: true })),
+      status: async () => ({ state: 'failed', output: 'Podsumowanie ustaleń: okna 3p-5h i 3p-weekly.' }),
+    };
+    const service = hermes({ client: silent, stallMs: 150 });
+    const { id } = await service.create({ text: 'Cześć' });
+    const chat = await finishedChat(service, id);
+    expect(chat.items[1]).toMatchObject({ status: 'error', error: expect.stringMatching(/^Hermes przerwał turę przed końcem, zwykle po limicie wywołań modelu\..*„dalej”/) });
+    expect(answerOf(chat.items[1])).toBe('Podsumowanie ustaleń: okna 3p-5h i 3p-weekly.');
   });
 
   it('asks for approval and goes on after the user approves', async () => {
@@ -419,9 +503,9 @@ describe('Hermes chat', () => {
   });
 
   it('does not count a running tool as silence', async () => {
-    // The mock's tool runs three steps (300 ms) with no event, longer than the silence limit; the rest is quicker.
-    mock.configure({ stepMs: 100 });
-    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 50, silenceMs: 250 });
+    // The mock's tool runs three steps (150 ms) with no event, longer than the silence limit; the rest is quicker.
+    mock.configure({ stepMs: 50 });
+    const service = hermes({ turnTimeoutMs: 60_000, stallMs: 25, silenceMs: 125 });
     const { id } = await service.create({ text: 'Co mam na listach?' });
     const chat = await finishedChat(service, id);
     expect(chat.items[1].status).toBe('done');
@@ -448,9 +532,9 @@ const quickAgy = () => () => {
 };
 
 describe('both engines', () => {
-  function hub() {
+  function hub(now?: () => number) {
     const agy = createAgentChat({ dir, launch: quickAgy(), idleMs: 60_000 });
-    const chat = createChatHub({ dir, engines: { hermes: hermes(), agy } });
+    const chat = createChatHub({ dir, engines: { hermes: hermes({ now }), agy } });
     services.push(chat);
     return chat;
   }
@@ -498,15 +582,16 @@ describe('both engines', () => {
   });
 
   it('reports which engines can take a message', async () => {
-    const chat = hub();
+    let clock = Date.now();
+    const chat = hub(() => clock);
     expect(await chat.engines!()).toEqual([{ engine: 'hermes', available: true }, { engine: 'agy', available: true }]);
     mock.setDown(true);
-    await new Promise(resolve => setTimeout(resolve, 5100)); // past the health cache
+    clock += 5100; // past the health cache
     const engines = await chat.engines!();
     expect(engines[0]).toMatchObject({ engine: 'hermes', available: false });
     expect(engines[0].error).toBeTruthy();
     expect(engines[1]).toEqual({ engine: 'agy', available: true });
-  }, 10_000);
+  });
 });
 
 describe('agy chats from before engines', () => {

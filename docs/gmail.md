@@ -17,3 +17,10 @@ temat, podgląd, treść, data), nigdy załączników; niezmienione wątki (ten 
 Zakres `gmail.modify` pozwala czytać, zmieniać etykiety i przenosić do kosza. Konto
 kalendarza połączone przed dodaniem poczty dalej pokazuje kalendarz, a w Ustawieniach
 prosi o ponowne połączenie, żeby dodać Gmail.
+
+## Wyszukiwanie (Smart Actions, Wektor)
+
+`search(q, limit)` i `thread(account, id)` w `server/gmail.ts` czytają całą skrzynkę (także przeczytane i archiwum) zapytaniem
+Gmaila, tylko odczyt, w tym samym zakresie `gmail.modify`. Wyniki są trzymane 2 minuty, wątki po `historyId`. Służą testom
+reguł Smart Actions i narzędziom `panel_mail_search` / `panel_mail_read` (docs/smart-actions.md); kafelek Poczta nadal
+pokazuje tylko nieprzeczytane z 30 dni.

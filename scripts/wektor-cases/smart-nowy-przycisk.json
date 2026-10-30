@@ -1,0 +1,20 @@
+{
+  "description": "Prośba o Smart Action z akcją, której przyciski nie umieją (nie link z maila): Wektor mówi wprost, że panel tego nie umie, nie proponuje reguły z innym linkiem ani bez przycisku i proponuje zadanie na Cezarze; nie zleca go sam.",
+  "turns": [
+    {
+      "say": "Zrób Smart Action dla maili InPost z kodem odbioru paczki: przycisk ma skopiować kod odbioru do schowka.",
+      "expect": {
+        "calls": ["panel_guide"],
+        "notCalls": ["panel_smart_rule_propose", "panel_cezar_propose", "panel_recon_report", "panel_todo_action"],
+        "text": ["Cezar"],
+        "textNot": ["zapisałem", "zleciłem"],
+        "maxTools": 10,
+        "maxSeconds": 150
+      },
+      "soft": [
+        { "name": "mówi, że panel tego nie umie", "text": "nie umie|nie potrafi|nie obsług|tylko (otworzyć|link)" },
+        { "name": "wskazuje skill Zaimplementuj zadanie", "text": "Zaimplementuj zadanie" }
+      ]
+    }
+  ]
+}

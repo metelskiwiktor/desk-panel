@@ -1,12 +1,21 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
+import { appointmentActionSchema, appointmentQuerySchema, appointmentReference, calendarChoiceSchema, calendarProposalSchema } from '../src/appointment-contract';
+import { stableAppointmentCardId } from './appointment-cards';
+import { AppointmentError } from './znanylekarz';
+import type { AppointmentService } from './appointments';
 import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
+import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
+import { bankAssignSchema } from '../src/bank-assign-contract';
+import { smartRulePlanOf } from '../src/smart-rules-contract';
 import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
+import { SmartRuleError } from './smart-rules';
 
-const MAX_BODY = 64 * 1024;
+/** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
+const MAX_BODY = 512 * 1024;
 /** Old decisions used unstable stream ids. Resolve only a unique exact prompt; otherwise block new decisions. */
 export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Record<string, DispatchOutcome>) {
   const resolved = { ...dispatches };
@@ -25,7 +34,7 @@ export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Rec
 }
 async function readBody(req: IncomingMessage): Promise<unknown> {
   let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>64 KB)'); }
+  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>512 KB)'); }
   return JSON.parse(body || 'null');
 }
 const parse = <T>(schema: ZodType<T>, value: unknown): T => {
@@ -49,14 +58,41 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit): Promise<boolean> {
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch))?)?\/?$/.exec(url.pathname);
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService): Promise<boolean> {
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
   if (!match) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = match;
   const write = req.method !== 'GET';
   if (write && req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return true; }
   try {
+    if (id && id !== 'engine' && (action === 'appointment' || action === 'calendar-plan') && (req.method === 'GET' || req.method === 'POST')) {
+      if (!appointments) throw new ChatError(503, 'Karty wizyt i wydarzeń są niedostępne.');
+      const body = req.method === 'POST' ? parse(z.object({ toolCallId: z.string().min(1).max(200), action: z.unknown() }).strict(), await readBody(req)) : null;
+      const toolCallId = body?.toolCallId ?? url.searchParams.get('toolCallId');
+      const conversation = await chat.get(id);
+      const tool = action === 'appointment' ? 'panel_znanylekarz' : 'panel_calendar_propose';
+      const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done' ? (m.parts ?? []).flatMap(p =>
+        p.type === 'tool' && p.id === toolCallId && p.name.endsWith(tool) && stableAppointmentCardId(m.id, p.name, p.input, p.output) === toolCallId ? [p] : []) : []) : [];
+      if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości gotowej karty. Odśwież rozmowę.');
+      const card = matches[0];
+      if (cardRefusal(action === 'appointment' ? 'appointment' : 'calendarPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę kartę. Poproś Wektora o nową.');
+      const binding = `${id}:${toolCallId}`;
+      if (action === 'appointment') {
+        const ref = appointmentReference(card.output);
+        if (!ref) throw new ChatError(409, 'Karta nie ma zapisanego odczytu terminów.');
+        const query = parse(appointmentQuerySchema, JSON.parse(card.input));
+        const view = await appointments.view(binding, ref);
+        if (JSON.stringify(query) !== JSON.stringify(view.preview.query)) throw new ChatError(409, 'Odczyt terminów nie pasuje do tej karty. Poproś Wektora o nową.');
+        return json(res, 200, body ? await appointments.act(binding, ref, parse(appointmentActionSchema, body.action)) : view), true;
+      }
+      const plan = parse(calendarProposalSchema, JSON.parse(card.input));
+      if (body) {
+        const decision = parse(z.object({ action: z.literal('confirm'), choice: calendarChoiceSchema.optional() }).strict(), body.action);
+        return json(res, 200, await appointments.calendarConfirm(binding, plan, decision.choice)), true;
+      }
+      return json(res, 200, await appointments.calendarView(binding, plan)), true;
+    }
     if (id === 'engine') {
       // The engine new conversations start on, remembered for every screen of the panel.
       if (action || req.method !== 'PUT' || !chat.prefer) { res.writeHead(405).end(); return true; }
@@ -111,6 +147,42 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         if (legacy.unresolved) throw new ChatError(409, 'Nie można jednoznacznie przypisać wcześniejszej decyzji do karty. Potrzebna jest diagnostyka tej rozmowy przed zleceniem.');
       }
       return json(res, 200, await cockpit.dispatch(id, input)), true;
+    } else if (action === 'bank-plan' && req.method === 'POST') {
+      // The user's answer on a bank change card: the only way the chat changes the account's categories. Which change it is
+      // comes from the conversation's own tool call, never from the request.
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(bankPlanDecisionSchema, await readBody(req));
+      const conversation = await chat.get(id);
+      const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && (p.name.includes('panel_bank_propose') || p.name.includes('panel_bank_assign')) && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        : []) : [];
+      // The id comes from the plan, so the same plan twice in one answer is one card.
+      if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
+      if (cardRefusal(card.name.includes('panel_bank_assign') ? 'bankAssign' : 'bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      const bad = () => new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+      if (card.name.includes('panel_bank_assign')) {
+        let plan;
+        try { plan = bankAssignSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
+        return json(res, 200, await cockpit.bankAssign(id, input, plan)), true;
+      }
+      let plan;
+      try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
+      return json(res, 200, await cockpit.bankPlan(id, input, plan)), true;
+    } else if (action === 'smart-rule' && req.method === 'POST') {
+      // The user's answer on a Smart Actions rule card: the only way the chat changes the rules. The rule comes from the
+      // conversation's own tool call, never from the request.
+      if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
+      const input = parse(bankPlanDecisionSchema.pick({ toolCallId: true, decision: true }).strict(), await readBody(req));
+      const conversation = await chat.get(id);
+      const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_smart_rule_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+        : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+      if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+      if (cardRefusal('smartRule', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+      const plan = smartRulePlanOf(card.input);
+      if (!plan) throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+      return json(res, 200, await cockpit.smartRule(id, input, plan)), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;
@@ -130,7 +202,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
     }
     res.writeHead(405).end();
   } catch (error) {
-    const status = error instanceof ChatError || error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 500;
+    const status = error instanceof ChatError || error instanceof SourceError || error instanceof AppointmentError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : 500;
     const msg = error instanceof Error && error.message && !error.message.startsWith('chat failed with ')
       ? error.message
       : undefined;

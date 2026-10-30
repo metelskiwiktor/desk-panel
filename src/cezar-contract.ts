@@ -64,13 +64,25 @@ export type FinishedTask = z.infer<typeof finishedTaskSchema>;
 export const cezarActions = ['archive', 'unarchive', 'read', 'unread'] as const;
 export type CezarAction = typeof cezarActions[number];
 export const cezarActionSchema = z.object({ id: z.string().regex(/^[^/\s]{1,128}\/[0-9A-Za-z-]{1,128}$/), action: z.enum(cezarActions) }).strict();
+const runnerId = z.string().trim().min(1).max(32).regex(/^[a-z0-9_-]+$/);
+/**
+ * Runner and model for agent steps the workflow pins (desk-panel-task: implement/fix/address on Codex, review on agy),
+ * for one task: Cezar's `stepOverrides` win over the pins. Without them a pinned step ignored the card's choice.
+ */
+export const stepOverridesSchema = z.record(
+  z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
+  z.object({ runner: runnerId.optional(), model: z.string().trim().min(1).max(128).optional() }).strict()
+    .refine(o => o.runner !== undefined || o.model !== undefined, 'wykonawca albo model'),
+).refine(steps => Object.keys(steps).length <= 12, 'najwyżej 12 kroków');
+export type StepOverrides = z.infer<typeof stepOverridesSchema>;
 export const cezarCreateRunSchema = z.object({
   task: z.string().trim().min(1).max(32_000),
   title: z.string().trim().min(1).max(120).optional(),
   project: z.string().trim().min(1).max(64).default('desk-panel'),
   workflow: z.string().trim().min(1).max(64).default('desk-panel-task'),
-  runner: z.string().trim().min(1).max(32).regex(/^[a-z0-9_-]+$/).optional(),
+  runner: runnerId.optional(),
   model: z.string().trim().min(1).max(128).optional(),
+  steps: stepOverridesSchema.optional(),
   todoId: z.string().trim().min(1).max(64).optional(),
 }).strict();
 export type CezarCreateRunInput = z.input<typeof cezarCreateRunSchema>;

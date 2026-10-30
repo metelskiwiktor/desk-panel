@@ -1,4 +1,4 @@
-import type { StepKind, TrainingStep, TrainingWorkout } from './training-contract';
+import type { StepKind, TrainingStep } from './training-contract';
 
 /** "50 min", "1 h 30": the planned time of a workout. */
 export function formatDuration(sec: number): string {
@@ -67,9 +67,4 @@ export function profileBars(steps: TrainingStep[]): { kind: ProfileBlock['kind']
   const peak = Math.max(0, ...blocks.map(b => b.watts ?? 0));
   return blocks.map(b => ({ kind: b.kind, width: (b.sec / total) * 100, height: peak && b.watts ? Math.max(26, (b.watts / peak) * 100) : 40 }));
 }
-/** Total ridden time of the steps, in seconds. */
-export const stepsDuration = (steps: TrainingStep[]) => flattenSteps(steps).reduce((sum, b) => sum + b.sec, 0);
 
-export const workoutsOn = (workouts: TrainingWorkout[], day: string) => workouts.filter(w => w.date === day);
-/** The next workout after `day`, for a day without one. */
-export const nextWorkoutAfter = (workouts: TrainingWorkout[], day: string) => workouts.find(w => w.date > day && !w.restDay);

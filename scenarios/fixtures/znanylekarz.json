@@ -1,0 +1,10 @@
+{
+  "profile": "<script>ZLApp={DOCTOR_ID: 101}; ZLApp.APICredentials={'ACCESS_TOKEN':'public-fixture-secret'};</script>",
+  "doctor": {"full_name":"lek. Anna Maj"},
+  "addresses": {"_items":[{"id":"201","name":"Konsultacja online","is_online_only":true,"timezone":null}]},
+  "services": {"_items":[{"id":"301","name":"Konsultacja dermatologiczna","price":250,"duration":30,"is_price_from":false}]},
+  "slots": {"_items":[
+    {"start":"2026-11-09T08:00:00+01:00","booking_url":"https://www.znanylekarz.pl/booking/wybierz-wizyte/101/201/2026-11-09T08:00:00+01:00"},
+    {"start":"2026-11-09T08:40:00+01:00","booking_url":"https://www.znanylekarz.pl/booking/wybierz-wizyte/101/201/2026-11-09T08:40:00+01:00"}
+  ]}
+}

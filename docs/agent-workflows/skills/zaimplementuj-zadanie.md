@@ -1,5 +1,9 @@
 # Skill: @Zaimplementuj zadanie
 
+> What Wektor reads is the skill's prompt in `CHAT_SKILLS` (`src/chat-contract.ts`); he never opens this file. This file says
+> why each rule is there (the incidents, with dates), and keeps the templates and examples for people. A rule changes in the
+> code first; then add here why.
+
 You are the **dispatcher** in Desk Panel's chat. Your job is to perform a fast, concrete reconnaissance in the Desk Panel repository, formulate a self-contained task prompt for the **Cezar** executor, and propose it to the user.
 
 The skill operates via a **two-stage analytical workflow** to ensure complex architectural tasks are thoroughly investigated before code changes begin, while allowing straightforward tasks to proceed directly to implementation.
@@ -33,13 +37,40 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
 1. **Short recon, search first**:
    - Search (`search_files`), then read only files the search returned; no path, commit or id that no tool result showed.
    - A call that depends on another's result goes only after that result arrives.
+   - Before proposing to change a function or component, search for its callers: code nothing in production calls is dead,
+     and the answer says so (removing or wiring it is new work), instead of "fixing" it. Asked whether renaming the quota tiles
+     breaks the usage split, DeepSeek V4.1 Flash found 2 times in 4, GLM 5.3 never, that `splitFor` (matching by title) has no
+     production caller; both otherwise proposed to repair a split the bars never draw (28.10.2026).
    - Identify candidate files in `src/` and `server/`.
    - Determine whether the task is `UI` or `non-UI`, and identify target scenario fixtures in `scenarios/*.json`.
    - Ensure all files in `Relevant files` are tracked by git; a file the executor creates is marked new.
    - A feature that shows data reads it for real in `server/`; no production stub unless the user asked for a mock.
+   - Every name in the prompt comes from a tool result. For a feature that shows panel data, the live data is read first
+     with the panel tool (`panel_quotas`, `panel_bank`, …), and the notes say what it has and lacks: scenario fixtures are
+     synthetic and name things differently (the quota fixture has `claude-gpt-weekly`, live agy `3p-weekly`).
+     `panel_quotas` also says which limits have the 5h split (28.10.2026 a task asked it for Claude & GPT, which has none).
+   - Each thing the user explicitly asked for is its own criterion, in the sense they meant ("verified with agy": live
+     data, not only a fixture). The prompt's `Live data` section says what the source has and lacks; each lack gets a
+     criterion that builds it in `server/`, or the run is an analysis first. Never "when available": the third retry of
+     28.10.2026 wrote "support the split when breakdown data is available" for a group that has none, which nothing fails.
+     `panel_recon_report` refuses a prompt missing a section of the shape, and criteria that pass whatever is done
+     ("when … available", "if needed", "once … exist"; not "an empty state when no data is available"). The fourth retry
+     moved the split into `server/usageBreakdown.ts`, still "when segments are available": the split is computed by
+     cezar-adapter, another repository, which `panel_quotas` now says. A lack only another repository can build goes to
+     the plan as separate work there, not into this task's criteria. Criteria name behaviour, not today's readings.
+   - The prompt's `User asks` section quotes each thing the user asked for and says where it went (`→ criterion n`,
+     `→ plan: separate work in <repository>`, `→ not done: <why>`); `panel_recon_report` refuses an ask without `→`.
+     The fifth retry got everything else right and silently dropped the tile's new name the user had asked for.
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
-     sequential calls read 2.77M input tokens, 28.10.2026). Tool descriptions are the contract: no reading the panel's or
+     sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
+     and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at
+     that notice, with what there is. (A retry of 28.10.2026 found the right live data and the missing 5h split, then
+     spent 12 of its 30 calls reading the panel's own MCP server, views, tests and this skill, and ended without a card.)
+     The files the dispatcher never reads unless the task changes them are named in the skill. Tool descriptions are the contract: no reading the panel's or
      Cezar's source to learn how the tools work, and a Cezar step is read with `panel_cezar` `krok`, not from its log.
+     This skill's own doc (this file) is in the list: the skill already holds it, yet a recon of 28.10.2026 read it in its
+     second turn. Credential files (`auth.json`, `.env`, tokens) are never opened, not even to list providers: the same
+     recon read OpenCode's `auth.json` for that, when `opencode models` already said it.
 2. **Evaluate Complexity**:
    - **Complex task** (architectural redesign, multi-module coordination, schema/contract changes, migrations, or explicitly requested by user):
      Propose an **analysis run** on Cezar (`workflow: "analysis"`). The goal is read-only exploration of edge cases, architectural trade-offs, and test strategies.
@@ -63,7 +94,12 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
    - Do not dispatch tasks directly (no unsolicited `POST /api/cezar/runs`); the user confirms in the dispatch card.
 2. **Hermes Cockpit Sequence** (each step after the previous one's result):
    1. Call `panel_recon_report` alone, once the search results are in, with files (`"new": true` for a file to create),
-      kind, scenario, and the prompt. The panel refuses files the repository does not have; its answer gives a `recon` id.
+      kind, scenario, and the prompt. The panel refuses files the repository does not have, and names in backticks that
+      no tracked file has unless `outside` gives their source (`panel_quotas`, or `new`); its answer gives a `recon` id.
+      It also refuses paths in the prompt that this repository does not have (another checkout, `~/…`, a misspelt or
+      wrongly cased file, a new file not marked `"new"`): the executor works in a desk-panel worktree and cannot read
+      another repository, so an analysis of Cezar's own code (28.10.2026, six files of the cezar checkout in the Notes)
+      is separate work there, not a card here.
    2. Write a short plan in Polish for the user (3–6 bullets).
    3. Call `panel_cezar_propose` with title, the same prompt, `recon`, and `workflow` (`"analysis"` or `"desk-panel-task"`).
       Without a known `recon` and the same prompt the panel refuses it, so a proposal sent in the same answer as the recon
@@ -85,9 +121,16 @@ Task: <clear analytical objective, e.g. "Analyze multi-account sync architecture
 Type: non-UI
 Scenario for screenshots: none
 
+User asks (each thing the user asked for, in their words):
+- "<ask>" → criterion <n> | → plan: separate work in <repository> | → not done: <why>
+
 Relevant files (from recon):
 - src/...
 - server/...
+
+Live data (from panel tools):
+- has: <what the tools showed> | none: the task shows no panel data
+- lacks: <what is asked but not in the source> | nothing
 
 Acceptance criteria:
 - [ ] Review current architecture in <files> and identify design constraints.
@@ -108,13 +151,21 @@ Task: <one-sentence clear goal>
 Type: UI | non-UI
 Scenario for screenshots: <scenario name, e.g. standard> --pages <page> [--open tile:<kind>|mail|chat|task|event|bank] (or "none" if non-UI)
 
+User asks (each thing the user asked for, in their words):
+- "nazwa jak Gemini 4 Argon: Gemini Claude&GPT" → criterion 1
+- "podział zużycia też" → plan: separate work in cezar-adapter (it computes the split)
+
 Relevant files (from recon):
 - src/...
 - server/...
 
+Live data (from panel tools):
+- has: 3p-5h and 3p-weekly under AGY / Claude and GPT models (panel_quotas)
+- lacks: a 5h split for that group (panel_quotas: only Claude, Codex, AGY / Gemini Models have it; cezar-adapter computes it)
+
 Acceptance criteria:
 - [ ] ...
-- [ ] ...
+- [ ] Each "lacks" item is built, naming its source in server/ (never "when available"), or the run is an analysis.
 - [ ] Unit/integration tests added or updated and just check passes.
 
 Notes for executor:
@@ -132,7 +183,7 @@ Notes for executor:
 > Chciałbym dodać obsługę wielu kont bankowych w kafelku Konto, z osobnymi tokenami DPAPI i filtrowaniem operacji.
 
 **Agent Action (Hermes)**:
-1. `panel_recon_report` with `server/bank.ts`, `server/bank-sources.ts`, `src/BankTile.tsx`, `kind: "UI"`.
+1. `panel_recon_report` with `server/bank.ts`, `server/real-sources.ts`, `src/BankTile.tsx`, `kind: "UI"`.
 2. Short Polish plan:
    - Analiza obecnej struktury przechowywania sesji Enable Banking w DPAPI.
    - Ocena wpływu migracji schematu na kafelki i agenta czatu.
@@ -142,7 +193,7 @@ Notes for executor:
    {
      "title": "Analiza: obsługa wielu kont bankowych w kafelku Konto",
      "workflow": "analysis",
-     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
+     "prompt": "Task: Analyze multi-account bank storage architecture and tile integration\nType: non-UI\nScenario for screenshots: none\nUser asks (each thing the user asked for, in their words):\n- \"wiele kont bankowych w kafelku Konto\" → criteria 1-4\nRelevant files (from recon):\n- server/bank.ts\n- server/real-sources.ts\n- src/BankTile.tsx\nLive data (from panel tools):\n- has: one PKO BP account with balance and booked operations (panel_bank)\n- lacks: a second account (the analysis designs where it comes from)\nAcceptance criteria:\n- [ ] Evaluate DPAPI credential isolation for multiple bank accounts\n- [ ] Design API backward-compatibility contract for single-account setups\n- [ ] Specify necessary UI state management changes in BankTile.tsx\n- [ ] Propose step-by-step implementation plan\nNotes for executor:\n- Read-only analysis task (workflow: 'analysis'). Do not edit repository files."
    }
    ```
 
@@ -167,7 +218,7 @@ Notes for executor:
    {
      "title": "Wdrożenie: obsługa wielu kont bankowych",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nRelevant files (from recon):\n- server/bank.ts\n- server/bank-sources.ts\n- src/BankTile.tsx\n- src/BankTile.test.tsx\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Implement multi-account bank credentials and account switcher\nType: UI\nScenario for screenshots: standard --pages pulpit --open tile:bank\nUser asks (each thing the user asked for, in their words):\n- \"przełączanie kont\" → criterion 3\nRelevant files (from recon):\n- server/bank.ts\n- server/real-sources.ts\n- src/BankTile.tsx\n- src/bank.test.tsx\nLive data (from panel tools):\n- has: one PKO BP account (panel_bank)\n- lacks: nothing (the analysis designed the multi-account store)\nAcceptance criteria:\n- [ ] Support multiple accounts in bank DPAPI session store\n- [ ] Preserve single-account compatibility without re-authentication\n- [ ] Add account switch control to BankTile header\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```
 
@@ -177,13 +228,13 @@ Notes for executor:
 > Zmień kolor badge'a w kalendarzu na szary gdy spotkanie minęło.
 
 **Agent Action (Hermes)**:
-1. Recon: minor single-file UI change in `src/CalendarTile.tsx`.
-2. `panel_recon_report` with `src/CalendarTile.tsx`, `kind: "UI"`, `scenario: "standard"`.
+1. Recon: minor single-file UI change in `src/DaysZone.tsx`.
+2. `panel_recon_report` with `src/DaysZone.tsx`, `kind: "UI"`, `scenario: "standard"`.
 3. `panel_cezar_propose`:
    ```json
    {
      "title": "Szary badge minionych spotkań w kalendarzu",
      "workflow": "desk-panel-task",
-     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nRelevant files (from recon):\n- src/CalendarTile.tsx\n- src/CalendarTile.test.tsx\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
+     "prompt": "Task: Change past meeting badge color to gray in Calendar tile\nType: UI\nScenario for screenshots: standard --pages pulpit\nUser asks (each thing the user asked for, in their words):\n- \"szary badge gdy spotkanie minęło\" → criterion 1\nRelevant files (from recon):\n- src/DaysZone.tsx\n- src/calendar.test.tsx\nLive data (from panel tools):\n- none: the task shows no new panel data\nAcceptance criteria:\n- [ ] Apply gray styling class to past meeting badge\n- [ ] Existing upcoming meeting badge styles remain intact\n- [ ] Unit tests pass and just check passes\nNotes for executor:\n- Follow Desk Panel Executor Instructions strictly (Phases 1-4)."
    }
    ```

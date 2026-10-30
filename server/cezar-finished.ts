@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { CezarAction, CezarCreateRunInput, CezarCreatedRun, FinishedTask } from '../src/cezar-contract';
 
@@ -137,7 +140,30 @@ const dispatchConfigSchema = z.object({
   modelsLocked: z.boolean().optional(),
 });
 
-export async function readCezarDefaults(base: string, workflow: string, selectedRunner?: string, request: typeof fetch = fetch) {
+/**
+ * Agent steps of a workflow file that name their own runner (and model): Cezar runs them on those whatever the run was
+ * started with, so the dispatch card must say so (28.10.2026 it showed "agy · gemini-3.8-flash-medium" while the
+ * implement step ran on gemini-3.8-flash-high). Node keys sit at four spaces; prompts are indented deeper. `follows`: the
+ * step continues that step's session (fix and address continue implement), so the card moves them together.
+ */
+export type PinnedStep = { id: string; runner: string; model: string | null; follows?: string };
+export function pinnedSteps(yaml: string): PinnedStep[] {
+  const steps: PinnedStep[] = [];
+  for (const block of yaml.replace(/\r\n/g, '\n').split(/\n(?= {2}- id: )/)) {
+    const id = /^ {2}- id: *(\S+)/m.exec(block)?.[1];
+    const runner = /\n {4}runner: *(\S+)/.exec(block)?.[1];
+    if (!id || !runner || !/\n {4}type: *agent\b/.test(block)) continue;
+    const follows = /\n {4}session:\s*\n {6}continue: *(\S+)/.exec(block)?.[1];
+    steps.push({ id, runner, model: /\n {4}model: *(\S+)/.exec(block)?.[1] ?? null, ...(follows ? { follows } : {}) });
+  }
+  return steps;
+}
+const WORKFLOWS_DIR = (() => { try { return fileURLToPath(new URL('../.ai/cezar/workflows/', import.meta.url)); } catch { return path.join(process.cwd(), '.ai', 'cezar', 'workflows'); } })();
+async function readPinnedSteps(workflow: string, dir: string): Promise<PinnedStep[]> {
+  try { return pinnedSteps(await readFile(path.join(dir, `${workflow}.yaml`), 'utf8')); } catch { return []; }
+}
+
+export async function readCezarDefaults(base: string, workflow: string, selectedRunner?: string, request: typeof fetch = fetch, workflowsDir = WORKFLOWS_DIR) {
   const response = await request(new URL('/api/v1/p/desk-panel/config', base), { signal: AbortSignal.timeout(4000), redirect: 'error' });
   if (!response.ok) throw new Error(`Cezar HTTP ${response.status}`);
   const config = dispatchConfigSchema.parse(await response.json());
@@ -161,7 +187,7 @@ export async function readCezarDefaults(base: string, workflow: string, selected
     } catch { /* defaults remain usable without a model catalog */ }
   }
   if (model && !models.some(item => item.id === model)) models.unshift({ id: model, label: model });
-  return { runner, model, models, catalogSource, modelsLocked: config.modelsLocked === true };
+  return { runner, model, models, catalogSource, modelsLocked: config.modelsLocked === true, pinned: await readPinnedSteps(workflow, workflowsDir) };
 }
 
 /** Starts an isolated task; Cezar resolves its workflow-specific runner and model when not explicitly selected. */
@@ -178,6 +204,7 @@ export async function createCezarRun(base: string, input: CezarCreateRunInput, r
       workflow,
       ...(input.runner ? { runner: input.runner } : {}),
       ...(input.model ? { model: input.model } : {}),
+      ...(input.steps ? { stepOverrides: input.steps } : {}),
       worktree: true,
       autonomous: true,
       ...(input.todoId ? { todoId: input.todoId } : {}),

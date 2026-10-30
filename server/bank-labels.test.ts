@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { BankTransaction } from '../src/bank-contract';
 import { bankLabelsSourceSchema } from '../src/bank-labels-contract';
 import { mapTransaction } from './bank';
-import { createBankLabelStore, type BankLabelFile, type BankLabelPersistence } from './bank-labels';
+import { createBankLabelStore, type BankLabelPersistence } from './bank-labels';
 import { maskPhones, partiesOf, publicTransaction } from './bank-parties';
 import { agentViews } from './agent-views';
 import type { PanelSources } from './sources';
@@ -124,78 +124,6 @@ describe('bank label store', () => {
     expect((await store.read()).data!.labels['acc:O;1']).toMatchObject({ move: 'move', category: savings });
   });
 
-  it('upgrades a file of the first version: categories, people and marks stay, a category’s mark becomes a spend', async () => {
-    const op = { at: Date.parse('2026-10-26T12:00:00Z'), amount: -43.9, currency: 'PLN', name: 'Biedronka', method: 'card', merchant: 'BIEDRONKA', keys: [] };
-    const v1 = {
-      version: 1, secret: 'x'.repeat(43), since: '2026-10-26', categories: [{ id: 'c-00000001', name: 'Jedzenie', color: 'orange', icon: 'utensils' }],
-      people: [{ id: 'p-00000001', name: 'pyszne.pl', createdAt: 1, identifiers: [] }],
-      labels: { 'acc:O;1': { category: 'c-00000001', recurring: false, person: 'p-00000001', comment: '', labeledAt: 1, op } },
-    };
-    const persistence = memory(v1);
-    const src = await setup([map(raw.card('O;1', '2026-10-26', '43.90'))], persistence).store.read();
-    expect(src.message).toBeUndefined();
-    expect(src.data?.labels['acc:O;1']).toEqual({ move: 'spend', category: 'c-00000001', tags: [], party: 'p-00000001', recurring: false, comment: '' });
-    expect(src.data?.categories[0].move).toBe('spend');
-    expect((persistence.file as { version: number }).version).toBe(4);
-  });
-
-  it('upgrades the second version: a “Pożyczka” category becomes a settlement with that person', async () => {
-    const op = (amount: number) => ({ at: Date.parse('2026-10-26T12:00:00Z'), amount, currency: 'PLN', name: 'x', method: 'transfer', merchant: 'X', keys: [] });
-    const v2 = {
-      version: 2, secret: 'x'.repeat(43), since: '2026-10-26', categories: [{ id: 'c-00000001', name: 'Pożyczka', color: 'blue', icon: 'handCoins' }, { id: 'c-00000002', name: 'Jedzenie', color: 'orange', icon: 'utensils' }],
-      tags: ['restauracja'], merchants: [{ id: 'm-00000001', name: 'pyszne.pl', createdAt: 1, identifiers: [] }], people: [{ id: 'p-00000001', name: 'Anna', createdAt: 1, identifiers: [] }],
-      labels: {
-        'acc:O;1': { category: 'c-00000001', tags: [], merchant: null, person: 'p-00000001', recurring: false, comment: '', labeledAt: 1, op: op(-400) },
-        'acc:O;2': { category: 'c-00000001', tags: [], merchant: null, person: 'p-00000001', recurring: false, comment: '', labeledAt: 1, op: op(150) },
-        'acc:O;3': { category: 'c-00000002', tags: ['restauracja'], merchant: 'm-00000001', person: null, recurring: false, comment: '', labeledAt: 1, op: op(-70) },
-      }, rejections: [],
-    };
-    const persistence = memory(v2);
-    const data = (await setup([], persistence).store.read()).data!;
-    const file = persistence.file as BankLabelFile;
-    expect(file.version).toBe(4);
-    expect(file.categories.map(c => `${c.name} ${c.move}`)).toEqual(['Jedzenie spend']);
-    expect(file.parties.map(p => p.name)).toEqual(['Anna', 'pyszne.pl']);
-    expect(file.labels['acc:O;1']).toMatchObject({ move: 'settle', category: null, party: 'p-00000001' });
-    expect(file.labels['acc:O;2']).toMatchObject({ move: 'settle', category: null, party: 'p-00000001' });
-    expect(file.labels['acc:O;3']).toMatchObject({ move: 'spend', category: 'c-00000002', party: 'm-00000001', tags: ['restauracja'] });
-    expect(data.balances).toEqual([{ party: 'p-00000001', currency: 'PLN', amount: 250 }]);
-  });
-
-  it('upgrades the third version into moves: the own side’s money in is income from “Pensja”, any other purpose a tag', async () => {
-    const op = (amount: number) => ({ at: Date.parse('2026-10-26T12:00:00Z'), amount, currency: 'PLN', name: 'x', method: 'transfer', merchant: 'X', keys: [] });
-    const mark = (party: string | null, amount: number, more: object = {}) => ({ category: null, tags: [], party, purpose: null, recurring: false, comment: '', labeledAt: 1, op: op(amount), ...more });
-    const v3 = {
-      version: 3, secret: 'x'.repeat(43), since: '2026-10-26', tags: ['ogrzewanie'], purposes: ['pożyczka', 'dokładka', 'prezent'], rejections: [],
-      categories: [{ id: 'c-00000001', name: 'Rachunki', color: 'blue', icon: 'receipt' }, { id: 'c-00000002', name: 'Sprzedaż', color: 'teal', icon: 'handCoins' }],
-      parties: [
-        { id: 'k-00000001', name: 'Moja firma', kind: 'self', createdAt: 1, identifiers: [] }, { id: 'k-00000002', name: 'Tata', kind: 'person', createdAt: 1, identifiers: [] },
-        { id: 'k-00000003', name: 'Anna', kind: 'person', createdAt: 1, identifiers: [] }, { id: 'k-00000004', name: 'OLX', kind: 'company', createdAt: 1, identifiers: [] },
-      ],
-      labels: {
-        'acc:O;1': mark('k-00000001', 8000, { tags: ['pensja'], recurring: true }),
-        'acc:O;2': mark('k-00000001', -2000),
-        'acc:O;3': mark('k-00000002', -300, { category: 'c-00000001', purpose: 'dokładka', tags: ['ogrzewanie'] }),
-        'acc:O;4': mark('k-00000003', -400, { purpose: 'pożyczka' }),
-        'acc:O;5': mark('k-00000003', -90, { purpose: 'prezent' }),
-        'acc:O;6': mark('k-00000004', 120, { category: 'c-00000002' }),
-      },
-    };
-    const persistence = memory(v3);
-    await setup([], persistence).store.read();
-    const file = persistence.file as BankLabelFile;
-    const salary = file.categories.find(c => c.name === 'Pensja')!;
-    expect(file.categories.map(c => `${c.name} ${c.move}`)).toEqual(['Rachunki spend', 'Sprzedaż income', 'Pensja income']);
-    expect(file.labels['acc:O;1']).toMatchObject({ move: 'income', category: salary.id, tags: ['pensja'], recurring: true });
-    expect(file.labels['acc:O;2']).toMatchObject({ move: 'move', category: null });
-    expect(file.labels['acc:O;3']).toMatchObject({ move: 'spend', category: 'c-00000001', tags: ['ogrzewanie', 'dokładka'] });
-    expect(file.labels['acc:O;4']).toMatchObject({ move: 'settle', party: 'k-00000003', tags: [] });
-    expect(file.labels['acc:O;5']).toMatchObject({ move: 'spend', category: null, tags: ['prezent'] });
-    expect(file.labels['acc:O;6']).toMatchObject({ move: 'income', category: 'c-00000002' });
-    expect(file.tags).toEqual(['ogrzewanie', 'dokładka', 'prezent']);
-    expect(JSON.stringify(file)).not.toContain('"kind":"self"');
-  });
-
   it('suggests the next transfer from a known account as it was marked, and leaves it to be marked until taken', async () => {
     const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00'))];
     const { store } = setup(ops);
@@ -205,12 +133,60 @@ describe('bank label store', () => {
     const data = (await store.read()).data!;
     expect(data.known['acc:O;2']).toBe(mine);
     expect(data.pending).toEqual(['acc:O;2']);
-    expect(data.suggestions['acc:O;2']).toEqual({ sure: true, options: [{ move: 'income', category: salary, party: mine, recurring: true, reasons: ['ten sam rachunek ··0000: Moja firma', 'Przychód · Pensja · cykliczne: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:O;2']).toEqual({ sure: false, options: [{ move: 'income', category: salary, party: mine, recurring: true, reasons: ['ten sam rachunek ··0000: Moja firma', 'Przychód · Pensja · cykliczne: 1 z 1 raz'] }] });
     expect(data.suggestions['acc:O;1']).toBeUndefined();
     // The side's habit, for the move buttons; none for an operation already done.
     expect(data.habits).toEqual({ 'acc:O;2': { income: 1 } });
     await store.apply({ action: 'accept', tx: 'acc:O;2' });
     expect((await store.read()).data!.pending).toEqual([]);
+  });
+
+  it('is sure of a transfer only after two agreeing marks; a single mark is a choice that can be picked', async () => {
+    const ops = [map(raw.transferIn('O;0', '2026-10-19', '1000.00')), map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.transferIn('O;3', '2026-10-27', '500.00')), map(raw.card('O;4', '2026-10-27', '12.00'))];
+    const { store } = setup(ops);
+    const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
+    const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', move: 'income', category: salary, party: mine, recurring: true });
+    expect((await store.read()).data!.suggestions['acc:O;2'].sure).toBe(false);
+    await store.apply({ action: 'label', tx: 'acc:O;0', move: 'income', category: salary, party: mine, recurring: true });
+    expect((await store.read()).data!.suggestions['acc:O;2']).toMatchObject({ sure: true });
+  });
+
+  it('marks many operations in one write with the whole mark of each, or none', async () => {
+    const ops = [map(raw.transferIn('O;1', '2026-10-21', '1000.00')), map(raw.transferIn('O;2', '2026-10-26', '500.00')), map(raw.card('O;3', '2026-10-27', '12.00')), map(raw.card('O;4', '2026-10-27', '13.00'))];
+    const { store } = setup(ops);
+    const mine = (await store.apply({ action: 'createParty', name: 'Moja firma' })).party!.id;
+    const salary = (await store.apply({ action: 'createCategory', name: 'Pensja', move: 'income' })).category!.id;
+    const food = (await store.apply({ action: 'createCategory', name: 'Jedzenie' })).category!.id;
+    const item = (tx: string, over: Record<string, unknown> = {}) => ({ tx, move: 'income', category: salary, tags: [], party: mine, recurring: false, ...over });
+    // an operation of a kind that does not fit its category refuses the lot
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;1'), item('acc:O;3', { move: 'spend' })] } as never)).rejects.toMatchObject({ status: 409 });
+    expect((await store.read()).data!.labels['acc:O;1']).toBeUndefined();
+    expect(await store.apply({ action: 'markMany', items: [item('acc:O;1', { recurring: true }), item('acc:O;3', { move: 'spend', category: food, tags: ['kfc'], party: null })] } as never)).toMatchObject({ ok: true, assigned: 2 });
+    const data = (await store.read()).data!;
+    expect(data.labels['acc:O;1']).toMatchObject({ move: 'income', category: salary, party: mine, recurring: true });
+    expect(data.labels['acc:O;3']).toMatchObject({ move: 'spend', category: food, tags: ['kfc'], party: null });
+    // an operation already done, one that is not there, one twice, and nothing at all are refused
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;1')] } as never)).rejects.toMatchObject({ status: 409 });
+    await expect(store.apply({ action: 'markMany', items: [item('acc:nope')] } as never)).rejects.toMatchObject({ status: 404 });
+    await expect(store.apply({ action: 'markMany', items: [item('acc:O;2'), item('acc:O;2')] } as never)).rejects.toMatchObject({ status: 400 });
+    await expect(store.apply({ action: 'markMany', items: [] } as never)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('makes the categories named on the card in the same write, uses one that exists, and makes nothing when the write is refused', async () => {
+    const ops = [map(raw.card('O;1', '2026-10-26', '43.90')), map(raw.card('O;2', '2026-10-25', '80.00')), map(raw.card('O;3', '2026-10-24', '12.00'))];
+    const { store } = setup(ops);
+    const food = (await store.apply({ action: 'createCategory', name: 'Jedzenie' })).category!.id;
+    const item = (tx: string, over: Record<string, unknown> = {}) => ({ tx, move: 'spend', category: null, tags: [], party: null, recurring: false, ...over });
+    // refused as a whole (an unknown new name): no category is made
+    await expect(store.apply({ action: 'markMany', create: ['Paliwo'], items: [item('acc:O;1', { newCategory: 'Paliwo' }), item('acc:O;2', { newCategory: 'Inna' })] } as never)).rejects.toMatchObject({ status: 404 });
+    expect((await store.read()).data!.categories.map(c => c.name)).toEqual(['Jedzenie']);
+    expect(await store.apply({ action: 'markMany', create: ['Paliwo', 'jedzenie'], items: [item('acc:O;1', { newCategory: 'Paliwo' }), item('acc:O;2', { newCategory: 'Jedzenie' }), item('acc:O;3', { category: food })] } as never)).toMatchObject({ ok: true, assigned: 3 });
+    const data = (await store.read()).data!;
+    const fuel = data.categories.find(c => c.name === 'Paliwo')!;
+    expect(data.categories.map(c => c.name)).toEqual(['Jedzenie', 'Paliwo']);
+    expect(data.labels['acc:O;1']).toMatchObject({ move: 'spend', category: fuel.id });
+    expect(data.labels['acc:O;2']).toMatchObject({ category: food });
   });
 
   it('refuses what it cannot do and changes nothing then', async () => {
@@ -264,13 +240,13 @@ describe('bank label store', () => {
     await store.apply({ action: 'label', tx: 'acc:O;1', move: 'spend', category: food, tags: ['zakupy'], party: spolem, recurring: false });
     let data = (await store.read()).data!;
     expect(data.known['acc:O;3']).toBe(spolem);
-    expect(data.suggestions['acc:O;3']).toEqual({ sure: true, options: [{ move: 'spend', category: food, tags: ['zakupy'], party: spolem, reasons: ['ten sam tekst w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
+    expect(data.suggestions['acc:O;3']).toEqual({ sure: false, options: [{ move: 'spend', category: food, tags: ['zakupy'], party: spolem, reasons: ['ten sam tekst w banku: Społem', 'Spożywcze · #zakupy: 1 z 1 raz'] }] });
     expect(data.labels['acc:O;3']).toBeUndefined();
     // Older than the day "to be marked" counts from: not counted, but still suggested when opened.
     await store.apply({ action: 'setSince', since: '2026-10-25' });
     data = (await store.read()).data!;
     expect(data.pending).toEqual([]);
-    expect(data.suggestions['acc:O;3'].sure).toBe(true);
+    expect(data.suggestions['acc:O;3'].sure).toBe(false);
     await store.apply({ action: 'accept', tx: 'acc:O;3' });
     data = (await store.read()).data!;
     expect(data.labels['acc:O;3']).toEqual({ move: 'spend', category: food, tags: ['zakupy'], party: spolem, recurring: false, comment: '' });
@@ -280,7 +256,7 @@ describe('bank label store', () => {
     expect(data.suggestions['acc:O;2']).toBeUndefined();
   });
 
-  it('offers a choice, not a guess, when earlier marks differ or only the exact amount links them', async () => {
+  it('offers a choice, not a guess, when earlier marks differ, and nothing for a payment with no name from the bank', async () => {
     const ops = [
       ...['O;1', 'O;2', 'O;3'].map((ref, i) => map(raw.card(ref, `2026-10-2${i}`, '10.00', 'LESZNOKAWIARNIA 7PL'))),
       map(raw.phonePay('P;1', '2026-10-21', '76.93')), map(raw.phonePay('P;2', '2026-10-26', '76.93')), map(raw.phonePay('P;3', '2026-10-26', '20.10')),
@@ -296,11 +272,28 @@ describe('bank label store', () => {
     const data = (await store.read()).data!;
     expect(data.suggestions['acc:O;3'].sure).toBe(false);
     expect(data.suggestions['acc:O;3'].options.map(o => o.category)).toEqual([b, a]);
-    expect(data.suggestions['acc:P;2']).toEqual({ sure: false, options: [{ move: 'spend', category: a, tags: ['restauracja'], party: pyszne, reasons: [expect.stringMatching(/^ta sama kwota 76,93\s?zł, bez nazwy sklepu$/), 'pyszne.pl · Kawa · #restauracja: 1 z 1 raz'] }] });
-    // No ranges and no guessing: another amount has nothing.
+    // A payment the bank gives no name for is linked to nothing, not even to an earlier one of the very same amount: amounts change.
+    expect(data.suggestions['acc:P;2']).toBeUndefined();
     expect(data.suggestions['acc:P;3']).toBeUndefined();
     await store.apply({ action: 'accept', tx: 'acc:O;3', option: 1 });
     expect((await store.read()).data!.labels['acc:O;3']).toMatchObject({ move: 'spend', category: a, party: cafe });
+  });
+
+  it('merges a category into another of its list: marks move, the name may stay as a tag, lists of other moves are refused', async () => {
+    const ops = [map(raw.card('O;1', '2026-10-26', '43.90')), map(raw.card('O;2', '2026-10-25', '80.00'))];
+    const { store } = setup(ops);
+    const health = (await store.apply({ action: 'createCategory', name: 'Zdrowie', move: 'spend' })).category!.id;
+    const psy = (await store.apply({ action: 'createCategory', name: 'Psycholog', move: 'spend' })).category!.id;
+    const pocket = (await store.apply({ action: 'createCategory', name: 'Revolut', move: 'move' })).category!.id;
+    await store.apply({ action: 'label', tx: 'acc:O;1', category: psy, recurring: false });
+    await store.apply({ action: 'label', tx: 'acc:O;2', category: psy, tags: ['psycholog'], recurring: false });
+    await expect(store.apply({ action: 'mergeCategory', category: psy, into: pocket })).rejects.toMatchObject({ status: 409 });
+    expect((await store.apply({ action: 'mergeCategory', category: psy, into: health, tag: 'Psycholog' })).removed).toBe(2);
+    const data = (await store.read()).data!;
+    expect(data.categories.map(c => c.name)).not.toContain('Psycholog');
+    expect(data.labels['acc:O;1']).toMatchObject({ category: health, tags: ['psycholog'] });
+    expect(data.labels['acc:O;2']).toMatchObject({ category: health, tags: ['psycholog'] });
+    expect(data.tags).toEqual(['psycholog']);
   });
 
   it('renames and deletes tags everywhere, and deleting a category or a side unmarks only that part', async () => {
@@ -378,7 +371,7 @@ describe('the bank label routes (standard scenario)', () => {
     const labels = bankLabelsSourceSchema.parse(await (await fetch(`${base}/api/bank/labels`)).json());
     expect(labels.data!.suggestions['acc-1:t13']).toEqual({ sure: true, options: [{ party: 'k-00000012', reasons: ['ta sama nazwa w banku („Anna Kowalska”): Anna'] }] });
     expect(labels.data!.suggestions['acc-1:t1'].options[0]).toMatchObject({ move: 'income', category: 'c-0000000f', party: 'k-00000010', recurring: true });
-    expect(labels.data!.suggestions['acc-1:t22'].sure).toBe(false);
+    expect(labels.data!.suggestions['acc-1:t22']).toBeUndefined();
     expect(labels.data!.balances).toEqual([{ party: 'k-00000012', currency: 'PLN', amount: -120 }]);
     expect((await post({ action: 'accept', tx: 'acc-1:t3' }, null)).status).toBe(403);
     expect((await post({ action: 'accept', tx: 'acc-1:t3' }, 'http://evil.example')).status).toBe(403);

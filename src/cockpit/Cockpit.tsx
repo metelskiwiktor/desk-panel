@@ -29,8 +29,8 @@ function CheckIcon({ state }: { state: CheckState }) {
 export function Cockpit({ source }: { source: CockpitSource }) {
   const { cockpit } = source;
   const { task, pr } = cockpit;
-  return <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-3 tw:overflow-y-auto tw:p-4">
-    <div className={`tw:flex tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:px-4 tw:py-3 ${cockpit.watching ? 'tw:border-ck-amber/40 tw:bg-ck-amber/10' : 'tw:border-ck-line tw:bg-ck-surface'}`} role="status">
+  return <div className="tw:flex tw:flex-col tw:gap-3 tw:p-4">
+    {task && <div className={`tw:flex tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:px-4 tw:py-3 ${cockpit.watching ? 'tw:border-ck-amber/40 tw:bg-ck-amber/10' : 'tw:border-ck-line tw:bg-ck-surface'}`} role="status">
       <Radar size={18} className={cockpit.watching ? 'tw:text-ck-amber tw:animate-ck-pulse' : 'tw:text-ck-faint'} aria-hidden="true" />
       <div className="tw:min-w-0">
         <div className="tw:text-sm tw:font-semibold tw:text-ck-text">{cockpit.watching ? 'Wektor monitoruje task' : task ? 'Wektor nie monitoruje teraz' : 'Brak aktywnego monitorowania'}</div>
@@ -38,7 +38,7 @@ export function Cockpit({ source }: { source: CockpitSource }) {
           : task ? (task.status === 'REVIEW' ? 'Task czeka na Twój przegląd.' : task.status === 'FAILED' ? 'Task się nie udał: szczegóły w Cezarze.' : 'Task jest zakończony.')
           : 'Zleć zadanie przez @Zaimplementuj zadanie albo wskaż task Cezara, a tu pojawi się jego postęp.'}</div>
       </div>
-    </div>
+    </div>}
 
     <section className={section} aria-label="Aktywny task Cezara">
       <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><span className={eyebrow}>Task Cezara</span>
@@ -59,7 +59,7 @@ export function Cockpit({ source }: { source: CockpitSource }) {
       </> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">Żaden task nie jest teraz obserwowany.</p>}
     </section>
 
-    <section className={section} aria-label="Pull request">
+    {pr && <section className={section} aria-label="Pull request">
       <div className="tw:mb-3 tw:flex tw:items-center tw:gap-2"><GitPullRequest size={15} className="tw:text-ck-green" aria-hidden="true" /><span className={eyebrow}>Pull request</span>
         {pr?.state && PR_STATE[pr.state] && <span className="tw:ml-auto tw:rounded-full tw:bg-ck-agent/15 tw:px-2 tw:py-0.5 tw:text-[11px] tw:font-semibold tw:text-ck-agent">{PR_STATE[pr.state]}</span>}
         {pr && <a href={pr.url} target="_blank" rel="noopener noreferrer" className={`${pr.state && PR_STATE[pr.state] ? '' : 'tw:ml-auto '}tw:text-sm tw:font-semibold tw:text-ck-cal tw:no-underline`}>#{pr.number}</a>}
@@ -73,7 +73,7 @@ export function Cockpit({ source }: { source: CockpitSource }) {
           {pr.checks.map(c => <li key={c.name} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:rounded-lg tw:border tw:border-ck-line tw:bg-ck-side tw:px-2.5 tw:py-1 tw:text-xs tw:text-ck-text"><CheckIcon state={c.state} />{c.name}</li>)}
         </ul>
       </> : <p className="tw:m-0 tw:text-sm tw:text-ck-faint">PR pojawi się, gdy Cezar go otworzy.</p>}
-    </section>
+    </section>}
 
   </div>;
 }

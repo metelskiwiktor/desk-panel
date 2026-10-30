@@ -101,7 +101,28 @@ describe('bank source', () => {
     expect(header).toEqual({ typ: 'JWT', alg: 'RS256', kid: 'app-1' });
     const transactions = new URL(calls.find(c => c.url.includes('/transactions'))!.url);
     expect(transactions.searchParams.get('transaction_status')).toBe('BOOK');
-    expect(transactions.searchParams.get('date_from')).toBe('2026-09-20');
+    expect(transactions.searchParams.get('date_from')).toBe('2026-07-27');
+  });
+  it('says in the log how many pages it read and whether the bank had more, without any operation', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await bank(memory({ session }), api()).read();
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/^bank: odczyt 2 operacji od 2026-07-27 w 1 stronach; po ostatniej stronie bank ma już nic więcej$/));
+      log.mockClear();
+      const more = api({ '/transactions': () => json({ transactions: [operation], continuation_key: 'k' }) });
+      await bank(memory({ session }), more).read();
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/w 8 stronach; po ostatniej stronie bank ma jeszcze dalsze/));
+      expect(JSON.stringify(log.mock.calls)).not.toContain('Sklep');
+    } finally { log.mockRestore(); }
+  });
+  it('asks for the shorter period when the bank refuses 90 days, and still reads', async () => {
+    let first = true;
+    const fetch = api({ '/transactions': () => { if (first) { first = false; return json({}, 400); } return json({ transactions: [operation] }); } });
+    const source = await bank(memory({ session }), fetch).read();
+    expect(source.status).toBe('connected');
+    expect(source.data!.transactions).toHaveLength(1);
+    const dates = fetch.mock.calls.map(([url]) => new URL(String(url))).filter(u => u.pathname.endsWith('/transactions')).map(u => u.searchParams.get('date_from'));
+    expect(dates).toEqual(['2026-07-27', '2026-09-20']);
   });
   it('does not read the bank again before the refresh interval, even after a restart', async () => {
     const store = memory({ session });

@@ -97,18 +97,36 @@ export function sender(from: string) {
   const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
   return (match ? match[1].trim() || match[2] : from).trim() || 'Nieznany nadawca';
 }
+/** `"Jan Kowalski" <jan@x.pl>` → `jan@x.pl`; a bare address stays as is. */
+export const address = (from: string) => (/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase();
 export function projectThread(email: string, raw: unknown): MailThread {
   const thread = threadDetail.parse(raw);
   const latest = [...thread.messages].reverse().find(m => m.labelIds?.includes('UNREAD')) ?? thread.messages.at(-1)!;
   const get = (name: string) => latest.payload?.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
-  return { id: `${email}:${thread.id}`, account: email, threadId: thread.id, from: sender(get('From')),
+  return { id: `${email}:${thread.id}`, account: email, threadId: thread.id, from: sender(get('From')), address: address(get('From')),
+    unread: thread.messages.some(m => m.labelIds?.includes('UNREAD')),
     subject: get('Subject').trim() || '(bez tematu)', snippet: decode(latest.snippet ?? ''), body: extractBody(latest) || decode(latest.snippet ?? ''),
     receivedAt: Number(latest.internalDate), messages: thread.messages.length,
     sourceUrl: `https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox/${thread.id}` };
 }
 
+const RETRY_MS = [2_000, 5_000];
+/**
+ * What went wrong with a Gmail request, without the error itself (an auth error may carry credentials): `rate` when Gmail
+ * limits the user's requests, `auth` when the sign-in is missing or refused, `other` otherwise. `detail` is safe to log.
+ */
+export function mailFailure(error: unknown): { kind: 'rate' | 'auth' | 'other'; detail: string } {
+  if (error instanceof GoogleAuthError) return { kind: 'auth', detail: `auth ${error.reason}` };
+  const failure = error as { response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } } };
+  const status = failure.response?.status;
+  const reasons = (failure.response?.data?.error?.errors ?? []).map(e => e.reason).filter((r): r is string => !!r);
+  const rate = status === 429 || reasons.some(r => /rateLimitExceeded|userRateLimitExceeded|quotaExceeded/.test(r));
+  const detail = status ? `HTTP ${status}${reasons.length ? ` ${reasons.join(',')}` : ''}` : error instanceof Error ? `${error.name}: ${error.message.slice(0, 120)}` : 'nieznany błąd';
+  return { kind: rate ? 'rate' : status === 401 || status === 403 && reasons.some(r => /auth|insufficientPermissions/i.test(r)) ? 'auth' : 'other', detail };
+}
+
 /** Unread inbox conversations of every account, merged newest first. Never sends or permanently deletes messages. */
-export function createMailReader(accounts: Account[], now = Date.now) {
+export function createMailReader(accounts: Account[], now = Date.now, wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))) {
   const states = new Map<string, AccountState>(accounts.map(a => [a.email, { status: 'loading', observedAt: null, threads: [], partial: false, cache: new Map(), retryAt: 0, rateLimitFailures: 0 }]));
   let lastAttempt = -Infinity;
   let pending: Promise<void> | undefined;
@@ -161,7 +179,72 @@ export function createMailReader(accounts: Account[], now = Date.now) {
         : 'Nie udało się odczytać Gmaila. Ponowię połączenie.';
     }
   }
+  /** Conversations a search read, by `email:threadId` (same historyId: no new request), and recent answers by query. */
+  const found = new Map<string, { historyId: string; thread: MailThread }>();
+  const searches = new Map<string, { at: number; threads: MailThread[] }>();
+  /**
+   * Searches run one at a time and the same one asked twice is one: three rule cards of one chat loading together read
+   * 30 conversations each in parallel and Gmail refused them (its per-user rate, 30.10.2026).
+   */
+  const running = new Map<string, Promise<MailThread[]>>();
+  let queue: Promise<unknown> = Promise.resolve();
+  /**
+   * A request Gmail refused for its rate is tried again after 2 s and 5 s: one second was too short right after a few
+   * searches, and three tests in a row failed while a minute later the same ones passed (30.10.2026).
+   */
+  async function get(account: Account, url: string, params: Record<string, string>): Promise<unknown> {
+    for (const delay of [...RETRY_MS, null]) {
+      try { return await account.request('mail', url, { params }); }
+      catch (error) {
+        if (delay === null || mailFailure(error).kind !== 'rate') throw error;
+        await wait(delay);
+      }
+    }
+    throw new Error('unreachable');
+  }
+  async function full(account: Account, id: string, historyId?: string): Promise<MailThread> {
+    const key = `${account.email}:${id}`, known = found.get(key);
+    if (known && historyId && known.historyId === historyId) return known.thread;
+    const raw = await get(account, `${BASE}/threads/${id}`, { format: 'full' });
+    const thread = projectThread(account.email, raw);
+    if (found.size > 500) found.clear();
+    found.set(key, { historyId: threadDetail.parse(raw).historyId, thread });
+    return thread;
+  }
   return {
+    /**
+     * Conversations of the whole mailbox (read or not) matching a Gmail query, newest first, at most `limit` of all the
+     * accounts together (each account was given `limit`, so two accounts doubled what Wektor read and a test ran on).
+     * Read-only: Wektor uses it to see what a Smart Actions rule would catch. Answers are kept for two minutes.
+     */
+    async search(q: string, limit: number): Promise<MailThread[]> {
+      const key = `${limit}:${q}`, known = searches.get(key);
+      if (known && now() - known.at < 120_000) return known.threads;
+      const pending = running.get(key);
+      if (pending) return pending;
+      const work = queue.catch(() => {}).then(async () => {
+        const threads: MailThread[] = [];
+        for (const account of accounts) {
+          const page = threadList.parse(await get(account, `${BASE}/threads`, { q, maxResults: String(limit) }));
+          const listed = page.threads ?? [];
+          for (let i = 0; i < listed.length; i += 5) threads.push(...await Promise.all(listed.slice(i, i + 5).map(t => full(account, t.id, t.historyId))));
+        }
+        threads.sort((a, b) => b.receivedAt - a.receivedAt);
+        threads.splice(limit);
+        if (searches.size > 50) searches.clear();
+        searches.set(key, { at: now(), threads });
+        return threads;
+      });
+      queue = work;
+      running.set(key, work);
+      try { return await work; } finally { running.delete(key); }
+    },
+    /** One conversation by account and id, read or not. */
+    async thread(email: string, threadId: string): Promise<MailThread> {
+      const account = accounts.find(a => a.email === email);
+      if (!account || !/^[0-9a-f]+$/i.test(threadId)) throw new Error('Unknown conversation');
+      return full(account, threadId);
+    },
     /** Drop a pre-login failure immediately after successful consent. Keep quota backoff. */
     invalidate() { lastAttempt = -Infinity; },
     async read(limit: number): Promise<MailSource> {

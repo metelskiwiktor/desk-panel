@@ -71,6 +71,7 @@ import {
   useContext,
   useLayoutEffect,
   useRef,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -486,7 +487,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="tw:aui-thread-welcome-suggestions tw:flex tw:w-full tw:flex-col">
+    <div className="tw:aui-thread-welcome-suggestions tw:flex tw:w-full tw:flex-col tw:empty:hidden">
       <ThreadPrimitive.Suggestions>
         {() => <ThreadSuggestionItem />}
       </ThreadPrimitive.Suggestions>
@@ -520,6 +521,21 @@ const ThreadSuggestionItem: FC = () => {
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const { ComposerHeader, ComposerTop, composerInput } = useContext(ThreadComponentsContext);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [, resizeInput] = useState(0);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input || typeof ResizeObserver === 'undefined') return;
+    let previousWidth = 0;
+    // TextareaAutosize remeasures on render/window resize. Our animated shell and resizable history also change its
+    // width without a window resize; re-render only on width changes so a stale height cannot survive until typing.
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (width > 0 && width !== previousWidth) { previousWidth = width; resizeInput(value => value + 1); }
+    });
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, []);
   return (
     <ComposerPrimitive.Root className="tw:aui-composer-root tw:relative tw:flex tw:w-full tw:flex-col">
       {ComposerHeader && <ComposerHeader />}
@@ -529,6 +545,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
       >
         {ComposerTop && <ComposerTop />}
         <ComposerPrimitive.Input
+          ref={inputRef}
           placeholder="Napisz wiadomość…"
           className="tw:aui-composer-input tw:caret-primary tw:placeholder:text-muted-foreground/60 tw:max-h-48 tw:min-h-10 tw:w-full tw:resize-none tw:bg-transparent tw:px-2.5 tw:py-1 tw:text-base tw:leading-6 tw:outline-none"
           rows={1}
@@ -671,15 +688,14 @@ const AssistantMessage: FC = () => {
   } = useContext(ThreadComponentsContext);
   const groupBy = TaskGroupComponent ? taskAwareGroupBy : messageGroupBy;
 
-  const ACTION_BAR_PT = "pt-1.5";
-  // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
-  const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
+  // Always reserve the action row; copying or moving the pointer must never move the next message.
+  const ACTION_BAR_HEIGHT = "tw:min-h-8 tw:pt-0.5";
 
   return (
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="tw:fade-in tw:slide-in-from-bottom-1 tw:animate-in tw:relative tw:-mb-7.5 tw:pb-7.5 tw:duration-150 tw:[contain-intrinsic-size:auto_200px] tw:[content-visibility:auto]"
+      className="tw:relative"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -779,7 +795,7 @@ const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
+      autohide="never"
       className="tw:aui-assistant-action-bar-root tw:text-muted-foreground tw:animate-in tw:fade-in tw:col-start-3 tw:row-start-2 tw:-ms-1 tw:flex tw:gap-1 tw:duration-200"
     >
       <ActionBarPrimitive.Copy asChild>

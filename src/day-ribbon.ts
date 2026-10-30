@@ -1,6 +1,5 @@
 import type { CalendarEvent } from './model';
 import { todayAgenda } from './agenda';
-import { time } from './format';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -70,4 +69,3 @@ export function countdown(ms: number): string {
   const minutes = Math.max(1, Math.ceil(ms / MINUTE));
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
 }
-export const meetingRange = (event: CalendarEvent) => `${time(event.startAt)}–${time(event.endAt)}`;

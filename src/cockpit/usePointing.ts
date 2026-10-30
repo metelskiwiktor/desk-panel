@@ -10,12 +10,6 @@ import { contextFrom, markPicked, pickableAt, sameContext } from '../chat-contex
 export function usePointing(picking: boolean, context: ContextItem[], setContext: (fn: (list: ContextItem[]) => ContextItem[]) => void) {
   useEffect(() => {
     if (!picking) return;
-    document.body.setAttribute('data-chat-dock', '');
-    return () => document.body.removeAttribute('data-chat-dock');
-  }, [picking]);
-
-  useEffect(() => {
-    if (!picking) return;
     document.body.setAttribute('data-picking', '');
     // The chat itself and whatever is marked data-pick-through (the menu of virtual desktops) keep working while pointing.
     const outside = (target: EventTarget | null) => !(target instanceof Element && target.closest('.chat-root, [data-pick-through]'));

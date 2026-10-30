@@ -14,6 +14,7 @@ Instrukcja dla osoby lub agenta, którego poproszono o wyjaśnienie problemu w r
 | `%USERPROFILE%\.desk-panel\cockpit.json` i `GET /api/chats/<id>/cockpit` | Zapisane decyzje kart i obserwowane zadanie. | Bieżący stan nie dowodzi sam w sobie stanu w chwili błędu; koreluj id wywołania i czas z historią. |
 | `servy/logs/Desk-Panel-Hermes/` i `servy/logs/Desk-Panel/` | Logi usług, gdy trzeba sprawdzić dostępność, błędy lub czas restartu. | Szukaj ograniczonego przedziału czasu i związku z przebiegiem; nie zakładaj, że brak wpisu wyklucza zdarzenie. |
 | `servy/logs/Desk-Panel-Hermes/stderr.log` i `%LOCALAPPDATA%\hermes\logs\errors.log` | Błędy dostawcy modelu i ponowienia Hermesa (`API call failed (attempt n/3)`, `no result event, process still alive`), przycięte pliki kontekstu (`Context file … TRUNCATED`), błędy narzędzi. Jedyne miejsce, które tłumaczy turę bez żadnych zdarzeń w strumieniu. | Wpisy mają nazwę sesji (`[desk-panel-<id>]`) tylko czasem; koreluj czasem. Logi izolowanego agy dostawcy (`%LOCALAPPDATA%\Temp\hermes_agy_*`) należą do konta usługi i zwykle są niedostępne. |
+| `output\wektor\<przypadek>-<czas>.json` | Raport przebiegów harnessu testowego (`scripts/wektor-test.mjs`, [skill](../skills/wektor-capabilities/SKILL.md)): każde narzędzie z wejściem i wyjściem, pełny tekst odpowiedzi, kontrole `expect` i `soft`. Rozmowy testowe w panelu mają tytuł `[test] <przypadek> #<n>`. | Poza Gitem, tylko przebiegi z harnessu. Liczniki użycia z Hermesa w raporcie (`0 wywołań modelu`) nie są wiarygodne jako miara kosztu; kartę w takiej rozmowie widzi i może kliknąć użytkownik, więc to są żywe karty. |
 | `GET /api/agent/cezar?id=<projekt/uuid>` i `&krok=<id>`; `<repo>\.ai\cezar\runs\<uuid>.ndjson` | Stan zadania Cezara, jego kroki, błędy, linie błędów kroku sprawdzającego, cały raport kroku agenta. To samo, co dostaje Wektor (`panel_cezar`). Plik ndjson: zdarzenia kroków z czasami. | Cezar zapisuje tylko początek wyjścia sprawdzeń (`… (output truncated)`): szczegółów asercji może tam nie być. |
 
 Lokalny `chat-logs/README.md` jest generowany z `server/chat-log.ts`; opisuje pola. Ślady rozmów starsze niż 30 dni są usuwane przy starcie usługi, ale rozmowa usunięta w panelu nie usuwa automatycznie śladu. Logowanie jest najlepszym wysiłkiem: jego błąd nie przerywa czatu. `turns.jsonl` nie podlega temu samemu usuwaniu co poszczególne ślady. Ścieżki domyślne mogą różnić się przy innej konfiguracji. Starsze rozmowy bez `engine` dotyczą agy; dla nich zobacz [czat.md](czat.md).
@@ -49,11 +50,35 @@ Drugi filtr może nadal zwrócić prywatne i długie dane. Zawęź go do konkret
 
 ## Na co patrzeć
 
+- **Narzędzie poczty lub Smart Actions zwraca błąd źródła.** Panel zapisuje przyczynę każdego nieudanego odczytu Gmaila
+  (`<czas ISO> gmail wyszukiwanie: rate|auth|other (HTTP 429 rateLimitExceeded)`) w `servy/logs/Desk-Panel/stderr.log`,
+  bez samego błędu (może nieść dane logowania). Porównaj czas z `t` narzędzia w `chat-logs/<id>.jsonl`. `rate` to limit
+  zapytań Google (panel ponawia po 2 i 5 s, Wektor dostaje polecenie, by odczekać ok. 30 s), `auth` to logowanie do
+  połączenia w Ustawieniach. Wcześniej (do 30.10.2026) Wektor dostawał samo „(502)”, ponawiał w pętli i czekał `sleep`.
+
+- **„Przejdź do podsumowania” nic nie robi.** W szerokim oknie obie kolumny są już widoczne, więc samo `setPane('chat')`
+  nie daje efektu. Przycisk ma wywołać `review()` właściwej karty: odsłonić czat, przewinąć do jej akcji i ustawić fokus.
+  Przed wyborem celem jest „Wybieram…”, po wyborze link rezerwacji. Sprawdzaj fokus i położenie celu, a nie tylko zmianę
+  stanu zakładki. Regresja jest sprawdzana przez `chat-appointment-axis` oraz `src/appointment-card.test.tsx`.
+  To problem nawigacji UI, nie powód do zmiany promptu ani ponawiania rezerwacji.
+
+- **Karta wizyty lub kalendarza.** Zakończone `panel_znanylekarz` / `panel_calendar_propose` mają id
+  `<wiadomość>:v-<16 znaków>` (`server/appointment-cards.ts`, odtwarzane także z historii Hermesa). W wyniku wizyty musi być
+  `ref=a-…`, wskazujące konkretny odczyt w `appointments.dpapi`. `GET /api/chats/<id>/appointment?toolCallId=…` pokazuje odczyt,
+  wybór i wynik zapisu; niczego nie zmienia. Analogicznie `calendar-plan` pokazuje propozycję zwykłego wydarzenia.
+  Nie klikaj potwierdzenia podczas diagnozy: tworzy prawdziwe wydarzenie Google. Brak `canWriteCalendar` nie oznacza braku
+  odczytu agendy — stary token wymaga nowej zgody na `calendar.events.owned`. W odczycie ZnanyLekarz `timezone: null` jest
+  poprawne, a daty z ułamkiem sekundy (`.000`) powodują `404`; czas wizyty jest w dodatkowym `with[]=service.duration`.
+
 - **Tura bez zdarzeń.** Gdy ślad pokazuje tylko statusy `stall` panelu, sprawdź w logu Hermesa ten przedział czasu. Wywołanie modelu przez `antigravity-oauth` kończy się po 300 s; `no result event, process still alive` trzy razy pod rząd oznacza zawieszone wywołania, nie wolne narzędzie. Panel przerywa taką turę po 6 min ciszy (`DESK_HERMES_SILENCE_MS`, [hermes.md](hermes.md)).
 - **Szczegół, którego nie było w danych.** Każdą konkretną nazwę testu, asercję, ścieżkę, hash czy id z odpowiedzi agenta wyszukaj w historii sesji przed tą odpowiedzią. Jeśli nie występuje w żadnym wyniku narzędzia, agent ją dopowiedział. Najczęściej dzieje się to przy uciętym wyjściu: sprawdź, czy wynik miał `output truncated` i czy agent to przyznał.
 - **Wywołania na ślepo.** Policz `tool_calls` w jednej wiadomości asystenta w historii sesji. Wywołanie, którego argument zależy od wyniku innego z tej samej paczki (ścieżka, hash, recon), powstało bez tego wyniku. Karta wysłana w takiej paczce jest dziś odrzucana przez panel (`panel_recon_report` → `recon`, [hermes.md](hermes.md)); odrzucona karta mówi to w UI.
 - **Koszt.** `usage` w `turns.jsonl`: `input` i `cached` sumują wszystkie wywołania modelu w turze, więc rosną z liczbą wywołań i długością historii. Policz udział wyników narzędzi w historii sesji (rola `tool`) i poszukaj doklejonych plików kontekstu (`[Subdirectory context discovered: …]`): dużo kosztu biorą pojedyncze wielkie wyniki i powtarzane czytanie tego samego.
 - **Środowisko czy model.** Błąd typu „is not recognized”, brak modułu czy `ENAMETOOLONG` sprawdź u źródła (np. `node_modules`, argv procesu), zanim uznasz go za błąd agenta.
+- **Karta z wyłączonymi przyciskami albo odrzucona z 409.** Sprawdź `parts[].id` karty w `GET /api/chats/<id>`. Karta zmiany w koncie (`panel_bank_propose`) powinna mieć id `<id wiadomości>:b-<16 znaków>`. Id `pending:<wiadomość>:<n>` (strumień nie dał id wywołania) albo surowe `call_…` znaczy, że nie dostała stabilnego id i jej decyzji nie da się przypisać (`stabilizeBankCards`, `stableBankCardId` w `server/hermes-chat.ts`; id to skrót z planu, bo Hermes nie daje użytecznych id). Zapisane decyzje i podglądy: `cockpit.json` → `bankPlans[<id karty>]` albo `GET /api/chats/<id>/cockpit`. Karty Cezara (`panel_cezar_propose`) mają osobną regułę wiązania (`fillFromHistory`).
+- **Nowe narzędzie jest „nieznane”.** Hermes zapamiętuje listę narzędzi MCP z chwili startu: odpowiedź w rodzaju „tego narzędzia nie ma w tej sesji” albo `tool_search` bez wyniku po wdrożeniu nowego narzędzia lub zmianie jego schematu to brak `just hermes RESTART`, a nie błąd agenta. Zmiana samej odpowiedzi narzędzia albo kodu panelu restartu nie wymaga.
+- **Czy rozmowa ma aktualne instrukcje.** Preambuła idzie tylko w pierwszej wiadomości sesji: w `<id>.jsonl` linia `panel` / `sent` z `preamble: true` w turze 1 mówi, że ją dostała. Zmiana preambuły nie dotyczy rozmów już trwających. Przewodniki dziedzin (`panel_guide`) Wektor czyta sam: sprawdź w turze, czy narzędzie było wywołane przed odpowiedzią i przed kartą.
+- **Czy twierdzenia o koncie są prawdziwe.** Porównaj nazwy, kwoty i daty z odpowiedzi z widokiem tylko do odczytu (`GET /api/agent/bank?kategoria=…&from=…&to=…`). Do tej pory konkretne twierdzenia Wektora o operacjach zgadzały się z danymi, ale trzeba to sprawdzić, nie zakładać. Konto zmienia się (użytkownik oznacza operacje i klika karty), więc przed oceną odpowiedzi sprawdź stan z chwili rozmowy, np. czy kategoria, o której mówi, jeszcze istnieje.
 - **Skutek zlecenia.** Karta i „zlecono” nie mówią, czy kod działa. Sprawdź zadanie Cezara (kroki, `verify`, `fix`, recenzja) i sam PR: czy funkcja jest osiągalna dla użytkownika, czy dane są prawdziwe i czy się odświeżają.
 
 ## Przykład: karta po analizie PR
@@ -82,3 +107,13 @@ To przykład metody i przyczyn, nie opis bieżącego stanu (wszystkie opisane br
 - `87f2b70a` („Kontynuujmy pracę nad tym…”). Tura 4 skończyła się po 15 min bez żadnego zdarzenia po `agy --help`. W logu Hermesa: trzy wywołania modelu po 300 s, każde `no result event, process still alive`, ponowienie w świeżym procesie agy zawisło tak samo. W turze 2 Wektor podał padający test i asercję („keeps the default kind order…”, 11 zamiast 12), których nie było w żadnym wyniku: wyjście weryfikacji było ucięte, a prawdziwy padający test był inny. W turze 3 jedna wiadomość miała 33 wywołania; ścieżki i hashe z tej paczki nie występowały wcześniej w rozmowie. `vitest is not recognized` był błędem środowiska (`node_modules` bez `.bin` po sprzątaniu worktree przez Cezara), nie agenta. Wyniki narzędzi stanowiły 300 z 374 tys. znaków historii, w tym ok. 57 tys. doklejonych `AGENTS.md`.
 - `fcf6eba4` („Dlaczego to zadanie Cezara…”). Diagnoza poprawna i z zastrzeżeniem o uciętym wyjściu. Zlecenie w turze 2 powstało w paczce 21 wywołań razem z kartami, bez czytania wcześniejszej analizy; PR #35 miał w produkcji zaślepkę z pustą listą. Wektor sam to potem wykrył i odmówił merge'a.
 - `10ad055a` („PR #35 z widgetem GitHub PR…”). Faza 0 znalazła analizę, rekonesans i karta przeszły barierę `recon` za pierwszym razem, zlecenie było trafne. Koszt: 46 wywołań po kolei i 2,77 mln tokenów wejścia, głównie dlatego, że widok kroku analizy był ucięty i agent składał raport z dziennika przez `node -e`. PR #36 przeszedł recenzję Cezara mimo kafelka, którego nie dało się wybrać: recenzent był tym samym modelem i sprawdzał tylko kryteria ze zlecenia.
+
+## Przykład: karty zmiany w koncie bez stabilnego id (29 października 2026)
+
+To przykład metody i przyczyny, nie opis bieżącego stanu (naprawiono tego dnia).
+
+- Objaw: użytkownik widział przyciski „Wykonaj” i „Odrzuć” wyszarzone na karcie. W innych rozmowach przyciski wyglądały normalnie.
+- Obserwacje: w `GET /api/chats/<id>` obie karty jednej odpowiedzi miały `parts[].id` w postaci `pending:<wiadomość>:4` i `…:6`; w rozmowach z jedną kartą id było surowe, `call_<hash>`. Komponent karty wyłącza przyciski dla `pending:`, a trasa `POST /api/chats/:id/bank-plan` wymaga id `<wiadomość>:…`, więc „Wykonaj” na karcie z `call_…` skończyłoby się 409.
+- Przyczyna: stabilne id nadawano tylko kartom `panel_cezar_propose`, a przy kilku kartach o tej samej nazwie nie da się ich rozróżnić kolejnością. Dla kart banku id pochodzi teraz z treści planu.
+- Dlaczego testy tego nie wykryły: używały sztucznych id w poprawnym formacie (`m1:ok`). Test karty musi używać id, które czat naprawdę wytwarza.
+

@@ -1,14 +1,19 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { COCKPIT_TOOLS } from '../src/cockpit-contract';
+import { PANEL_GUIDES } from '../src/chat-contract';
+import { bankPlanSchema } from '../src/bank-plan-contract';
+import { bankAssignSchema } from '../src/bank-assign-contract';
+import { smartRulePlanOf } from '../src/smart-rules-contract';
+import { stableAppointmentCardId } from './appointment-cards';
+import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
-import { HermesError, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
+import { HermesError, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
 import {
   titleFrom, withContext,
-  type ChatApproval, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
+  type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSummary, type ContextItem, type MessageStatus,
 } from '../src/chat-contract';
 
 /**
@@ -25,12 +30,20 @@ export function cockpitRules(): string[] {
   ];
 }
 
+/** The preamble's lines about the guides: that they exist and when to read one; the guides themselves come from `panel_guide`. */
+export function guideRules(): string[] {
+  return [
+    'Przewodniki dziedzin: zasady rozmowy o danej dziedzinie czytasz narzędziem panel_guide (z tematem), a nie masz ich tutaj. Gdy rozmowa dochodzi do dziedziny z listy, wywołaj panel_guide z jej tematem, zanim użyjesz innych narzędzi tej dziedziny, i stosuj go do końca rozmowy; raz na rozmowę wystarczy.',
+    ...Object.entries(PANEL_GUIDES).map(([topic, guide]) => `- ${topic}: ${guide.when}. Istota: ${guide.core}.`),
+  ];
+}
+
 export function hermesPreamble(): string {
   return [
     'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
     'Odpowiadasz po polsku, zwięźle i konkretnie.',
     'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to podpowiedź, o co pyta, a nie wszystko, co możesz wiedzieć. Gdy pytanie wymaga danych, których tam nie ma, pobierz je sam i nie proś użytkownika o ich podanie.',
-    'Dane panelu czytasz wyłącznie narzędziami serwera MCP `desk-panel` (nazwy kończą się na `panel_…`, w Hermesie z przedrostkiem serwera, np. mcp_desk-panel_panel_calendar): panel_calendar, panel_training, panel_cezar, panel_mail, panel_quotas, panel_system, panel_todos, panel_bank, panel_time. Zwracają krótki tekst po polsku z czasem lokalnym (Europe/Warsaw); nie przeliczaj czasów. Nie używaj do tego powłoki, curl ani przeglądarki: narzędzia panelu są szybsze i nie wymagają zgody. panel_cezar bez argumentów zwraca listę zadań; z argumentem {"id":"projekt/uuid"} zwraca szczegóły, kroki i błędy wskazanego zadania, a z {"id":…,"krok":"verify"} wycinek wyniku jednego kroku. Wyniki Cezara czytaj tak, nie z plików .ai/cezar/runs.',
+    'Dane panelu czytasz wyłącznie narzędziami serwera MCP `desk-panel` (nazwy kończą się na `panel_…`, w Hermesie z przedrostkiem serwera, np. mcp_desk-panel_panel_calendar): panel_calendar, panel_training, panel_cezar, panel_mail, panel_mail_search, panel_mail_read, panel_smart_rules, panel_smart_rule_test, panel_quotas, panel_system, panel_todos, panel_bank, panel_time. Zwracają krótki tekst po polsku z czasem lokalnym (Europe/Warsaw); nie przeliczaj czasów. Nie używaj do tego powłoki, curl ani przeglądarki: narzędzia panelu są szybsze i nie wymagają zgody. panel_cezar bez argumentów zwraca listę zadań; z argumentem {"id":"projekt/uuid"} zwraca szczegóły, kroki i błędy wskazanego zadania, a z {"id":…,"krok":"verify"} wycinek wyniku jednego kroku. Wyniki Cezara czytaj tak, nie z plików .ai/cezar/runs.',
     'Nagłówek widoku mówi, jaki jest dziś i z kiedy są dane; wiersz „brak danych” znaczy, że źródło milczy: powiedz to wprost. Pobieraj tylko źródła potrzebne do pytania, z zakresem dat dopasowanym do pytania, i nie pobieraj ponownie tego, co już jest w rozmowie.',
     'Słowo „zadanie” bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara. Zadania Cezara to tylko te, o których użytkownik mówi „Cezar” albo „task Cezara”, albo które wskazał na kafelku Cezara. Gdy w [Kontekst] jest „Zadanie Cezara” (lub użytkownik pyta o zadanie/błąd Cezara), zawsze najpierw wywołaj panel_cezar z id tego zadania, aby poznać status kroków, błąd i worktree.',
     'Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.',
@@ -38,9 +51,10 @@ export function hermesPreamble(): string {
     'Plikami i powłoką pracujesz z dowodów, nie z pamięci. Ścieżki, nazwy plików, hashe commitów i identyfikatory bierz tylko z wyników narzędzi tej rozmowy: gdy nie znasz ścieżki, najpierw ją wyszukaj (search_files), potem czytaj to, co wyszło. Wywołanie, które zależy od wyniku innego, wysyłaj dopiero po jego otrzymaniu; razem tylko wywołania od siebie niezależne. Zawężaj wyniki (git log -n 10 --oneline, wyszukiwanie w konkretnym katalogu, ogon logu), bo każdy znak wyniku zostaje w rozmowie.',
     'Przyczynę błędu podajesz tylko taką, jaką widać w wyniku narzędzia; gdy wynik jest ucięty albo go brak, napisz to i nie dopowiadaj szczegółów (nazwy testu, asercji, wartości). Gdy polecenie pada przez środowisko (brak programu albo zależności, np. „is not recognized”, brak node_modules), zgłoś to użytkownikowi jako problem środowiska i nie obchodź go.',
     'Kodu w repozytoriach (desk-panel, Cezar ani innych) nie zmieniasz sam, nawet na prośbę: dla desk-panel proponujesz task Cezara kartą (skill „Zaimplementuj zadanie”), dla innego projektu opisujesz zmianę i proponujesz, by użytkownik zlecił ją w Cezarze.',
-    'Zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Oznaczeń operacji bankowych, poczty ani niczego w banku nie zmieniasz wcale; nie uruchamiasz też tasków Cezara.',
+    'Bezpośrednie zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Pozostałe obsługiwane zmiany tylko proponujesz kartami z tabeli narzędzi: oznaczenia banku, reguły Smart Actions, zlecenie Cezara i utworzenie wydarzenia Google (panel_calendar_propose albo potwierdzenie wizyty z panel_znanylekarz). Wykonuje je panel po kliknięciu użytkownika. Nie zapisujesz kalendarza ani rezerwacji sam, nie wysyłasz maili i nie ustawiasz przypomnień. Nie proponuj operacji, których narzędzia nie dają.',
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
+    ...guideRules(),
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
 }
@@ -176,24 +190,61 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  * them whole. Fills a finished answer's tool steps from the session's group of that turn, matching them by name and
  * order (the stream gives no call ids). True when something changed.
  */
+/**
+ * A bank change card has no id of Hermes's to stand on (the stream gives only the tool's name, or a call id the history may
+ * not repeat), and two cards of one answer cannot be told apart by order. Its identity is what it proposes: the message and
+ * a hash of the plan (the names, the target, the tags flag; the title is only a label). The same answer read live, kept, or
+ * from Hermes's history gives the same id, so the user's decision stays with the card, and two different plans never share one.
+ */
+export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign') || name.includes('panel_smart_rule_propose');
+export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
+  if (name.includes('panel_smart_rule_propose')) {
+    const plan = smartRulePlanOf(input);
+    return plan && `${messageId}:s-${createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0, 16)}`;
+  }
+  if (name.includes('panel_bank_assign')) {
+    let assign;
+    try { assign = bankAssignSchema.parse(JSON.parse(input)); } catch { return null; }
+    return `${messageId}:b-${createHash('sha256').update(JSON.stringify({ assign: true, from: assign.from ?? null, to: assign.to ?? null })).digest('hex').slice(0, 16)}`;
+  }
+  let plan;
+  try { plan = bankPlanSchema.parse(JSON.parse(input)); } catch { return null; }
+  const key = JSON.stringify({ merge: plan.merge.map(n => n.toLowerCase()), into: plan.into.toLowerCase(), tags: plan.tags });
+  return `${messageId}:b-${createHash('sha256').update(key).digest('hex').slice(0, 16)}`;
+}
+/** Gives consent cards stable ids from their arguments (and, for visits, the persisted reading's reference). */
+export function stabilizeBankCards(message: ChatMessage): boolean {
+  let changed = false;
+  for (const p of message.parts ?? []) {
+    if (p.type !== 'tool') continue;
+    const id = isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
+    if (id && p.id !== id) { p.id = id; changed = true; }
+  }
+  return changed;
+}
+
 export function fillFromHistory(message: ChatMessage, group: { parts: ChatPart[] } | undefined): boolean {
   if (!group) return false;
   const seen = new Map<string, number>();
   const whole = new Map<string, Extract<ChatPart, { type: 'tool' }>[]>();
   for (const p of group.parts) if (p.type === 'tool') whole.set(p.name, [...(whole.get(p.name) ?? []), p]);
+  // A proposal the panel refused (sent before its recon, say) shows no „Zleć” and needs no id: of the rest, only one
+  // card per side can be bound safely.
+  const accepted = (parts: ChatPart[], name: string) =>
+    parts.filter((s): s is Extract<ChatPart, { type: 'tool' }> => s.type === 'tool' && s.name === name && !cardRefusal('dispatch', s.output, s.error));
   let changed = false;
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool') continue;
     const n = seen.get(p.name) ?? 0;
     seen.set(p.name, n + 1);
-    const full = whole.get(p.name)?.[n];
+    let full = whole.get(p.name)?.[n];
     if (!full) continue;
     // Never bind a dispatch card to a name-only streaming id. Session history supplies the real call id.
     if (p.name.includes('panel_cezar_propose')) {
-      const streamedCount = (message.parts ?? []).filter(step => step.type === 'tool' && step.name === p.name).length;
-      const historyCalls = whole.get(p.name) ?? [];
+      const streamed = accepted(message.parts ?? [], p.name), recorded = accepted(group.parts, p.name);
       // The stream has no reliable call ids. Order alone cannot disambiguate multiple identical tools.
-      if (streamedCount !== 1 || historyCalls.length !== 1) continue;
+      if (streamed.length !== 1 || recorded.length !== 1 || streamed[0] !== p) continue;
+      full = recorded[0];
       const stableId = `${message.id}:${full.id}`;
       if (p.id !== stableId) { p.id = stableId; changed = true; }
     }
@@ -292,12 +343,14 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       // What this panel saw live (approvals and timings included, text checked against Hermes's final output) is
       // shown as it was; after a restart the session's history is the answer.
       const kept = finished.get(turn.agent);
-      if (kept) { fillFromHistory(kept, group); out.push(kept); }
+      if (kept) { fillFromHistory(kept, group); stabilizeBankCards(kept); out.push(kept); }
       else if (group && group.parts.length) {
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
-        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : p);
-        out.push({ id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) });
+        const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : { ...p });
+        const restored: ChatMessage = { id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) };
+        stabilizeBankCards(restored);
+        out.push(restored);
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
         out.push({
@@ -386,6 +439,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         tool.endedAt = now();
         if (event.error) { tool.error = true; tool.output = `Błąd: ${event.output || event.error}`.slice(0, 600); }
         else if (event.output) tool.output = event.output.slice(0, 4000);
+        stabilizeBankCards(live.message);
         break;
       }
       case 'progress':
@@ -408,7 +462,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         break;
       }
       case 'completed': void finalize(live, { state: 'completed', output: event.output, session: event.session }, 'result', event.usage); return;
-      case 'failed': void finalize(live, { state: 'failed', error: event.error }, 'result'); return;
+      case 'failed': void finalize(live, { state: 'failed', error: event.error, output: event.output }, 'result'); return;
       case 'cancelled': void finalize(live, { state: 'cancelled' }, live.stopping ? 'stop' : 'result'); return;
       default: return;
     }
@@ -504,8 +558,9 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     if (status.state === 'completed') {
       const output = status.output ?? '';
       // Hermes's final output is the answer: it fills a stream that gave no deltas and replaces one that did not add up.
+      // It is only the last message, so text written between tools (the plan before a card) stays when the stream ends with it.
       if (output.trim() && !streamed.trim()) parts.push({ type: 'text', text: output });
-      else if (output.trim() && norm(streamed) !== norm(output)) parts = [...parts.filter(p => p.type !== 'text'), { type: 'text', text: output }];
+      else if (output.trim() && !norm(streamed).endsWith(norm(output))) parts = [...parts.filter(p => p.type !== 'text'), { type: 'text', text: output }];
       if (!parts.some(p => p.type === 'text' && p.text.trim())) {
         // No output in the event either: the session has the answer, if anything does.
         try {
@@ -516,7 +571,14 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       }
       if (!parts.some(p => p.type === 'text' && p.text.trim())) { answer = 'error'; error = 'Hermes zakończył bez odpowiedzi.'; }
     } else if (status.state === 'cancelled') answer = 'stopped';
-    else { answer = 'error'; error = status.error || 'Hermes nie dokończył odpowiedzi.'; }
+    else {
+      answer = 'error';
+      // Ended early (Hermes's limit of model calls): what it found is still the answer, and the error says what happened.
+      const output = status.output?.trim() ? status.output : '';
+      if (output && !streamed.trim()) parts.push({ type: 'text', text: output });
+      error = !output ? status.error || UNFINISHED
+        : `Hermes przerwał turę przed końcem${status.error && status.error !== UNFINISHED ? ` (${status.error})` : ', zwykle po limicie wywołań modelu'}. Powyżej to, co zdążył napisać; napisz „dalej”, a dokończy.`;
+    }
     for (const part of parts) {
       if (part.type === 'tool' && part.state === 'running') { part.state = 'done'; part.endedAt = now(); }
       if (part.type === 'approval' && part.state === 'pending') part.state = 'expired';
@@ -541,7 +603,11 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     void ensureHistory(record).then(() => {
       const groups = histories.get(record.id)?.groups;
       const index = record.turns.filter(t => t.run).indexOf(turn);
-      if (groups && index >= 0 && fillFromHistory(message, groups[index])) touch(record, message, true);
+      if (groups && index >= 0) {
+        const filled = fillFromHistory(message, groups[index]);
+        const stabilized = stabilizeBankCards(message);
+        if (filled || stabilized) touch(record, message, true);
+      }
     }).catch(() => { /* the live answer stays */ });
     const answerChars = message.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
     const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: t.input.slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch } from './test-fixtures';
@@ -37,13 +37,14 @@ const openChat = async (user: ReturnType<typeof userEvent.setup>) => {
 const startPointing = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /Wskaż element/ }));
 
 describe('the chat window', () => {
-  it('opens as a big window with the cockpit beside the conversation, and docks to the edge while pointing', async () => {
+  it('opens fullscreen with the idle cockpit hidden, and docks to the edge while pointing', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openChat(user);
     expect(root().dataset.mode).toBe('window');
     expect(screen.getByRole('dialog', { name: 'Czat z agentem' }).getAttribute('aria-modal')).toBe('true');
-    expect(screen.getByRole('complementary', { name: 'Kokpit taska' })).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: 'Kokpit taska' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Pokaż szczegóły rozmowy' })).toBeTruthy();
     expect(screen.getByRole('log', { name: 'Rozmowa' })).toBeTruthy();
     expect(document.body.hasAttribute('data-chat-dock')).toBe(false);
     await startPointing(user);
@@ -81,37 +82,78 @@ describe('the chat window', () => {
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
   });
-  it('preserves unsent draft text and attached context chips when closing and reopening the chat', async () => {
+  it('toggles pointing immediately with left Ctrl+Alt, preserves paste and AltGr, and shares state with the buttons', async () => {
     const panel = scenarioFetch('standard');
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-      String(input).startsWith('/api/chats')
-        ? Promise.resolve(new Response(JSON.stringify({ chats: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-        : panel(input, init)));
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input) === '/api/chats'
+      ? Promise.resolve(new Response(JSON.stringify({ chats: [], engines: [{ engine: 'hermes', available: true }] }))) : panel(input, init)));
     const user = userEvent.setup();
     render(<App />);
-    await openChat(user);
-    const input = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
-    await user.type(input, 'Projekt koncepcji');
-
-    await startPointing(user);
-    await user.click(screen.getByText('Anna Nowak'));
-    await user.click(screen.getByRole('button', { name: 'Gotowe' }));
-
-    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
-    await waitFor(() => expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Projekt koncepcji'));
-
-    // Close chat using toggle button
-    const toggleBtn = screen.getByRole('button', { name: 'Otwórz czat z agentem' });
-    await user.click(toggleBtn);
+    await screen.findByRole('region', { name: 'Poczta' });
+    const cycle = () => { fireEvent.keyDown(document, { code: 'KeyW', key: 'w', altKey: true }); fireEvent.keyUp(document, { code: 'AltLeft', key: 'Alt' }); };
+    const toggle = (altFirst = false) => {
+      const first = altFirst ? 'AltLeft' : 'ControlLeft', second = altFirst ? 'ControlLeft' : 'AltLeft';
+      fireEvent.keyDown(document, { code: first, key: altFirst ? 'Alt' : 'Control', ctrlKey: !altFirst, altKey: altFirst });
+      fireEvent.keyDown(document, { code: second, key: altFirst ? 'Control' : 'Alt', ctrlKey: true, altKey: true });
+      fireEvent.keyDown(document, { code: second, key: altFirst ? 'Control' : 'Alt', ctrlKey: true, altKey: true, repeat: true });
+      fireEvent.keyUp(document, { code: second });
+      fireEvent.keyUp(document, { code: first });
+    };
+    cycle();
+    await screen.findByRole('complementary', { name: 'Czat z agentem' });
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Szkic');
+    cycle();
+    expect(root().dataset.mode).toBe('window');
+    cycle();
     expect(screen.queryByRole('dialog', { name: 'Czat z agentem' })).toBeNull();
-
-    // Reopen chat using toggle button
-    await user.click(toggleBtn);
-    await screen.findByRole('dialog', { name: 'Czat z agentem' });
-
-    const reopenedInput = screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement;
-    expect(reopenedInput.value).toBe('Projekt koncepcji');
-    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Anna Nowak: Spotkanie w czwartek' })).toBeTruthy();
+    fireEvent.keyDown(document, { code: 'AltLeft', key: 'Alt', altKey: true });
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    fireEvent.keyUp(document, { code: 'AltLeft', key: 'Alt' });
+    fireEvent.keyDown(document, { code: 'ControlLeft', key: 'Control', ctrlKey: true });
+    fireEvent.keyDown(document, { code: 'KeyV', key: 'v', ctrlKey: true });
+    fireEvent.keyUp(document, { code: 'ControlLeft', key: 'Control' });
+    expect(screen.queryByRole('complementary', { name: 'Czat z agentem' })).toBeNull();
+    toggle();
+    expect(document.body.hasAttribute('data-picking')).toBe(true);
+    await user.click(screen.getByRole('region', { name: 'Poczta' }));
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Poczta' })).toBeTruthy();
+    toggle(true);
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    expect(root().dataset.mode).toBe('compact');
+    await user.click(screen.getByRole('button', { name: 'Wskaż element' }));
+    toggle();
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    toggle();
+    await user.keyboard('{Escape}');
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    toggle();
+    await user.click(screen.getByRole('button', { name: 'Gotowe' }));
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Zamknij czat' }));
+    toggle();
+    expect(document.body.hasAttribute('data-picking')).toBe(true);
+    fireEvent.blur(window);
+    expect(document.body.hasAttribute('data-picking')).toBe(true);
+    toggle();
+    expect(root().dataset.mode).toBe('compact');
+    expect((screen.getByLabelText('Wiadomość do agenta') as HTMLTextAreaElement).value).toBe('Szkic');
+    expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Poczta' })).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.filter(([url, init]) => String(url).startsWith('/api/chats') && init?.method === 'POST')).toHaveLength(0);
+    fireEvent.keyDown(document, { code: 'ControlLeft', key: 'Control', ctrlKey: true });
+    fireEvent.keyDown(document, { code: 'AltRight', key: 'Alt', ctrlKey: true, altKey: true });
+    fireEvent.keyDown(document, { code: 'KeyE', key: 'ę', ctrlKey: true, altKey: true });
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    fireEvent.keyUp(document, { code: 'AltRight', key: 'Alt' });
+    fireEvent.keyUp(document, { code: 'ControlLeft', key: 'Control' });
+    fireEvent.keyDown(document, { code: 'ControlRight', key: 'Control', ctrlKey: true });
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    fireEvent.keyUp(document, { code: 'ControlRight', key: 'Control' });
+    cycle();
+    expect(root().dataset.mode).toBe('window');
+    toggle();
+    expect(document.body.hasAttribute('data-picking')).toBe(true);
+    cycle();
+    expect(document.body.hasAttribute('data-picking')).toBe(false);
+    expect(root().dataset.mode).toBe('window');
   });
 });
 

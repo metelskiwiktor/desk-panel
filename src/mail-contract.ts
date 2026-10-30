@@ -5,6 +5,8 @@ const status = z.enum(['connected', 'offline', 'unavailable', 'loading']);
 export const mailThreadSchema = z.object({
   id: z.string(), account: z.string(), threadId: z.string().regex(/^[0-9a-f]+$/i),
   from: z.string(), subject: z.string(), snippet: z.string(), body: z.string().optional(),
+  /** The sender's address (`from` is the name); `unread`: only search results may be read already. */
+  address: z.string().optional(), unread: z.boolean().optional(),
   receivedAt: z.number().finite(), messages: z.number().int().positive(), sourceUrl: z.url(),
 });
 export const mailAccountSchema = z.object({

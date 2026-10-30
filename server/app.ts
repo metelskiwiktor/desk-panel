@@ -15,6 +15,14 @@ import { handleMcpRoute } from './panel-mcp';
 import { todoActionSchema } from '../src/todo-contract';
 import { TodoError } from './todos';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
+import { bankShowQuerySchema } from '../src/bank-show-contract';
+import { bankPlanSchema } from '../src/bank-plan-contract';
+import { smartRulePlanSchema, smartRuleToggleSchema } from '../src/smart-rules-contract';
+import { mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } from './smart-rules';
+import { planPreview } from './bank-plan';
+import { bankAssignSchema } from '../src/bank-assign-contract';
+import { assignPreview } from './bank-assign';
+import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
@@ -50,7 +58,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
       return;
     }
-    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit)) return;
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments)) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
     if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl }); return; }
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
@@ -72,7 +80,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -93,6 +101,11 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         } else if (url.pathname === '/api/todos/action') {
           res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
+        } else if (url.pathname === '/api/smart-rules/toggle') {
+          // The tile's switch: on or off, nothing else of a rule changes without the chat's card.
+          if (!sources.smartRules) throw new SourceError(503);
+          const { id, enabled } = await readJson(req, smartRuleToggleSchema);
+          res.end(JSON.stringify({ rules: sources.smartRules.toggle(id, enabled) }));
         } else if (url.pathname === '/api/bank/labels/action') {
           // The user's marks only, kept on this computer: nothing here reaches the bank.
           res.end(JSON.stringify(await sources.bankLabelAction(await readJson(req, bankLabelActionSchema))));
@@ -102,9 +115,9 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           res.end(JSON.stringify({ ok: true }));
         }
       } catch (error) {
-        const status = error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
+        const status = error instanceof SourceError || error instanceof SmartRuleError ? error.status : error instanceof SyntaxError ? 400 : url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' ? 409 : 502;
         // A refused to-do action says why (the agent reads it); the other actions keep to a general sentence.
-        const reason = error instanceof TodoError || error instanceof BankLabelError ? error.message
+        const reason = error instanceof TodoError || error instanceof BankLabelError || error instanceof SmartRuleError ? error.message
           : url.pathname === '/api/todos/action' && status === 400 ? 'Niepoprawna akcja: sprawdź nazwę akcji i pola; lista i zadanie to identyfikatory w postaci l-… i t-….'
           : status === 409 && url.pathname === '/api/google/connect' ? 'Dodaj plik klienta OAuth Google.'
           : status === 409 && url.pathname === '/api/bank/connect' ? 'Konto bankowe nie jest skonfigurowane albo bank odmówił rozpoczęcia zgody.' : 'Nie udało się wykonać akcji.';
@@ -120,6 +133,68 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         res.writeHead(answer.status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(answer.body);
         return;
       }
+    }
+    if (url.pathname === '/api/bank/plan') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const plan = bankPlanSchema.safeParse({ merge: url.searchParams.getAll('merge'), into: url.searchParams.get('into') ?? '', tags: url.searchParams.get('tags') !== '0' });
+        if (!plan.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(planPreview(await sources.bankLedger(), plan.data)));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać podglądu zmiany.' }));
+      }
+      return;
+    }
+    if (url.pathname === '/api/bank/assign') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const plan = bankAssignSchema.safeParse({ from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
+        if (!plan.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(assignPreview(await sources.bankLedger(), plan.data)));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać podglądu oznaczeń.' }));
+      }
+      return;
+    }
+    if (url.pathname === '/api/bank/show') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const query = bankShowQuerySchema.safeParse({ view: url.searchParams.get('view') ?? undefined, kategorie: url.searchParams.getAll('kategorie'), nieoznaczone: url.searchParams.get('nieoznaczone') === '1', from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined });
+        if (!query.success) { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawne zapytanie karty.' })); return; }
+        res.end(JSON.stringify(bankShow(await sources.bankLedger(), query.data, dayIn(Date.now(), 'Europe/Warsaw'))));
+      } catch (error) {
+        const status = error instanceof BankShowError ? error.status : error instanceof SourceError ? error.status : 502;
+        res.writeHead(status).end(JSON.stringify({ error: error instanceof BankShowError ? error.message : 'Nie udało się pobrać danych karty.' }));
+      }
+      return;
+    }
+    if (url.pathname === '/api/smart-actions' || url.pathname === '/api/smart-rules/preview' || url.pathname === '/api/mail/search') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        if (url.pathname === '/api/smart-actions') { res.end(JSON.stringify(await smartView(sources))); return; }
+        if (url.pathname === '/api/mail/search') {
+          // Read-only: the mail list card of the chat (`panel_mail_show`) reads its rows itself.
+          const q = url.searchParams.get('q')?.trim() ?? '';
+          if (!q || q.length > 300 || !sources.mailSearch) { res.writeHead(q ? 503 : 400).end(JSON.stringify({ error: 'Niepoprawne zapytanie.' })); return; }
+          const limit = Math.min(TEST_LIMIT, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+          res.end(JSON.stringify({ query: q, rows: (await sources.mailSearch(q, limit)).map(mailRow) }));
+          return;
+        }
+        let plan;
+        try { plan = smartRulePlanSchema.parse(JSON.parse(url.searchParams.get('plan') ?? '')); }
+        catch { res.writeHead(400).end(JSON.stringify({ error: 'Niepoprawna propozycja reguły.' })); return; }
+        res.end(JSON.stringify(await previewPlan(sources, plan)));
+      } catch (error) {
+        const status = error instanceof SmartRuleError || error instanceof SourceError ? error.status : 502;
+        res.writeHead(status).end(JSON.stringify({ error: error instanceof SmartRuleError ? error.message
+          : error instanceof SourceError && error.status === 429 ? 'Gmail chwilowo ogranicza liczbę zapytań. Odśwież kartę za pół minuty.'
+          : 'Nie udało się odczytać poczty ani reguł.' }));
+      }
+      return;
     }
     const route = routes[url.pathname];
     if (route) {

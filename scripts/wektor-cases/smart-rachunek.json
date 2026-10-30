@@ -1,0 +1,19 @@
+{
+  "description": "Nowa reguła Smart Actions pod mail, którego nie ma już w nieprzeczytanych: Wektor sam znajduje go w całej skrzynce, czyta link, testuje regułę na mailach nadawcy i pokazuje kartę zgody. Nie prosi o oznaczenie maila jako nieprzeczytany i nie mówi, że zapisał.",
+  "turns": [
+    {
+      "say": "Zrób mi Smart Action dla maili od INEA <e-rachunek@inea.com.pl> z tematem „Twój rachunek” (ostatni przyszedł 21 paź). Ma mnie prowadzić do zapłacenia rachunku.",
+      "expect": {
+        "calls": ["panel_mail_search", "panel_smart_rule_test", "panel_smart_rule_propose"],
+        "notCalls": ["panel_todo_action", "panel_cezar_action", "panel_bank_propose"],
+        "textNot": ["zapisałem", "dodałem reguł", "oznacz (go|ten mail|maila) jako nieprzeczytan"],
+        "maxTools": 14,
+        "maxSeconds": 180
+      },
+      "soft": [
+        { "name": "mówi, ile maili złapie test", "text": "złapie|\\d+ mail" },
+        { "name": "mówi, dokąd prowadzi przycisk", "text": "inea\\.com\\.pl|zapła" }
+      ]
+    }
+  ]
+}

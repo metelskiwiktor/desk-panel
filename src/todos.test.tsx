@@ -3,7 +3,10 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
-import { WORKSPACE_KEY, type Tile } from './tile-grid';
+import { useState } from 'react';
+import { TodoTile } from './TodoTile';
+import { WORKSPACE_KEY, configure, type Tile } from './tile-grid';
+import { useTodos } from './useTodos';
 
 const now = new Date('2026-10-14T10:00:00Z').getTime();
 beforeEach(() => {
@@ -24,24 +27,46 @@ const todo = (n: number, c: number, r: number, w: number, h: number, config?: Ti
 const arrange = (...tiles: Tile[]) => localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ version: 1, tiles }));
 const arranged = (): Tile[] => JSON.parse(localStorage.getItem(WORKSPACE_KEY)!).tiles;
 const grid = () => document.querySelector('.wk-grid') as HTMLElement;
-const tileOf = (id: string) => grid().querySelector(`[data-tile="${id}"]`) as HTMLElement;
+const tileOf = (id: string) => document.querySelector(`[data-tile="${id}"]`) as HTMLElement;
 
-function renderApp(scenario: ScenarioName = 'standard') {
+function stubServer(scenario: ScenarioName) {
   const fetcher = vi.fn(scenarioFetch(scenario));
   vi.stubGlobal('fetch', fetcher);
-  render(<App />);
   /** What the screen asked the server to change, in order. */
   const posts = () => fetcher.mock.calls
     .filter(([url, init]) => init?.method === 'POST' && String(url).endsWith('/api/todos/action'))
     .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
   return { fetcher, posts };
 }
+/** The whole panel, for how the tile stands on the grid. */
+function renderApp(scenario: ScenarioName = 'standard') {
+  const server = stubServer(scenario);
+  render(<App />);
+  return server;
+}
+/**
+ * The tiles alone, with the hook and the scenario API the panel gives them and their settings kept as the grid keeps
+ * them (`configure`): the panel around them costs a second a test and adds nothing to what the tile does.
+ */
+function renderTiles(tiles: Tile[], scenario: ScenarioName = 'standard') {
+  const server = stubServer(scenario);
+  let kept = tiles;
+  function Tiles() {
+    const todos = useTodos();
+    const [shown, setShown] = useState(tiles);
+    return <>{shown.map(tile => <div key={tile.id} data-tile={tile.id}>
+      <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
+        setConfig={patch => setShown(now => (kept = configure(now, tile.id, patch)))} />
+    </div>)}</>;
+  }
+  render(<Tiles />);
+  return { ...server, config: (id: string) => kept.find(tile => tile.id === id)!.config };
+}
 const titles = (tile: HTMLElement) => [...tile.querySelectorAll('.todo-row .todo-text')].map(x => x.textContent);
 
 describe('the Zadania tile', () => {
   it('shows its list: open tasks first, done ones struck through at the end, notes, and a count; nobody is marked as the author unless asked', async () => {
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    renderApp();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(titles(tile)).toEqual(['Agent nie wie, ile ma limitu na dziś', 'Odpowiedź bez sformułowania „nie mam dostępu”', 'Komunikat o pustej odpowiedzi']);
@@ -57,20 +82,18 @@ describe('the Zadania tile', () => {
 
   it('follows the list set in its settings, falls back to the first when that list is gone, and switches by the drop-down', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: 'l-deadbeef' }), todo(2, 2, 0, 2, 2, { list: B }));
-    renderApp();
+    const { config } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-deadbeef' }), todo(2, 2, 0, 2, 2, { list: B })]);
     await within(tileOf('todo#2')).findByText('Kupić żarówki do przedpokoju');
     expect(titles(tileOf('todo#1')).at(0)).toBe('Agent nie wie, ile ma limitu na dziś'); // the first list
     await user.selectOptions(within(tileOf('todo#1')).getByRole('combobox', { name: 'Lista zadań' }), 'Dom');
     expect(titles(tileOf('todo#1'))).toEqual(['Kupić żarówki do przedpokoju']);
-    expect(arranged().find(t => t.id === 'todo#1')!.config).toEqual({ list: B });
-    expect(arranged().find(t => t.id === 'todo#2')!.config).toEqual({ list: B }); // the other tile did not move
+    expect(config('todo#1')).toEqual({ list: B });
+    expect(config('todo#2')).toEqual({ list: B }); // the other tile did not move
   });
 
   it('hides what is done from the ⋯ menu: a setting of the list, so every tile showing it follows and another list is untouched', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A }), todo(3, 0, 1, 2, 1, { list: B }));
-    const { posts } = renderApp();
+    const { posts, config } = renderTiles([todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A }), todo(3, 0, 1, 2, 1, { list: B })]);
     const [first, second] = [tileOf('todo#1'), tileOf('todo#2')];
     await within(first).findByText('Komunikat o pustej odpowiedzi');
     expect(within(first).queryByRole('checkbox', { name: 'Ukryj ukończone' })).toBeNull(); // no checkbox on the tile any more
@@ -82,7 +105,7 @@ describe('the Zadania tile', () => {
     expect(titles(first)).not.toContain('Komunikat o pustej odpowiedzi');
     expect(titles(tileOf('todo#3'))).toEqual(['Kupić żarówki do przedpokoju']);
     await waitFor(() => expect(titles(second)).not.toContain('Komunikat o pustej odpowiedzi')); // the other tile of the same list
-    expect(arranged().find(t => t.id === 'todo#1')!.config).toEqual({ list: A }); // nothing about it in the tile
+    expect(config('todo#1')).toEqual({ list: A }); // nothing about it in the tile
     await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
     expect(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }).getAttribute('aria-checked')).toBe('true');
     await user.click(within(first).getByRole('menuitemcheckbox', { name: 'Ukryj ukończone' }));
@@ -92,8 +115,7 @@ describe('the Zadania tile', () => {
 
   it('marks what the agent added only when the list asks for it in the menu, for every tile that shows the list', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 2, 1, { list: A })]);
     const [first, second] = [tileOf('todo#1'), tileOf('todo#2')];
     await within(first).findByText('Komunikat o pustej odpowiedzi');
     await user.click(within(first).getByRole('button', { name: 'Zarządzaj listą' }));
@@ -119,8 +141,7 @@ describe('the Zadania tile', () => {
 
   it('adds a task with Enter (the user is the author), clears the field, and refuses an empty one', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(within(tile).queryByRole('textbox', { name: 'Nowe zadanie' })).toBeNull(); // the field is not there until the + asks for it
@@ -143,8 +164,7 @@ describe('the Zadania tile', () => {
 
   it('ticks a task at once and writes it, and unticks a done one', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     const box = await within(tile).findByRole('checkbox', { name: 'Agent nie wie, ile ma limitu na dziś' }) as HTMLInputElement;
     await user.click(box);
@@ -160,8 +180,7 @@ describe('the Zadania tile', () => {
 
   it('opens a task in a dialog over the panel: saves only what changed, Escape and Anuluj drop the edit, and focus goes back to the task', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 1, 1, { list: A })); // even the smallest tile edits in the same dialog
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 1, 1, { list: A })]); // even the smallest tile edits in the same dialog
     const tile = tileOf('todo#1');
     const row = await within(tile).findByRole('button', { name: 'Edytuj zadanie: Odpowiedź bez sformułowania „nie mam dostępu”' });
     await user.click(row);
@@ -196,8 +215,7 @@ describe('the Zadania tile', () => {
 
   it('saves with Enter in the title and sends only the title when only that changed', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
     await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), '!{Enter}');
     expect(posts()).toEqual([{ action: 'updateTask', task: 't-a0000003', title: 'Komunikat o pustej odpowiedzi!' }]);
@@ -206,8 +224,7 @@ describe('the Zadania tile', () => {
 
   it('closes on a tap on the dimmed panel only while nothing was typed, and keeps focus inside with Tab', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    renderApp();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const open = async () => user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
     await open();
     const scrim = screen.getByRole('dialog').parentElement!;
@@ -230,8 +247,7 @@ describe('the Zadania tile', () => {
 
   it('deletes a task from its dialog, and only on the second tap', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     expect(within(tile).queryByRole('button', { name: /^Usuń zadanie/ })).toBeNull(); // no X on every row
     await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Komunikat o pustej odpowiedzi' }));
@@ -246,8 +262,7 @@ describe('the Zadania tile', () => {
   it('stays open and keeps what was typed when the list is read again, even if the task is hidden meanwhile; closes if the task is gone', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { fetcher } = renderApp();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
     await user.type(screen.getByRole('textbox', { name: 'Notatka' }), 'Wpisane w trakcie');
@@ -265,8 +280,7 @@ describe('the Zadania tile', () => {
 
   it('manages lists from the menu: new, rename, clear done, delete (after a second tap)', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Komunikat o pustej odpowiedzi');
     const menu = async () => { await user.click(within(tile).getByRole('button', { name: 'Zarządzaj listą' })); return within(tile).getByRole('menu', { name: 'Lista zadań' }); };
@@ -297,8 +311,7 @@ describe('the Zadania tile', () => {
 
   it('creates a list from the drop-down and shows it at once; Escape cancels the name', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts, config } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Komunikat o pustej odpowiedzi');
     const select = () => within(tile).getByRole('combobox', { name: 'Lista zadań' });
@@ -311,13 +324,12 @@ describe('the Zadania tile', () => {
     expect(posts()).toEqual([{ action: 'createList', name: 'Praca' }]);
     expect(await within(tile).findByText('Brak zadań na tej liście.')).toBeTruthy();
     expect((select() as HTMLSelectElement).selectedOptions[0].textContent).toBe('Praca');
-    expect(arranged()[0].config!.list).toMatch(/^l-[0-9a-f]{8}$/);
+    expect(config('todo#1')!.list).toMatch(/^l-[0-9a-f]{8}$/);
   });
 
   it('says why the server refused a change, and the message can be closed', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    renderApp();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Komunikat o pustej odpowiedzi');
     await user.click(within(tile).getByRole('button', { name: 'Zarządzaj listą' }));
@@ -332,23 +344,20 @@ describe('the Zadania tile', () => {
 
   it('with no list asks to create the first one, and is told so while loading and when the server is out', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2));
-    renderApp('empty');
+    renderTiles([todo(1, 0, 0, 2, 2)], 'empty');
     const tile = tileOf('todo#1');
     expect(await within(tile).findByText('Nie ma jeszcze żadnej listy.')).toBeTruthy();
     await user.click(within(tile).getByRole('button', { name: 'Utwórz listę' }));
     await user.type(within(tile).getByRole('textbox', { name: 'Nazwa nowej listy' }), 'Pierwsza{Enter}');
     expect(await within(tile).findByText('Brak zadań na tej liście.')).toBeTruthy();
     cleanup();
-    arrange(todo(1, 0, 0, 2, 2));
-    renderApp('offline');
+    renderTiles([todo(1, 0, 0, 2, 2)], 'offline');
     expect(await within(tileOf('todo#1')).findByText(/Zadania są niedostępne|Nie można połączyć się z lokalnym serwerem|Ładowanie zadań/)).toBeTruthy();
   });
 
   it('shows what is left when everything is done and hidden', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await user.click(await within(tile).findByRole('checkbox', { name: 'Agent nie wie, ile ma limitu na dziś' }));
     await user.click(within(tile).getByRole('checkbox', { name: 'Odpowiedź bez sformułowania „nie mam dostępu”' }));
@@ -360,8 +369,7 @@ describe('the Zadania tile', () => {
 
   it('in a tile of one cell leaves out notes but keeps everything else: the + for adding and the count', async () => {
     const user = userEvent.setup();
-    arrange(todo(1, 0, 0, 1, 1, { list: A }));
-    const { posts } = renderApp();
+    const { posts } = renderTiles([todo(1, 0, 0, 1, 1, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(within(tile).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
@@ -374,8 +382,7 @@ describe('the Zadania tile', () => {
   });
 
   it('shows notes only when the tile is wide and tall, and marks its size on the card for the layout', async () => {
-    arrange(todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 1, 2, { list: A }), todo(3, 3, 0, 1, 1, { list: A }));
-    renderApp();
+    renderTiles([todo(1, 0, 0, 2, 1, { list: A }), todo(2, 2, 0, 1, 2, { list: A }), todo(3, 3, 0, 1, 1, { list: A })]);
     const [wide, tall, one] = [tileOf('todo#1'), tileOf('todo#2'), tileOf('todo#3')];
     await within(wide).findByText('Komunikat o pustej odpowiedzi');
     expect(within(wide).queryByText('Dodać limity AI do widoku dla agenta.')).toBeNull();
@@ -418,8 +425,7 @@ describe('putting Zadania on the grid', () => {
 describe('changes made elsewhere', () => {
   it('appear on the screen within seconds: what the agent adds is read again', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    arrange(todo(1, 0, 0, 2, 2, { list: A }));
-    const { fetcher } = renderApp();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })]);
     const tile = tileOf('todo#1');
     await within(tile).findByText('Agent nie wie, ile ma limitu na dziś');
     expect(titles(tile)).toHaveLength(3);

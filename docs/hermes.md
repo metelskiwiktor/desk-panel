@@ -2,11 +2,12 @@
 
 Analiza problemów konkretnej rozmowy: [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md).
 
-Czat panelu ma dwa silniki: **Hermes** (Hermes Agent, domyślny dla nowych rozmów) i **AGY** (Antigravity CLI, jak dotąd,
-zob. [czat.md](czat.md)). Wybór jest w oknie czatu (przełącznik „Hermes / AGY” obok przycisku wysyłania) i serwer go pamięta
-(`~/.desk-panel/chat-settings.json`, wspólny dla komputera i telefonu). Rozmowa należy do jednego silnika na zawsze: wybór
-drugiego przy otwartej rozmowie przechodzi do nowego czatu tego silnika (szkic i wskazane elementy zostają, poprzednia rozmowa
-jest dalej na liście). Lista rozmów pokazuje silnik przy każdej; wpisanie „hermes” albo „agy” w wyszukiwarkę je filtruje.
+Serwer panelu ma dwa silniki czatu: **Hermes** (Hermes Agent) i **AGY** (Antigravity CLI, zob. [czat.md](czat.md)). Okno
+czatu (Wektor) pisze **tylko do Hermesa**: nie ma przełącznika silników, nowe rozmowy startują na Hermesie, a lista pokazuje
+tylko rozmowy Hermesa (`useChat('hermes')`, `src/cockpit/live.ts`). AGY zostaje na serwerze: `POST /api/chats` z `engine: "agy"`
+i jego stare rozmowy (bez pola `engine`) dalej działają, tylko okno ich nie pokazuje. Zapamiętany wybór silnika
+(`~/.desk-panel/chat-settings.json`, `/api/chats/engine`) serwer dalej trzyma, ale okno go nie używa. Rozmowa należy do jednego
+silnika na zawsze.
 
 ## Jak to działa
 
@@ -58,6 +59,16 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
     API serwer Hermesa nie ma przełącznika `skip_context_files`, więc steruje tym tylko katalog roboczy.
   - `tool_output` w `config.yaml` (dopisuje `just hermes-setup`): wyjście terminala do 16 tys. znaków, z początkiem i końcem
     (wyniki testów są na końcu), `read_file` do 400 linii, linia do 600 znaków. Wartości domyślne Hermesa to 50 tys., 2000 i 2000.
+  - `skills.creation_nudge_interval: 0` (też `just hermes-setup`): bez tego co 10 wywołań narzędzi Hermes po turze przegląda
+    ją w tle (kilka kolejnych wywołań agy na tym samym limicie) i zapisuje lub łata skill. 28.10.2026 utworzył tak skill `cezar`,
+    kopię „Zaimplementuj zadanie”, która rozjechałaby się z panelem przy pierwszej zmianie. Instrukcje skilli są w panelu
+    (`src/chat-contract.ts`); co Hermes zmienił sam, zapisuje `%LOCALAPPDATA%\hermes\skills\.curator_ledger.jsonl`.
+  - `agent.max_turns: 40` i `agent.budget_warning_ratio: 0.5` (też `just hermes-setup`): tura kończy się po 40 wywołaniach
+    modelu, potem Hermes prosi go jeszcze raz, bez narzędzi, o podsumowanie, a przebieg kończy jako `failed` z tym
+    podsumowaniem w `output`. Panel pokazuje je wtedy z wyjaśnieniem i podpowiedzią „dalej”. Przy 20. wywołaniu Hermes dokleja
+    do wyniku narzędzia „iteration budget checkpoint”, na co skill „Zaimplementuj zadanie” wysyła rekonesans. Domyślnie
+    limitu praktycznie nie ma; 28.10.2026 dyspozytor zrobił 87 wywołań narzędzi w 9 minut, w tym jedno wywołanie modelu na
+    277 s z 36 narzędziami naraz. Przy limicie 30 następna próba skończyła się bez karty.
   - Kompresja historii Hermesa włącza się dopiero przy 50% okna modelu, czego przy oknie gemini-flash rozmowy panelu nie osiągają.
     Nie jest przestawiona, bo streszczenie to kolejne wywołanie agy.
   Zmiana katalogu lub limitów działa po restarcie usługi Hermesa (`just hermes RESTART`); Servy czyta manifest i `hermes.env`
@@ -92,6 +103,8 @@ zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
+| `panel_znanylekarz` | karta wyboru terminu: profile, service, mode, opcjonalnie address, firstVisit, from/to; tylko anonimowy odczyt; rezerwuje użytkownik w osobnym oknie, a Google zapisuje jego potwierdzenie na karcie ([znanylekarz.md](znanylekarz.md)) |
+| `panel_calendar_propose` | propozycja nowego wydarzenia: title, start, end, opcjonalnie location/description; karta zgody, bez zapisu narzędziem ([calendar.md](calendar.md)) |
 | `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wynik kroku: dla sprawdzeń linie błędów bez stosu i przechodzących testów, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek); dla kroku agenta (np. `analysis`) cały jego raport z `.ai/cezar/runs/<id>.ndjson` (do 24 tys. znaków), bo `summary` przebiegu trzyma tylko ostatnie 4000 |
 | `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |
@@ -109,7 +122,7 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
 
-Opisy czterech narzędzi kokpitu (co, kiedy, skutek) i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
+Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 
 Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę).
@@ -125,12 +138,39 @@ wyłączone, a przyciski to „Przełącz na AGY” i „Sprawdź ponownie” (o
 Wiadomość, której Hermes nie przyjął, nie trafia do rozmowy (`503` z powodem). Rozmowa Hermesa otwarta przy wyłączonym Hermesie
 pokazuje pytania, a przy odpowiedziach „Nie można teraz wczytać odpowiedzi z sesji Hermesa…” — wrócą, gdy Hermes wstanie.
 
+## Model
+
+Od 28.10.2026 Hermes Wektora działa na **DeepSeek V4.1 Flash przez OpenRouter** (`model.provider: openrouter`,
+`model.default: deepseek/deepseek-v4.1-flash-1017`, `base_url: https://openrouter.ai/api/v1` w obu `config.yaml`). Klucz
+`OPENROUTER_API_KEY` wpisuje użytkownik w `~/.hermes/.env` i w `%LOCALAPPDATA%\hermes\.env` (tę kopię czyta usługa); ma limit wydatków
+ustawiony w OpenRouter. Agent widzi pocztę, kalendarz i skróty z banku, więc `provider_routing.models.<model>.data_collection: deny`:
+OpenRouter kieruje żądania tylko do dostawców, którzy nie trenują na danych. Serwer API Hermesa stosuje `provider_routing` tylko per
+model, ogólne ustawienie nie wystarcza; `just hermes-setup` dopisuje wpis dla bieżącego modelu. Model zmienia się w configu bez
+restartu (Hermes czyta go przy każdym przebiegu); powrót do agy: `provider: antigravity-oauth`, `base_url: agy://local`,
+`default: gemini-3.8-flash-medium`. Codex i Claude zostają dla Cezara.
+
+Ten sam klucz ma też OpenCode (`~/.local/share/opencode/auth.json`, wpis `openrouter`; Cezar działa na koncie użytkownika, więc
+jego runner `opencode` go czyta), żeby taski Cezara mogły iść na DeepSeeku: `~/.config/opencode/opencode.jsonc` pokazuje z
+OpenRoutera tylko `deepseek/deepseek-v4-pro-0813` i `deepseek/deepseek-v4.1-flash-1017` (`whitelist`, z `data_collection: deny`),
+a karta zlecenia ma je w liście modeli runnera `opencode`. Przy wymianie klucza zmień go we wszystkich czterech miejscach (dwa
+`.env` Hermesa, `panel.env`, ten `auth.json`). W `desk-panel-task` kroki implement/fix/address i review mają wykonawcę z workflow,
+więc wybór DeepSeeka dotyczy tam tylko pozostałych kroków; w `analysis`, `implement` i `quick-task` obowiązuje cały run.
+
+Wybór z trzech testów na tym samym zestawie (skill „Zaimplementuj zadanie”, prawdziwy panel, każdy model po razie): zadanie już zrobione
+(PR niezmergowany), rozmowa o „zadaniach jako większym bycie” i obawa o podział zużycia, gdzie trzeba było odkryć, że `splitFor` nie ma
+wywołania produkcyjnego. DeepSeek V4.1 Flash wypadł najlepiej za swoją cenę (0,015–0,04 USD za zlecenie, 1–2 min), Qwen 3.8 Max
+równie trafnie, ale do 14 min i 0,57 USD, GLM 5.3 nierówno. Gemini 3.8 Flash przez agy powielił zrobione zadanie i przeoczył martwy
+kod; Claude Sonnet i Opus przez agy myślały najlepiej, ale jedno zlecenie brało 4–8% tygodniowej puli Claude & GPT (agy słabo
+cache'uje Claude'a). Szacunek kosztu w sesji Hermesa (`estimated_cost_usd`) zaniżał rachunek OpenRouter mniej więcej o połowę:
+wydatki sprawdzaj w OpenRouter.
+
 ## Instalacja i uruchamianie (Windows)
 
 Panel i Hermes to **dwie osobne usługi Servy**; żadna nie czeka na drugą przy starcie, więc kolejność po restarcie komputera jest
 dowolna (panel pokazuje „Hermes niedostępny”, dopóki Hermes nie wstanie; narzędzia MCP odpowiadają, gdy wstanie panel).
 
-1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`.** Oba katalogi muszą być
+1. **Zainstaluj Hermes Agent i provider `antigravity-oauth` z commitów w `servy/hermes.lock.json`** (provider jest potrzebny
+   tylko do modeli agy; model domyślny idzie przez OpenRouter, zob. „Model”). Oba katalogi muszą być
    checkoutami Git: domyślnie `~/.hermes/hermes-agent` i `~/.hermes/plugins/antigravity-oauth`. Inne lokalizacje można wskazać
    zmiennymi `DESK_HERMES_SOURCE` i `DESK_HERMES_PROVIDER_SOURCE` w środowisku uruchamiającym skrypty. Provider musi być czysty.
    Nie używaj tymczasowych katalogów prób (PoC) jako docelowej instalacji.

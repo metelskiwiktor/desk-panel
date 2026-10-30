@@ -1,0 +1,130 @@
+import { BANK_SHOW_LIMITS, type BankShowData, type BankShowQuery } from '../src/bank-show-contract';
+import type { BankLedger } from './bank-labels';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const isDay = (value: string) => new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+const addDays = (value: string, days: number) => new Date(Date.parse(`${value}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+/** A booking day is noon UTC of that date. */
+const bookedOn = (at: number) => new Date(at).toISOString().slice(0, 10);
+const clip = (text: string, max: number) => { const flat = text.replace(/\s+/g, ' ').trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
+/** No long run of digits (an account or a phone number) leaves the panel in a card or its summary. */
+const masked = (text: string) => text.replace(/\d{9,}/g, run => `${'*'.repeat(run.length - 3)}${run.slice(-3)}`);
+export const money = (amount: number) => `${amount.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
+
+export class BankShowError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+/** The spending marks in the range, PLN only: a spend, or an unmarked outflow (counted as spending, like the agent's view does). */
+function spending(ledger: BankLedger, from: string, to: string) {
+  return ledger.entries.filter(e => e.op.currency === 'PLN' && bookedOn(e.op.at) >= from && bookedOn(e.op.at) <= to
+    && (e.label?.move === 'spend'));
+}
+
+const UNMARKED = 'unmarked';
+/** Outflows with no mark yet in the range, PLN only: the agent's view counts them as spending too. */
+function unmarkedSpending(ledger: BankLedger, from: string, to: string) {
+  return ledger.entries.filter(e => e.op.currency === 'PLN' && bookedOn(e.op.at) >= from && bookedOn(e.op.at) <= to && !e.label?.move && e.op.amount < 0);
+}
+
+/**
+ * The card's data from the ledger. A name matches a category by id or by a part of its name, among the spending categories
+ * only; a name that matches none comes back in `unknown`, and no match at all is refused with the names there are.
+ * `nieoznaczone` adds the outflows nothing has marked yet as one more row of the card.
+ */
+export function bankShow(ledger: BankLedger, query: BankShowQuery, today: string): BankShowData {
+  const to = query.to ?? today;
+  const from = query.from ?? addDays(to, -BANK_SHOW_LIMITS.defaultDays);
+  if (!isDay(from) || !isDay(to)) throw new BankShowError(400, 'from i to to daty RRRR-MM-DD.');
+  if (to < from) throw new BankShowError(400, 'to nie może być przed from.');
+  if (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) >= BANK_SHOW_LIMITS.days * DAY_MS) throw new BankShowError(400, `Zakres to najwyżej ${BANK_SHOW_LIMITS.days} dni.`);
+
+  const spend = ledger.categories.filter(c => c.move === 'spend');
+  const matched = new Map<string, (typeof spend)[number]>();
+  const unknown: string[] = [];
+  for (const wanted of query.kategorie) {
+    const w = wanted.trim().toLowerCase();
+    const found = spend.filter(c => c.id === w || c.name.toLowerCase().includes(w));
+    if (!found.length) unknown.push(wanted);
+    for (const c of found) matched.set(c.id, c);
+  }
+  if (!matched.size && !query.nieoznaczone) throw new BankShowError(404, `Żadna kategoria wydatków nie pasuje do: ${query.kategorie.join(', ')}. Kategorie wydatków: ${spend.map(c => c.name).join(', ') || '(brak)'}.`);
+
+  const marked = spending(ledger, from, to).filter(e => e.label?.category && matched.has(e.label.category));
+  const unmarked = query.nieoznaczone ? unmarkedSpending(ledger, from, to) : [];
+  const entries = [...marked, ...unmarked].sort((a, b) => b.op.at - a.op.at);
+  const categories = [
+    ...[...matched.values()].map(c => {
+      const own = marked.filter(e => e.label?.category === c.id);
+      return { id: c.id, name: c.name, color: c.color, count: own.length, spent: -own.reduce((sum, e) => sum + e.op.amount, 0) };
+    }),
+    ...(query.nieoznaczone ? [{ id: UNMARKED, name: 'Nieoznaczone', color: 'slate' as const, count: unmarked.length, spent: -unmarked.reduce((sum, e) => sum + e.op.amount, 0) }] : []),
+  ].sort((a, b) => b.spent - a.spent);
+  const rows = entries.slice(0, BANK_SHOW_LIMITS.rows).map(e => ({
+    day: bookedOn(e.op.at), amount: e.op.amount, name: masked(clip(e.op.name, 60)),
+    category: e.label?.category ? matched.get(e.label.category)!.name : 'Nieoznaczone', tags: (e.label?.tags ?? []).map(t => masked(clip(t, 30))),
+  }));
+  return {
+    view: query.view, from, to, unknown, categories, rows,
+    total: { count: entries.length, spent: categories.reduce((sum, c) => sum + c.spent, 0) },
+    span: entries.length ? { first: bookedOn(Math.min(...entries.map(e => e.op.at))), last: bookedOn(Math.max(...entries.map(e => e.op.at))) } : null,
+    hidden: Math.max(0, entries.length - rows.length), observedAt: ledger.observedAt,
+  };
+}
+
+/**
+ * Since when the user marks, and what in the range is still unmarked: a category's share or rhythm is only true of the marked
+ * period, and the model cannot see that from the sums (marking may have started recently).
+ */
+function coverage(ledger: BankLedger, data: BankShowData): string {
+  const inRange = ledger.entries.filter(e => e.op.currency === 'PLN' && bookedOn(e.op.at) >= data.from && bookedOn(e.op.at) <= data.to);
+  const marked = inRange.filter(e => e.label?.move);
+  if (!marked.length) return '';
+  const first = bookedOn(Math.min(...marked.map(e => e.op.at)));
+  const unmarked = inRange.filter(e => !e.label?.move && e.op.amount < 0);
+  return `Oznaczenia w tym zakresie zaczynają się ${first}; nieoznaczonych wydatków: ${unmarked.length} op. ${money(-unmarked.reduce((sum, e) => sum + e.op.amount, 0))}${unmarked.length ? ` (od ${bookedOn(Math.min(...unmarked.map(e => e.op.at)))} do ${bookedOn(Math.max(...unmarked.map(e => e.op.at)))})` : ''}.`;
+}
+
+/** The most frequent names of the operations in one shown category (at most 5): what it holds, which sums alone do not say. */
+function namesOf(ledger: BankLedger, data: BankShowData, id: string): string {
+  const own = id === UNMARKED ? unmarkedSpending(ledger, data.from, data.to) : spending(ledger, data.from, data.to).filter(e => e.label?.category === id);
+  const counts = new Map<string, { n: number; spent: number }>();
+  for (const e of own) {
+    const name = masked(clip(e.op.name, 24));
+    const entry = counts.get(name) ?? { n: 0, spent: 0 };
+    entry.n++; entry.spent -= e.op.amount;
+    counts.set(name, entry);
+  }
+  const top = [...counts].sort((a, b) => b[1].n - a[1].n || b[1].spent - a[1].spent).slice(0, 5).map(([name]) => name);
+  return top.length ? ` (${top.join(', ')})` : '';
+}
+
+/**
+ * What the model is told after a card: a short line it can comment on, not the rows. The spending categories beside the
+ * asked ones come with their sums, so it can notice a related one itself (the model decides, the panel only lists).
+ */
+export function bankShowSummary(ledger: BankLedger, data: BankShowData): string {
+  const shown = new Set(data.categories.map(c => c.id));
+  const others = new Map<string, { count: number; spent: number; names: string[] }>();
+  for (const e of spending(ledger, data.from, data.to)) {
+    const id = e.label?.category;
+    if (!id || shown.has(id)) continue;
+    const entry = others.get(id) ?? { count: 0, spent: 0, names: [] };
+    entry.count++; entry.spent -= e.op.amount;
+    const name = masked(clip(e.op.name, 24));
+    if (entry.names.length < 3 && !entry.names.includes(name)) entry.names.push(name);
+    others.set(id, entry);
+  }
+  const names = new Map(ledger.categories.map(c => [c.id, c.name]));
+  // The operations' names say what a category holds: without them the model guesses from the category's name.
+  const rest = [...others].sort((a, b) => b[1].spent - a[1].spent).map(([id, o]) => `${names.get(id) ?? '?'} ${o.count} op. ${money(o.spent)} (${o.names.join(', ')})`);
+  return [
+    `Pokazano: ${data.categories.map(c => `${c.name} ${c.count} op. ${money(c.spent)}${namesOf(ledger, data, c.id)}`).join('; ')}. Razem ${data.total.count} operacji, ${money(data.total.spent)}; zakres ${data.from} – ${data.to}${data.span ? `, same operacje od ${data.span.first} do ${data.span.last}` : ''}.`,
+    coverage(ledger, data),
+    data.unknown.length ? `Bez dopasowania: ${data.unknown.join(', ')}.` : '',
+    `Inne kategorie wydatków w tym zakresie: ${rest.length ? rest.join('; ') : 'brak'}.`,
+  ].filter(Boolean).join(' ');
+}
+
+/** Today's date in the user's zone, for the default range. */
+export const dayIn = (now: number, zone: string) => new Intl.DateTimeFormat('sv-SE', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

@@ -41,7 +41,10 @@ Status i sterowanie: `just hermes [STATUS|START|STOP|RESTART|CHECK|RUN]`. Szczeg
    znacznika brak, robi `npm ci`. Działającą usługę najpierw zatrzymuje — jeśli się
    nie da, przerywa bez instalacji. Zatrzymaną lub jeszcze niezarejestrowaną pomija.
 4. Testy, typecheck i build do `dist.next`; dopiero po sukcesie podmienia `dist`.
-   Przy błędzie usługa dalej serwuje poprzedni frontend.
+   Przy błędzie usługa dalej serwuje poprzedni frontend. Działający serwer scenariusza (`scripts/scenario.ts`, watcher
+   Vite) blokuje podmianę: 26.10.2026 skończyło się EPERM po przeniesieniu `dist` do `dist.old` i usługa nie miała
+   frontendu. Przed `just update` zabij jego procesy node (`taskkill /T`); po takim błędzie przemianuj `dist.next` na
+   `dist` i uruchom `just update --force`.
 5. Restartuje usługę i sprawdza, czy API odpowiada. Niezarejestrowana
    usługa kończy się komunikatem `just install`.
 

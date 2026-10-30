@@ -19,8 +19,10 @@ nodes:
   - id: implement
     name: Implement
     type: agent
-    runner: agy
-    model: gemini-3.8-flash-high
+    # The code is written on the user's Codex subscription (fix and address continue its session); the review runs on
+    # another family. Gemini 3.8 Flash judged worse than the others in the dispatcher benchmarks of 28.10.2026.
+    runner: codex
+    model: gpt-6.1-terra
     prompt: |
       {{task}}
 
@@ -116,8 +118,8 @@ nodes:
   - id: fix
     name: Fix verification or commit
     type: agent
-    runner: agy
-    model: gemini-3.8-flash-high
+    runner: codex
+    model: gpt-6.1-terra
     session:
       continue: implement
     prompt: |
@@ -189,8 +191,8 @@ nodes:
   - id: address
     name: Address review findings
     type: agent
-    runner: agy
-    model: gemini-3.8-flash-high
+    runner: codex
+    model: gpt-6.1-terra
     session:
       continue: implement
     prompt: |

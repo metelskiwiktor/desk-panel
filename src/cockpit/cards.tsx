@@ -1,26 +1,39 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { Component, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
+import { Check, ChartColumn, Circle, CircleX, ExternalLink, FileCode2, LoaderCircle, Minus, Pencil, Radar, Rocket, Send, ShieldQuestion, X } from 'lucide-react';
 import {
-  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type StepState, type WatchArgs,
+  type CockpitTask, type DispatchArgs, type DispatchResult, type HermesApprovalArgs, type ReconArgs, type ShowArgs, type StepState, type WatchArgs,
 } from './types';
+import { bankShowQuerySchema, type BankShowData } from '../bank-show-contract';
+import { COLOR_VALUES } from '../bank-look';
 import { watchAnswerTask } from '../cockpit-contract';
 
 /**
  * What a card can do and see: answer on behalf of the user (a promise that fails says why), whether the thread is busy
  * (cards wait then), and the task the cockpit watches now, so a watch card shows it live.
  */
-export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; watched?: CockpitTask }>({ respond: () => {}, running: false });
+export const CardActions = createContext<{ respond: (toolCallId: string, response: unknown) => void | Promise<void>; running: boolean; refreshing?: boolean; watched?: CockpitTask; chatId?: string | null }>({ respond: () => {}, running: false });
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'INPUT']);
+
+/** One card that cannot render says so in its place; without this, React drops the whole chat window (a black screen). */
+export class CardBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    return this.state.failed
+      ? <p className="tw:m-0 tw:rounded-xl tw:border tw:border-ck-line tw:px-3 tw:py-2 tw:text-xs tw:text-ck-muted" role="alert">Nie da się pokazać tej karty: agent przysłał nieoczekiwane dane.</p>
+      : this.props.children;
+  }
+}
 
 /** `0:53`, `2:05`: how long something has been going. */
 export const elapsed = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-const card = 'tw:rounded-2xl tw:border tw:border-ck-line tw:bg-ck-side tw:text-sm tw:overflow-hidden';
-const head = 'tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-3 tw:border-b tw:border-ck-line';
+export const card = 'tw:rounded-2xl tw:border tw:border-ck-line tw:bg-ck-side tw:text-sm tw:overflow-hidden';
+export const head = 'tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-3 tw:border-b tw:border-ck-line';
 const eyebrow = 'tw:text-[11px] tw:font-semibold tw:uppercase tw:tracking-[0.14em] tw:text-ck-muted';
-const refusedNote = 'tw:m-0 tw:rounded-xl tw:border tw:border-ck-amber/40 tw:bg-ck-amber/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-ck-text';
-const btn = 'tw:inline-flex tw:items-center tw:justify-center tw:gap-2 tw:min-h-10 tw:px-4 tw:rounded-xl tw:text-sm tw:font-medium tw:transition-colors tw:disabled:opacity-40';
+export const refusedNote = 'tw:m-0 tw:rounded-xl tw:border tw:border-ck-amber/40 tw:bg-ck-amber/10 tw:px-3 tw:py-2 tw:text-[13px] tw:text-ck-text';
+export const btn = 'tw:inline-flex tw:items-center tw:justify-center tw:gap-2 tw:min-h-10 tw:px-4 tw:rounded-xl tw:text-sm tw:font-medium tw:transition-colors tw:disabled:opacity-40';
 
 function StepIcon({ state }: { state: StepState }) {
   if (state === 'done') return <Check size={15} className="tw:text-ck-green" aria-hidden="true" />;
@@ -81,6 +94,56 @@ export function ReconCard({ args, status }: ToolCallMessagePartProps<ReconArgs>)
   </section>;
 }
 
+type PinnedStep = { id: string; runner: string; model: string | null; follows?: string };
+/** What the user picked for a pinned step on the card; empty strings keep the workflow's pin. */
+type StepChoice = { runner: string; model: string };
+const RUNNERS = ['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'];
+/** Pinned steps that start their own session; one continuing another's session (fix, address after implement) follows it. */
+const leadSteps = (pinned: PinnedStep[]) => pinned.filter(s => !s.follows || !pinned.some(p => p.id === s.follows));
+/**
+ * Cezar's `stepOverrides` from the card: only steps whose choice differs from the pin, each lead with its followers, so a
+ * continued session stays on one runner. A new runner without a model lets Cezar resolve that runner's default.
+ */
+export function stepOverrides(pinned: PinnedStep[], choices: Record<string, StepChoice>, modelsLocked: boolean) {
+  const out: Record<string, { runner?: string; model?: string }> = {};
+  for (const lead of leadSteps(pinned)) {
+    const choice = choices[lead.id];
+    if (!choice) continue;
+    const runner = choice.runner && choice.runner !== lead.runner ? choice.runner : undefined;
+    const model = !modelsLocked && choice.model ? choice.model : undefined;
+    if (!runner && !model) continue;
+    for (const step of [lead, ...pinned.filter(s => s.follows === lead.id)]) out[step.id] = { ...(runner ? { runner } : {}), ...(model ? { model } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function PinnedStepChoice({ workflow, lead, followers, choice, disabled, modelsLocked, onChange }: {
+  workflow: string; lead: PinnedStep; followers: PinnedStep[]; choice?: StepChoice; disabled: boolean; modelsLocked: boolean; onChange: (choice: StepChoice) => void;
+}) {
+  const runner = choice?.runner || lead.runner;
+  const moved = runner !== lead.runner;
+  const [catalog, setCatalog] = useState<{ model: string | null; models: { id: string; label: string }[] } | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    setCatalog(null);
+    fetch(`/api/cezar/dispatch-defaults?${new URLSearchParams({ workflow, runner })}`, { signal: abort.signal }).then(r => r.ok ? r.json() : null)
+      .then(value => { if (!abort.signal.aborted && value && Array.isArray(value.models)) setCatalog(value); }).catch(() => {});
+    return () => abort.abort();
+  }, [workflow, runner]);
+  const models = catalog?.models ?? [];
+  const label = `${lead.id}${followers.length ? ` (z ${followers.map(s => s.id).join(', ')})` : ''}`;
+  return <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted">
+    <span className="tw:font-ck-mono tw:text-ck-text">{label}</span>
+    <select aria-label={`Wykonawca kroku ${lead.id}`} value={runner} disabled={disabled} onChange={e => onChange({ runner: e.target.value, model: '' })} className="tw:bg-ck-surface-2 tw:text-ck-text">
+      {RUNNERS.map(name => <option key={name} value={name}>{name === lead.runner ? `${name} (workflow)` : name}</option>)}
+    </select>
+    {!modelsLocked && <select aria-label={`Model kroku ${lead.id}`} value={choice?.model ?? ''} disabled={disabled} onChange={e => onChange({ runner, model: e.target.value })} className="tw:bg-ck-surface-2 tw:text-ck-text">
+      <option value="">{moved ? `Domyślny: ${catalog?.model || 'nieznany'}` : `Z workflow: ${lead.model || 'domyślny'}`}</option>
+      {models.filter(item => moved || item.id !== lead.model).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+    </select>}
+  </div>;
+}
+
 /** Human in the loop: nothing goes to Cezar until the user says so here, and the prompt can be corrected first. */
 export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartProps<DispatchArgs, DispatchResult>) {
   const { respond, running } = useContext(CardActions);
@@ -89,7 +152,9 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const [error, setError] = useState('');
   const [runner, setRunner] = useState('');
   const [model, setModel] = useState('');
-  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean } | null>(null);
+  const [defaults, setDefaults] = useState<{ runner: string | null; model: string | null; models: { id: string; label: string }[]; catalogSource: string; modelsLocked: boolean; pinned?: PinnedStep[] } | null>(null);
+  const pinned = defaults?.pinned ?? [];
+  const [stepChoices, setStepChoices] = useState<Record<string, StepChoice>>({});
   useEffect(() => {
     const abort = new AbortController();
     setDefaults(null);
@@ -116,7 +181,8 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
   const answer = async (response: { decision: 'dispatch' | 'reject'; prompt?: string }) => {
     setSending(true); setError('');
     const selectedRunner = runner || (model ? defaults?.runner : undefined);
-    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId, ...(selectedRunner ? { runner: selectedRunner } : {}), ...(!defaults?.modelsLocked && model ? { model } : {}) }); setEditing(null); }
+    const steps = stepOverrides(pinned, stepChoices, defaults?.modelsLocked === true);
+    try { await respond(toolCallId, { ...response, title: args.title, prompt: response.prompt ?? args.prompt, workflow: args.workflow, todoId: args.todoId, ...(selectedRunner ? { runner: selectedRunner } : {}), ...(!defaults?.modelsLocked && model ? { model } : {}), ...(steps ? { steps } : {}) }); setEditing(null); }
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };
@@ -133,14 +199,21 @@ export function DispatchCard({ toolCallId, args, result }: ToolCallMessagePartPr
       <div className="tw:text-ck-text tw:font-medium">{args.title}</div>
       {args.workflow && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Workflow: {args.workflow}</p>}
       {decided?.decision === 'dispatched' && (decided.runner || decided.model) && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Wybrano: {decided.runner ?? 'wykonawca domyślny'}{decided.model ? ` · ${decided.model}` : ''}</p>}
+      {decided?.decision === 'dispatched' && decided.steps && <p className="tw:m-0 tw:text-xs tw:text-ck-muted">Kroki: {Object.entries(decided.steps).map(([id, o]) => `${id} · ${o.runner ?? 'jak w workflow'}${o.model ? ` · ${o.model}` : ''}`).join(', ')}</p>}
       {!decided && <div className="tw:grid tw:gap-2">
         <label className="tw:text-xs tw:text-ck-muted">Wykonawca
           <select aria-label="Wykonawca Cezara" value={runner} disabled={busy} onChange={e => { setRunner(e.target.value); setModel(''); }} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
             <option value="">Domyślny dla workflow w Cezarze</option>
-            {['agy', 'claude', 'codex', 'opencode', 'cursor', 'pi', 'junie', 'copilot'].map(name => <option key={name} value={name}>{name}</option>)}
+            {RUNNERS.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
         </label>
-        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `Według obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
+        {pinned.length > 0 && <div className="tw:grid tw:gap-1" data-testid="pinned-steps">
+          <p className="tw:m-0 tw:text-xs tw:text-ck-text">Kroki z wykonawcą ustalonym w workflow; tutaj zmienisz go tylko dla tego taska:</p>
+          {leadSteps(pinned).map(lead => <PinnedStepChoice key={lead.id} workflow={args.workflow || 'desk-panel-task'} lead={lead} followers={pinned.filter(s => s.follows === lead.id)}
+            choice={stepChoices[lead.id]} disabled={Boolean(busy)} modelsLocked={defaults?.modelsLocked === true}
+            onChange={choice => setStepChoices(current => ({ ...current, [lead.id]: choice }))} />)}
+        </div>}
+        <p className="tw:m-0 tw:text-xs tw:text-ck-muted">{defaults ? `${pinned.length ? 'Pozostałe kroki według' : 'Według'} obecnych ustawień Cezara: ${defaults.runner || 'wykonawca nieznany'} · ${defaults.model || 'model nieznany'}.` : 'Nie udało się jeszcze odczytać ustawień domyślnych Cezara.'}</p>
         {defaults && !defaults.modelsLocked && <label className="tw:text-xs tw:text-ck-muted">Model
           <select aria-label="Model Cezara" value={model} disabled={busy || defaults.models.length === 0} onChange={e => setModel(e.target.value)} className="tw:ml-2 tw:bg-ck-surface-2 tw:text-ck-text">
             <option value="">Domyślny: {defaults.model || 'nieznany'}</option>
@@ -204,6 +277,74 @@ export function WatchCard({ args, result, status }: ToolCallMessagePartProps<Wat
     </div>
   </section>;
 }
+const pln = (amount: number) => `${amount.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
+const dayLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/**
+ * `panel_show`: bank spending of some categories as a table or bars. The model sent only what to show; the rows are read
+ * here from the panel (`GET /api/bank/show`), so they never went through it, and the card shows the marks as they are now.
+ */
+export function ShowCard({ args }: ToolCallMessagePartProps<ShowArgs>) {
+  const query = bankShowQuerySchema.safeParse(args);
+  const key = query.success ? JSON.stringify(query.data) : '';
+  const [state, setState] = useState<{ key: string; data?: BankShowData; error?: string }>({ key: '' });
+  useEffect(() => {
+    if (!query.success) return;
+    const params = new URLSearchParams({ view: query.data.view });
+    for (const name of query.data.kategorie) params.append('kategorie', name);
+    if (query.data.nieoznaczone) params.set('nieoznaczone', '1');
+    if (query.data.from) params.set('from', query.data.from);
+    if (query.data.to) params.set('to', query.data.to);
+    let gone = false;
+    fetch(`/api/bank/show?${params}`, { signal: AbortSignal.timeout(15_000) }).then(async response => {
+      const body = await response.json().catch(() => null) as (BankShowData & { error?: string }) | null;
+      if (gone) return;
+      setState(response.ok && body ? { key, data: body } : { key, error: body?.error || 'Nie udało się pobrać danych karty.' });
+    }, () => { if (!gone) setState({ key, error: 'Nie udało się pobrać danych karty.' }); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the query
+  }, [key]);
+  const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Wydatki';
+  const data = state.key === key ? state.data : undefined;
+  const error = !query.success ? 'Agent przysłał niepoprawne zapytanie karty.' : state.key === key ? state.error : undefined;
+  const widest = Math.max(1, ...(data?.categories.map(c => Math.max(0, c.spent)) ?? []));
+  return <section className={card} aria-label={`Karta: ${title}`}>
+    <div className={head}>
+      <ChartColumn size={16} className="tw:text-ck-cal" aria-hidden="true" />
+      <span className={eyebrow}>{title}</span>
+      {data && <span className="tw:ml-auto tw:text-xs tw:text-ck-muted">{dayLabel(data.from)} – {dayLabel(data.to)}</span>}
+    </div>
+    <div className="tw:grid tw:gap-3 tw:p-4">
+      {error && <p className={refusedNote} role="alert">{error}</p>}
+      {!data && !error && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Wczytuję…</p>}
+      {data && <>
+        <p className="tw:m-0 tw:text-ck-text"><b className="tw:font-semibold">{pln(data.total.spent)}</b> <span className="tw:text-ck-muted">· {data.total.count} {data.total.count === 1 ? 'operacja' : 'operacji'}</span></p>
+        {data.view === 'słupki' || data.categories.length > 1 ? <ul className="tw:m-0 tw:grid tw:list-none tw:gap-2 tw:p-0">
+          {data.categories.map(c => <li key={c.id} className="tw:grid tw:gap-1">
+            <div className="tw:flex tw:items-baseline tw:gap-2"><span className="tw:text-ck-text">{c.name}</span><span className="tw:text-xs tw:text-ck-faint">{c.count} op.</span><span className="tw:ml-auto tw:font-ck-mono tw:text-[13px] tw:text-ck-text">{pln(c.spent)}</span></div>
+            <div className="tw:h-2 tw:overflow-hidden tw:rounded-full tw:bg-ck-surface-2" aria-hidden="true"><div className="tw:h-full tw:rounded-full" style={{ width: `${Math.round(Math.max(0, c.spent) / widest * 100)}%`, background: COLOR_VALUES[c.color] }} /></div>
+          </li>)}
+        </ul> : null}
+        {data.view === 'tabela' && <div className="tw:overflow-x-auto">
+          <table className="tw:w-full tw:border-collapse tw:text-[13px]">
+            <thead><tr className="tw:text-left tw:text-[11px] tw:uppercase tw:tracking-wider tw:text-ck-muted"><th className="tw:py-1 tw:pr-3 tw:font-semibold">Dzień</th><th className="tw:py-1 tw:pr-3 tw:font-semibold">Operacja</th><th className="tw:py-1 tw:pr-3 tw:font-semibold">Kategoria</th><th className="tw:py-1 tw:text-right tw:font-semibold">Kwota</th></tr></thead>
+            <tbody>
+              {data.rows.map((r, i) => <tr key={`${i}:${r.day}:${r.name}`} className="tw:border-t tw:border-ck-line">
+                <td className="tw:whitespace-nowrap tw:py-1.5 tw:pr-3 tw:text-ck-muted">{dayLabel(r.day)}</td>
+                <td className="tw:py-1.5 tw:pr-3 tw:text-ck-text">{r.name}{r.tags.map(t => <span key={t} className="tw:ml-1.5 tw:text-xs tw:text-ck-faint">#{t}</span>)}</td>
+                <td className="tw:py-1.5 tw:pr-3 tw:text-ck-muted">{r.category}</td>
+                <td className="tw:whitespace-nowrap tw:py-1.5 tw:text-right tw:font-ck-mono tw:text-ck-text">{pln(-r.amount)}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+        {data.hidden > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">… i {data.hidden} starszych (zawęź zakres dat).</p>}
+        {data.unknown.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-ck-faint">Bez dopasowania: {data.unknown.join(', ')}.</p>}
+      </>}
+    </div>
+  </section>;
+}
+
 /** The task in a watch tool's answer (`{"task":{…}}`), if it has one. */
 const parseTask = (result: unknown) => watchAnswerTask<CockpitTask>(result);
 
@@ -211,7 +352,7 @@ const DECIDED: Record<Exclude<HermesApprovalArgs['state'], 'pending'>, string> =
 
 /** Hermes asks before running a tool; its run waits for the answer (or its own timeout). */
 export function HermesApprovalCard({ toolCallId, args }: ToolCallMessagePartProps<HermesApprovalArgs>) {
-  const { respond } = useContext(CardActions);
+  const { respond, refreshing } = useContext(CardActions);
   const pending = args.state === 'pending';
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -230,8 +371,8 @@ export function HermesApprovalCard({ toolCallId, args }: ToolCallMessagePartProp
       {pending && <>
         <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Odpowiedź czeka na Twoją decyzję · {elapsed(now - args.at)}</p>
         <div className="tw:flex tw:gap-2">
-          <button type="button" className={`${btn} tw:bg-ck-green tw:text-ck-bg tw:hover:bg-[#8de0ae]`} onClick={() => respond(toolCallId, 'approve')}>Zezwól</button>
-          <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} onClick={() => respond(toolCallId, 'deny')}>Odmów</button>
+          <button type="button" className={`${btn} tw:bg-ck-green tw:text-ck-bg tw:hover:bg-[#8de0ae]`} disabled={refreshing} onClick={() => respond(toolCallId, 'approve')}>Zezwól</button>
+          <button type="button" className={`${btn} tw:text-ck-red tw:hover:bg-ck-red/10`} disabled={refreshing} onClick={() => respond(toolCallId, 'deny')}>Odmów</button>
         </div>
       </>}
     </div>
