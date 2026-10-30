@@ -84,7 +84,7 @@ export interface SmartAlert {
   /** `mail:<thread id>` or `bank:<operation id>`: what the tile hides when dismissed. */
   id: string;
   ruleId: string;
-  source: 'mail' | 'bank';
+  source: 'mail' | 'bank' | 'automation';
   badge: string;
   title: string;
   snippet: string;

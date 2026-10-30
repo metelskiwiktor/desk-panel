@@ -2077,3 +2077,11 @@ nav:not(:focus-within) { position: absolute; width: 1px; height: 1px; margin: -1
   .automation-layout { grid-template-columns: minmax(0, 1fr); }
   .automation-side { border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; padding-bottom: 18px; }
 }
+
+.automations-tile-card { height: 100%; display: flex; flex-direction: column; }
+.automations-tile { display: grid; align-content: start; gap: 10px; width: 100%; flex: 1; text-align: left; background: transparent; border: 0; color: inherit; cursor: pointer; overflow: auto; padding: 8px; }
+.automations-tile-row { display: grid; gap: 4px; min-width: 0; }
+.automations-tile-row strong { overflow-wrap: anywhere; }
+.automations-tile-row small { opacity: .65; }
+.automation-run-actions { padding-left: 18px; overflow-wrap: anywhere; }
+.automation-run-actions small { opacity: .65; }

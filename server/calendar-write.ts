@@ -6,7 +6,7 @@ import { GoogleAuthError } from './google-oauth';
 import { AppointmentError } from './znanylekarz';
 
 type Request = (path: string, init: { method?: 'GET' | 'POST'; params?: Record<string, string>; data?: unknown }) => Promise<unknown>;
-const responseSchema = z.object({ id: z.string().min(1), status: z.string().optional(), htmlLink: z.url(), summary: z.string(), start: z.object({ dateTime: z.string() }), end: z.object({ dateTime: z.string() }), location: z.string().default(''), description: z.string().default(''), extendedProperties: z.object({ private: z.record(z.string(), z.string()).optional() }).optional() });
+const responseSchema = z.object({ id: z.string().min(1), status: z.string().optional(), htmlLink: z.url(), summary: z.string(), start: z.object({ dateTime: z.string().optional(), date: z.string().optional() }), end: z.object({ dateTime: z.string().optional(), date: z.string().optional() }), location: z.string().default(''), description: z.string().default(''), extendedProperties: z.object({ private: z.record(z.string(), z.string()).optional() }).optional() });
 export const calendarEventId = (key: string) => 'desk' + createHash('sha256').update(key).digest('hex');
 export const calendarDraftHash = (draft: CalendarDraft) => createHash('sha256').update(JSON.stringify(calendarDraftSchema.parse(draft))).digest('hex');
 
@@ -18,7 +18,8 @@ export function createCalendarWriter(request: Request, now = Date.now) {
     const end = DateTime.fromMillis(draft.endAt, { zone: draft.timeZone });
     if (!start.isValid || !end.isValid) throw new AppointmentError(400, 'Nieprawidłowa strefa lub godziny wydarzenia.');
     const id = calendarEventId(key), hash = calendarDraftHash(draft);
-    const payload = { id, summary: draft.title, start: { dateTime: start.toISO(), timeZone: draft.timeZone }, end: { dateTime: end.toISO(), timeZone: draft.timeZone },
+    const payload = { id, summary: draft.title, start: draft.allDay ? { date: start.toISODate() } : { dateTime: start.toISO(), timeZone: draft.timeZone }, end: draft.allDay ? { date: end.toISODate() } : { dateTime: end.toISO(), timeZone: draft.timeZone },
+      ...(draft.reminderMinutes !== undefined ? { reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: draft.reminderMinutes }] } } : {}),
       location: draft.location, description: draft.description, extendedProperties: { private: { deskPanelPlan: hash } } };
     try {
       let response;
@@ -29,7 +30,7 @@ export function createCalendarWriter(request: Request, now = Date.now) {
       }
       const event = responseSchema.parse(response);
       if (event.id !== id || event.status === 'cancelled' || event.extendedProperties?.private?.deskPanelPlan !== hash || !isGoogleCalendarEventUrl(event.htmlLink)
-        || event.summary !== draft.title || Date.parse(event.start.dateTime) !== draft.startAt || Date.parse(event.end.dateTime) !== draft.endAt || event.location !== draft.location || event.description !== draft.description) throw new AppointmentError(409, 'Nie można bezpiecznie potwierdzić zapisanego wydarzenia. Sprawdź Google Calendar.');
+        || event.summary !== draft.title || (draft.allDay ? event.start.date !== start.toISODate() || event.end.date !== end.toISODate() : Date.parse(event.start.dateTime ?? '') !== draft.startAt || Date.parse(event.end.dateTime ?? '') !== draft.endAt) || event.location !== draft.location || event.description !== draft.description) throw new AppointmentError(409, 'Nie można bezpiecznie potwierdzić zapisanego wydarzenia. Sprawdź Google Calendar.');
       return calendarSavedSchema.parse({ id, url: event.htmlLink, at: now(), draft });
     } catch (error) {
       if (error instanceof AppointmentError) throw error;

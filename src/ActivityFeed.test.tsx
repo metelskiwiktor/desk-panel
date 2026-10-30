@@ -1,10 +1,11 @@
+import type { Automation } from './automation-contract';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityFeed, nowe } from './ActivityFeed';
 import { useActivityLog } from './useActivityLog';
 import { createFixture } from './test-fixtures';
-import { emptyActivityLog, recordActivity, type ActivityEntry } from './activity-log';
+import { emptyActivityLog, recordAutomationActivity, recordActivity, type ActivityEntry } from './activity-log';
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const now = Date.parse('2026-10-15T10:00:00Z');
@@ -139,4 +140,18 @@ describe('what is new since the list was last open', () => {
   it('speaks Polish about the numbers', () => {
     expect([1, 2, 4, 5, 12, 22, 25].map(nowe)).toEqual(['nowe', 'nowe', 'nowe', 'nowych', 'nowych', 'nowe', 'nowych']);
   });
+});
+
+it('receives persisted automation notify in the bell once, keeps text and opens its link', async () => {
+  const row = { id: 'a-111111111111', name: 'Nowe zapisy', runs: [{ id: 'run-111111111111', actions: [{ kind: 'notify', at: 1000, result: 'error', title: 'Formularz działa', text: 'Możesz się zapisać.', url: 'https://example.com/signup' }] }] } as Automation;
+  const log = recordAutomationActivity(emptyActivityLog(), [row], 2000);
+  expect(recordAutomationActivity(log, [row], 3000).entries).toHaveLength(1);
+  const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null);
+  const user = userEvent.setup();
+  render(<ActivityFeed entries={log.entries} open={vi.fn()} dismiss={vi.fn()} restore={vi.fn()} canUndo={false} storageError={false} showRules={() => {}} />);
+  await user.click(screen.getByRole('button', { name: /^Zdarzenia panelu:/ }));
+  expect(screen.getByText('Formularz działa · Możesz się zapisać.')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Automat: Automat: Nowe zapisy' }));
+  expect(windowOpen).toHaveBeenCalledWith('https://example.com/signup', '_blank', 'noopener,noreferrer');
+  windowOpen.mockRestore();
 });

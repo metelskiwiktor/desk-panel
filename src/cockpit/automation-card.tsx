@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { Check, Minus, Repeat } from 'lucide-react';
-import { ACTION_HINTS, ACTION_LABELS, CHANGE_LABELS, changeValue, automationDiff, automationPlanValues, automationListSchema, type Automation, automationPlanSchema, describeTriggerRange, type AutomationAction } from '../automation-contract';
+import { ACTION_HINTS, actionLabel, CHANGE_LABELS, changeValue, automationDiff, automationPlanValues, automationListSchema, type Automation, automationPlanSchema, describeTriggerRange, type AutomationAction } from '../automation-contract';
 import { openPanelPage } from '../panel-nav';
 import { CardActions, refusedNote } from './cards';
 import { ConsentShell } from './consent-card';
@@ -55,7 +55,7 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
     catch (e) { setError(e instanceof Error && e.message ? e.message : 'Nie udało się zapisać decyzji.'); }
     finally { setSending(false); }
   };
-  const toggle = (kind: AutomationAction['kind']) => setActions(list => list.some(a => a.kind === kind) ? list.filter(a => a.kind !== kind) : [...list, { kind }]);
+  const toggle = (kind: AutomationAction['kind']) => setActions(list => list.some(a => a.kind === kind) ? list.filter(a => a.kind !== kind) : [...list, ... (plan.success ? plan.data.actions.filter(a => a.kind === kind) : [])]);
   return <ConsentShell
     label={replaces ? 'Zmiana automatu' : 'Nowy automat'}
     heading={!decided ? replaces ? 'Zmienić automat?' : 'Utworzyć automat?' : decided.decision === 'updated' ? 'Automat zaktualizowany' : decided.decision === 'created' ? 'Automat utworzony' : 'Odrzucono'}
@@ -98,7 +98,7 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
             <label className="tw:flex tw:cursor-pointer tw:items-start tw:gap-2.5 tw:py-0.5 tw:text-ck-text">
               <input type="checkbox" className="tw:mt-1" checked={actions.some(x => x.kind === a.kind)} disabled={!!decided} onChange={() => toggle(a.kind)} />
               <span className="tw:grid tw:gap-0.5">
-                <span>{ACTION_LABELS[a.kind] ?? a.kind}</span>
+                <span>{actionLabel(a)}</span>
                 <span className="tw:text-xs tw:text-ck-muted">{ACTION_HINTS[a.kind] ?? ''}</span>
               </span>
             </label>

@@ -3,6 +3,11 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAutomationExecutor } from './automation-actions';
+import { createCalendarWriter } from './calendar-write';
+import { smartView } from './smart-rules';
+import type { PanelSources } from './sources';
+import { createPanelServer } from './app';
 import { createAutomations, nextOccurrence, resolveObserverTime } from './automations';
 import { ChatError } from './agent-chat';
 import { RUN_REPORT_TIMEOUT_MS, type Automation } from '../src/automation-contract';
@@ -366,5 +371,232 @@ describe('in-place consent updates', () => {
     const reloaded = make();
     await expect(reloaded.createFromPlan('origin', plan({ replaces: a.id }))).rejects.toThrow(/nowy automat bez replaces/);
     expect(stored()).toEqual(data);
+  });
+});
+
+
+describe('consented run actions', () => {
+  const actions = [{ kind: 'calendarEvent', reminderMinutes: 45, domain: 'example.com' }, { kind: 'smartAction', domain: 'example.com' }, { kind: 'notify', domain: 'example.com' }];
+  async function running(executeAction: Parameters<typeof createAutomations>[0]['executeAction'], log?: (line: string) => void) {
+    const automations = make({ executeAction, ...(log ? { log } : {}) });
+    const a = await automations.createFromPlan('origin', plan({ actions }));
+    await automations.update({ id: a.id, action: 'runNow' });
+    const p = stored().pending[0];
+    automations.turnChanged({ chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run', ended: false });
+    return { automations, a, p, input: { runId: p.id, token: p.token, title: 'Nowe zapisy', url: 'https://forms.example.com/signup' } };
+  }
+  it.each(['notify', 'calendarEvent', 'smartAction'] as const)('requires a separate non-public domain for %s links on create, update and act', async action => {
+    const { automations, a, input } = await running(vi.fn().mockResolvedValue('ref'));
+    for (const domain of ['co.uk', 'github.io']) {
+      await expect(automations.createFromPlan('origin', plan({ actions: [{ kind: action, domain }] }))).rejects.toThrow();
+      await expect(automations.createFromPlan('origin', plan({ replaces: a.id, actions: [{ kind: action, domain }] }))).rejects.toThrow();
+    }
+    await expect(automations.act({ ...input, action, url: 'https://evil.test/' })).rejects.toMatchObject({ status: 403 });
+    if (action !== 'smartAction') {
+      await automations.createFromPlan('origin', plan({ replaces: a.id, actions: [{ kind: action, ...(action === 'calendarEvent' ? { reminderMinutes: 45 } : {}) }] }));
+      await expect(automations.act({ ...input, action })).rejects.toMatchObject({ status: 403 });
+      expect((await automations.act({ ...input, action, url: undefined })).result).toBe('ok');
+    }
+  });
+  it.each(['notify', 'calendarEvent', 'smartAction'] as const)('permits %s content without a link when no domain was approved', async action => {
+    const execute = vi.fn().mockResolvedValue('ref');
+    const automations = make({ executeAction: execute });
+    const a = await automations.createFromPlan('origin', plan({ actions: [{ kind: action }] }));
+    await automations.update({ id: a.id, action: 'runNow' });
+    const p = stored().pending[0];
+    automations.turnChanged({ chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run', ended: false });
+    const input = { runId: p.id, token: p.token, action, title: 'Treść' };
+    await expect(automations.act({ ...input, url: 'https://example.com/' })).rejects.toMatchObject({ status: 403 });
+    expect((await automations.act(input)).result).toBe('ok');
+  });
+  it('uses the separate approved domain of each action', async () => {
+    const automations = make({ executeAction: vi.fn().mockResolvedValue('ref') });
+    const actions = [{ kind: 'notify', domain: 'notify.example.com' }, { kind: 'calendarEvent', domain: 'calendar.example.com' }, { kind: 'smartAction', domain: 'smart.example.com' }];
+    const a = await automations.createFromPlan('origin', plan({ actions }));
+    await automations.update({ id: a.id, action: 'runNow' });
+    const p = stored().pending[0];
+    automations.turnChanged({ chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run', ended: false });
+    for (const { kind, domain } of actions) {
+      const input = { runId: p.id, token: p.token, action: kind as 'notify' | 'calendarEvent' | 'smartAction', title: 'Treść' };
+      await expect(automations.act({ ...input, url: 'https://other.example.com/' })).rejects.toMatchObject({ status: 403 });
+      expect((await automations.act({ ...input, url: `https://${domain}/` })).result).toBe('ok');
+    }
+  });
+  it.each(['pause', 'cancel'] as const)('blocks act after %s', async action => {
+    const execute = vi.fn();
+    const { automations, a, input } = await running(execute);
+    await automations.update({ id: a.id, action });
+    await expect(automations.act({ ...input, action: 'notify' })).rejects.toMatchObject({ status: action === 'pause' ? 403 : 409 });
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('allows only narrower domains, keeps Calendar parameters fixed and cannot gain permissions mid-run', async () => {
+    const execute = vi.fn().mockResolvedValue('ref');
+    const { automations, a, input } = await running(execute);
+    await automations.createFromPlan('origin', plan({ replaces: a.id, actions: [
+      { kind: 'notify', domain: 'forms.example.com' }, { kind: 'calendarEvent', reminderMinutes: 15, domain: 'example.com' },
+    ] }));
+    await expect(automations.act({ ...input, action: 'calendarEvent', when: '2027-01-01T10:00' })).rejects.toMatchObject({ status: 403 });
+    await expect(automations.act({ ...input, action: 'notify', url: 'https://other.example.com/' })).rejects.toMatchObject({ status: 403 });
+    expect((await automations.act({ ...input, action: 'notify' })).result).toBe('ok');
+    expect(execute.mock.calls[0][1].domain).toBe('forms.example.com');
+    await automations.createFromPlan('origin', plan({ replaces: a.id, actions: [{ kind: 'smartAction', domain: 'evil.test' }] }));
+    await expect(automations.act({ ...input, action: 'smartAction', url: 'https://evil.test/' })).rejects.toMatchObject({ status: 403 });
+  });
+  it('does not grant a newly added kind to the run that started with message only', async () => {
+    const execute = vi.fn();
+    const automations = make({ executeAction: execute });
+    const a = await automations.createFromPlan('origin', plan());
+    await automations.update({ id: a.id, action: 'runNow' });
+    const p = stored().pending[0];
+    automations.turnChanged({ chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run', ended: false });
+    await automations.createFromPlan('origin', plan({ replaces: a.id, actions: [{ kind: 'notify', domain: 'example.com' }] }));
+    await expect(automations.act({ runId: p.id, token: p.token, action: 'notify', title: 'New' })).rejects.toMatchObject({ status: 403 });
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('returns 404 for a removed automation and rejects a legacy public-suffix consent at act', async () => {
+    const { input } = await running(vi.fn());
+    const data = stored();
+    data.automations[0].actions = [{ kind: 'notify', domain: 'github.io' }];
+    data.pending[0].settings.actions = [{ kind: 'notify', domain: 'github.io' }];
+    // Simulate a previously accepted consent without bypassing the effect boundary.
+    // The store schema also rejects it on reload; no action can be executed.
+    writeFileSync(join(dir, 'automations.json'), JSON.stringify(data));
+    await expect(make().act({ ...input, action: 'notify', url: 'https://owner.github.io/' })).rejects.toMatchObject({ status: 503 });
+    // A valid orphan reservation has a distinct 404 response, not a null dereference.
+    data.automations = [];
+    data.pending[0].settings.actions = [{ kind: 'notify', domain: 'example.com' }];
+    writeFileSync(join(dir, 'automations.json'), JSON.stringify(data));
+    rmSync(join(dir, 'automations.json.blocked'), { force: true });
+    await expect(make().act({ ...input, action: 'notify' })).rejects.toMatchObject({ status: 404 });
+  });
+  it('normalizes the link passed to the provider and saved for the bell', async () => {
+    const execute = vi.fn().mockResolvedValue('ref');
+    const { automations, input } = await running(execute);
+    expect((await automations.act({ ...input, action: 'notify', url: 'HTTPS://Example.COM:443/x' })).url).toBe('https://example.com/x');
+    expect(execute.mock.calls[0][0].url).toBe('https://example.com/x');
+    expect(stored().pending[0].actions[0].url).toBe('https://example.com/x');
+  });
+  it('rejects report while a provider is pending, but permits pause and cancel without waiting for the network', async () => {
+    let release!: (ref: string) => void;
+    const gate = new Promise<string>(resolve => { release = resolve; });
+    const execute = vi.fn(() => gate);
+    const { automations, a, input } = await running(execute);
+    const act = automations.act({ ...input, action: 'notify' });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    try {
+      await expect(automations.report({ runId: input.runId, token: input.token, outcome: 'done', summary: 'Done' })).rejects.toMatchObject({ status: 409 });
+      await automations.update({ id: a.id, action: 'pause' });
+      await automations.update({ id: a.id, action: 'cancel' });
+    } finally { release('ref'); await act; }
+    const run = (await automations.get(a.id))!.runs[0];
+    expect(run.actions![0].result).toBe('ok');
+    expect(stored().automations[0].runs[0].actions[0].result).toBe('ok');
+  });
+  it('requires the approved kind, token, live turn and enabled automations; links respect domain boundaries', async () => {
+    const execute = vi.fn().mockResolvedValue('ref');
+    const { automations, a, p, input } = await running(execute);
+    for (const url of ['https://example.com.evil.test/', 'http://example.com/', 'https://evilexample.com/', 'https://user:pass@example.com/', 'https://example.com:444/']) {
+      await expect(automations.act({ ...input, action: 'smartAction', url })).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(automations.act({ ...input, token: '0'.repeat(32), action: 'notify' })).rejects.toMatchObject({ status: 409 });
+    await expect(make({ enabled: false }).act({ ...input, action: 'notify' })).rejects.toMatchObject({ status: 409 });
+    expect(execute).not.toHaveBeenCalled();
+    // Removing consent immediately blocks the action in the running turn.
+    await automations.createFromPlan('origin', plan({ replaces: a.id, actions: [{ kind: 'message' }] }));
+    await expect(automations.act({ ...input, action: 'notify' })).rejects.toMatchObject({ status: 403 });
+    automations.turnChanged({ chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run', ended: true });
+    await expect(automations.act({ ...input, action: 'notify' })).rejects.toMatchObject({ status: 409 });
+    const other = make();
+    const b = await other.createFromPlan('other', plan());
+    await other.update({ id: b.id, action: 'runNow' });
+    const q = stored().pending[0];
+    other.turnChanged({ chatId: q.chatId, turnId: q.turnId, runId: 'hermes-run', ended: false });
+    await expect(other.act({ ...input, runId: q.id, token: q.token, action: 'notify' })).rejects.toMatchObject({ status: 403 });
+  });
+  it('executes once under parallel calls and after restart, persists refs; alerts reach the HTTP API', async () => {
+    const execute = vi.fn(createAutomationExecutor({}));
+    const { automations, a, input } = await running(execute);
+    const call = { ...input, action: 'smartAction' as const, text: 'Formularz już działa.' };
+    const results = await Promise.all([automations.act(call), automations.act(call)]);
+    expect(results[0].result).toBe('ok');
+    expect(['pending', 'ok']).toContain(results[1].result); expect(execute).toHaveBeenCalledOnce();
+    const reloaded = make({ executeAction: execute });
+    expect(await reloaded.act(call)).toEqual(results[0]); expect(execute).toHaveBeenCalledOnce();
+    await reloaded.report({ runId: input.runId, token: input.token, outcome: 'done', summary: 'Zapisy ruszyły.' });
+    expect((await reloaded.get(a.id))!.runs[0].actions).toEqual(results.slice(0, 1));
+    const sources = { automations: async () => ({ automations: await reloaded.list() }), mail: async () => ({ data: [] }) } as unknown as PanelSources;
+    const time = vi.spyOn(Date, 'now').mockReturnValue(clock);
+    expect((await smartView(sources)).alerts[0]).toMatchObject({ source: 'automation', url: input.url, badge: 'Automat: Ceny', id: `${input.runId}:smartAction` });
+    const server = createPanelServer(sources, dir);
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address() as { port: number };
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/smart-actions`);
+      expect(response.status).toBe(200);
+      expect((await response.json()).alerts[0].title).toBe('Nowe zapisy');
+    } finally { time.mockRestore(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+  it('writes the consent reminder with a stable Google id and recovers identical insert on 409', async () => {
+    let saved: any;
+    let inserts = 0;
+    const request = vi.fn(async (_path: string, init: any) => {
+      if (init.method === 'GET') return saved;
+      inserts++;
+      if (saved) throw Object.assign(new Error(), { response: { status: 409 } });
+      saved = { ...init.data, htmlLink: 'https://calendar.google.com/calendar/event?eid=fixture' };
+      return saved;
+    });
+    const writeCalendar = createCalendarWriter(request);
+    const execute = createAutomationExecutor({ writeCalendar });
+    const { automations, input } = await running(execute);
+    const call = { ...input, action: 'calendarEvent' as const, when: '2027-01-10T10:30' };
+    const result = await automations.act(call);
+    expect(result.result).toBe('ok');
+    expect(saved.reminders).toEqual({ useDefault: false, overrides: [{ method: 'popup', minutes: 45 }] });
+    await automations.act(call); expect(inserts).toBe(1);
+    // Lost-response retry of the existing writer uses the same key, not a new Google id.
+    const ref = await execute(call, { kind: 'calendarEvent', reminderMinutes: 45 }, `${input.runId}:calendarEvent`, 'Ceny');
+    expect(ref).toBe(result.ref); expect(inserts).toBe(2);
+    expect(request.mock.calls.at(-1)![0]).toBe(`/events/${result.ref}`);
+  });
+  it('keeps a failed action and its message, permits reporting; never leaks provider errors', async () => {
+    const { automations, a, input } = await running(createAutomationExecutor({ writeCalendar: vi.fn().mockRejectedValue(new Error('private-key')) }));
+    const result = await automations.act({ ...input, action: 'calendarEvent', when: '2027-01-10T10:30' });
+    expect(result).toMatchObject({ result: 'error', error: expect.stringContaining('calendar.events.owned') });
+    expect(JSON.stringify(result)).not.toContain('private-key');
+    expect(stored().outbox[0].text).toContain('błąd akcji');
+    await automations.report({ runId: input.runId, token: input.token, outcome: 'done', summary: 'Cel osiągnięty; błąd kalendarza.' });
+    expect((await automations.get(a.id))!.runs[0].actions![0].result).toBe('error');
+  });
+  it('sends ntfy only when opted in; topic and raw fetch error stay out of logs and public results', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true });
+    const input = { action: 'notify' as const, title: 'Zapisy ruszyły', text: 'Formularz działa. Dalszy tekst.', runId: 'run-123456789abc', token: '0'.repeat(32), url: 'https://example.com/' };
+    await createAutomationExecutor({ fetcher })(input, { kind: 'notify' }, 'key', 'Nazwa');
+    expect(fetcher).not.toHaveBeenCalled();
+    const secret = 'https://ntfy.sh/private-topic';
+    const log = vi.fn();
+    const execute = createAutomationExecutor({ fetcher, ntfyUrl: secret });
+    const { automations, a, input: runInput } = await running(execute, log);
+    fetcher.mockRejectedValueOnce(new Error(secret));
+    expect(await automations.act({ ...runInput, action: 'notify', text: input.text })).toMatchObject({ result: 'error', error: expect.stringContaining('dzwonku') });
+    await automations.act({ ...runInput, action: 'notify' });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0][0])).toBe(secret);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: 'error', body: 'Formularz działa.' });
+    await automations.report({ runId: runInput.runId, token: runInput.token, outcome: 'done', summary: 'Powiadomiono.' });
+    expect(JSON.stringify(await automations.get(a.id))).not.toContain(secret);
+    expect(stored().automations[0].runs[0].actions[0].result).toBe('error');
+    expect(JSON.stringify(stored().outbox)).not.toContain(secret);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('private-topic');
+    expect(log.mock.calls.some(([line]) => line.includes('done'))).toBe(true);
+  });
+  it('uses consented all-day date, exclusive next day across DST, and rejects malformed local clocks', async () => {
+    const writer = vi.fn().mockResolvedValue({ id: 'event' });
+    const execute = createAutomationExecutor({ writeCalendar: writer });
+    const input = { action: 'calendarEvent' as const, title: 'Dzień', runId: 'run-123456789abc', token: '0'.repeat(32), when: '2027-10-31' };
+    await execute(input, { kind: 'calendarEvent', allDay: true }, 'key', 'Nazwa');
+    expect(writer.mock.calls[0][1]).toMatchObject({ allDay: true, reminderMinutes: 60, startAt: Date.parse('2027-10-31T00:00:00+02:00'), endAt: Date.parse('2027-11-01T00:00:00+01:00') });
+    for (const when of ['2027-02-30T10:00', '2027-03-28T02:30', '2027-01-01T10:00Z']) await expect(execute({ ...input, when }, { kind: 'calendarEvent' }, 'key', 'Nazwa')).rejects.toMatchObject({ status: 400 });
+    expect(writer).toHaveBeenCalledOnce();
   });
 });

@@ -15,10 +15,11 @@ export const appointmentQuerySchema = z.object({
 export type AppointmentQuery = z.infer<typeof appointmentQuerySchema>;
 
 export const calendarDraftSchema = z.object({
+  allDay: z.boolean().optional(), reminderMinutes: z.number().int().min(0).max(40320).optional(),
   title: z.string().trim().min(1).max(160), startAt: z.number().finite(), endAt: z.number().finite(),
   timeZone: z.string().min(1).max(80).default('Europe/Warsaw'),
   location: z.string().trim().max(300).default(''), description: z.string().trim().max(2000).default(''),
-}).strict().refine(v => v.endAt > v.startAt && v.endAt - v.startAt <= 24 * 60 * 60_000, 'Koniec musi być po początku, najwyżej 24 h później.');
+}).strict().refine(v => v.endAt > v.startAt && v.endAt - v.startAt <= (v.allDay ? 25 : 24) * 60 * 60_000, 'Koniec musi być po początku, najwyżej 24 h później.');
 export type CalendarDraft = z.infer<typeof calendarDraftSchema>;
 export const calendarProposalSchema = z.object({
   title: z.string().trim().min(1).max(160),

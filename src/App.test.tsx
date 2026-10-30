@@ -127,7 +127,7 @@ describe('interaktywny panel', () => {
     await user.click(nav('Zdarzenia'));
     expect(screen.getByRole('heading', { level: 1, name: 'Zdarzenia' })).toBeTruthy();
     const rules = screen.getByRole('table', { name: 'Aktualne reguły tworzenia zdarzeń' });
-    expect(within(rules).getAllByRole('row')).toHaveLength(9);
+    expect(within(rules).getAllByRole('row')).toHaveLength(10);
     expect(within(rules).getByRole('columnheader', { name: 'Kiedy ponownie' })).toBeTruthy();
     expect(within(rules).getByText('Zużycie wyprzedza czas o ponad 5 do 15 p.p.')).toBeTruthy();
     expect(screen.getByText(/Restart serwera i odświeżenie strony zachowują historię/)).toBeTruthy();

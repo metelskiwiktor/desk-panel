@@ -44,3 +44,9 @@ Przyciski umieją otworzyć link z maila i oznaczyć operację podpowiedzią. Ka
 link, który dałby przycisk („→ domena”, klikalny), żeby użytkownik sprawdził go przed zapisem. Akcja, której nie da się
 zrobić linkiem, to praca w kodzie: Wektor mówi to wprost i proponuje zadanie na Cezarze (skill „Zaimplementuj zadanie”).
 Nowy rodzaj to pole w `smartButtonSchema` (kontrakt), jego wykonanie w kafelku i opis w przewodniku `smart`.
+
+## Alerty z automatów
+
+Wyjątek od nowej zgody na zapis: run dodaje alert bez kolejnego kliknięcia tylko dla smartAction {domain} zatwierdzonego na karcie automatu. Alerty pochodzą z trwałej historii automations.json przez smartView/GET /api/smart-actions, mają autora „Automat: nazwa”, tytuł, treść i przycisk HTTPS na zatwierdzonej domenie lub subdomenie. Nie tworzą ani nie zmieniają reguł poczty. Odrzucenie jak innych alertów, w tej przeglądarce. Szczegóły: [Automaty](automaty.md#akcje-zatwierdzone-raz-na-karcie).
+
+Alerty z zatwierdzonych akcji automatów (docs/automaty.md) wygasają po 30 dniach od akcji i znikają po anulowaniu automatu. Mogą mieć samą treść; link wymaga osobnej domeny zatwierdzonej dla smartAction.

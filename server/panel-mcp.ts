@@ -27,7 +27,7 @@ import { linksOf, mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } 
 import { AutomationError, type Automations } from './automations';
 import { observerKinds, OBSERVER_KIND_LABELS } from '../src/observers-contract';
 import {
-  describeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationPlanSchema, automationReportSchema, automationUpdateSchema,
+  describeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationActSchema, automationPlanSchema, automationReportSchema, automationUpdateSchema,
   type Automation,
 } from '../src/automation-contract';
 
@@ -573,7 +573,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       goal: { type: 'string', description: 'Polecenie użytkownika słowo w słowie: co automat ma sprawdzać i robić' },
       trigger: { type: 'object', description: 'once {at: epoch ms}; daily {time:"HH:MM", from?, until?}; weekly {weekday:1–7, time, from?, until?}; cezar {taskId}; pr {url}' },
       doneWhen: { type: 'string', description: 'Warunek celu jednym zdaniem; przy nim outcome done kończy automat' },
-      actions: { type: 'array', description: 'Zatwierdzone akcje; etap 1 tylko [{kind:"message"}]', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message'] } }, required: ['kind'] } },
+      actions: { type: 'array', description: 'Akcje do jednorazowego zatwierdzenia: message, calendarEvent {reminderMinutes?:60, allDay?, domain?}, smartAction {domain?}, notify {domain?}', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message', 'calendarEvent', 'smartAction', 'notify'] }, domain: { type: 'string', description: 'Własna domena tej akcji, nie sufiks publiczny. Bez domain akcja nie przyjmuje url.' }, reminderMinutes: { type: 'integer' }, allDay: { type: 'boolean' } }, required: ['kind'] } },
       learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },
       replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), do aktualizacji na miejscu; historia i notatnik zostają' },
     }, ['name', 'goal', 'trigger', 'actions', 'learn']),
@@ -627,6 +627,15 @@ export const PANEL_TOOLS: Record<string, Tool> = {
         if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);
         throw error;
       }
+    },
+  },
+  panel_automation_act: {
+    description: cockpitToolDescription('panel_automation_act'), input: automationActSchema,
+    schema: schema({ runId: { type: 'string' }, token: { type: 'string' }, action: { type: 'string', enum: ['calendarEvent', 'smartAction', 'notify'] }, title: { type: 'string' }, when: { type: 'string', description: 'YYYY-MM-DDTHH:MM Europe/Warsaw; całodniowe YYYY-MM-DD' }, url: { type: 'string' }, text: { type: 'string' } }, ['runId', 'token', 'action', 'title']),
+    async run(args, ctx) {
+      if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
+      try { return JSON.stringify(await ctx.automations.act(args as any)); }
+      catch (e) { if (e instanceof AutomationError) throw new AgentViewError(e.status, e.message); throw e; }
     },
   },
   panel_automation_report: {

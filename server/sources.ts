@@ -25,6 +25,7 @@ import type { Automation, AutomationList, AutomationUpdate } from '../src/automa
 export interface PanelSources {
   /** Read-only proposals; Google is written only by the user's Origin-checked confirmation in the chat route. */
   appointments?: AppointmentService;
+  automationCalendarWrite?: (key: string, draft: import('../src/appointment-contract').CalendarDraft) => Promise<import('../src/appointment-contract').CalendarSaved>;
   cezar(): Promise<CezarSnapshot>;
   /** Raw details of a single run from Cezar (steps, error, worktreePath) for agent views. */
   cezarRun?(id: string): Promise<Record<string, any> | null>;

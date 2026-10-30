@@ -96,6 +96,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   let active = new Set<string>();
   return {
     appointments,
+    automationCalendarWrite: async (key, draft) => { if (!(await calendarAccount.canWriteCalendar())) throw new Error("calendar.events.owned required"); return writeCalendar(key, draft); },
     async cezar() {
       if (!cache || Date.now() - fetchedAt >= 4000) {
         pending ??= readCezar(options.cezarUrl).then(value => {

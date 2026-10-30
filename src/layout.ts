@@ -10,6 +10,7 @@ export const widgetNames = {
   todo: 'Zadania · listy do zrobienia (kafelków może być kilka)',
   bank: 'Konto bankowe · saldo i ostatnie operacje',
   'smart-actions': 'Smart Actions · szybkie akcje z poczty i alertów',
+  automations: 'Automaty',
 } as const;
 export type WidgetId = keyof typeof widgetNames;
 /** Order, displayMode and priority are kept from earlier layouts; the dashboard sizes sections by content. */

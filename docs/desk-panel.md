@@ -108,3 +108,9 @@ Osobny `just scenario` uruchamia syntetyczne źródła do pracy nad UI, zob. [te
 Null oznacza brak pomiaru; historia to dyskretne obserwacje.
 Zdarzenia korzystają z tych samych źródeł co karty. Offline lub stare dane nie
 tworzą nowych alertów.
+
+### DESK_NTFY_URL i widget Automaty
+
+Opcjonalne `DESK_NTFY_URL` w panel.env to pełny URL tematu HTTPS, np. `https://ntfy.sh/<losowy-temat>`. Domyślnie brak: notify automatów zapisuje tylko dzwonek. Skonfigurowany adres włącza wysyłkę krótkiego tytułu, jednego zdania i linku na telefon; bez konta ntfy w panelu. Adres tematu jest sekretem: tylko backend, nigdy logi ani przeglądarka. Backend nie podąża za przekierowaniami, ma timeout 10 s i nie ponawia niepewnej wysyłki.
+
+Widget „Automaty” dodaje się do pustego kafelka tak samo jak Poczta: do trzech aktywnych automatów (stan, nazwa, następny run, pięć kropek runów); dotknięcie otwiera widok Automaty z wynikami akcji na osi runów.

@@ -1271,6 +1271,72 @@
         "runs": [
           { "id": "run-eeeeeeeeeeee", "at": "now-1d", "chatId": "00000000-0000-4000-8000-000000000003", "outcome": "done", "summary": "Przypomnienie wysłane; rachunek opłacony.", "notebookChanged": false, "seconds": 3.5, "costUsd": 0.0003 }
         ]
+      },
+      {
+        "id": "a-444444444444",
+        "name": "Zapisy: IRONMAN 70.3 Poznań 2027",
+        "goal": "Gdy zapisy ruszą, dodaj wydarzenie z przypomnieniem, alert z formularzem i powiadomienie.",
+        "trigger": {
+          "kind": "once",
+          "at": "now-1h"
+        },
+        "status": "done",
+        "doneWhen": "Formularz zapisów jest dostępny.",
+        "notebook": "",
+        "learn": false,
+        "actions": [
+          {
+            "kind": "calendarEvent",
+            "reminderMinutes": 60
+          },
+          {
+            "kind": "smartAction",
+            "domain": "example.com"
+          },
+          {
+            "kind": "notify"
+          }
+        ],
+        "chatId": "00000000-0000-4000-8000-000000000004",
+        "createdAt": "now-2d",
+        "lastRunAt": "now-1h",
+        "runs": [
+          {
+            "id": "run-444444444444",
+            "at": "now-1h",
+            "chatId": "00000000-0000-4000-8000-000000000004",
+            "outcome": "done",
+            "summary": "Zapisy ruszyły. Dodano wydarzenie z przypomnieniem, alert z formularzem i powiadomienie.",
+            "notebookChanged": false,
+            "seconds": 14.2,
+            "actions": [
+              {
+                "kind": "calendarEvent",
+                "at": "now-1h",
+                "result": "ok",
+                "ref": "desk444444fixture",
+                "title": "Zapisy: IRONMAN 70.3 Poznań 2027"
+              },
+              {
+                "kind": "smartAction",
+                "at": "now-1h",
+                "result": "ok",
+                "ref": "run-444444444444:smartAction",
+                "title": "Formularz zapisów",
+                "url": "https://example.com/zapisy"
+              },
+              {
+                "kind": "notify",
+                "at": "now-1h",
+                "result": "ok",
+                "ref": "run-444444444444:notify",
+                "title": "Zapisy ruszyły",
+                "text": "Możesz otworzyć formularz zapisów.",
+                "url": "https://example.com/zapisy"
+              }
+            ]
+          }
+        ]
       }
     ]
   }

@@ -1,12 +1,12 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MailThread } from '../src/mail-contract';
 import type { BankSource } from '../src/bank-contract';
 import type { BankLabelsSource } from '../src/bank-labels-contract';
 import type { SmartRule } from '../src/smart-rules-contract';
-import { alertsOf, buttonLink, createSmartRuleStore, defaultQuery, rulePreview, SEED_RULES, SmartRuleError } from './smart-rules';
+import { alertsOf, buttonLink, createSmartRuleStore, defaultQuery, rulePreview, SEED_RULES, SmartRuleError, smartView } from './smart-rules';
 
 const thread = (over: Partial<MailThread>): MailThread => ({
   id: 'me@x.pl:a1', account: 'me@x.pl', threadId: 'a1', from: 'Nadawca', address: 'nadawca@x.pl', subject: 'Temat', snippet: '',
@@ -85,4 +85,17 @@ describe('Smart Actions rules', () => {
     expect(JSON.parse(readFileSync(file, 'utf8')).rules).toHaveLength(1);
     expect(() => store.apply({ rule: { ...inea, id: 'znanylekarz-confirm', source: 'bank', suggestion: 'dowolna' } as SmartRule })).toThrow(SmartRuleError);
   });
+});
+
+
+it('expires automation alerts after 30 days and removes cancelled automations immediately', async () => {
+  const now = Date.parse('2026-10-30T12:00:00Z');
+  const time = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const action = { kind: 'smartAction', result: 'ok', ref: 'recent', at: now, title: 'Recent' };
+  const sources = { mail: async () => ({ data: [] }), automations: async () => ({ automations: [
+    { id: 'active', name: 'A', status: 'active', runs: [{ actions: [action, { ...action, ref: 'old', at: now - 30 * 24 * 60 * 60_000 - 1 }] }] },
+    { id: 'cancelled', name: 'B', status: 'cancelled', runs: [{ actions: [{ ...action, ref: 'cancelled' }] }] },
+  ] }) } as unknown as import('./sources').PanelSources;
+  try { expect((await smartView(sources)).alerts.map(x => x.id)).toEqual(['recent']); }
+  finally { time.mockRestore(); }
 });

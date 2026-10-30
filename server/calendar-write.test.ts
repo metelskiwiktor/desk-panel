@@ -32,3 +32,21 @@ describe('consented Calendar insert', () => {
     const send = vi.fn(); await expect(createCalendarWriter(send)('card', { ...draft, endAt: draft.startAt })).rejects.toThrow(); expect(send).not.toHaveBeenCalled();
   });
 });
+
+it('inserts an all-day event with exclusive end and popup, recovering the same id after retry', async () => {
+  const allDay = calendarDraftSchema.parse({ title: 'Dzień zapisów', allDay: true, reminderMinutes: 60, startAt: Date.parse('2027-10-31T00:00:00+02:00'), endAt: Date.parse('2027-11-01T00:00:00+01:00') });
+  let event: any;
+  const request = vi.fn(async (_path: string, init: any) => {
+    if (init.method === 'GET') return event;
+    if (event) throw Object.assign(new Error(), { response: { status: 409 } });
+    event = { ...init.data, htmlLink: 'https://calendar.google.com/calendar/event?eid=fixture' };
+    return event;
+  });
+  const writer = createCalendarWriter(request);
+  const first = await writer('allDay', allDay);
+  const again = await writer('allDay', allDay);
+  expect(again.id).toBe(first.id);
+  expect(event.start).toEqual({ date: '2027-10-31' });
+  expect(event.end).toEqual({ date: '2027-11-01' });
+  expect(event.reminders).toEqual({ useDefault: false, overrides: [{ method: 'popup', minutes: 60 }] });
+});

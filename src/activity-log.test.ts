@@ -1,5 +1,6 @@
+import type { Automation } from './automation-contract';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ACTIVITY_LIMIT, ACTIVITY_STORAGE_KEY, dismissActivity, emptyActivityLog, readActivityLog, recordActivity, restoreActivity, saveActivityLog } from './activity-log';
+import { ACTIVITY_LIMIT, ACTIVITY_STORAGE_KEY, dismissActivity, emptyActivityLog, readActivityLog, recordActivity, recordAutomationActivity, restoreActivity, saveActivityLog } from './activity-log';
 import { createFixture } from './test-fixtures';
 import { MINUTE } from './model';
 
@@ -165,4 +166,22 @@ it('does not merge a new live reset with an already expired reset even inside th
   expect(log.entries).toHaveLength(2);
   saveActivityLog(log);
   expect(readActivityLog().entries).toHaveLength(2);
+});
+
+
+it('skips one malformed entry and keeps valid history and seen keys', () => {
+  const log = recordActivity(emptyActivityLog(), quotaData(), now);
+  localStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify({ ...log, entries: [{ ...log.entries[0], target: { kind: 'automation', id: 'a', url: 'HTTPS://Example.COM/x' } }, ...log.entries] }));
+  expect(readActivityLog()).toEqual(log);
+});
+
+it('a new browser collects only settled notifications from the last 24 hours', () => {
+  const rows = [{ id: 'a-111111111111', name: 'Fixture', runs: [
+    { id: 'old', actions: [{ kind: 'notify', result: 'ok', at: now - 24 * 60 * MINUTE - 1, title: 'Old' }] },
+    { id: 'new', actions: [{ kind: 'notify', result: 'error', at: now - MINUTE, title: 'Recent' }] },
+    { id: 'pending', actions: [{ kind: 'notify', result: 'pending', at: now, title: 'Pending' }] },
+  ] }] as unknown as Automation[];
+  const log = recordAutomationActivity(emptyActivityLog(), rows, now);
+  expect(log.entries.map(x => x.context)).toEqual(['Recent']);
+  expect(recordAutomationActivity(log, rows, now)).toEqual(log);
 });
