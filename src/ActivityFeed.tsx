@@ -1,3 +1,4 @@
+import { openPanelPage } from './panel-nav';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, ChevronRight, Trash2, X } from 'lucide-react';
 import { preciseStamp } from './format';
@@ -7,7 +8,7 @@ import { useSwipe } from './useSwipe';
 import { useDismiss } from './popover';
 
 /** Every panel event names the source it comes from, so it never reads as an e-mail. */
-const sources: Record<ActivityEntry['target']['kind'], string> = { event: 'Kalendarz', task: 'Cezar', quota: 'Limity AI', system: 'Komputer' };
+const sources: Record<ActivityEntry['target']['kind'], string> = { automation: 'Automat', event: 'Kalendarz', task: 'Cezar', quota: 'Limity AI', system: 'Komputer' };
 export const sourceOf = (entry: ActivityEntry) => sources[entry.target.kind];
 const SourceTag = ({ entry }: { entry: ActivityEntry }) => <span className={`source-tag source-${entry.target.kind}`}>{sourceOf(entry)}</span>;
 export const EVENTS_SEEN_KEY = 'desk-panel.events-seen';
@@ -43,7 +44,7 @@ function ActivityRow({ entry, fresh, open, dismiss }: {
   return <li className={`activity-swipe ${offset ? 'dragging' : ''}`}>
     <span className="activity-swipe-hint" aria-hidden="true"><Trash2 size={18} /> Usuń</span>
     <div className="activity-row" style={{ transform: `translateX(${offset}px)` }}>
-      <button className={`p2-erow ${entry.tone} ${fresh ? 'new' : ''}`} {...handlers} aria-label={`${sourceOf(entry)}: ${entry.title}`} onClick={event => { if (isTap(event)) open(entry.target); }}>
+      <button className={`p2-erow ${entry.tone} ${fresh ? 'new' : ''}`} {...handlers} aria-label={`${sourceOf(entry)}: ${entry.title}`} onClick={event => { if (isTap(event)) { if (entry.target.kind === 'automation') { if (entry.target.url) window.open(entry.target.url, '_blank', 'noopener,noreferrer'); else openPanelPage('automations'); } else open(entry.target); } }}>
         <i className="p2-edot" aria-hidden="true" />
         <span className="p2-erow-body">
           <span className="p2-erow-top"><SourceTag entry={entry} />{fresh && <span className="p2-erow-new">nowe</span>}<span className="p2-erow-time">{preciseStamp(entry.detectedAt)}</span></span>

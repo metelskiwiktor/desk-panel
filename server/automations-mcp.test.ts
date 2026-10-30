@@ -139,6 +139,16 @@ describe('automation card route', () => {
     expect(await before.list()).toHaveLength(0);
   });
 
+  it('narrows kinds while taking domain and reminder only from the conversation plan', async () => {
+    const automations = make();
+    const detail = JSON.parse(JSON.stringify(conversation()));
+    detail.items[0].parts[0].input = JSON.stringify({ ...plan, actions: [{ kind: 'calendarEvent', reminderMinutes: 60 }, { kind: 'smartAction', domain: 'example.com' }, { kind: 'notify' }] });
+    const res = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create', actions: [{ kind: 'calendarEvent', reminderMinutes: 0 }, { kind: 'smartAction', domain: 'evil.test' }] }), res as never, url, 'http://panel', { get: async () => detail } as never, undefined, undefined, automations);
+    expect(res.status).toBe(200);
+    expect((await automations.list())[0].actions).toEqual([{ kind: 'calendarEvent', reminderMinutes: 60 }, { kind: 'smartAction', domain: 'example.com' }]);
+  });
+
   it('applies an update once under concurrent clicks, keeps its before preview after restart', async () => {
     const automations = make();
     const a = await automations.createFromPlan(chatId, plan as never);

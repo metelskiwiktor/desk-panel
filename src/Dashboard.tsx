@@ -125,7 +125,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, todos, bank, 
     : trainingOn && training.data && !fresh(training, now, MAX_AGE.training) ? 'Garmin: dane nieaktualne'
     : calendarOn && data.calendar.data && !fresh(data.calendar, now, MAX_AGE.calendar) ? 'Kalendarz: dane nieaktualne' : null;
 
-  const work = (['cezar', 'mail', 'system', 'quotas', 'todo', 'bank'] as const).some(visible);
+  const work = (['cezar', 'mail', 'system', 'quotas', 'todo', 'bank', 'automations'] as const).some(visible);
   // In the month the work area folds away to nothing instead of leaving: the zones glide, and the cards are still there.
   const folded = view.bottom === 'month';
   return <div className="p3-frame" data-top={view.top} data-bottom={view.bottom} data-work={work} data-days={calendarOn || trainingOn}>

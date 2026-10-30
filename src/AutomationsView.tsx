@@ -6,7 +6,7 @@ import { stamp } from './format';
 import { usePollingEnabled } from './polling';
 import { openChatConversation } from './useChatPresentation';
 import {
-  CHANGE_LABELS, changeValue, ACTION_HINTS, ACTION_LABELS, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
+  CHANGE_LABELS, changeValue, ACTION_HINTS, ACTION_LABELS, actionLabel, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
   type Automation, type AutomationRun, type AutomationStatus,
 } from './automation-contract';
 
@@ -226,9 +226,10 @@ export function AutomationsView() {
                           <span className="automation-run-outcome">{OUTCOME_LABELS[r.outcome]}</span>
                         </div>
                         <p className="automation-run-summary">{r.summary}</p>
+                        <ul className="automation-run-actions">{r.actions?.map(a => <li key={a.kind} title={a.ref}>{ACTION_LABELS[a.kind]} · {a.result === 'ok' ? 'wykonano' : a.result === 'error' ? 'błąd' : 'wynik niepotwierdzony'}{a.error && `: ${a.error}`}</li>)}</ul>
                         <p className="automation-run-meta">{r.notebookChanged ? 'notatnik zmieniony' : 'notatnik bez zmian'}</p>
                         <button className="link-button" onClick={() => openChatConversation(r.chatId)}><MessageSquare size={14} /> Otwórz rozmowę runu</button>
-                      </div> : <p className="automation-axis-older"><span className="automation-run-when">{runDate(r.at)}</span> — {r.summary}</p>}
+                      </div> : <p className="automation-axis-older"><span className="automation-run-when">{runDate(r.at)}</span> — {r.summary}{r.actions?.map(a => <small key={a.kind}> · {ACTION_LABELS[a.kind]}: {a.result}{a.error && ` (${a.error})`}</small>)}</p>}
                     </li>)}
                   </ol>
                   <aside className="automation-run-aside" aria-label="Pomoc do runów">
@@ -241,7 +242,7 @@ export function AutomationsView() {
                       <h3>Gdy cel zostanie osiągnięty</h3>
                       <p>{chosen.doneWhen ?? 'Automat nie ma dodatkowego warunku celu.'}</p>
                       <ul>
-                        {chosen.actions.length ? chosen.actions.map((a, i) => <li key={i}>{ACTION_LABELS[a.kind]}</li>) : <li className="meta">Brak akcji — automat tylko sprawdza.</li>}
+                        {chosen.actions.length ? chosen.actions.map((a, i) => <li key={i}>{actionLabel(a)}</li>) : <li className="meta">Brak akcji — automat tylko sprawdza.</li>}
                       </ul>
                     </div>
                   </aside>
@@ -259,7 +260,7 @@ export function AutomationsView() {
                 <p className="automation-goal">{chosen.goal}</p>
                 {chosen.doneWhen && <><h3>Cel osiągnięty, gdy</h3><p>{chosen.doneWhen}</p></>}
                 <h3>Zatwierdzone akcje</h3>
-                <div className="automation-chips">{chosen.actions.length ? chosen.actions.map((a, i) => <span key={i} className="automation-chip">{ACTION_LABELS[a.kind]}</span>) : <span className="meta">brak</span>}</div>
+                <div className="automation-chips">{chosen.actions.length ? chosen.actions.map((a, i) => <span key={i} className="automation-chip">{actionLabel(a)}</span>) : <span className="meta">brak</span>}</div>
                 <p className="meta">Uczy się między runami: {chosen.learn ? 'tak' : 'nie'}.</p>
               </div>}
               {tab === 'notebook' && <div className="automation-tab" role="tabpanel" aria-label="Notatnik">

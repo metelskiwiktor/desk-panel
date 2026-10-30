@@ -105,6 +105,8 @@ node_modules or dist. Do not print credentials in tool output.
 
 ## Areas
 
+Automat może bez kolejnego kliknięcia zapisać wydarzenie Google lub dodać alert Smart Actions wyłącznie w swoim runie, jeśli użytkownik zatwierdził tę akcję i jej parametry na karcie tworzenia/zmiany automatu (docs/automaty.md).
+
 Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i `pr` po PR-ze taska oraz stan „W realizacji” po udanym dispatchu z karty z `todoId`, bez startowania agenta.
 
 Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Bot, Coins, Cpu, Gem, GitPullRequest, Landmark, Layers, ListChecks, Mail, Rocket, Sparkles, Terminal, X, Zap, type LucideIcon } from 'lucide-react';
+import { AutomationsTile } from './AutomationsTile';
 import { BankTile } from './BankTile';
 import { CezarPanel } from './CezarCard';
 import type { CezarSnapshot } from './cezar-contract';
@@ -29,6 +30,7 @@ const sameLayout = (a: Tile[], b: Tile[]) => a.length === b.length && a.every(t 
 const areaOf = ({ c, r, w, h }: Rect) => ({ '--c': c + 1, '--r': r + 1, '--w': w, '--h': h }) as CSSProperties;
 
 const FIXED: Record<string, { title: string; icon: LucideIcon }> = {
+  automations: { title: 'Automaty', icon: Bot },
   cezar: { title: 'Cezar', icon: Bot },
   mail: { title: 'Poczta', icon: Mail },
   system: { title: 'Komputer', icon: Cpu },
@@ -177,6 +179,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     const roomy = tile.w > 1 || tile.h > 1;
     if (tile.kind === 'cezar') return <CezarPanel data={data} snapshot={snapshot} now={now} open={openDetail} showAll={showTasks} beside={tile.h < 2}
       finished={cezar?.finished} archive={cezar?.archive} restore={cezar?.restore} markRead={cezar?.markRead} undo={cezar?.undo} error={cezar?.error} />;
+    if (tile.kind === 'automations') return <AutomationsTile />;
     if (tile.kind === 'mail') return <MailFeed mail={mail} now={now} open={openDetail} compact={!roomy} />;
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={openDetail} roomy={roomy} threshold={systemThreshold} />;
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;

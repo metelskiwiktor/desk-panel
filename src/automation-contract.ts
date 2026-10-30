@@ -20,28 +20,55 @@ export const triggerSchema = z.discriminatedUnion('kind', [
 export type AutomationTrigger = z.infer<typeof triggerSchema>;
 
 /**
- * Zatwierdzone akcje automatu. Etap 1 zna tylko `message` (wiadomość w rozmowie automatu). Lista obiektów `{kind, …}`,
- * żeby etap 2 dołożył `calendarEvent` i `smartAction {domain}` bez zmiany kształtu zapisu.
+ * Zatwierdzone na karcie akcje automatu; parametry są limitem uprawnień runu.
  */
 export const automationActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('message') }).strict(),
+  z.object({ kind: z.literal('calendarEvent'), reminderMinutes: z.number().int().min(0).max(40320).optional(), allDay: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal('smartAction'), domain: z.string().trim().toLowerCase().regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/) }).strict(),
+  z.object({ kind: z.literal('notify') }).strict(),
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 
 /** What an approved action is, in Polish, for the card and the view. */
 export const ACTION_LABELS: Record<AutomationAction['kind'], string> = {
   message: 'Wiadomość w tej rozmowie',
+  calendarEvent: 'Wydarzenie w Google Calendar',
+  smartAction: 'Alert Smart Actions',
+  notify: 'Powiadomienie w dzwonku i opcjonalnie na telefon',
 };
 
 /** One line under an action on the consent card. */
 export const ACTION_HINTS: Record<AutomationAction['kind'], string> = {
   message: 'Krótka wiadomość od Wektora po runie, w tej samej rozmowie.',
+  calendarEvent: 'Zapis na koncie kalendarza panelu z przypomnieniem popup.',
+  smartAction: 'Przycisk otwiera wyłącznie HTTPS na zatwierdzonej domenie lub jej subdomenie.',
+  notify: 'Dzwonek panelu; telefon tylko gdy właściciel skonfigurował ntfy.',
 };
 
 export const RUN_OUTCOMES = ['not-yet', 'done', 'error', 'skipped'] as const;
 export type RunOutcome = typeof RUN_OUTCOMES[number];
 
+export function actionLabel(a: AutomationAction): string {
+  if (a.kind === 'calendarEvent') return `${ACTION_LABELS[a.kind]} · ${a.allDay ? 'całodniowe' : 'godzina Europe/Warsaw, 1 h'} · popup ${a.reminderMinutes ?? 60} min przed`;
+  if (a.kind === 'smartAction') return `${ACTION_LABELS[a.kind]} · https://${a.domain}`;
+  return ACTION_LABELS[a.kind];
+}
+
+export const automationActSchema = z.object({
+  runId: z.string().regex(/^run-[0-9a-f]{12}$/), token: z.string().regex(/^[0-9a-f]{32}$/),
+  action: z.enum(['calendarEvent', 'smartAction', 'notify']), title: z.string().trim().min(1).max(160),
+  when: z.string().max(40).optional(), url: z.url().max(2000).optional(), text: z.string().trim().max(1000).optional(),
+}).strict();
+export type AutomationAct = z.infer<typeof automationActSchema>;
+export const automationActionResultSchema = z.object({
+  kind: z.enum(['calendarEvent', 'smartAction', 'notify']), at: z.number(), result: z.enum(['pending', 'ok', 'error']),
+  ref: z.string().optional(), error: z.string().optional(), title: z.string(), text: z.string().optional(), url: z.string().optional(),
+});
+export type AutomationActionResult = z.infer<typeof automationActionResultSchema>;
+
 export const automationRunSchema = z.object({
+  actions: z.array(automationActionResultSchema).optional(),
   turnId: z.string().optional(),
   hermesRunId: z.string().optional(),
   id: z.string().regex(/^run-[0-9a-f]{12}$/),
@@ -108,7 +135,7 @@ export const automationPlanSchema = z.object({
   goal: z.string().trim().min(1).max(4000),
   trigger: triggerSchema,
   doneWhen: z.string().trim().min(1).max(500).optional(),
-  actions: z.array(automationActionSchema).min(1).max(20),
+  actions: z.array(automationActionSchema).min(1).max(20).refine(a => new Set(a.map(x => x.kind)).size === a.length, 'Każdy rodzaj akcji tylko raz.'),
   learn: z.boolean(),
   replaces: z.string().regex(/^a-[0-9a-f]{12}$/).optional(),
 }).strict();
@@ -233,7 +260,7 @@ export const CHANGE_LABELS: Record<string, string> = { name: 'Nazwa', goal: 'Cel
 export function changeValue(field: string, value: unknown): string {
   if (value == null) return 'brak';
   if (field === 'trigger') return describeTriggerRange(triggerSchema.parse(value));
-  if (field === 'actions') return (value as AutomationAction[]).map(a => ACTION_LABELS[a.kind]).join(', ') || 'brak';
+  if (field === 'actions') return (value as AutomationAction[]).map(actionLabel).join(', ') || 'brak';
   if (typeof value === 'boolean') return value ? 'tak' : 'nie';
   return String(value);
 }

@@ -346,3 +346,5 @@ strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
 
 Własne skille w czacie (menu po `/`; natywne skille `agy` leżą w `<katalog roboczy>/.agents/skills/<nazwa>/SKILL.md` i rozwijają
 się przez `/nazwa`), notatki oraz widget list zadań w interfejsie i wskazywanie go w czacie (dane i dostęp agenta już są, zob. [docs/zadania.md](zadania.md)).
+
+Akcje trwającego runu automatu wykonuje panel_automation_act tylko w granicach jednorazowej zgody na karcie tworzenia/zmiany automatu; wyjątek dla wydarzenia Google i alertu Smart Actions opisuje [Automaty](automaty.md#akcje-zatwierdzone-raz-na-karcie). Zwykła rozmowa nadal tylko proponuje wydarzenie kartą.

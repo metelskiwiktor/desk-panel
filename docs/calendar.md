@@ -74,3 +74,7 @@ bez edycji, usuwania, gości i zaproszeń. Zapis nie tworzy konferencji Google M
 wydarzenie przy `409`, sprawdza jego pochodzenie i zwraca ten sam wynik. Treść zapisu zostaje zamrożona przed żądaniem Google
 w `appointments.dpapi`; błąd nie daje prawa do zmiany terminu w trakcie ponowienia. Po sukcesie cache agendy jest unieważniany,
 z zachowaniem ostatniej obserwacji na wypadek błędu następnego odczytu. Narzędzie propozycji nie wykonuje żadnych zapisów Google.
+
+## Zapis z automatu
+
+Wyjątek od zapisu po kliknięciu karty wydarzenia: trwający run może wykonać `calendarEvent` przez panel_automation_act, jeśli użytkownik wcześniej zatwierdził tę akcję na karcie automatu. Parametry, idempotencja, godziny i przypomnienia: [Automaty](automaty.md#akcje-zatwierdzone-raz-na-karcie). Ten sam moduł calendar-write i konto panelu; scope calendar.events.owned. Wizyty nadal wymagają potwierdzenia użytkownika.

@@ -81,7 +81,10 @@ if (!values.shot) {
             await entry.click();
             await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
             await page.waitForTimeout(600);
-            if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills') {
+            if (values.open?.startsWith('automation:')) {
+              await page.getByRole('navigation', { name: 'Lista automatów' }).getByRole('button', { name: new RegExp(values.open.slice('automation:'.length)) }).click();
+              await page.waitForTimeout(200);
+            } else if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills') {
               await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
               if (values.open === 'chat' || values.open === 'chat-edit') {
                 await page.getByLabel('Wiadomość do agenta').fill('Chciałbym znaleźć dogodny termin wizyty u psychologa w przyszłym tygodniu i sprawdzić mój kalendarz');

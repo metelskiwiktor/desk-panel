@@ -7,6 +7,7 @@ export const kindOfCard = (card: QuotaCardItem) => `quota:${card.id}`;
 
 /** Whether the settings let the tile exist at all; a tile of a switched-off kind leaves the layout and is not offered. */
 export function kindAvailable(kind: string, visible: (id: WidgetId) => boolean, hidden: QuotaVisibility): boolean {
+  if (kind === 'automations') return visible('automations');
   if (kind === 'cezar') return visible('cezar');
   if (kind === 'mail') return visible('mail');
   if (kind === 'system') return visible('system');
@@ -36,6 +37,6 @@ export const MULTI_KINDS: readonly string[] = ['todo'];
  * GitHub PR, then the widgets that may repeat. A new widget kind is listed here too, or no empty tile ever offers it. A widget that stands once is offered only while it is not placed; one that may repeat is always offered.
  */
 export function pickable(cards: QuotaCardItem[], placed: string[], available: (kind: string) => boolean, multi: readonly string[] = MULTI_KINDS): string[] {
-  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', 'smart-actions', 'github-pr', 'openrouter', ...multi])];
+  const kinds = [...new Set([...limitKinds(cards), 'cezar', 'mail', 'system', 'bank', 'smart-actions', 'github-pr', 'openrouter', 'automations', ...multi])];
   return kinds.filter(kind => (multi.includes(kind) || !placed.includes(kind)) && available(kind));
 }

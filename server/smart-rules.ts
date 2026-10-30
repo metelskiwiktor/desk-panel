@@ -205,7 +205,9 @@ export async function smartView(sources: PanelSources): Promise<SmartActionsView
     try { bank = { bank: await sources.bank(), labels: await sources.bankLabels() }; }
     catch { problems.push('Konto: nie udało się odczytać.'); }
   }
-  return { rules, alerts: alertsOf(rules, mail, bank), problems };
+  const automations = await sources.automations?.();
+  const automated: SmartAlert[] = (automations?.automations ?? []).flatMap(a => a.runs.flatMap(r => (r.actions ?? []).filter(x => x.kind === 'smartAction' && x.result === 'ok').map(x => ({ id: x.ref!, ruleId: a.id, source: 'automation' as const, badge: `Automat: ${a.name}`, title: x.title, snippet: x.text ?? '', category: 'other' as const, priority: 'high' as const, at: x.at, url: x.url, label: 'Otwórz formularz' }))));
+  return { rules, alerts: [...automated, ...alertsOf(rules, mail, bank)], problems };
 }
 
 export const TEST_LIMIT = 30;

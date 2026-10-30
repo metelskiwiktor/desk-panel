@@ -6,6 +6,7 @@ import { QUOTA_PACE_TOLERANCE, QUOTA_PACE_WARNING } from './quota-pace';
 
 export function EventRulesView() {
   const rules = [
+    ['Automat: <nazwa>', 'Run wykonał zatwierdzoną akcję notify; treść i link pochodzą z runu.', 'Raz na run, także po usunięciu i odświeżeniu; odbierane również po ponownym otwarciu panelu.'],
     ['Cezar · pytanie', 'Zadanie wymaga Twojej odpowiedzi.', 'Po ustąpieniu i ponownym wystąpieniu.'],
     ['Cezar · zakończenie', `Wykryto zadanie zakończone w ostatnich ${EVENT_RULES.completedWithinMinutes} minutach.`, 'Raz na dane zakończenie zadania.'],
     ['Kalendarz · spotkanie', `Spotkanie zaczyna się za 0–${EVENT_RULES.meetingWithinMinutes} minut. Bez wydarzeń całodniowych.`, 'Raz na termin spotkania.'],

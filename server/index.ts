@@ -10,6 +10,7 @@ import { createCockpit } from './cockpit';
 import { createPrReader } from './github';
 import { createHermesClient, hermesUrl } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
+import { createAutomationExecutor } from './automation-actions';
 import { createAutomations, type Automations } from './automations';
 import { mcpToken } from './panel-mcp';
 import { createRealSources } from './real-sources';
@@ -61,6 +62,7 @@ automations = createAutomations({
   file: join(panelDir, 'automations.json'), observersFile: join(panelDir, 'observers.json'), chat,
   readTask: id => sources.cezarRun ? sources.cezarRun(id) : Promise.resolve(null),
   readPr: url => prReader.read(url),
+  executeAction: createAutomationExecutor({ writeCalendar: sources.automationCalendarWrite, ntfyUrl: process.env.DESK_NTFY_URL }),
   enabled: automationsEnabled(process.env),
 });
 automations.start();

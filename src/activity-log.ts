@@ -1,3 +1,4 @@
+import type { Automation } from './automation-contract';
 import { z } from 'zod';
 import { deriveInsights } from './insights';
 import { fresh, MAX_AGE, MINUTE, type DashboardData } from './model';
@@ -34,6 +35,7 @@ const entrySchema = z.object({
     z.object({ kind: z.literal('event'), id: z.string().max(1000) }),
     z.object({ kind: z.literal('quota'), provider: z.enum(['Claude', 'Codex', 'AGY']) }),
     z.object({ kind: z.literal('system') }),
+    z.object({ kind: z.literal('automation'), id: z.string(), url: z.url().refine(u => u.startsWith('https://')).optional() }),
   ]),
 });
 const logSchema = z.object({
@@ -123,4 +125,19 @@ export function dismissActivity(log: ActivityLog, id: string): ActivityLog {
 export function restoreActivity(log: ActivityLog, entry: ActivityEntry): ActivityLog {
   if (log.entries.some(item => item.id === entry.id)) return log;
   return { ...log, entries: [...log.entries, entry].sort((a,b) => b.detectedAt-a.detectedAt || Number(b.id.split(':').at(-1))-Number(a.id.split(':').at(-1))).slice(0, ACTIVITY_LIMIT) };
+}
+
+/** Durable per-run notify signals are collected even if the browser was closed when the run finished. */
+export function recordAutomationActivity(log: ActivityLog, rows: Automation[], now: number): ActivityLog {
+  const seen = new Set(log.seen);
+  const added: ActivityEntry[] = [];
+  let sequence = log.sequence;
+  for (const a of rows) for (const r of a.runs) for (const action of r.actions ?? []) {
+    if (action.kind !== 'notify') continue;
+    const key = `automation:${r.id}:notify`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    added.push({ id: `${now}:${++sequence}`, signalKey: key, detectedAt: action.at, title: `Automat: ${a.name}`, context: [action.title, action.text].filter(Boolean).join(' · '), tone: 'blue', target: { kind: 'automation', id: a.id, url: action.url } });
+  }
+  return added.length ? { ...log, sequence, seen: [...seen].slice(-2000), entries: [...added.reverse(), ...log.entries].slice(0, ACTIVITY_LIMIT) } : log;
 }

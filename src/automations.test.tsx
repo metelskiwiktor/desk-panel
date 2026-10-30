@@ -1,6 +1,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AutomationsTile } from './AutomationsTile';
 import { AutomationsView } from './AutomationsView';
 import { AutomationCard } from './cockpit/automation-card';
 import { CardActions } from './cockpit/cards';
@@ -119,4 +120,31 @@ it('shows recorded before/after changes in Cel i akcje', async () => {
   expect(screen.getByText('Historia zmian')).toBeTruthy();
   expect(screen.getByText('Nazwa: Stara nazwa → Nowa nazwa')).toBeTruthy();
   expect(screen.getByText('Uczenie się: nie → tak')).toBeTruthy();
+});
+
+it('shows the active automation tile and opens the Automaty page', async () => {
+  vi.stubGlobal('fetch', scenarioFetch('standard'));
+  const navigate = vi.fn(); window.addEventListener('desk-panel:navigate', navigate);
+  try {
+    const user = userEvent.setup();
+    const { container } = render(<AutomationsTile />);
+    await screen.findByText('Ceny prądu u dostawcy');
+    expect(screen.queryByText('Treningi w planie Garmina')).toBeNull();
+    expect(container.querySelectorAll('.automation-dot')).toHaveLength(6);
+    await user.click(screen.getByRole('button', { name: 'Otwórz Automaty' }));
+    expect(navigate.mock.calls[0][0].detail).toBe('automations');
+  } finally { window.removeEventListener('desk-panel:navigate', navigate); }
+});
+
+it('shows action parameters on consent and preserves them when unticked and ticked again', async () => {
+  const respond = vi.fn(async () => {});
+  const user = userEvent.setup();
+  const actions = [{ kind: 'calendarEvent', reminderMinutes: 45, allDay: true }, { kind: 'smartAction', domain: 'example.com' }, { kind: 'notify' }];
+  render(<CardActions.Provider value={{ respond, running: false }}><AutomationCard {...({ toolCallId: 'message:call', args: { name: 'Zapisy', goal: 'Sprawdzaj', trigger: { kind: 'daily', time: '07:00' }, actions, learn: false } } as any)} /></CardActions.Provider>);
+  const calendar = screen.getByRole('checkbox', { name: /całodniowe.*45 min/ });
+  expect(screen.getByRole('checkbox', { name: /https:\/\/example.com/ })).toBeTruthy();
+  await user.click(calendar); await user.click(calendar);
+  await user.click(screen.getByRole('checkbox', { name: /Powiadomienie w dzwonku/ }));
+  await user.click(screen.getByRole('button', { name: 'Utwórz automat' }));
+  expect(respond.mock.calls[0]).toEqual(['message:call', { kind: 'automation', decision: 'create', learn: false, actions: [actions[1], actions[0]] }]);
 });

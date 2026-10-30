@@ -204,8 +204,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       let plan;
       try { plan = automationPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
       if (input.actions) {
-        const allowed = new Set(plan.actions.map(a => a.kind));
-        plan = { ...plan, actions: input.actions.filter(a => allowed.has(a.kind)) };
+        plan = { ...plan, actions: plan.actions.filter(a => input.actions!.some(x => x.kind === a.kind)) };
         if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
       }
       // The card may only narrow the plan: turning „learn” off works, turning it on cannot.

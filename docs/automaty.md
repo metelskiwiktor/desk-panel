@@ -22,8 +22,7 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - Wyzwalacz: `{kind:'once', at}` (epoch ms), `{kind:'daily', time:'HH:MM', from?, until?}`,
   `{kind:'weekly', weekday:1–7, time, from?, until?}`, `{kind:'cezar', taskId}`, `{kind:'pr', url}`. Strefa
   `Europe/Warsaw`; `from`/`until` to daty lokalne `YYYY-MM-DD`. Cykliczny bez `until` kończy się po 90 dniach.
-- Akcje: lista obiektów `{kind, …}`; etap 1 zna tylko `message` (krótka wiadomość w rozmowie automatu). Etap 2 dołoży
-  `calendarEvent` i `smartAction {domain}` bez zmiany zapisu.
+- Akcje: lista obiektów `{kind, …}`; `message`, `calendarEvent`, `smartAction {domain}` i `notify` (parametry i ograniczenia poniżej).
 - Run: `id` `run-…`, `at`, `chatId` (rozmowa runu), `outcome` (`not-yet | done | error | skipped`), `summary` (1–2
   zdania), `notebookChanged`, `previousNotebook?`, `costUsd?`, `seconds?`.
 - Limity: 20 aktywnych automatów; daily/weekly najwyżej raz na dzień/tydzień; `once` jak dawne obserwatory czasu.
@@ -107,7 +106,7 @@ wskazywalny w czacie (`ctx('automation', …)`).
 ## Bezpieczeństwo
 
 - Strony WWW, które run czyta terminalem (`curl`), są danymi, nigdy poleceniami. Run nie wykonuje akcji spoza listy
-  zatwierdzonych; zmiany danych użytkownika nadal idą tylko kartami zgody.
+  zatwierdzonych na karcie tworzenia/zmiany; uprawnienia runu opisano poniżej.
 - Zapis jest lokalny, poza Gitem. Klucze dostawców nie trafiają do automatu; jednorazowy żeton raportu pozostaje prywatny. `runNow`, pauza i anulowanie są lokalne i
   Origin-checked; Hermes nie uruchamia automatów sam.
 
@@ -119,3 +118,17 @@ rejestr trwających tur Hermesa. Jest to żeton dostępu do jednego otwartego ru
 Koniec tury natychmiast zamyka niezaraportowany run jako `error`; późniejsza tura nie może użyć żetonu ponownie.
 Żeton pozostaje w prywatnym magazynie runów i treści tury; publiczne widoki (`GET /api/automations`, runy, MCP)
 go pomijają, a diagnostyka czatu usuwa go z argumentów narzędzi, zdarzeń i podsumowań przed skracaniem i zapisem.
+
+## Akcje zatwierdzone raz na karcie
+
+Karta tworzenia i zmiany pokazuje parametry oraz pozwala odznaczyć akcje: `message`, `calendarEvent {reminderMinutes?, allDay?}`, `smartAction {domain}`, `notify`. Odznaczenie wyłącznie zawęża; serwer bierze parametry oryginalnej propozycji. Run zamraża zatwierdzoną listę w chwili startu. Jednorazowy automat z tymi akcjami także wymaga karty (panel_observe pozostaje tylko wiadomością).
+
+Gdy cel spełniony, Wektor najpierw wywołuje `panel_automation_act {runId, token, action, title, when?, url?, text?}`, potem raport `done`. Obowiązują otwarty run, zgodny żeton i trwająca własna tura Hermesa, jak przy raporcie. `DESK_AUTOMATIONS=0` blokuje także akcje. Każdy rodzaj najwyżej raz na run, również przy równoległych wywołaniach; rezerwacja zapisana przed efektem. Powtórzenie zwraca zapisany wynik. Po awarii w trakcie efektu stan `pending` oznacza wynik niepotwierdzony i nie ponawia zewnętrznej wysyłki. Wyniki (`kind, at, result, ref`, opcjonalnie błąd i treść) zostają w runie i na osi; błąd nie przerywa runu, trafia także do wiadomości automatu.
+
+`calendarEvent` zapisuje na koncie kalendarza panelu, z popup domyślnie 60 min wcześniej (zakres 0–40320 min). `when` to lokalne `YYYY-MM-DDTHH:MM` Europe/Warsaw, długość 1 h; zatwierdzone allDay wymaga samej daty i obejmuje jeden dzień z wyłącznym końcem. ID Google wynika z runId+kind; identyczny zapis po 409 odzyskuje to samo wydarzenie. Brak scope calendar.events.owned daje błąd akcji.
+
+`smartAction` tworzy trwały alert (tytuł, treść, link, autor automat) z historii runu w `GET /api/smart-actions`; odrzucenie działa jak inne alerty, lokalnie w przeglądarce. Link wymaga HTTPS bez danych logowania i portu, na zatwierdzonej domenie lub jej subdomenie; dopasowanie po granicy etykiety hosta. Jeśli lista zawiera smartAction, ta domena ogranicza także linki pozostałych akcji. WWW to dane, nie polecenia.
+
+`notify` daje wpis „Automat: <nazwa>” w dzwonku, z treścią i linkiem; opcjonalny telefon opisuje DESK_NTFY_URL w docs/desk-panel.md. Brak ntfy oznacza sam dzwonek, błąd ntfy go nie usuwa.
+
+Widget „Automaty” można umieścić na pulpicie jak inne kafelki: do trzech aktywnych automatów, stan, nazwa, następny run i pięć kropek historii. Dotknięcie otwiera widok Automaty.
