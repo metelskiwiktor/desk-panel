@@ -15,25 +15,27 @@ export function ObserversCard() {
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const read = useCallback(async () => {
+  const read = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/observers');
+      const response = await fetch('/api/observers', { signal });
       if (!response.ok) throw new Error('offline');
-      setRows(observerListSchema.parse(await response.json()).observers);
-      setError(false);
-    } catch { setError(true); }
+      const value = observerListSchema.parse(await response.json());
+      if (!signal?.aborted) { setRows(value.observers); setError(false); }
+    } catch { if (!signal?.aborted) setError(true); }
   }, []);
 
   useEffect(() => {
     if (!polling) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    let controller: AbortController | undefined;
     const loop = async () => {
-      await read();
+      controller = new AbortController();
+      await read(controller.signal);
       if (!stopped) timer = setTimeout(loop, 15000);
     };
     void loop();
-    return () => { stopped = true; clearTimeout(timer); };
+    return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
   }, [polling, read]);
 
   const cancel = async (id: string) => {
