@@ -20,12 +20,5 @@
     "url": "http://127.0.0.1:8642",
     "health": "/health",
     "routes": "server/hermes-api.ts (HERMES_ROUTES)"
-  },
-  "mcpTurnContextPatch": {
-    "required": true,
-    "target": "tools/mcp_tool_handlers.py",
-    "baseSha256": "d3f99c5832dd7a99b0a39447f97981281cccd13ba582587b97f914c726cdb5d6",
-    "resultSha256": "4273e6158622975272f22bd866285499682ff055b6bf4c5eee76ffbdae9bfd6a",
-    "note": "scripts/hermes-mcp-turn-context.py; capture native /v1/runs approval ContextVar before MCP loop dispatch; stamp tools/call params._meta desk-panel/run-id. Reports fail closed without this bridge."
   }
 }

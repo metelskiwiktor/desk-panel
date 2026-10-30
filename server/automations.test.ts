@@ -30,7 +30,8 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 const make = (over: Partial<Parameters<typeof createAutomations>[0]> = {}) => createAutomations({
-  file: join(dir, 'automations.json'), chat, now: () => clock, log: () => {}, ...over,
+  file: join(dir, 'automations.json'), now: () => clock, log: () => {}, ...over,
+  chat: { ...(over.chat ?? chat), automationTurn: () => { const p = stored().pending[0]; return p ? { chatId: p.chatId, turnId: p.turnId, runId: 'hermes-run' } : undefined; } },
 });
 const plan = (over: Record<string, unknown> = {}) => ({
   name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: false, ...over,
@@ -125,7 +126,8 @@ describe('runs and reports', () => {
     clock = NOW + 60_000;
     await automations.tick();
     expect(sent).toHaveLength(1);
-    const run = await automations.report('chat-1', { runId: pendingId(), turnId: stored().pending[0].turnId, outcome: 'done', summary: 'Cel osiągnięty.', notebook: 'Nowa wiedza.' });
+    automations.turnChanged({ chatId: stored().pending[0].chatId, turnId: stored().pending[0].turnId, runId: 'hermes-run', ended: false });
+    const run = await automations.report({ runId: pendingId(), token: stored().pending[0].token, outcome: 'done', summary: 'Cel osiągnięty.', notebook: 'Nowa wiedza.' });
     expect(run).toMatchObject({ outcome: 'done', notebookChanged: true, previousNotebook: '' });
     const after = (await automations.get(created.id))!;
     expect(after.status).toBe('done');
@@ -138,14 +140,15 @@ describe('runs and reports', () => {
     const created = await automations.createFromPlan('chat-1', plan({ trigger: { kind: 'once', at: NOW + 60_000 }, learn: false }));
     clock = NOW + 60_000;
     await automations.tick();
-    const run = await automations.report('chat-1', { runId: pendingId(), turnId: stored().pending[0].turnId, outcome: 'not-yet', summary: 'Jeszcze nie.', notebook: 'Niedozwolone.' });
+    automations.turnChanged({ chatId: stored().pending[0].chatId, turnId: stored().pending[0].turnId, runId: 'hermes-run', ended: false });
+    const run = await automations.report({ runId: pendingId(), token: stored().pending[0].token, outcome: 'not-yet', summary: 'Jeszcze nie.', notebook: 'Niedozwolone.' });
     expect(run.notebookChanged).toBe(false);
     expect((await automations.get(created.id))!.notebook).toBe('');
   });
 
   it('refuses a report outside a run', async () => {
     const automations = make();
-    await expect(automations.report('chat-1', { runId: 'run-000000000000', turnId: '00000000-0000-4000-8000-000000000000', outcome: 'done', summary: 'x' })).rejects.toMatchObject({ status: 409 });
+    await expect(automations.report({ runId: 'run-000000000000', token: '0'.repeat(32), outcome: 'done', summary: 'x' })).rejects.toMatchObject({ status: 409 });
   });
 
   it('turns a run without a report into an error after 15 minutes', async () => {
@@ -160,7 +163,7 @@ describe('runs and reports', () => {
     expect(after.status).toBe('done');
   });
 
-  it('runs at most one overdue automation per tick after a restart', async () => {
+  it('queues overdue automations until the previous turn ends', async () => {
     const automations = make();
     await automations.createFromPlan('chat-1', plan({ name: 'A', trigger: { kind: 'once', at: NOW + 60_000 } }));
     await automations.createFromPlan('chat-1', plan({ name: 'B', trigger: { kind: 'once', at: NOW + 60_000 } }));
@@ -168,9 +171,13 @@ describe('runs and reports', () => {
     await automations.tick();
     expect(sent).toHaveLength(1);
     await automations.tick();
-    expect(sent).toHaveLength(2);
+    expect(sent).toHaveLength(1);
+    const first = stored().pending[0];
+    automations.turnChanged({ chatId: first.chatId, turnId: first.turnId, runId: 'hermes-run', ended: true });
     await automations.tick();
-    expect(sent).toHaveLength(2);
+    expect(sent.filter(s => s.text.includes('panel_automation_report'))).toHaveLength(2);
+    await automations.tick();
+    expect(sent.filter(s => s.text.includes('panel_automation_report'))).toHaveLength(2);
   });
 
   it('with DESK_AUTOMATIONS=0 creates nothing and starts no run, yet the list answers', async () => {
@@ -186,20 +193,6 @@ describe('runs and reports', () => {
 });
 
 describe('run identity and restarts', () => {
-  it('binds a report to its own run when two one-shot runs share a conversation', async () => {
-    const automations = make();
-    const first = await automations.createFromPlan('origin', plan({ name: 'First goal', trigger: { kind: 'once', at: NOW + 60_000 } }));
-    const second = await automations.createFromPlan('origin', plan({ name: 'Second goal', trigger: { kind: 'once', at: NOW + 120_000 } }));
-    clock = NOW + 60_000;
-    await automations.tick();
-    clock = NOW + 120_000;
-    await automations.tick();
-    const ids = stored().pending.map((p: { id: string }) => p.id);
-    await automations.report('origin', { runId: ids[1], turnId: stored().pending[1].turnId, outcome: 'done', summary: 'Second goal completed' });
-    expect((await automations.get(first.id))!.runs).toHaveLength(0);
-    expect((await automations.get(second.id))!.runs[0].summary).toBe('Second goal completed');
-  });
-
   it('reserves a cyclic run before starting it, so a restart resumes it exactly once', async () => {
     let release!: (value: { id: string }) => void;
     const gate = new Promise<{ id: string }>(resolve => { release = resolve; });
@@ -207,7 +200,7 @@ describe('run identity and restarts', () => {
     await automations.createFromPlan('origin', plan());
     clock = Date.parse('2026-10-31T07:00:00+01:00');
     const tick = automations.tick();
-    expect(stored().pending).toHaveLength(1);
+    await vi.waitFor(() => expect(stored().pending).toHaveLength(1));
     expect(stored().automations[0].nextRunAt).toBeGreaterThan(clock);
     const send = vi.fn(async () => ({ id: 'restart-run' }));
     const restart = make({ chat: { createAutomation: send } });
@@ -224,7 +217,8 @@ describe('run identity and restarts', () => {
     clock += 60_000;
     await automations.tick();
     send.mockRejectedValue(new ChatError(503, 'Hermes unavailable'));
-    await automations.report('origin', { runId: pendingId(), turnId: stored().pending[0].turnId, outcome: 'done', summary: 'Done' });
+    automations.turnChanged({ chatId: stored().pending[0].chatId, turnId: stored().pending[0].turnId, runId: 'hermes-run', ended: false });
+    await automations.report({ runId: pendingId(), token: stored().pending[0].token, outcome: 'done', summary: 'Done' });
     await automations.tick();
     expect(stored().outbox).toHaveLength(1);
     expect(stored().outbox[0].nonce).toBeTruthy();
@@ -243,7 +237,8 @@ describe('run identity and restarts', () => {
     clock += 60_000;
     await automations.tick();
     send.mockRejectedValue(new ChatError(404, 'Nie ma takiej rozmowy.'));
-    await automations.report('origin', { runId: pendingId(), turnId: stored().pending[0].turnId, outcome: 'done', summary: 'Done' });
+    automations.turnChanged({ chatId: stored().pending[0].chatId, turnId: stored().pending[0].turnId, runId: 'hermes-run', ended: false });
+    await automations.report({ runId: pendingId(), token: stored().pending[0].token, outcome: 'done', summary: 'Done' });
     await automations.tick();
     expect(stored().outbox).toEqual([]);
   });
@@ -258,7 +253,8 @@ describe('schedules and limits', () => {
     await automations.tick();
     expect(send).toHaveBeenCalledTimes(1);
     const run = stored().pending[0];
-    await automations.report(run.chatId, { runId: run.id, turnId: run.turnId, outcome: 'not-yet', summary: 'Jeszcze nie.' });
+    automations.turnChanged({ chatId: stored().pending[0].chatId, turnId: stored().pending[0].turnId, runId: 'hermes-run', ended: false });
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Jeszcze nie.' });
     expect((await automations.get(created.id))!.status).toBe('expired');
   });
 

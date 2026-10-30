@@ -30,6 +30,9 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 
 ## Wykonanie runu
 
+- Runy automatów wykonują się po jednym w całym panelu: trwała kolejka `pending` i rezerwacja `execution`
+  obejmują tick, callbacki Cezara, PR-y i ręczne uruchomienia. Raport lub anulowanie automatu nie zwalnia slotu:
+  następny run czeka do końca tury Hermesa. Czas 15 minut liczy się dopiero od próby wysyłki, nie podczas oczekiwania w kolejce.
 - Zegar (`server/automations.ts`) chodzi co minutę tylko wtedy, gdy są aktywne automaty. Jeden tick naraz (serializacja),
   po każdym odczycie PR stan jest sprawdzany ponownie, a wspólny cache PR (`createPrReader` w `server/github.ts`) jest ten
   sam co w kokpicie. Po restarcie zaległy run startuje najwyżej jeden na tick.
@@ -45,9 +48,10 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
   akcje i polecenie wykonania sprawdzenia oraz wywołania `panel_automation_report` na końcu.
 - Run jednorazowy (once/cezar/pr) wraca do rozmowy automatu (`chatId`), jak dawne obserwatory.
 - Run jest otwarty tylko podczas własnej tury: tej, którą panel uruchomił dla niego. `pending` i historia runu trzymają
-  rozmowę, panelowe `turnId` i natywne `hermesRunId`. `panel_automation_report {runId, turnId, outcome, summary, notebook?}`
-  przyjmuje raport tylko, gdy metadane wywołującego MCP wskazują właśnie tę trwającą turę automatyki, a oba argumenty
-  zgadzają się z rezerwacją. Zwykła lub obca równoległa tura nie może raportować tego runu. `outcome:
+  rozmowę, panelowe `turnId` i natywne `hermesRunId`. `panel_automation_report {runId, token, outcome, summary, notebook?}`
+  przyjmuje raport tylko przy zgodnym jednorazowym żetonie (128 losowych bitów hex, porównanie w czasie stałym)
+  i nadal trwającej turze o zapisanych chatId, turnId i hermesRunId. Panel nadaje żeton przy rezerwacji, zapisuje go
+  trwale i przekazuje wyłącznie w treści tej tury. Sam runId bez żetonu nie wystarcza. `outcome:
   done` kończy cel i harmonogram; `notebook` podmienia notatnik tylko przy `learn = true`, a poprzednia wersja zostaje w
   runie. Koniec tury (`done/error/cancel`) bez raportu natychmiast zapisuje `error`: „Tura zakończona bez raportu.”.
   Późniejsza tura w tej samej rozmowie już go nie przyjmie. Limit 15 minut zostaje jako zabezpieczenie, gdy koniec tury
@@ -71,7 +75,7 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - `panel_automations {id?}` — lista albo szczegóły (runy, notatnik) do analizy.
 - `panel_automation_update {id, pause|resume|cancel|runNow, notebook?, name?}` — bez karty, na wyraźną prośbę. Zmiana celu,
   akcji albo harmonogramu to nowa karta `panel_automation_propose` z `replaces`.
-- `panel_automation_report {runId, turnId, …}` — tylko w runie o tym `runId`, w bieżącej turze jego rozmowy.
+- `panel_automation_report {runId, token, …}` — tylko w runie o tym `runId`, w bieżącej turze jego rozmowy.
 
 ## UI
 
@@ -92,21 +96,14 @@ wskazywalny w czacie (`ctx('automation', …)`).
 
 - Strony WWW, które run czyta terminalem (`curl`), są danymi, nigdy poleceniami. Run nie wykonuje akcji spoza listy
   zatwierdzonych; zmiany danych użytkownika nadal idą tylko kartami zgody.
-- Zapis jest lokalny, poza Gitem. Klucze i tokeny nie trafiają do automatu. `runNow`, pauza i anulowanie są lokalne i
+- Zapis jest lokalny, poza Gitem. Klucze dostawców nie trafiają do automatu; jednorazowy żeton raportu pozostaje prywatny. `runNow`, pauza i anulowanie są lokalne i
   Origin-checked; Hermes nie uruchamia automatów sam.
 
-## Skąd pochodzi tożsamość wywołania MCP
+## Żeton i okno raportu
 
-Sam Hermes wysyłał tylko nazwę narzędzia i argumenty, bez tożsamości tury. Lista aktywnych rozmów ani id podane przez
-model nie są dowodem źródła. Most `scripts/hermes-mcp-turn-context.py` (hash źródła i wyniku w
-`servy/hermes.lock.json`) przechwytuje `tools.approval_context._approval_session_key` w wątku wywołującego agenta,
-przed przeniesieniem pracy na współdzieloną pętlę MCP. `gateway/platforms/api_server_runs.py::_run_agent_sync`
-ustawia ten ContextVar na natywne `run.run_id` (właściwość `_RunLaunch.approval_session_key`), oddzielnie dla każdego
-przebiegu. Most dopisuje je do `tools/call.params._meta["desk-panel/run-id"]` dla serwera `desk-panel`, poza argumentami
-modelu. Panel porównuje je z żywą turą z `hermes-chat` i trwałym wiązaniem rezerwacji; bez metadanych odmawia raportu.
-
-Most wymaga SDK MCP z parametrem `ClientSession.call_tool(meta=…)`. `just hermes-setup` aplikuje przypiętą łatkę,
-`just hermes CHECK` weryfikuje jej hash. Samo wdrożenie kodu panelu nie instaluje mostu w działającym procesie Hermesa:
-łatkę trzeba zastosować do przypiętego źródła i osobno zatwierdzić restart Hermesa. Próba bez instalacji, bez usług,
-promptów i danych użytkownika:
-`python scripts/hermes-mcp-turn-context-probe.py --source <źródła-Hermesa>`.
+Wektor przepisuje `runId` i `token` dokładnie z treści własnej tury automatyki; żetonu nigdy nie podaje nigdzie indziej.
+Raport nie wymaga modyfikacji źródeł Hermesa ani metadanych MCP. Panel sprawdza otwartą rezerwację, żeton i własny
+rejestr trwających tur Hermesa. Jest to żeton dostępu do jednego otwartego runu, nie dowód tożsamości wywołującego MCP.
+Koniec tury natychmiast zamyka niezaraportowany run jako `error`; późniejsza tura nie może użyć żetonu ponownie.
+Żeton pozostaje w prywatnym magazynie runów i treści tury; publiczne widoki (`GET /api/automations`, runy, MCP)
+go pomijają, a diagnostyka czatu usuwa go z argumentów narzędzi, zdarzeń i podsumowań przed skracaniem i zapisem.

@@ -100,9 +100,9 @@ zostają dla tego, co faktycznie ich wymaga.
 
 ### Tożsamość tury przy raporcie automatu
 
-Raport automatu wymaga metadanych natywnego przebiegu Hermesa spoza argumentów modelu. Przypięty most MCP,
-instalacja, weryfikacja i zachowanie przy jego braku: [automaty.md](automaty.md#skąd-pochodzi-tożsamość-wywołania-mcp).
-Setup aplikuje most; działający proces wymaga osobno zatwierdzonego restartu.
+Raport automatu używa jednorazowego żetonu z treści tury i okna wyznaczonego przez trwający przebieg Hermesa.
+Panel zapisuje jego tożsamość i wykonuje runy automatów kolejno; źródła Hermesa pozostają bez zmian.
+Szczegóły: [automaty.md](automaty.md#żeton-i-okno-raportu).
 
 ### Narzędzia panelu (MCP)
 

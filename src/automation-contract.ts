@@ -134,7 +134,7 @@ export const automationOutcomeSchema = z.discriminatedUnion('decision', [
 export type AutomationOutcome = z.infer<typeof automationOutcomeSchema>;
 
 export const automationReportSchema = z.object({
-  turnId: z.string().uuid(),
+  token: z.string().regex(/^[0-9a-f]{32}$/),
   /** The run id the panel put in the automation turn: it binds the report to that one run. */
   runId: z.string().regex(/^run-[0-9a-f]{12}$/),
   outcome: z.enum(RUN_OUTCOMES),

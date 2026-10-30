@@ -1,6 +1,8 @@
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
+import { createPanelServer } from './app';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createAutomations, type Automations } from './automations';
 import { createHermesChat } from './hermes-chat';
@@ -20,8 +22,8 @@ let file: string;
 let clock: number;
 let cleanups: (() => void | Promise<void>)[];
 const stored = () => JSON.parse(readFileSync(file, 'utf8'));
-const make = (chat: Parameters<typeof createAutomations>[0]['chat']) => {
-  const service = createAutomations({ file, chat, now: () => clock, log: () => {} });
+const make = (chat: Parameters<typeof createAutomations>[0]['chat'], log: (line: string) => void = () => {}) => {
+  const service = createAutomations({ file, chat, now: () => clock, log });
   cleanups.push(() => service.stop());
   return service;
 };
@@ -120,12 +122,12 @@ it('rejects a stale real runId through MCP even when its conversation is active'
   const runId = stored().pending[0].id;
   const result: any = await answerRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
     name: 'panel_automation_report', arguments: { runId, outcome: 'done', summary: 'ordinary user turn' },
-  } }, { views: {}, sources, now: () => clock, automations, activeChats: () => ['origin'] });
+  } }, { views: {}, sources, now: () => clock, automations, activeChats: () => ['other-conversation'] });
   expect(result.result.isError).toBe(true);
   expect((await automations.list())[0].runs).toHaveLength(0);
 });
 
-async function liveRun() {
+async function liveRun(twoDue = false) {
   let emit!: (event: HermesEvent, id: string | null) => void;
   const client: HermesClient = {
     url: 'http://127.0.0.1:1', health: async () => {}, startRun: vi.fn().mockResolvedValueOnce({ run: 'hermes-run' }).mockResolvedValue({ run: 'later-user-run' }),
@@ -133,30 +135,28 @@ async function liveRun() {
     events: async (_run, onEvent, { signal }) => { emit = onEvent; await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); },
   };
   let automations: Automations;
-  const chat = createHermesChat({ dir, client, log: quiet, onAutomationTurn: turn => automations.turnChanged(turn) });
+  const chat = createHermesChat({ dir, client, onAutomationTurn: turn => automations.turnChanged(turn) });
   cleanups.push(async () => { chat.close(); await chat.drain(); });
-  automations = make(chat);
+  const serverLog: string[] = [];
+  automations = make(chat, line => serverLog.push(line));
   await automations.createFromPlan('origin', plan);
+  if (twoDue) await automations.createFromPlan('origin-2', { ...plan, name: 'Second' });
   clock = DUE;
   await automations.tick();
   const pending = stored().pending[0];
-  const ctx = { views: {}, sources, now: () => clock, automations, automationTurn: (id: string) => chat.automationTurn?.(id), activeChats: () => chat.activeTurns!() };
+  const ctx = { views: {}, sources, now: () => clock, automations, activeChats: () => chat.activeTurns!() };
   const report = (over = {}) => answerRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
-    name: 'panel_automation_report', _meta: { 'desk-panel/run-id': 'hermes-run' }, arguments: { runId: pending.id, turnId: pending.turnId, outcome: 'done', summary: 'Done', ...over },
+    name: 'panel_automation_report', arguments: { runId: pending.id, token: pending.token, outcome: 'done', summary: 'Done', ...over },
   } }, ctx) as Promise<any>;
-  return { chat, automations, pending, ctx, report, emit: (event: HermesEvent) => emit(event, null) };
+  return { chat, client, automations, pending, ctx, report, serverLog, emit: (event: HermesEvent) => emit(event, null) };
 }
 
 it('accepts only the open own turn, preserves its Hermes run identity and closes it after reporting', async () => {
-  const { automations, pending, ctx, report } = await liveRun();
+  const { automations, pending, report } = await liveRun();
   expect(pending.hermesRunId).toBe('hermes-run');
-  for (const meta of [undefined, { 'desk-panel/run-id': 'foreign-run' }]) {
-    const foreign: any = await answerRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
-      name: 'panel_automation_report', _meta: meta, arguments: { runId: pending.id, turnId: pending.turnId, outcome: 'done', summary: 'Spoofed' },
-    } }, ctx);
-    expect(foreign.result.isError).toBe(true);
-  }
-  expect((await report({ turnId: '00000000-0000-4000-8000-000000000000' })).result.isError).toBe(true);
+  expect(pending.token).toMatch(/^[0-9a-f]{32}$/);
+  expect((await report({ token: '0'.repeat(32) })).result.isError).toBe(true);
+  expect((await report({ token: undefined })).result.isError).toBe(true);
   expect((await report({ runId: 'run-000000000000' })).result.isError).toBe(true);
   expect((await report()).result.isError).toBeUndefined();
   expect((await report()).result.isError).toBe(true);
@@ -178,6 +178,59 @@ it.each([
   expect(chat.activeTurns?.()).toContain(pending.chatId);
   expect((await report()).result.isError).toBe(true);
   expect((await automations.list())[0].runs).toHaveLength(1);
+});
+
+it('runs due automations sequentially even after an early report and keeps queued identity across restart', async () => {
+  const { chat, client, automations, pending, report, emit } = await liveRun(true);
+  const second = (await automations.list())[1];
+  await automations.tick();
+  const queued = stored().pending[1];
+  expect(queued).toMatchObject({ automationId: second.id, sent: false, token: expect.any(String) });
+  expect(client.startRun).toHaveBeenCalledTimes(1);
+  await report({ outcome: 'not-yet' }); // saves the report but Hermes still has work to finish
+  await automations.tick();
+  expect(client.startRun).toHaveBeenCalledTimes(1);
+  expect(stored().execution.id).toBe(pending.id);
+  const restart = make(chat);
+  await restart.tick();
+  expect(client.startRun).toHaveBeenCalledTimes(1);
+  emit({ kind: 'completed', output: 'Done' });
+  await vi.waitFor(async () => expect((await chat.get(pending.chatId)).running).toBe(false));
+  await restart.tick();
+  expect(client.startRun).toHaveBeenCalledTimes(2);
+  expect(stored().pending[0]).toMatchObject({ id: queued.id, token: queued.token, sent: true });
+});
+
+it('omits tokens from HTTP automation views, MCP run history and actual chat logs', async () => {
+  const { chat, automations, pending, ctx, report, serverLog, emit } = await liveRun();
+  const fixtureSources = createScenarioSources(join(process.cwd(), 'scenarios/standard.json'));
+  fixtureSources.automations = async () => ({ automations: await automations.list() });
+  const server = createPanelServer(fixtureSources, dir, undefined, chat, { automations });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/automations`;
+    const before = await fetch(url);
+    expect(before.status).toBe(200);
+    expect(await before.text()).not.toContain(pending.token);
+    emit({ kind: 'tool-start', id: 'report', name: 'panel_automation_report', input: JSON.stringify({ runId: pending.id, token: pending.token, summary: 'Done' }) });
+    expect((await report()).result.isError).toBeUndefined();
+    emit({ kind: 'tool-end', id: 'report', name: 'panel_automation_report', output: 'Raport zapisany' });
+    emit({ kind: 'completed', output: `Done ${pending.token}` }); // even an accidental echo is redacted in diagnostics
+    await vi.waitFor(async () => expect((await chat.get(pending.chatId)).running).toBe(false));
+    await chat.drain();
+    const after = await (await fetch(url)).text();
+    expect(after).toContain('hermes-run');
+    expect(after).not.toContain(pending.token);
+    expect(after).not.toContain('"token"');
+    const mcp = await answerRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'panel_automations', arguments: {} } }, ctx);
+    expect(JSON.stringify(mcp)).not.toContain(pending.token);
+    const logs = readdirSync(join(dir, 'chat-logs')).filter(n => n.endsWith('.jsonl')).map(n => readFileSync(join(dir, 'chat-logs', n), 'utf8')).join('\n');
+    expect(logs).toContain('[redacted]');
+    expect(logs).not.toContain(pending.token);
+    expect(serverLog.length).toBeGreaterThan(0);
+    expect(serverLog.join('\n')).not.toContain(pending.token);
+    expect(stored().automations[0].runs[0].token).toBe(pending.token); // private durable run only
+  } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });
 
 it('never resurrects cancelled observers after corruption, including a second restart', async () => {

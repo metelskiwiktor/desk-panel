@@ -35,9 +35,6 @@ function Set-EnvValues([string]$Path,[hashtable]$Values) {
 & (Join-Path $PSScriptRoot 'hermes-stream-patch.ps1') -Action APPLY
 if ($LASTEXITCODE -ne 0) { throw 'Hermes streaming patch setup failed. See the warning above.' }
 
-$turnContextSource=if ($env:DESK_HERMES_SOURCE) { $env:DESK_HERMES_SOURCE } else { Join-Path $env:USERPROFILE '.hermes\hermes-agent' }
-& python (Join-Path $PSScriptRoot 'hermes-mcp-turn-context.py') --source $turnContextSource --apply
-if ($LASTEXITCODE -ne 0) { throw 'Hermes MCP turn context setup failed.' }
 
 $hermesHome=Join-Path $env:USERPROFILE '.hermes'
 $panelHome=Join-Path $env:USERPROFILE '.desk-panel'

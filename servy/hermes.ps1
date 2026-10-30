@@ -20,9 +20,6 @@ if ($Action -eq 'CHECK') {
     } else { Write-Warning "Hermes not found at $exe. Install it or change 'executable' in servy/hermes.json."; $problems++ }
     & (Join-Path $PSScriptRoot '..\scripts\hermes-stream-patch.ps1') -Action CHECK
     if ($LASTEXITCODE -ne 0) { $problems++ }
-    $turnContextSource=if ($env:DESK_HERMES_SOURCE) { $env:DESK_HERMES_SOURCE } else { Join-Path $env:USERPROFILE '.hermes\hermes-agent' }
-    & python (Join-Path $PSScriptRoot '..\scripts\hermes-mcp-turn-context.py') --source $turnContextSource
-    if ($LASTEXITCODE -ne 0) { $problems++ }
     try {
         $health=Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 3
         Write-Host "API server: http://127.0.0.1:$port answers ($($health | ConvertTo-Json -Compress))"

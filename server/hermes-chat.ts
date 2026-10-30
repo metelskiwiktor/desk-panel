@@ -276,7 +276,21 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const client = options.client;
   const dir = options.dir ?? path.join(homedir(), '.desk-panel');
   const now = options.now ?? Date.now;
-  const log = options.log ?? createChatLog(dir, now);
+  const rawLog = options.log ?? createChatLog(dir, now);
+  // Redact before truncation: even tool arguments and echoed output must never leak a report token.
+  const redact = (text: string): string => {
+    for (const record of records.values()) for (const turn of record.turns) {
+      if (!turn.automation) continue;
+      for (const match of turn.text.matchAll(/token:"([0-9a-f]{32})"/g)) text = text.replaceAll(match[1], '[redacted]');
+    }
+    return text;
+  };
+  const clean = <T,>(value: T): T => JSON.parse(redact(JSON.stringify(value))) as T;
+  const log: ChatLog = {
+    trace: (id, entry) => rawLog.trace(id, clean(entry)),
+    turn: summary => rawLog.turn(clean(summary)),
+    drain: () => rawLog.drain(),
+  };
   const stallMs = options.stallMs ?? 25_000;
   const turnTimeoutMs = options.turnTimeoutMs ?? 15 * 60_000;
   const silenceMs = options.silenceMs ?? 6 * 60_000;
@@ -652,10 +666,10 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       }
     }).catch(() => { /* the live answer stays */ });
     const answerChars = message.parts.reduce((sum, p) => sum + (p.type === 'text' ? p.text.length : 0), 0);
-    const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: t.input.slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));
+    const toolList: TurnTool[] = tools(live).slice(0, 30).map(t => ({ name: t.name, input: redact(t.input).slice(0, 200), exitCode: null, outputChars: t.output?.length ?? null, error: t.error ? t.output ?? 'błąd' : null }));
     log.trace(record.id, { turn: record.turns.length, src: 'panel', kind: 'finish', status: answer, error: error ?? null, endedBy, deltas: live.deltas });
     log.turn({
-      at: now(), chat: record.id, title: record.title, turn: record.turns.length, model: 'hermes', engine: 'hermes', ask: turn.text.replace(/\s+/g, ' ').slice(0, 200),
+      at: now(), chat: record.id, title: record.title, turn: record.turns.length, model: 'hermes', engine: 'hermes', ask: redact(turn.text).replace(/\s+/g, ' ').slice(0, 200),
       context: (turn.context ?? []).map(c => c.kind), status: answer as 'done' | 'error' | 'stopped', error: error ?? null, endedBy,
       emptyAnswer: answer === 'error' && !answerChars && status.state === 'completed', answerChars, seconds: Math.round((now() - turn.at) / 100) / 10,
       lastStep: null, denied: [], result: { status: status.state, responseChars: status.output?.length ?? 0 },
