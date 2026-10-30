@@ -111,7 +111,7 @@ function scriptFor(input: string): { tools: MockTool[]; answer?: string } {
   if (/automat/i.test(message)) return {
     tools: [{ name: 'mcp_desk-panel_panel_automation_propose', output: 'Karta „Nowy automat” jest u użytkownika.', args: {
       name: 'Ceny prądu u dostawcy', goal: 'Sprawdzaj codziennie rano, czy na stronie dostawcy prądu pojawiła się nowa taryfa, i podaj różnicę.',
-      trigger: { kind: 'daily', time: '07:00' }, doneWhen: 'Na stronie jest taryfa z ceną niższą niż obecna.',
+      trigger: { kind: 'daily', time: '07:00', from: '2026-10-31', until: '2026-12-31' }, doneWhen: 'Na stronie jest taryfa z ceną niższą niż obecna.',
       actions: [{ kind: 'message' }], learn: true,
     }, before: '**Plan**\n\n- codzienne sprawdzenie cennika,\n- wynik wraca do tej rozmowy,\n- automat uczy się między runami.\n\n' }],
     answer: 'Decyzja w karcie poniżej.',

@@ -1,7 +1,8 @@
 import { useContext, useEffect, useState } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Bot, Check, Minus, Repeat } from 'lucide-react';
-import { automationPlanSchema, describeTrigger, type AutomationAction } from '../automation-contract';
+import { Check, Minus, Repeat } from 'lucide-react';
+import { ACTION_HINTS, ACTION_LABELS, automationPlanSchema, describeTriggerRange, type AutomationAction } from '../automation-contract';
+import { openPanelPage } from '../panel-nav';
 import { CardActions, refusedNote } from './cards';
 import { ConsentShell } from './consent-card';
 import type { AutomationArgs, AutomationResult } from './types';
@@ -9,11 +10,9 @@ import type { AutomationArgs, AutomationResult } from './types';
 /*
  * `panel_automation_propose`: zgoda na nowy automat. Wektor podał plan; karta pokazuje go po polsku, pozwala odznaczyć
  * akcje i ustawić „Ucz się między runami”. Automat powstaje dopiero po kliknięciu „Utwórz automat”, a plan do zapisu
- * pochodzi z wywołania narzędzia w tej rozmowie (karta tylko zawęża akcje).
+ * pochodzi z wywołania narzędzia w tej rozmowie (karta tylko zawęża akcje). Decyzja jest zapisana w kokpicie, więc po
+ * przeładowaniu karta pokazuje „Utworzono automat …” zamiast drugi raz proponować zapis.
  */
-
-const chip = 'tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:bg-ck-surface-2 tw:px-2 tw:py-0.5 tw:text-[11px] tw:text-ck-muted';
-const ACTION_LABEL: Record<string, string> = { message: 'krótka wiadomość w rozmowie automatu' };
 
 export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePartProps<AutomationArgs, AutomationResult>) {
   const { respond, running } = useContext(CardActions);
@@ -43,43 +42,46 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
     heading={!decided ? 'Utworzyć automat?' : decided.decision === 'created' ? 'Automat utworzony' : 'Odrzucono'}
     subtitle={title}
     applyLabel="Utwórz automat"
+    actionsAlign="end"
+    rejectFirst
     notices={!decided && <>
       {typeof args.refused === 'string' && <p className={refusedNote} role="alert">Panel nie przyjął propozycji: {args.refused}</p>}
       {!plan.success && !args.refused && <p className={refusedNote} role="alert">Agent przysłał niepoprawny plan automatu.</p>}
     </>}
-    body={plan.success ? <div className="tw:grid tw:gap-3" data-state={decided ? decided.decision : 'open'}>
-      <div className="tw:flex tw:items-start tw:gap-2">
-        <Bot size={16} className="tw:mt-0.5 tw:flex-none tw:text-ck-cal" aria-hidden="true" />
-        <div className="tw:min-w-0 tw:grid tw:gap-0.5">
+    body={plan.success ? <div className="tw:grid tw:gap-4" data-state={decided ? decided.decision : 'open'}>
+      <div className="tw:grid tw:gap-3 tw:sm:grid-cols-2">
+        <div className="tw:grid tw:content-start tw:gap-1 tw:rounded-xl tw:bg-ck-surface-2 tw:px-3.5 tw:py-3">
           <span className="tw:text-xs tw:text-ck-muted">Kiedy</span>
-          <span className="tw:text-ck-text">{describeTrigger(plan.data.trigger)}</span>
-          {plan.data.trigger.kind !== 'once' && ('until' in plan.data.trigger) && plan.data.trigger.until && <span className="tw:text-xs tw:text-ck-faint">Do {plan.data.trigger.until}</span>}
+          <span className="tw:text-ck-text">{describeTriggerRange(plan.data.trigger)}</span>
+        </div>
+        <div className="tw:grid tw:content-start tw:gap-1 tw:rounded-xl tw:bg-ck-surface-2 tw:px-3.5 tw:py-3">
+          <span className="tw:text-xs tw:text-ck-muted">Cel osiągnięty, gdy</span>
+          <span className="tw:text-ck-text">{plan.data.doneWhen ?? 'Wektor sam rozpozna, że cel jest osiągnięty.'}</span>
         </div>
       </div>
       <div className="tw:grid tw:gap-0.5">
         <span className="tw:text-xs tw:text-ck-muted">Cel</span>
         <p className="tw:m-0 tw:whitespace-pre-wrap tw:text-ck-text">{plan.data.goal}</p>
       </div>
-      {plan.data.doneWhen && <div className="tw:grid tw:gap-0.5">
-        <span className="tw:text-xs tw:text-ck-muted">Cel osiągnięty, gdy</span>
-        <p className="tw:m-0 tw:text-ck-text">{plan.data.doneWhen}</p>
-      </div>}
-      <div className="tw:grid tw:gap-1.5">
-        <span className="tw:text-xs tw:text-ck-muted">Zatwierdzone akcje</span>
-        <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1 tw:p-0">
-          {plan.data.actions.map(a => <li key={a.kind} className="tw:flex tw:items-center tw:gap-2">
-            <label className="tw:flex tw:cursor-pointer tw:items-center tw:gap-2 tw:text-ck-text">
-              <input type="checkbox" checked={actions.some(x => x.kind === a.kind)} disabled={!!decided} onChange={() => toggle(a.kind)} />
-              <span className={`${chip} tw:text-ck-text`}>{a.kind}</span>
-              <span className="tw:text-xs tw:text-ck-muted">{ACTION_LABEL[a.kind] ?? a.kind}</span>
+      <div className="tw:grid tw:gap-2">
+        <span className="tw:text-[13px] tw:font-semibold tw:text-ck-text">Wtedy zrobi sam, bez pytania</span>
+        <ul className="tw:m-0 tw:grid tw:list-none tw:gap-1.5 tw:p-0">
+          {plan.data.actions.map(a => <li key={a.kind}>
+            <label className="tw:flex tw:cursor-pointer tw:items-start tw:gap-2.5 tw:py-0.5 tw:text-ck-text">
+              <input type="checkbox" className="tw:mt-1" checked={actions.some(x => x.kind === a.kind)} disabled={!!decided} onChange={() => toggle(a.kind)} />
+              <span className="tw:grid tw:gap-0.5">
+                <span>{ACTION_LABELS[a.kind] ?? a.kind}</span>
+                <span className="tw:text-xs tw:text-ck-muted">{ACTION_HINTS[a.kind] ?? ''}</span>
+              </span>
             </label>
           </li>)}
         </ul>
+        <span className="tw:text-xs tw:text-ck-faint">Wszystko inne pokaże Ci jak dziś — kartą do zatwierdzenia.</span>
       </div>
-      <label className="tw:flex tw:cursor-pointer tw:items-center tw:gap-2 tw:text-ck-text">
+      <label className="tw:flex tw:cursor-pointer tw:items-center tw:gap-2.5 tw:border-t tw:border-ck-line tw:pt-3 tw:text-ck-text">
         <input type="checkbox" checked={learn} disabled={!!decided} onChange={e => setLearn(e.target.checked)} />
         <Repeat size={14} className="tw:text-ck-cal" aria-hidden="true" />
-        <span>Ucz się między runami</span>
+        <span>Ucz się między runami (notatnik: gdzie i jak sprawdzać)</span>
       </label>
     </div> : undefined}
     footnote={!decided && plan.success ? <p className="tw:m-0 tw:text-xs tw:text-ck-muted">
@@ -87,7 +89,10 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
       {plan.data.replaces && ' Zastąpi wskazany automat.'}
     </p> : undefined}
     outcome={decided?.decision === 'created'
-      ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />Automat gotowy; widać go w widoku Automaty.</p>
+      ? <div className="tw:grid tw:justify-items-start tw:gap-1.5" role="status">
+        <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green"><Check size={15} aria-hidden="true" />Utworzono automat „{decided.name}”.</p>
+        <button type="button" className="tw:inline-flex tw:items-center tw:gap-1 tw:bg-transparent tw:p-0 tw:text-[13px] tw:text-ck-cal tw:underline" onClick={() => openPanelPage('automations')}>Otwórz widok Automaty</button>
+      </div>
       : decided?.decision === 'rejected' ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-xs tw:text-ck-muted" role="status"><Minus size={13} aria-hidden="true" />Nic nie zostało utworzone.</p> : undefined}
     canApply={!running && !unidentified && plan.success && actions.length > 0 && !args.refused}
     canReject={!running && !unidentified}

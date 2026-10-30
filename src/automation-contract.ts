@@ -28,6 +28,16 @@ export const automationActionSchema = z.discriminatedUnion('kind', [
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 
+/** What an approved action is, in Polish, for the card and the view. */
+export const ACTION_LABELS: Record<AutomationAction['kind'], string> = {
+  message: 'Wiadomość w tej rozmowie',
+};
+
+/** One line under an action on the consent card. */
+export const ACTION_HINTS: Record<AutomationAction['kind'], string> = {
+  message: 'Krótka wiadomość od Wektora po runie, w tej samej rozmowie.',
+};
+
 export const RUN_OUTCOMES = ['not-yet', 'done', 'error', 'skipped'] as const;
 export type RunOutcome = typeof RUN_OUTCOMES[number];
 
@@ -112,6 +122,13 @@ export const automationDecisionSchema = z.object({
   actions: z.array(automationActionSchema).max(20).optional(),
 }).strict();
 
+/** The user's answer on a card, kept in `cockpit.json`: answered twice, done once and shown after a reload. */
+export const automationOutcomeSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('created'), at: z.number(), automationId: z.string().regex(/^a-[0-9a-f]{12}$/), name: z.string().min(1).max(120) }),
+  z.object({ decision: z.literal('rejected'), at: z.number() }),
+]);
+export type AutomationOutcome = z.infer<typeof automationOutcomeSchema>;
+
 export const automationReportSchema = z.object({
   outcome: z.enum(RUN_OUTCOMES),
   summary: z.string().trim().min(1).max(1000),
@@ -140,6 +157,29 @@ export function scheduleLabel(trigger: AutomationTrigger): string {
   if (trigger.kind === 'once') return 'jednorazowo';
   if (trigger.kind === 'cezar') return 'task Cezara';
   return 'PR';
+}
+
+/** `2026-10-31` as `31.10.2026`, without a date library. */
+export function shortDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return `${Number(day)}.${month}.${year}`;
+}
+
+/** `od 31.10.2026 do 31.12.2026` for a cyclic trigger; empty for the others. */
+export function triggerRange(trigger: AutomationTrigger): string {
+  if (trigger.kind !== 'daily' && trigger.kind !== 'weekly') return '';
+  return [
+    trigger.from ? `od ${shortDate(trigger.from)}` : '',
+    trigger.until ? `do ${shortDate(trigger.until)}` : '',
+  ].filter(Boolean).join(' ');
+}
+
+const capitalize = (text: string) => text ? text[0].toLocaleUpperCase('pl-PL') + text.slice(1) : text;
+
+/** The card's "Kiedy": Polish schedule plus the date range, with a capital first letter. */
+export function describeTriggerRange(trigger: AutomationTrigger): string {
+  const range = triggerRange(trigger);
+  return capitalize(range ? `${describeTrigger(trigger)}, ${range}` : describeTrigger(trigger));
 }
 
 export const isCyclic = (trigger: AutomationTrigger) => trigger.kind === 'daily' || trigger.kind === 'weekly';

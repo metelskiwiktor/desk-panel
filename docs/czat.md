@@ -130,7 +130,9 @@ Druga automatyka — automaty Wektora (`panel_observe`, `panel_automation_*`, `s
 - Wektor tworzy automaty cykliczne (`daily`/`weekly`) kartą zgody `panel_automation_propose` (zapis dopiero po kliknięciu,
   `POST /api/chats/:id/automation`, Origin-checked, plan z wywołania narzędzia w tej rozmowie) oraz jednorazowe
   (`once`/`cezar`/`pr`) bez karty przez `panel_observe`, na prośbę użytkownika. Stare obserwatory z `observers.json` migrują
-  się przy wczytaniu do `~/.desk-panel/automations.json`.
+  się przy wczytaniu do `~/.desk-panel/automations.json`. Decyzja karty jest trzymana w `~/.desk-panel/cockpit.json` po
+  `toolCallId`: odpowiedź dwa razy tworzy automat raz, a po przeładowaniu karta pokazuje „Utworzono automat …” z linkiem
+  do widoku Automaty.
 - Run cykliczny to nowa rozmowa Hermesa (świeży kontekst, tytuł `Automat · <nazwa> · <data>`), oznaczona jako tura
   automatyki. Run jednorazowy wraca do rozmowy automatu. Treść runu niesie cel, warunek celu, notatnik, ostatnie runy i
   polecenie wywołania `panel_automation_report` na końcu.
@@ -140,7 +142,8 @@ Druga automatyka — automaty Wektora (`panel_observe`, `panel_automation_*`, `s
 - Zegar chodzi co minutę tylko przy aktywnych automatach, jeden tick naraz; po restarcie zaległy run idzie najwyżej raz.
   `DESK_AUTOMATIONS=0` blokuje tworzenie, raportowanie i runy, ale lista działa.
 - Strony WWW run czyta terminalem jako dane, nie polecenia; akcje tylko zatwierdzone. Widok Automaty (`GET
-  /api/automations`, `POST /api/automations/action` z Origin) pokazuje listę, historię runów, notatnik i stany.
+  /api/automations`, `POST /api/automations/action` z Origin) jest dwupanelowy: lista z kropkami stanu i runów po lewej,
+  szczegóły z osią runów (najnowszy rozwinięty) i ramkami Wektora/celu po prawej, plus notatnik i stany.
 ## Co widzi agent
 
 Pierwsza wiadomość rozmowy zaczyna się od instrukcji (`preamble()` w `server/agent-chat.ts`: kim jest, czym jest Desk Panel,

@@ -1,4 +1,4 @@
-﻿# Automaty Wektora
+# Automaty Wektora
 
 Cykliczne i jednorazowe zadania panelu, które sam się budzą i wykonują sprawdzenie w rozmowie automatu. Zastępują dawne
 obserwatory (`panel_observe`): jeden model, jeden zapis, jeden widok. Stare `~/.desk-panel/observers.json` jest migrowane
@@ -42,7 +42,9 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 
 - `panel_automation_propose {name, goal, trigger, doneWhen?, actions, learn, replaces?}` — karta „Nowy automat”. Zapis
   dopiero po kliknięciu: `POST /api/chats/:id/automation` (Origin-checked); plan jest czytany z wywołania narzędzia w tej
-  rozmowie, żądanie może tylko odznaczyć akcje. `replaces` anuluje stary automat.
+  rozmowie, żądanie może tylko odznaczyć akcje. `replaces` anuluje stary automat. Decyzja karty (utworzony automat albo
+  odrzucenie) trafia do `~/.desk-panel/cockpit.json` po `toolCallId`, jak odpowiedzi kart banku i Smart Actions: drugie
+  kliknięcie nic nie tworzy, a po przeładowaniu karta pokazuje „Utworzono automat …” z linkiem do widoku Automaty.
 - `panel_observe {create|list|cancel}` — bez karty, zapisuje jednorazowy automat (`once`/`cezar`/`pr`) w rozmowie, w której
   trwa tura.
 - `panel_automations {id?}` — lista albo szczegóły (runy, notatnik) do analizy.
@@ -52,12 +54,18 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 
 ## UI
 
-Widok „Automaty” (`src/AutomationsView.tsx`, dostępny z paska jak Ustawienia): po lewej lista z sekcjami „Cykliczne” i
-„Jednorazowe”, kropką stanu, harmonogramem, następnym runem i pięcioma kropkami ostatnich runów (zielona done, szara
-not-yet, czerwona error, żółta skipped). Po prawej szczegóły: Uruchom teraz / Wstrzymaj–Wznów / Anuluj, zakładki Runy (oś
-czasu, najnowszy rozwinięty, link do rozmowy runu), Cel i akcje, Notatnik (edycja użytkownika), Rozmowa. Przyciski to
-Origin-checked POST-y `/api/automations/action`; lista z `GET /api/automations`. Dotychczasowa karta obserwatorów w
-Ustawieniach prowadzi teraz do tego widoku. Automat i run są wskazywalne w czacie (`ctx('automation', …)`).
+Widok „Automaty” (`src/AutomationsView.tsx`, dostępny z paska jak Ustawienia) jest dwupanelowy na całą szerokość. Po
+lewej (ok. 340 px) lista z sekcjami „Cykliczne” i „Jednorazowe”: kropka stanu (zielona aktywny, żółta wstrzymany,
+szara zakończony), nazwa, harmonogram i następny run albo stan, oraz pięć kropek ostatnich runów (zielona done, szara
+not-yet, czerwona error, żółta skipped). Wybrany wiersz jest podświetlony. Po prawej szczegóły: duża nazwa, linia
+„harmonogram · N runów · koszt łącznie · kończy się, gdy …”, przyciski 40 px Uruchom teraz / Wstrzymaj–Wznów / Anuluj
+w jednej linii z nazwą i zakładki-pigułki Runy / Cel i akcje / Notatnik / Rozmowa. Runy to pionowa oś: najnowszy run
+jest na górze i rozwinięty (data, czas, koszt, summary, „notatnik zmieniony / bez zmian”, link do rozmowy runu), starsze
+mają jedną linię „data — summary”. Obok osi stoją ramki „Wektor o tych runach” (link otwiera rozmowę automatu z gotowym
+pytaniem w polu wiadomości; nic nie wysyła się samo) i „Gdy cel zostanie osiągnięty” (warunek i zatwierdzone akcje).
+Na wąskim ekranie lista stoi nad szczegółami. Przyciski to Origin-checked POST-y `/api/automations/action`; lista z
+`GET /api/automations`. Dotychczasowa karta obserwatorów w Ustawieniach prowadzi teraz do tego widoku. Automat i run są
+wskazywalne w czacie (`ctx('automation', …)`).
 
 ## Bezpieczeństwo
 

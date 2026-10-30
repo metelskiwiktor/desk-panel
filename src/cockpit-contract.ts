@@ -4,6 +4,7 @@ import { stepOverridesSchema, type StepOverrides } from './cezar-contract';
 import type { BankPlanOutcome } from './bank-plan-contract';
 import type { BankAssignOutcome } from './bank-assign-contract';
 import type { SmartRuleOutcome } from './smart-rules-contract';
+import type { AutomationOutcome } from './automation-contract';
 
 /**
  * The chat cockpit of a conversation (`GET /api/chats/:id/cockpit`): the Cezar task it watches, that task's pull request
@@ -53,6 +54,8 @@ export interface CockpitView {
   dispatches: Record<string, DispatchOutcome>;
   /** The user's answer on each consent card of the conversation (bank changes, Smart Actions rules), by its tool call id. */
   bankPlans: Record<string, BankPlanOutcome | BankAssignOutcome | SmartRuleOutcome>;
+  /** The user's answer on each „Nowy automat” card, by its tool call id: a reload shows the decision. */
+  automationCards: Record<string, AutomationOutcome>;
   /** A historical decision cannot be attributed safely to a single card. */
   legacyUnresolved?: boolean;
 }

@@ -47,7 +47,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
   : { decision: 'rejected' as const };
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
-export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}): CockpitMessage {
+export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}, automationCards: CockpitView['automationCards'] = {}): CockpitMessage {
   if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, ...(m.automation ? { automation: m.automation } : {}), status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
@@ -57,7 +57,7 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       if (p.type === 'approval') return { type: 'tool', id: p.id, name: HERMES_APPROVAL, args: { tool: p.tool, detail: p.detail, state: p.state, at: p.at }, running: p.state === 'pending' };
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
-      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : p.output;
+      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : name === AUTOMATION ? automationCards[p.id] : p.output;
       const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : name === AUTOMATION ? 'automation' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
       const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
@@ -117,7 +117,8 @@ export function useLiveCockpit(): CockpitSource {
   const { view, error: cockpitError, refresh, loading: cockpitLoading } = useCockpitView(chat.activeId, items);
   const dispatches = view?.dispatches;
   const bankPlans = view?.bankPlans;
-  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans)), [items, dispatches, view?.legacyUnresolved, bankPlans]);
+  const automationCards = view?.automationCards;
+  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans, automationCards)), [items, dispatches, view?.legacyUnresolved, bankPlans, automationCards]);
   const activeId = chat.activeId;
 
   const cockpit: CockpitState = useMemo(() => {
@@ -169,7 +170,9 @@ export function useLiveCockpit(): CockpitSource {
       }
       if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'automation') {
         if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
-        await call(`/api/chats/${activeId}/automation`, 'POST', { toolCallId: id, decision: (response as { decision: 'create' | 'reject' }).decision });
+        const decision = response as { decision: 'create' | 'reject'; actions?: unknown };
+        await call(`/api/chats/${activeId}/automation`, 'POST', { toolCallId: id, decision: decision.decision, ...(Array.isArray(decision.actions) ? { actions: decision.actions } : {}) });
+        refresh();
         return;
       }
       // A bank change card: the panel changes the categories (or not) as the user answered; the card shows the outcome from the cockpit.

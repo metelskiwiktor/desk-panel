@@ -1,33 +1,83 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, MessageSquare, Pause, Play, Save, X } from 'lucide-react';
+import { Bot, MessageSquare, Pause, Play, Save, Sparkles, X } from 'lucide-react';
 import { Card } from './components';
 import { ctx } from './chat-context';
 import { stamp } from './format';
 import { usePollingEnabled } from './polling';
 import { openChatConversation } from './useChatPresentation';
 import {
-  describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema, type Automation, type AutomationRun,
+  ACTION_HINTS, ACTION_LABELS, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
+  type Automation, type AutomationRun, type AutomationStatus,
 } from './automation-contract';
 
 /**
- * Widok „Automaty”: cykliczne i jednorazowe zadania Wektora. Po lewej lista z kropką stanu i pięcioma kropkami ostatnich
- * runów; po prawej szczegóły wybranego (runy, cel i akcje, notatnik, rozmowa). Przyciski to Origin-checked POST-y.
+ * Widok „Automaty”: cykliczne i jednorazowe zadania Wektora. Po lewej lista z kropką stanu, harmonogramem i pięcioma
+ * kropkami ostatnich runów; po prawej szczegóły wybranego (oś runów, cel i akcje, notatnik, rozmowa). Przyciski to
+ * Origin-checked POST-y.
  */
 type Tab = 'runs' | 'goal' | 'notebook' | 'chat';
 
-const RUN_CLASS = { 'not-yet': 'wait', done: 'ok', error: 'bad', skipped: 'skip' } as const;
-const STATUS_CLASS: Record<Automation['status'], string> = { active: 'ok', paused: 'wait', done: 'ok', expired: 'skip', cancelled: 'bad' };
+const RUN_CLASS = { 'not-yet': 'idle', done: 'ok', error: 'bad', skipped: 'skip' } as const;
+const STATUS_CLASS: Record<AutomationStatus, string> = { active: 'ok', paused: 'warn', done: 'idle', expired: 'idle', cancelled: 'idle' };
 const when = (at?: number) => at ? stamp(at) : '—';
+const latestRun = (a: Automation): AutomationRun | undefined => [...a.runs].sort((x, y) => y.at - x.at)[0];
+const runTime = (at: number) => new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false });
+const dayNumber = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+const nextLabel = (at?: number) => {
+  if (!at) return 'czeka na wyzwalacz';
+  const date = new Date(at);
+  const days = Math.round((dayNumber(date) - dayNumber(new Date())) / 86_400_000);
+  if (days === 0) return `dziś ${runTime(at)}`;
+  if (days === 1) return 'jutro';
+  if (days === 2) return 'pojutrze';
+  return `${date.getDate()}.${String(date.getMonth() + 1).padStart(2, '0')} ${runTime(at)}`;
+};
 const nextText = (a: Automation) => {
   if (a.status === 'done') return 'zakończony';
   if (a.status === 'paused') return 'wstrzymany';
   if (a.status === 'cancelled') return 'anulowany';
   if (a.status === 'expired') return 'wygasły';
-  return a.nextRunAt ? `następny ${when(a.nextRunAt)}` : 'czeka na wyzwalacz';
+  return a.nextRunAt ? `następny ${nextLabel(a.nextRunAt)}` : 'czeka na wyzwalacz';
+};
+const runDate = (at: number) => {
+  const date = new Date(at);
+  const days = Math.round((dayNumber(date) - dayNumber(new Date())) / 86_400_000);
+  if (days === 0) return `Dziś ${runTime(at)}`;
+  if (days === -1) return `Wczoraj ${runTime(at)}`;
+  return `${date.getDate()}.${String(date.getMonth() + 1).padStart(2, '0')} ${runTime(at)}`;
+};
+const runsLabel = (count: number) => count === 1 ? '1 run' : count >= 2 && count <= 4 ? `${count} runy` : `${count} runów`;
+const durationLabel = (seconds?: number) => {
+  if (seconds === undefined) return null;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`;
+};
+const costLabel = (usd?: number) => usd === undefined ? null : `${usd.toFixed(4).replace('.', ',')} USD`;
+const totalCost = (a: Automation) => {
+  if (!a.runs.some(r => r.costUsd !== undefined)) return null;
+  return a.runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+};
+const detailLine = (a: Automation) => {
+  const cost = totalCost(a);
+  const end = a.doneWhen ? `kończy się, gdy ${a.doneWhen.replace(/^./, c => c.toLocaleLowerCase('pl-PL')).replace(/\.$/, '')}` : 'kończy się po wykonaniu celu';
+  return `${describeTrigger(a.trigger)} · ${runsLabel(a.runs.length)} · koszt łącznie ${cost === null ? '—' : costLabel(cost)} · ${end}`;
+};
+const rowText = (a: Automation) => {
+  const last = latestRun(a);
+  const error = last?.outcome === 'error' ? ' · ostatni run z błędem' : '';
+  return `${scheduleLabel(a.trigger)} · ${nextText(a)}${error}`;
+};
+const askText = (a: Automation) => {
+  const runs = [...a.runs].sort((x, y) => y.at - x.at).slice(0, 5);
+  return [
+    `Przejrzyj ostatnie runy automatu „${a.name}” i powiedz, co z nich wynika.`,
+    '',
+    ...(runs.length ? runs.map(r => `- ${stamp(r.at)} · ${OUTCOME_LABELS[r.outcome]} · ${r.summary}`) : ['- brak runów']),
+  ].join('\n');
 };
 
 function Dots({ runs }: { runs: AutomationRun[] }) {
-  const last = runs.slice(-5);
+  const last = [...runs].sort((a, b) => a.at - b.at).slice(-5);
   return <span className="automation-dots" aria-label={`Ostatnie runy: ${last.map(r => OUTCOME_LABELS[r.outcome]).join(', ') || 'brak'}`}>
     {Array.from({ length: 5 }, (_, i) => {
       const run = last[i];
@@ -108,11 +158,11 @@ export function AutomationsView() {
         {list.map(a => (
           <li key={a.id}>
             <button type="button" className={`automation-row ${a.id === selected ? 'active' : ''}`} aria-current={a.id === selected ? 'true' : undefined} onClick={() => { setSelected(a.id); setTab('runs'); }}
-              {...ctx('automation', a.id, a.name, `${a.name}\nStan: ${STATUS_LABELS[a.status]}\nHarmonogram: ${describeTrigger(a.trigger)}\nCel: ${a.goal}\nOstatnie runy:\n${a.runs.slice(-5).map(r => `- ${stamp(r.at)} · ${OUTCOME_LABELS[r.outcome]} · ${r.summary}`).join('\n') || '- brak'}`)}>
+              {...ctx('automation', a.id, a.name, `${a.name}\nStan: ${STATUS_LABELS[a.status]}\nHarmonogram: ${describeTrigger(a.trigger)}\nCel: ${a.goal}\nOstatnie runy:\n${[...a.runs].sort((x, y) => y.at - x.at).slice(0, 5).map(r => `- ${stamp(r.at)} · ${OUTCOME_LABELS[r.outcome]} · ${r.summary}`).join('\n') || '- brak'}`)}>
               <i className={`automation-dot ${STATUS_CLASS[a.status]}`} aria-label={`stan: ${STATUS_LABELS[a.status]}`} />
               <span className="automation-row-main">
                 <span className="automation-name">{a.name}</span>
-                <span className="meta">{scheduleLabel(a.trigger)} · {nextText(a)}</span>
+                <span className="meta">{rowText(a)}</span>
               </span>
               <Dots runs={a.runs} />
             </button>
@@ -122,27 +172,28 @@ export function AutomationsView() {
     </div>
   );
 
+  const orderedRuns = chosen ? [...chosen.runs].sort((a, b) => b.at - a.at) : [];
+
   return (
     <div className="automation-view">
-      <Card title="Automaty" icon={<Bot />}>
-        <p className="card-intro">
-          Cykliczne i jednorazowe zadania Wektora. Run cykliczny to nowa rozmowa automatu, a wynik wraca do rozmowy, w której
-          automat powstał. Wszystkie wyłącza <code>DESK_AUTOMATIONS=0</code>.
-        </p>
+      <Card title="Automaty" icon={<Bot />} className="automation-card">
         {error && <p className="warning" role="status">Nie udało się odczytać automatów ani wykonać akcji.</p>}
         {!rows ? <p className="meta">Odczytuję automaty…</p> : rows.length === 0 ? (
-          <p className="meta">Brak automatów. Poproś Wektora w rozmowie, żeby coś sprawdzał cyklicznie.</p>
+          <div className="automation-empty">
+            <Bot size={26} aria-hidden="true" />
+            <p>Brak automatów. Automat tworzy się w rozmowie z Wektorem — poproś go, żeby coś sprawdzał cyklicznie.</p>
+          </div>
         ) : (
           <div className="automation-layout">
-            <nav className="automation-side" aria-label="Lista automatów">
+            <div className="automation-side" role="navigation" aria-label="Lista automatów">
               {group('Cykliczne', cyclic)}
               {group('Jednorazowe', oneShot)}
-            </nav>
+            </div>
             {chosen && <section className="automation-detail" aria-label={`Automat ${chosen.name}`}>
               <header className="automation-head">
-                <div>
+                <div className="automation-head-main">
                   <h2>{chosen.name}</h2>
-                  <p className="meta">{describeTrigger(chosen.trigger)} · {nextText(chosen)} · ostatni run {when(chosen.lastRunAt)}</p>
+                  <p className="meta">{detailLine(chosen)}</p>
                 </div>
                 <div className="automation-actions">
                   {(chosen.status === 'active' || chosen.status === 'paused') && <>
@@ -159,27 +210,48 @@ export function AutomationsView() {
                   <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{label}</button>)}
               </div>
               {tab === 'runs' && <div className="automation-tab" role="tabpanel" aria-label="Runy">
-                {chosen.runs.length === 0 ? <p className="meta">Brak runów.</p> : <ol className="automation-runs">
-                  {[...chosen.runs].reverse().map((r, i) => <li key={r.id} className={i === 0 ? 'newest' : ''}>
-                    <div className="automation-run-head">
-                      <i className={`automation-dot ${RUN_CLASS[r.outcome]}`} aria-hidden="true" />
-                      <span className="automation-run-when">{stamp(r.at)}</span>
-                      <span className="automation-run-outcome">{OUTCOME_LABELS[r.outcome]}</span>
-                      {r.costUsd !== undefined && <span className="meta">{r.costUsd.toFixed(3)} USD</span>}
-                      {r.seconds !== undefined && <span className="meta">{r.seconds.toFixed(1)} s</span>}
-                      <span className="meta">notatnik zmieniony: {r.notebookChanged ? 'tak' : 'nie'}</span>
+                {orderedRuns.length === 0 ? <p className="meta">Brak runów.</p> : <div className="automation-runs-layout">
+                  <ol className="automation-runs automation-axis">
+                    {orderedRuns.map((r, i) => <li key={r.id} className={i === 0 ? 'newest' : ''}>
+                      <div className="automation-axis-rail" aria-hidden="true">
+                        <i className={`automation-dot ${RUN_CLASS[r.outcome]}`} />
+                        {i < orderedRuns.length - 1 && <span className="automation-axis-line" />}
+                      </div>
+                      {i === 0 ? <div className="automation-run-card">
+                        <div className="automation-run-head">
+                          <span className="automation-run-when">{runDate(r.at)}</span>
+                          {durationLabel(r.seconds) && <span className="meta">{durationLabel(r.seconds)}</span>}
+                          {costLabel(r.costUsd) && <span className="meta">{costLabel(r.costUsd)}</span>}
+                          <span className="automation-run-outcome">{OUTCOME_LABELS[r.outcome]}</span>
+                        </div>
+                        <p className="automation-run-summary">{r.summary}</p>
+                        <p className="automation-run-meta">{r.notebookChanged ? 'notatnik zmieniony' : 'notatnik bez zmian'}</p>
+                        <button className="link-button" onClick={() => openChatConversation(r.chatId)}><MessageSquare size={14} /> Otwórz rozmowę runu</button>
+                      </div> : <p className="automation-axis-older"><span className="automation-run-when">{runDate(r.at)}</span> — {r.summary}</p>}
+                    </li>)}
+                  </ol>
+                  <aside className="automation-run-aside" aria-label="Pomoc do runów">
+                    <div className="automation-aside-card wektor">
+                      <h3><Sparkles size={15} aria-hidden="true" /> Wektor o tych runach</h3>
+                      <p>Otwórz rozmowę automatu z gotowym pytaniem o historię runów. Nic nie wyśle się samo — treść czeka w polu wiadomości.</p>
+                      <button className="link-button" onClick={() => openChatConversation(chosen.chatId, askText(chosen))}>Zapytaj Wektora o te runy</button>
                     </div>
-                    {i === 0 ? <p className="automation-run-summary">{r.summary}</p> : <p className="meta automation-run-summary">{r.summary}</p>}
-                    <button className="link-button" onClick={() => openChatConversation(r.chatId)}><MessageSquare size={14} /> Otwórz rozmowę runu</button>
-                  </li>)}
-                </ol>}
+                    <div className="automation-aside-card">
+                      <h3>Gdy cel zostanie osiągnięty</h3>
+                      <p>{chosen.doneWhen ?? 'Automat nie ma dodatkowego warunku celu.'}</p>
+                      <ul>
+                        {chosen.actions.length ? chosen.actions.map((a, i) => <li key={i}>{ACTION_LABELS[a.kind]}</li>) : <li className="meta">Brak akcji — automat tylko sprawdza.</li>}
+                      </ul>
+                    </div>
+                  </aside>
+                </div>}
               </div>}
               {tab === 'goal' && <div className="automation-tab" role="tabpanel" aria-label="Cel i akcje">
                 <h3>Cel</h3>
                 <p className="automation-goal">{chosen.goal}</p>
                 {chosen.doneWhen && <><h3>Cel osiągnięty, gdy</h3><p>{chosen.doneWhen}</p></>}
                 <h3>Zatwierdzone akcje</h3>
-                <div className="automation-chips">{chosen.actions.length ? chosen.actions.map((a, i) => <span key={i} className="automation-chip">{a.kind}</span>) : <span className="meta">brak</span>}</div>
+                <div className="automation-chips">{chosen.actions.length ? chosen.actions.map((a, i) => <span key={i} className="automation-chip">{ACTION_LABELS[a.kind]}</span>) : <span className="meta">brak</span>}</div>
                 <p className="meta">Uczy się między runami: {chosen.learn ? 'tak' : 'nie'}.</p>
               </div>}
               {tab === 'notebook' && <div className="automation-tab" role="tabpanel" aria-label="Notatnik">
@@ -198,4 +270,3 @@ export function AutomationsView() {
     </div>
   );
 }
-

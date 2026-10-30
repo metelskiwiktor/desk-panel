@@ -34,3 +34,10 @@ function save(id: string | null, draft: ChatDraft) {
 export function setChatDraftText(text: string, id: string | null = null) { save(id, { ...getChatDraft(id), text }); }
 export function setChatDraftContext(context: ContextItem[], id: string | null = null) { save(id, { ...getChatDraft(id), context }); }
 export function clearChatDraft(id: string | null = null) { save(id, empty()); }
+
+/** A draft put into a conversation that is already open: the composer listens for it. */
+export const CHAT_DRAFT_EVENT = 'desk-panel:chat-draft';
+export function applyChatDraft(text: string, id: string | null = null) {
+  setChatDraftText(text, id);
+  window.dispatchEvent(new CustomEvent(CHAT_DRAFT_EVENT, { detail: { id, text } }));
+}

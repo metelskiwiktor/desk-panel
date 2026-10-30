@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+import { applyChatDraft } from './chat-draft';
 
 export type ChatView = 'hidden' | 'compact' | 'full';
 const OPEN_CHAT = 'desk-panel:open-chat';
-/** Open an existing conversation without sending a message. */
-export function openChatConversation(id: string) { window.dispatchEvent(new CustomEvent(OPEN_CHAT, { detail: id })); }
+/** Open an existing conversation without sending a message; a draft waits in the composer, never sent by itself. */
+export function openChatConversation(id: string, draft?: string) {
+  if (draft) applyChatDraft(draft, id);
+  window.dispatchEvent(new CustomEvent(OPEN_CHAT, { detail: id }));
+}
 const nextView: Record<ChatView, ChatView> = { hidden: 'compact', compact: 'full', full: 'hidden' };
 
 /** Presentation never starts a turn. Physical left Ctrl+Alt toggles pointing without a hold timer. */

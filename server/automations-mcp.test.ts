@@ -1,9 +1,9 @@
-// @vitest-environment node
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAutomations } from './automations';
+import { createCockpit } from './cockpit';
 import { PANEL_TOOLS } from './panel-mcp';
 import { createScenarioSources } from './scenario';
 import { handleChatRoute } from './chat-routes';
@@ -60,7 +60,8 @@ describe('automation tools', () => {
 
 describe('automation card route', () => {
   const plan = { name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: true };
-  const conversation = () => ({ id: 'chat-1', engine: 'hermes', items: [{ id: 'm1', role: 'agent', status: 'done', at: 1, parts: [{ type: 'tool', id: 'm1:call1', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify(plan), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }] }] }) as never;
+  const chatId = '00000000-0000-4000-8000-000000000009';
+  const conversation = () => ({ id: chatId, engine: 'hermes', items: [{ id: 'm1', role: 'agent', status: 'done', at: 1, parts: [{ type: 'tool', id: 'm1:call1', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify(plan), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }] }] }) as never;
   function response() {
     let status = 200; let body = '';
     return {
@@ -72,21 +73,43 @@ describe('automation card route', () => {
     const text = JSON.stringify(body);
     return { method: 'POST', headers: { origin }, setEncoding() {}, async *[Symbol.asyncIterator]() { yield text; } } as never;
   }
+  const cockpit = () => createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+  const url = new URL(`http://panel/api/chats/${chatId}/automation`);
+
   it('creates the automation only after the user click, with the plan from the conversation', async () => {
     const automations = make();
     const chatStub = { get: async () => conversation() } as never;
-    const url = new URL('http://panel/api/chats/00000000-0000-4000-8000-000000000009/automation');
     const first = response();
     const handled = await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), first as never, url, 'http://panel', chatStub, undefined, undefined, automations);
     expect(handled).toBe(true);
     expect(first.status).toBe(200);
     expect(JSON.parse(first.body)).toMatchObject({ decision: 'created' });
-    expect((await automations.list())[0]).toMatchObject({ name: 'Ceny', chatId: '00000000-0000-4000-8000-000000000009' });
+    expect((await automations.list())[0]).toMatchObject({ name: 'Ceny', chatId });
 
     const before = make({ file: join(dir, 'before.json') });
     const denied = response();
     await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }, 'http://evil'), denied as never, url, 'http://panel', chatStub, undefined, undefined, before);
     expect(denied.status).toBe(403);
     expect(await before.list()).toHaveLength(0);
+  });
+
+  it('keeps the decision in the cockpit: a second answer creates nothing and a reload shows it', async () => {
+    const automations = make();
+    const chatStub = { get: async () => conversation() } as never;
+    const first = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), first as never, url, 'http://panel', chatStub, cockpit(), undefined, automations);
+    const created = JSON.parse(first.body);
+    expect(created).toMatchObject({ decision: 'created', name: 'Ceny' });
+    expect(created.automationId).toMatch(/^a-[0-9a-f]{12}$/);
+
+    const second = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), second as never, url, 'http://panel', chatStub, cockpit(), undefined, automations);
+    expect(JSON.parse(second.body)).toEqual(created);
+    expect(await automations.list()).toHaveLength(1);
+
+    const view = await cockpit().view(chatId, (conversation() as unknown as { items: never }).items);
+    expect(view.automationCards['m1:call1']).toEqual({ decision: 'created', at: created.at, automationId: created.automationId, name: 'Ceny' });
+    const restarted = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    expect((await restarted.view(chatId, (conversation() as unknown as { items: never }).items)).automationCards['m1:call1']).toEqual(view.automationCards['m1:call1']);
   });
 });

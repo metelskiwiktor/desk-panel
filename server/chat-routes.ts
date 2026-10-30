@@ -196,7 +196,10 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_automation_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
         : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
       if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
-      if (input.decision === 'reject') return json(res, 200, { decision: 'rejected', at: Date.now() }), true;
+      if (input.decision === 'reject') {
+        const outcome = { decision: 'rejected' as const, at: Date.now() };
+        return json(res, 200, cockpit ? await cockpit.automation(id, input, async () => outcome) : outcome), true;
+      }
       if (cardRefusal('automation', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej utworzyć. Poproś Wektora o nową.');
       let plan;
       try { plan = automationPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
@@ -205,7 +208,11 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         plan = { ...plan, actions: input.actions.filter(a => allowed.has(a.kind)) };
         if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
       }
-      return json(res, 200, { decision: 'created', at: Date.now(), automation: await automations.createFromPlan(id, plan) }), true;
+      const create = async () => {
+        const automation = await automations.createFromPlan(id, plan);
+        return { decision: 'created' as const, at: Date.now(), automationId: automation.id, name: automation.name };
+      };
+      return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;

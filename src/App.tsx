@@ -61,6 +61,7 @@ import { PulpitMenu } from './PulpitMenu';
 import { usePulpits } from './pulpits';
 import './chat.css';
 import { useChatPresentation } from './useChatPresentation';
+import { PANEL_NAVIGATE } from './panel-nav';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
@@ -122,6 +123,14 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     setDetail(null);
     setPage(target);
   };
+  useEffect(() => {
+    const jump = (event: Event) => {
+      const target = (event as CustomEvent<string>).detail;
+      if (target in pageNames) { setDetail(null); setPage(target as Page); }
+    };
+    window.addEventListener(PANEL_NAVIGATE, jump);
+    return () => window.removeEventListener(PANEL_NAVIGATE, jump);
+  }, []);
   const configure = (next: Layout) => {
     setLayout(next);
     setStorageError(!saveLayout(next));

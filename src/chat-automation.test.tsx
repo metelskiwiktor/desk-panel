@@ -27,4 +27,16 @@ describe('an automation turn', () => {
     expect(automationLabel(automation)).toBe('Automatyka · Cezar');
     expect(automationPrompt('Task Cezara: x', automation)).toBe('[Automatyka · Cezar] task Cezara zakończony\nTask Cezara: x');
   });
+
+  it('keeps the automation card decision from the cockpit, so a reload shows what was created', () => {
+    const plan = { name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: true };
+    const message: ChatMessage = {
+      id: 'm1', role: 'agent', at: 1, status: 'done',
+      parts: [{ type: 'tool', id: 'm1:call1', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify(plan), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }],
+    };
+    const outcome = { decision: 'created' as const, at: 2, automationId: 'a-111111111111', name: 'Ceny' };
+    const cockpit = cockpitMessage(message, {}, false, {}, { 'm1:call1': outcome });
+    const part = cockpit.parts[0] as Extract<(typeof cockpit.parts)[number], { type: 'tool' }>;
+    expect(part.result).toEqual(outcome);
+  });
 });

@@ -10,7 +10,7 @@ import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CONTEXT, automationLabel, skillItem, type ChatAutomation, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
-import { clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
+import { CHAT_DRAFT_EVENT, clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
 import { MailListCard, SmartRuleCard } from './smart-cards';
@@ -217,6 +217,19 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
       aui.composer().setText(initialDraft.current);
     }
   }, [aui]);
+
+  // A draft put in from outside (e.g. „Zapytaj Wektora o te runy”) while this conversation is already open.
+  useEffect(() => {
+    const apply = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string | null; text: string }>).detail;
+      if (!detail || detail.id !== source.activeId) return;
+      initialDraft.current = detail.text;
+      hasRestored.current = true;
+      aui.composer().setText(detail.text);
+    };
+    window.addEventListener(CHAT_DRAFT_EVENT, apply);
+    return () => window.removeEventListener(CHAT_DRAFT_EVENT, apply);
+  }, [aui, source.activeId]);
 
   useEffect(() => {
     if (initialDraft.current && draft === '') return;
