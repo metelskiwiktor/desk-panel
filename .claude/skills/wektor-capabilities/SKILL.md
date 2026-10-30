@@ -1,6 +1,6 @@
 ---
 name: wektor-capabilities
-description: Use when the user wants Wektor (the in-panel Hermes chat agent) to be able to do or show something new, or wants his answers about the bank improved - building the tool/card/skill lines, running test conversations against him, judging his answers with the user.
+description: Use when the user wants Wektor (the in-panel Hermes chat agent) to be able to do or show something new, or wants his answers in an area (bank, Smart Actions, visits, calendar...) improved, or asks how well a real conversation of his went - building the tool/card/skill lines, running test conversations against him, judging his answers with the user.
 ---
 
 # Giving Wektor an ability
@@ -18,7 +18,7 @@ Moving between phases: `soft` = a criterion still forming; `expect` = a rule tha
 
 ## The loop
 
-0. **Know what exists first**: `git log --oneline -- server/panel-mcp.ts src/cockpit src/chat-contract.ts scripts/wektor-cases`, the section "Wektor i bank" and "Otwarte pomysly" in `docs/bank.md`, and the memory notes. This skill holds the method, not the state.
+0. **Know what exists first**: `git log --oneline -- server/panel-mcp.ts src/cockpit src/chat-contract.ts scripts/wektor-cases`, the area's guide in `PANEL_GUIDES` (`src/chat-contract.ts`) and its document (`docs/bank.md`, `docs/smart-actions.md`, `docs/znanylekarz.md`, `docs/calendar.md`...), and the memory notes. This skill holds the method, not the state.
 
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
 2. **Deliver in code** (below), with tests. Commit and push to main (user's standing rule), `just update` to deploy.
@@ -41,7 +41,7 @@ Moving between phases: `soft` = a criterion still forming; `expect` = a rule tha
 
 - General rules only. No name, amount, category or answer of a test case, no click instructions ("Ustawienia -> Scal"). A line that hands Wektor the test's answer makes the test worthless.
 - Examples are welcome but from **other** domains than the cases (fictional data), and the cases stay held out. Keep two or three cases in different topics.
-- Policy (e.g. "when to merge") is the user's, in his words, added when a real preference appears. Wektor may propose a skill update when he hears one ("Warto dopisać do skilla Bank: ...").
+- Policy (e.g. "when to merge") is the user's, in his words, added when a real preference appears. When it says what the panel shows or allows ("Smart Actions only what can be done"), enforce it in code as well (`alertsOf` drops a mail without a link) and say it in the guide: then Wektor cannot get it wrong. Wektor may propose a skill update when he hears one ("Warto dopisać do skilla Bank: ...").
 - The consent card is **not proactive**: on a request for advice he first suggests the change in words and asks whether to show the card; the card comes after the user agrees, or at once when the user explicitly asks for a concrete change. Not every bank conversation means the user wants a change.
 - What the user judged good: verdict first with a reason from the numbers, <= 6 sentences without lists, says since when marks exist and how much is unmarked, "trudno ocenic" instead of a forecast when the sample is small, names of services allowed but no table of rows, proposes only steps his tools can do, no `execute_code`, ends with one concrete next step, never says he changed something.
 
@@ -61,7 +61,7 @@ An **agent harness** is everything around the model except its reasoning: the lo
 | Observability | `~/.desk-panel/chat-logs`, the card's own preview |
 | Evaluation | `scripts/wektor-test.mjs` and the cases, judged with the user |
 
-Failures we fixed in the harness, not in a prompt: the tool's field name he kept guessing (`view`), a limit he read from the wrong tool (42 days), sums he could not see (coverage line in the card summary), a card he could not show (unmarked spending), names of what a category holds (he guessed from the category name), card ids from the stream, a decided card that lost its content. Next time start from the same question: **what in the system made him do that?**
+Failures we fixed in the harness, not in a prompt: the tool's field name he kept guessing (`view`), a limit he read from the wrong tool (42 days), sums he could not see (coverage line in the card summary), a card he could not show (unmarked spending), names of what a category holds (he guessed from the category name), card ids from the stream, a decided card that lost its content, an error he could not read (a bare "502" from Gmail: three retries, a 58 s pause from Hermes, `sleep 70`; now every tool error names the cause and what to do, and the cause goes to the service log). Next time start from the same question: **what in the system made him do that?**
 
 ## The evaluation harness (`scripts/wektor-test.mjs`)
 
@@ -71,6 +71,7 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 - **What he sees is a natural conversation**: the harness sends plain text, never picks `@Bank`, so it tests what a user really gets (skill text arrives through the preamble).
 - **Output**: per run, the tool chain (`panel_bank -> panel_show`, `!` marks an error), model-call/token/seconds line (the counters are unreliable), failed `expect` checks (`x`), `soft` results (`+`/`-`), the proposals of `panel_bank_propose` (printed as `karta zgody: {...}`), and **his answer in full**. A JSON report goes to `output/wektor/<case>-<timestamp>.json` (git-ignored): all tools with inputs and outputs, useful to check what a tool really answered.
 - **Chats stay** in the panel, renamed `[test] <case> #<run> <time>`, so the user can read them and see the cards. `--delete` removes them (only when the user asks). The harness never clicks a card.
+- **The user's reply to a card goes into the same chat**: `--chat <id>` sends the case's turns into a kept conversation (one run), so his "tak, łap też…" meets the card it is about. A turn's `context: [{ kind, id, title, text }]` sends pointed dashboard elements; build it like the tile does, and point whenever the case is about one element (the user's rule), keeping one case without pointing to test that Wektor finds it himself.
 - **Exit code** 0 when every run passed its `expect` checks, 1 otherwise, 2 on bad usage.
 
 ### Writing a case (`scripts/wektor-cases/<name>.json`)
@@ -84,7 +85,7 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 ```
 
 - Tool names are matched without the `mcp__desk_panel__` prefix. Regexes are case-insensitive, matched on his whole text, written as JSON (double backslashes).
-- **`expect` is for rules that must hold** (a write tool must not be called; the card appears or does not; no "I changed it"). **`soft` is for judgement we are still forming** (mentions a related category, notes the data is short, does not list rows). A `soft` regex is crude: Polish inflection breaks it (`Gadzety` vs `Gadzetow`), so a `-` means "look", not "bad".
+- **`expect` is for rules that must hold** (a write tool must not be called; the card appears or does not; no "I changed it"). **`soft` is for judgement we are still forming** (mentions a related category, notes the data is short, does not list rows). A `soft` regex is crude: Polish inflection breaks it (`Gadzety` vs `Gadzetow`), so a `-` means "look", not "bad". What he did is better read from the tool's arguments in the report (`rule.id` the same = he changed the rule) than from his text.
 - **Every case that must not write needs the write/card tools in `notCalls`**; the advice case lists `panel_bank_propose` there (the card is not proactive).
 - **Multi-turn cases** model the user's replies ("Tak", "Okej, daj"); the second turn's `expect` is checked on the second answer only.
 - **New case = new topic.** Keep the cases held out from the examples in `BANK_GUIDE` (other categories, other wording); when a real conversation of the user's goes wrong, turn it into a case.
@@ -125,6 +126,14 @@ Failures we fixed in the harness, not in a prompt: the tool's field name he kept
 
 When a conversation looks wrong (a card misbehaves, an answer is odd, a turn hangs, a tool is "unknown"), **read `docs/diagnostyka-czatu-wektora.md` first and follow its procedure**: read-only, evidence over his claims, observations separate from conclusions, never click a card as part of a diagnosis. It lists where each fact lives (`hermes-chats`, `GET /api/chats/<id>`, `chat-logs/turns.jsonl` and `<id>.jsonl`, Hermes history and logs, `cockpit.json`, the harness reports in `output/wektor`). Quick pointers from our own work: grey card buttons or a 409 on "Wykonaj" = the card has no stable id (`pending:` or `call_…`); a "no such tool" after a deploy = Hermes was not restarted; a chat that ignores a new rule = it started before the preamble changed. After a diagnosis that taught something new, **update that document** (add it under "Na co patrzeć" or as a short example), as we did on 2026-10-29.
 
+## Judging a real conversation of the user's ("oceń jego efektywność")
+
+Not a diagnosis of one failure: a review of how a turn went. Read it with the procedure above, then report:
+per turn the tools, seconds and tokens; errors and loops; calls that added nothing; his claims checked against the data;
+whether he followed the area's guide; and where the time went (e.g. 75 of 124 s on one error). Look for the cause of a
+loss in the panel (an opaque error, a limit, a field he guesses) before touching his guide. Propose fixes; change nothing
+before the user agrees.
+
 ## Lessons from the bulk-marking card (2026-10-29)
 
 - **Start from the model, not the widget.** The first card grouped by "the mark the panel suggests" and the user was misled. What worked: separate **who it is** (identity: only what the bank shows: shop text, account, phone, name) from **what it was for the user** (the mark), and make a *template* = a mark taken from the user's real earlier marks, scoped to a recipient (or, for payments the bank does not name, to the whole pool). A weak signal (an exact amount) may be a visible *hint*, never a grouping, a default tick or an identity; amounts change (tip, tax).
@@ -150,12 +159,12 @@ When a conversation looks wrong (a card misbehaves, an answer is odd, a turn han
 
 ## Gotchas
 
-- Windows: long heredocs in the shell break on quotes. Write a script file to the scratchpad with the Write tool and run it; avoid `\s` in non-raw Python strings (use the Edit tool for TS regexes).
+- Windows: long heredocs in the shell break on quotes, and even short ones mangle escapes (`\b` became a backspace byte, `'\n'` a real line break inside a TS string). Write a script file to the scratchpad with the Write tool and run it; avoid `\s` in non-raw Python strings (use the Edit tool for TS regexes). Polish characters in `curl` from bash reach the panel broken: call the API with `node` and `fetch`.
 - Files may be CRLF; edit with a helper that keeps the file's line endings.
 - Icon keys are `BANK_ICONS` (`heart`, not `heartPulse`). `ICONS[key]` can be undefined: guard.
 - Calendar source reads only today + 42 days ahead (`CALENDAR_DAYS`); it cannot see past visits. A `panel_calendar_search` (past range, by keyword) is the open idea.
 - The built-in browser pane: chat button via `find` + `ref` click only with the viewport set to 1280x800; reset with `preset: desktop` afterwards. Never click "Wykonaj" in a real chat.
-- **Cards in kept test chats are live**: "Wykonaj" there changes the user's real data. Say so when reporting. To test the answer path without changing data, POST `reject` (as the page would, with an `Origin` header).
+- **Cards in kept test chats are live**: "Wykonaj" there changes the user's real data (bank marks, Smart Actions rules, calendar). Say so when reporting. To test the answer path without changing data, POST `reject` (as the page would, with an `Origin` header).
 - Logs for diagnosis: `~/.desk-panel/chat-logs` (see its README); `turns.jsonl` first.
 
 ## Cases
