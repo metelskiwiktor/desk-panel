@@ -3,6 +3,7 @@ import { ctx } from './chat-context';
 import { SizeGrip } from './SizeGrip';
 import { MonthGrid, WeekChips, WeekStrip } from './WeekStrip';
 import type { WeekDay } from './week';
+import { dayText } from './week';
 import { BOTTOM_SIZES, bottomHeights, type BottomSize } from './zones';
 
 const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'];
@@ -26,9 +27,11 @@ export function DaysZone({ week, month, size, known, selected, select, open, cyc
   open: (d: Detail) => void; cycle: () => void; resize: (size: BottomSize) => void; preview: (size: BottomSize | null) => void; showCalendar: () => void;
 }) {
   const zone = { known, selected, select, open };
-  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni" {...ctx('tile', 'days', size === 'month' ? monthTitle(month) : 'Najbliższe dni')}>
+  const title = size === 'month' ? monthTitle(month) : 'Najbliższe dni';
+  const days = size === 'month' ? month : week;
+  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni" {...ctx('tile', 'days', title, days.map(dayText).join('\n'))}>
     <div className="p3-days-head">
-      <h2 className="p2-eyebrow">{size === 'month' ? monthTitle(month) : 'Najbliższe dni'}</h2>
+      <h2 className="p2-eyebrow">{title}</h2>
       <button className="p3-cal" aria-label="Otwórz kalendarz" onClick={showCalendar}>Kalendarz</button>
     </div>
     {size === 'short' && <WeekChips days={week} {...zone} />}

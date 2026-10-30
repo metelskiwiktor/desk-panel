@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch } from './test-fixtures';
 import { clearChatDraft } from './chat-draft';
+import { MAX_CONTEXT_TEXT } from './chat-context';
 
 // The chat window is a lazy chunk of App: loaded once here, so opening it in a test does not wait for its first transform.
 beforeAll(() => import('./ChatWindow'), 60_000);
@@ -158,7 +159,10 @@ describe('the chat window', () => {
 });
 
 describe('pointing at the panel', () => {
-  it('picks the whole zone of days, and a day on its own without selecting it', async () => {
+  const tileText = () => document.querySelector<HTMLElement>('.chat-chip.tile')!.getAttribute('title')!;
+  const dayBlocks = (text: string) => text.split(/(?=^Dzień: )/m).filter(block => block.startsWith('Dzień: ')).map(block => block.replace(/\n+$/, ''));
+
+  it('picks the whole zone of days with what is planned in it, and a day on its own without selecting it', async () => {
     const user = userEvent.setup();
     render(<App />);
     await openChat(user);
@@ -166,6 +170,18 @@ describe('pointing at the panel', () => {
     const zone = screen.getByRole('region', { name: 'Najbliższe dni' });
     await user.click(within(zone).getByRole('heading', { name: 'Najbliższe dni' }));
     expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Najbliższe dni' })).toBeTruthy();
+    const told = tileText();
+    const blocks = dayBlocks(told);
+    expect(blocks).toHaveLength(7);
+    expect(blocks[0]).toBe([
+      'Dzień: 2026-10-14 (Śr 14, dziś)',
+      '- Trening: Długa jazda, 1 h 30',
+      '- Planowanie Tabnote, 12:12',
+      '- Przegląd interfejsu, 13:30',
+      '- Czas na pracę własną, 15:00',
+    ].join('\n'));
+    expect(blocks.find(block => block.startsWith('Dzień: 2026-10-15'))).toContain('- Trening: Baza, 1 h 13');
+    expect(blocks.find(block => block.startsWith('Dzień: 2026-10-17'))!.trim()).toBe('Dzień: 2026-10-17 (Sob 17)'); // a free day is still told
     const days = within(zone).getAllByRole('button', { name: /^Pokaż dzień:/ });
     const dayTitle = days[1].closest<HTMLElement>('[data-ctx-title]')?.dataset.ctxTitle
       ?? `Dzień: ${days[1].getAttribute('aria-label')!.replace('Pokaż dzień: ', '').replace(/, \d+ pozycj.*$/, '')}`;
@@ -173,6 +189,23 @@ describe('pointing at the panel', () => {
     expect(screen.getByRole('button', { name: `Usuń z kontekstu: ${dayTitle}` })).toBeTruthy();
     expect(days[1].getAttribute('aria-pressed')).toBe('false'); // pointing is not selecting
     expect(days[0].getAttribute('aria-pressed')).toBe('true');
+  });
+  it('tells the agent every day the month size shows', async () => {
+    localStorage.setItem('desk-panel.zones', JSON.stringify({ top: 'cmp', bottom: 'month' }));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Beztlenowe');
+    await user.click(screen.getByRole('button', { name: 'Otwórz czat z agentem' }));
+    await screen.findByRole('dialog', { name: 'Czat z agentem' });
+    await startPointing(user);
+    await user.click(within(screen.getByRole('region', { name: 'Najbliższe dni' })).getByRole('heading', { name: /Październik/ }));
+    const told = tileText();
+    const blocks = dayBlocks(told);
+    expect(blocks).toHaveLength(35);
+    expect(blocks[0]).toBe('Dzień: 2026-10-12 (Pn 12)'); // the days of this week already gone are listed too
+    expect(told).toContain('Dzień: 2026-10-14 (Śr 14, dziś)');
+    expect(told).toContain('- Trening: Beztlenowe, 1 h');
+    expect(told.length).toBeLessThanOrEqual(MAX_CONTEXT_TEXT);
   });
   it('lets the menu of virtual desktops work, so tiles of any desktop can be pointed at', async () => {
     const user = userEvent.setup();
