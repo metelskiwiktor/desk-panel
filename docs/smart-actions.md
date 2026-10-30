@@ -37,3 +37,10 @@ konta z podpowiedzią oznaczenia i zadania Cezara czekające na użytkownika.
 - Wskazywanie: wiersz alertu (`smartAction`), reguła w oknie reguł (`smartRule`) i wiersz operacji w kafelku Konto (`bankOp`,
   z uciętymi numerami jak w kafelku).
 - Test reguły nie wymaga oznaczania maili jako nieprzeczytane: szuka w całej skrzynce.
+
+## Nowy rodzaj przycisku
+
+Przyciski umieją otworzyć link z maila i oznaczyć operację podpowiedzią. Karta reguły pokazuje przy każdym mailu z testu
+link, który dałby przycisk („→ domena”, klikalny), żeby użytkownik sprawdził go przed zapisem. Akcja, której nie da się
+zrobić linkiem, to praca w kodzie: Wektor mówi to wprost i proponuje zadanie na Cezarze (skill „Zaimplementuj zadanie”).
+Nowy rodzaj to pole w `smartButtonSchema` (kontrakt), jego wykonanie w kafelku i opis w przewodniku `smart`.

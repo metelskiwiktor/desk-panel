@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { Check, Mail, MailOpen, Minus, X, Zap } from 'lucide-react';
+import { Check, ExternalLink, Mail, MailOpen, Minus, X, Zap } from 'lucide-react';
 import { smartRulePlanSchema, type SmartMailRow, type SmartRule, type SmartRuleOutcome, type SmartRulePreview, type SmartTestRow } from '../smart-rules-contract';
 import { card, CardActions, head, refusedNote } from './cards';
 import { ConsentShell } from './consent-card';
@@ -24,7 +24,9 @@ const host = (url: string) => { try { return new URL(url).hostname; } catch { re
 function Verdict({ row }: { row: SmartTestRow }) {
   if (row.caught) return <span className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1">
     <span className={green}><Check size={11} aria-hidden="true" />{row.caughtNow === false ? 'zacznie łapać' : 'złapie'}</span>
-    {row.url && <span className={grey} title={row.url}>→ {host(row.url)}</span>}
+    {/* The very link the button would open for this mail: the user checks where it leads before saving the rule. */}
+    {row.url && <a href={row.url} target="_blank" rel="noopener noreferrer" className={`${grey} tw:no-underline tw:hover:bg-ck-cal/20 tw:hover:text-ck-text`}
+      title={`Otwiera link z tego maila: ${row.url}`} aria-label={`Sprawdź przycisk tego maila: ${row.url}`}>→ {host(row.url)}<ExternalLink size={10} aria-hidden="true" /></a>}
   </span>;
   if (row.caughtNow) return <span className={red}><X size={11} aria-hidden="true" />przestanie łapać</span>;
   return row.noLink ? <span className={amber} title={row.noLink}>pominie: brak linku</span> : <span className={grey}>pominie</span>;
@@ -188,7 +190,7 @@ export function SmartRuleCard({ toolCallId, args, result }: ToolCallMessagePartP
     footnote={open && ok ? <p className="tw:m-0 tw:flex tw:flex-wrap tw:items-center tw:gap-x-3 tw:gap-y-1 tw:text-xs tw:text-ck-muted">
       <span className={green}>+ słowo</span>dochodzi
       <span className={`${chip} tw:border tw:border-dashed tw:border-ck-red/50 tw:line-through`}>słowo</span>znika
-      <span className="tw:basis-full">Reguła działa na nieprzeczytanych mailach i daje alert tylko, gdy przycisk ma link z maila na swojej domenie. Nic nie idzie do Gmaila.</span>
+      <span className="tw:basis-full">Reguła działa na nieprzeczytanych mailach i daje alert tylko, gdy przycisk ma link z maila na swojej domenie. Nic nie idzie do Gmaila. „→ domena” przy mailu otwiera link, który dałby przycisk: link potwierdzenia może przy tym wykonać akcję.</span>
     </p> : undefined}
     outcome={decided?.decision === 'applied'
       ? <p className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:text-ck-green" role="status"><Check size={15} aria-hidden="true" />{preview?.kind === 'remove' ? 'Reguła usunięta.' : 'Reguła zapisana; kafelek Smart Actions pokaże jej alerty.'}</p>
