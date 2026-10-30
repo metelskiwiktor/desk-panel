@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   checkState,
   createGitHubClient,
+  createPrReader,
   deriveReviewStatus,
   parsePrFromGhList,
   prFromGh,
@@ -296,5 +297,36 @@ describe('createGitHubClient', () => {
     expect(source.status).toBe('offline');
     expect(source.pullRequests).toEqual([]);
     expect(source.totalCount).toBe(0);
+  });
+});
+
+describe('createPrReader', () => {
+  it('shares one cached read of a PR and asks gh again only after its TTL', async () => {
+    let clock = 0;
+    const gh: GhRunner = vi.fn(async () => JSON.stringify({ number: 41, title: 'Paski', state: 'OPEN', headRefName: 'cez/x', statusCheckRollup: [{ name: 'test', status: 'IN_PROGRESS' }] }));
+    const reader = createPrReader({ gh, now: () => clock });
+    const url = 'https://github.com/metelskiwiktor/desk-panel/pull/41';
+    const first = await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(1);
+    clock = 29_000;
+    await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(1);
+    clock = 31_000;
+    await reader.read(url);
+    expect(gh).toHaveBeenCalledTimes(2);
+    expect(first).toMatchObject({ number: 41, state: 'OPEN', checks: [{ name: 'test', state: 'running' }] });
+  });
+
+  it('joins simultaneous reads of the same PR into one gh call', async () => {
+    let release: (value: string) => void = () => {};
+    const gh: GhRunner = vi.fn(() => new Promise<string>(resolve => { release = resolve; }));
+    const reader = createPrReader({ gh, now: () => 0 });
+    const url = 'https://github.com/metelskiwiktor/desk-panel/pull/41';
+    const first = reader.read(url);
+    const second = reader.read(url);
+    release(JSON.stringify({ number: 41, title: 'Paski', state: 'OPEN', headRefName: 'cez/x', statusCheckRollup: [] }));
+    const [one, two] = await Promise.all([first, second]);
+    expect(gh).toHaveBeenCalledTimes(1);
+    expect(one).toBe(two);
   });
 });

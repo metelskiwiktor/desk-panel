@@ -89,6 +89,7 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       if (!service.sendAutomation) throw new ChatError(503, `Silnik ${owner.get(id) ?? 'rozmowy'} nie przyjmuje tur automatyki.`);
       return service.sendAutomation(id, input);
     },
+    activeTurns() { return services.flatMap(([, service]) => service.activeTurns?.() ?? []); },
     async stop(id) { return (await find(id)).stop(id); },
     async rename(id, title) { return (await find(id)).rename(id, title); },
     async remove(id) { const service = await find(id); await service.remove(id); owner.delete(id); },

@@ -15,6 +15,7 @@ import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } fr
 import type { GitHubPrSource } from '../src/types';
 import type { OpenRouterUsage } from '../src/openrouter-contract';
 import type { AppointmentService } from './appointments';
+import type { ObserverList } from '../src/observers-contract';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
@@ -66,6 +67,10 @@ export interface PanelSources {
   warmup?():Promise<WarmupStatus>;
   saveWarmup?(provider:WarmupProvider,value:WarmupSettings):Promise<WarmupStatus>;
   runWarmup?(provider:WarmupProvider):Promise<WarmupRunResult>;
+  /** The chat's active one-shot observers (`server/observers.ts`); readable even when automations are off. */
+  observers?(): Promise<ObserverList>;
+  /** Cancels one observer, so it never fires; answers with the active list. */
+  observerCancel?(id: string): Promise<ObserverList>;
   /** Starts Google sign-in for one configured account and resolves to the authorization URL. */
   googleConnect(email: string): Promise<string>;
   googleCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;
@@ -97,6 +102,7 @@ export function jsonRoutes(sources: PanelSources): Record<string, (url: URL) => 
     '/api/todos': () => sources.todos(),
     '/api/bank': () => sources.bank(),
     '/api/bank/labels': () => sources.bankLabels(),
+    '/api/observers': () => sources.observers ? sources.observers() : Promise.resolve({ observers: [] }),
     '/api/github/prs': () => sources.githubPr ? sources.githubPr() : Promise.resolve({ pullRequests: [] }),
     '/api/openrouter': () => { if (!sources.openrouterUsage) throw new SourceError(503); return sources.openrouterUsage(); },
     '/api/usage-breakdown': () => { if (!sources.usageBreakdown) throw new SourceError(503); return sources.usageBreakdown(); },

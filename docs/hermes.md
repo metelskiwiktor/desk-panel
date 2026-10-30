@@ -125,11 +125,12 @@ odczytana z historii sesji ma tekst, a nie flagę błędu. Po co: model flash wy
 wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_cezar_watch` | `id` (`projekt/uuid`): stan taska jako JSON (status, kroki, postęp, tokeny, PR); karta na żywo, kokpit obserwuje ten task |
 | `panel_cockpit_clear` | bez argumentów: kokpit rozmowy przestaje obserwować task |
+| `panel_observe` | bez karty, akcje `create`/`list`/`cancel`: jednorazowy obserwator rozmowy — kind `cezar` (target `projekt/uuid`), `pr` (pełny URL PR) albo `time` (ISO 8601 lub „za 10 minut”, „jutro o 9”); instruction trafia dosłownie do jednej tury automatyki; rozmowę bierze z trwającej tury ([czat.md](czat.md)) |
 
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 
-Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę).
+Nie ma narzędzi do poczty, oznaczeń banku, zgód bankowych ani zlecania tasków Cezara (zleca okno czatu, gdy użytkownik kliknie kartę). `panel_observe` nie zapisuje danych użytkownika: tylko lokalny obserwator, który potem wraca jedną turą automatyki.
 Okno rozpoznaje karty po nazwie narzędzia z przedrostkiem serwera (`mcp__desk_panel__panel_…` albo `mcp_desk-panel_panel_…`). Dostęp: tylko adresy loopback (nazwa Tailscale
 dostaje `403`), żądanie z nagłówkiem `Origin` (przeglądarka) dostaje `403`, a bez tokenu `Authorization: Bearer <~/.desk-panel/mcp-token>`
 dostaje `401`. Token tworzy panel przy pierwszym starcie (albo `DESK_MCP_TOKEN`) i `just hermes-setup`; leży poza Gitem.

@@ -1,5 +1,33 @@
 {
-  "description": "Warmup preferences and dynamic Gemini/Claude-GPT/frontier visibility.",
+  "description": "Warmup preferences, dynamic Gemini/Claude-GPT/frontier visibility and the chat agent's one-shot observers.",
+  "observers": {
+    "observers": [
+      {
+        "id": "o-0a1b2c3d4e5f",
+        "kind": "cezar",
+        "target": "desk-panel/6a939ea4-19cf-4ce8-a4b5-a773ad245933",
+        "instruction": "Sprawdź wynik zadania i zaproponuj jeden następny krok.",
+        "createdAt": "now-20m",
+        "expiresAt": "now+23h40m"
+      },
+      {
+        "id": "o-1b2c3d4e5f60",
+        "kind": "pr",
+        "target": "https://github.com/metelskiwiktor/desk-panel/pull/41",
+        "instruction": "Powiedz, czy PR przeszedł CI i czy można go scalić.",
+        "createdAt": "now-2h",
+        "expiresAt": "now+22h"
+      },
+      {
+        "id": "o-2c3d4e5f6071",
+        "kind": "time",
+        "target": "2026-10-30T15:00:00+01:00",
+        "instruction": "Przypomnij mi o spotkaniu o 15:00 i sprawdź, co mam w kalendarzu.",
+        "createdAt": "now-5m",
+        "expiresAt": "now+55m"
+      }
+    ]
+  },
   "cezar": {
     "observedAt": "now",
     "partial": false,

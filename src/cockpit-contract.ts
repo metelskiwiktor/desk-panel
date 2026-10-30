@@ -160,6 +160,11 @@ export const COCKPIT_TOOLS = {
     effect: 'użytkownik widzi kartę z regułą przed i po oraz testem na jego poczcie (które maile złapie, których nie, dokąd prowadzi przycisk) i przyciskami „Wykonaj” i „Odrzuć”; panel zapisuje regułę dopiero po jego kliknięciu. Nie pisz, że zmieniłeś. Zakończ odpowiedź jednym zdaniem.',
     card: 'smartRule',
   },
+  panel_observe: {
+    purpose: 'Bez karty: jednorazowy obserwator tej rozmowy — task Cezara (koniec albo czekanie na odpowiedź), PR na GitHubie (stan, CI, scalenie) albo moment w czasie. Akcje: create (kind, target, instruction), list, cancel (id).',
+    when: 'gdy użytkownik prosi, żebyś sam coś zauważył i wrócił do tego w tej rozmowie („daj znać, gdy task skończy”, „obserwuj ten PR”, „przypomnij za 10 minut”). Nie do zwykłego pytania o stan teraz (panel_cezar_watch) i nie jako zapis danych użytkownika.',
+    effect: 'obserwator zapisuje się w panelu (Ustawienia → Obserwatory); po zadziałaniu panel wysyła do tej rozmowy dokładnie jedną turę automatyki z poleceniem zapisanym przy tworzeniu, a obserwator znika. Limit aktywnych i wygasanie pilnuje panel. Karty nie ma: to zapis obserwatora, nie zapis danych użytkownika. Ty niczego poza tym nie zapisujesz, nie zlecasz i nie zatwierdzasz.',
+  },
   panel_cockpit_clear: {
     purpose: 'Kokpit tej rozmowy przestaje obserwować task Cezara.',
     when: 'gdy użytkownik prosi, by przestać obserwować task, albo wyraźnie zmienia temat na coś niezwiązanego z obserwowanym taskiem.',

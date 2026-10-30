@@ -12,7 +12,7 @@ import { BankPlanError, planPreview } from './bank-plan';
 import { assignMarks, assignPreview } from './bank-assign';
 import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
 import { SourceError, type PanelSources } from './sources';
-import { PR_URL, type GhRunner, runGh, checkState, prFromGh } from './github';
+import { PR_URL, type GhRunner, type PrReader, runGh, checkState, prFromGh, createPrReader } from './github';
 
 export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
 
@@ -105,9 +105,6 @@ export function cezarTaskView(id: string, raw: Record<string, any>, cezarUrl: st
 
 // ── The pull request and its CI checks, from the GitHub CLI (unified in server/github.ts) ──
 
-/** Kept as long as a check runs, longer once all are settled: GitHub is asked gently. */
-const PR_TTL_MS = 20_000, PR_SETTLED_TTL_MS = 5 * 60_000;
-
 export interface DispatchedTask { chatId: string; taskId: string; at: number; todoId?: string }
 
 export interface Cockpit {
@@ -133,8 +130,8 @@ export interface Cockpit {
   smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
 }
 
-export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now }: {
-  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number;
+export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader }: {
+  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number; reader?: PrReader;
 }): Cockpit {
   const load = (): Store => {
     try { if (existsSync(file)) return storeSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* a broken file starts over */ }
@@ -194,23 +191,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     try { return await operation; } finally { pendingAssigns.delete(key); }
   }
 
-  const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
-  async function prOf(url: string, fallback: { title: string; branch?: string }): Promise<CockpitPrView> {
-    const known = prs.get(url);
-    if (known && now() - known.at < (known.settled ? PR_SETTLED_TTL_MS : PR_TTL_MS)) return known.value;
-    try {
-      const value = prFromGh(await gh(['pr', 'view', url, '--json', 'number,title,state,headRefName,statusCheckRollup']), url);
-      prs.set(url, { at: now(), value, settled: value.state !== 'OPEN' || value.checks.every(c => c.state === 'pass' || c.state === 'fail') });
-      return value;
-    } catch {
-      const value: CockpitPrView = {
-        number: Number(url.split('/').at(-1)), title: fallback.title, branch: fallback.branch ?? '', url, state: known?.value.state ?? 'UNKNOWN',
-        checks: known?.value.checks ?? [], checksError: 'Checków CI nie udało się odczytać (GitHub CLI: gh).',
-      };
-      prs.set(url, { at: now(), value, settled: false });
-      return value;
-    }
-  }
+  // The same cached read the PR observers use (`server/github.ts`): GitHub is asked gently, never once per card.
+  const reader = injectedReader ?? createPrReader({ gh, now });
+  const prOf = (url: string, fallback: { title: string; branch?: string }) => reader.read(url, fallback);
 
   return {
     async view(chatId, items, decisions) {

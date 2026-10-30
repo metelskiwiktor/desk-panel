@@ -207,7 +207,7 @@ export const chatApprovalSchema = z.object({
 export type ChatApproval = z.infer<typeof chatApprovalSchema>;
 
 /** A turn the panel starts itself: never the user's message, always labelled as such in the conversation. */
-export const automationSources = ['cezar'] as const;
+export const automationSources = ['cezar', 'observer'] as const;
 export type AutomationSource = typeof automationSources[number];
 export interface ChatAutomation {
   source: AutomationSource;
@@ -220,8 +220,9 @@ export interface ChatAutomationInput {
   automation: ChatAutomation;
   context?: ContextItem[];
 }
+const AUTOMATION_LABELS: Record<AutomationSource, string> = { cezar: 'Automatyka · Cezar', observer: 'Automatyka · Obserwator' };
 export function automationLabel(automation: ChatAutomation): string {
-  return automation.source === 'cezar' ? 'Automatyka · Cezar' : `Automatyka · ${automation.source}`;
+  return AUTOMATION_LABELS[automation.source] ?? `Automatyka · ${automation.source}`;
 }
 /** What the model reads: the same text, behind a prefix that says the panel wrote it, not the user. */
 export function automationPrompt(text: string, automation: ChatAutomation): string {

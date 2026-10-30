@@ -24,6 +24,8 @@ import { appointmentQuerySchema, calendarProposalSchema } from '../src/appointme
 import { AppointmentError } from './znanylekarz';
 import { SMART_CATEGORIES, SMART_LIMITS, SMART_PRIORITIES, SMART_SUGGESTION, smartRulePlanSchema, smartRuleSchema, type SmartRule, type SmartRulePreview } from '../src/smart-rules-contract';
 import { linksOf, mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } from './smart-rules';
+import { ObserverError, type Observers } from './observers';
+import { observerKinds, OBSERVER_KIND_LABELS, MAX_ACTIVE_OBSERVERS } from '../src/observers-contract';
 
 /**
  * The panel's data as MCP tools for Hermes (`POST /api/mcp`, Streamable HTTP, JSON answers only). Each tool is a narrow
@@ -44,7 +46,7 @@ interface Tool {
   input: z.ZodType<Record<string, unknown>>;
   /** JSON Schema of the arguments as MCP lists it. */
   schema: Record<string, unknown>;
-  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string }): Promise<string>;
+  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; observers?: Observers; activeChats?: () => string[] }): Promise<string>;
 }
 
 const view = (name: string, params: (args: Record<string, any>) => Record<string, string | undefined>) =>
@@ -514,6 +516,50 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     // What it does follows from the call itself: the cockpit reads the conversation (src/cockpit-contract.ts).
     async run() { return 'Kokpit tej rozmowy nie obserwuje już taska.'; },
   },
+  panel_observe: {
+    description: cockpitToolDescription('panel_observe'),
+    input: z.object({
+      action: z.enum(['create', 'list', 'cancel']).default('create'),
+      kind: z.enum(observerKinds).optional(),
+      target: text(1000).optional(),
+      instruction: text(2000).optional(),
+      id: z.string().trim().regex(/^o-[0-9a-f]{12}$/).optional(),
+    }).strict(),
+    schema: schema({
+      action: { type: 'string', enum: ['create', 'list', 'cancel'], description: 'create (domyślnie), list albo cancel' },
+      kind: { type: 'string', enum: [...observerKinds], description: 'cezar: task Cezara (koniec albo czekanie na odpowiedź); pr: PR na GitHubie; time: moment w czasie' },
+      target: { type: 'string', description: 'cezar: id projekt/uuid; pr: pełny adres https://github.com/owner/repo/pull/n; time: ISO 8601 albo „za 10 minut”, „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”' },
+      instruction: { type: 'string', description: 'Polecenie, które trafi do rozmowy dosłownie, gdy obserwator zadziała' },
+      id: { type: 'string', description: 'Id obserwatora (o-…) do anulowania' },
+    }),
+    async run(args, ctx) {
+      if (!ctx.observers) throw new AgentViewError(503, 'Obserwatory nie są dostępne.');
+      const line = (o: { id: string; kind: keyof typeof OBSERVER_KIND_LABELS; target: string; createdAt: number; expiresAt: number }) =>
+        `${o.id} · ${OBSERVER_KIND_LABELS[o.kind]} · ${o.target} · utworzono ${localTime(o.createdAt)} · wygasa ${localTime(o.expiresAt)}`;
+      try {
+        if (args.action === 'list') {
+          const rows = await ctx.observers.list();
+          return rows.length ? [`Aktywne obserwatory (${rows.length} z ${MAX_ACTIVE_OBSERVERS}):`, ...rows.map(line)].join('\n') : 'Brak aktywnych obserwatorów.';
+        }
+        if (args.action === 'cancel') {
+          if (!args.id) throw new AgentViewError(400, 'cancel wymaga id obserwatora (o-…, z listy).');
+          const rows = await ctx.observers.cancel(args.id);
+          return `Obserwator ${args.id} anulowany; aktywnych: ${rows.length} z ${MAX_ACTIVE_OBSERVERS}.`;
+        }
+        if (!args.kind || !args.target || !args.instruction) throw new AgentViewError(400, 'create wymaga kind, target i instruction.');
+        // The conversation is the one whose turn is running now: the tool never takes a chat id from the model.
+        const chats = ctx.activeChats?.() ?? [];
+        if (chats.length !== 1) throw new AgentViewError(409, chats.length
+          ? 'Obserwator powstaje w rozmowie, w której trwa tura, a teraz trwa ich kilka. Poczekaj, aż zostanie jedna.'
+          : 'Obserwator powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa. Wywołaj to narzędzie w odpowiedzi na wiadomość użytkownika.');
+        const created = await ctx.observers.create({ chatId: chats[0], kind: args.kind, target: args.target, instruction: args.instruction });
+        return `Obserwator ${created.id} utworzony (${OBSERVER_KIND_LABELS[created.kind]}: ${created.target}); wygasa ${localTime(created.expiresAt)}. Gdy zadziała, panel wyśle do tej rozmowy jedną turę automatyki z Twoim poleceniem. Nic więcej nie zapisano i nie powstała żadna karta.`;
+      } catch (error) {
+        if (error instanceof ObserverError) throw new AgentViewError(error.status, error.message);
+        throw error;
+      }
+    },
+  },
   panel_cezar_action: {
     description: 'Na prośbę użytkownika: archive, unarchive, read albo unread jednego zakończonego zadania Cezara (id projekt/uuid z panel_cezar).',
     input: z.object({ id: text(200), action: z.enum(['archive', 'unarchive', 'read', 'unread']) }).strict(),
@@ -542,7 +588,7 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string }): Promise<unknown | null> {
+export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; observers?: Observers; activeChats?: () => string[] }): Promise<unknown | null> {
   if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return rpcError(message?.id, -32600, 'Invalid Request');
   const notification = message.id === undefined;
   if (notification) return null;
@@ -554,7 +600,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_observe, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };
@@ -567,10 +613,10 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       const args = tool.input.safeParse(params.arguments ?? {});
       if (!args.success) return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: `Niepoprawne argumenty: ${args.error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}` }] } };
       try {
-        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/' });
+        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', observers: ctx.observers, activeChats: ctx.activeChats });
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: out }] } };
       } catch (error) {
-        const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError ? error.message
+        const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError || error instanceof ObserverError ? error.message
           : error instanceof z.ZodError ? `Niepoprawne argumenty: ${error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}`
           : error instanceof SourceError ? sourceFailure(error) : 'Nie udało się wykonać narzędzia.';
         return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: reason }] } };
@@ -586,7 +632,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; observers?: Observers; activeChats?: () => string[] }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -598,7 +644,7 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
-  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl };
+  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, observers: ctx.observers, activeChats: ctx.activeChats };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);
   if (!answers.length) { res.writeHead(202).end(); return; }

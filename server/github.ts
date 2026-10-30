@@ -37,6 +37,45 @@ export function prFromGh(json: string, url: string): CockpitPrView {
   };
 }
 
+/** Kept as long as a check runs, longer once all are settled: GitHub is asked gently (30–90 s, as the tile). */
+const PR_TTL_MS = 30_000, PR_SETTLED_TTL_MS = 90_000;
+
+/** One cached read of a single PR: the cockpit beside the chat and the PR observers share it, so neither calls `gh` per read. */
+export interface PrReader {
+  /** `fallback` fills the card when GitHub cannot be read (the Cezar task's own title and branch). */
+  read(url: string, fallback?: { title?: string; branch?: string }): Promise<CockpitPrView>;
+}
+
+export function createPrReader({ gh = runGh, now = Date.now }: { gh?: GhRunner; now?: () => number } = {}): PrReader {
+  const prs = new Map<string, { at: number; value: CockpitPrView; settled: boolean }>();
+  const inflight = new Map<string, Promise<CockpitPrView>>();
+  return {
+    async read(url, fallback = {}) {
+      const known = prs.get(url);
+      if (known && now() - known.at < (known.settled ? PR_SETTLED_TTL_MS : PR_TTL_MS)) return known.value;
+      // A read already running answers this one too: the cockpit and the observers never ask gh twice for one PR.
+      const running = inflight.get(url);
+      if (running) return running;
+      const request = (async (): Promise<CockpitPrView> => {
+        try {
+          const value = prFromGh(await gh(['pr', 'view', url, '--json', 'number,title,state,headRefName,statusCheckRollup']), url);
+          prs.set(url, { at: now(), value, settled: value.state !== 'OPEN' || value.checks.every(c => c.state === 'pass' || c.state === 'fail') });
+          return value;
+        } catch {
+          const value: CockpitPrView = {
+            number: Number(url.split('/').at(-1)), title: fallback.title ?? '', branch: fallback.branch ?? '', url, state: known?.value.state ?? 'UNKNOWN',
+            checks: known?.value.checks ?? [], checksError: 'Checków CI nie udało się odczytać (GitHub CLI: gh).',
+          };
+          prs.set(url, { at: now(), value, settled: false });
+          return value;
+        }
+      })();
+      inflight.set(url, request);
+      try { return await request; } finally { inflight.delete(url); }
+    },
+  };
+}
+
 export const DEFAULT_GITHUB_REPOS: readonly string[] = [
   'metelskiwiktor/desk-panel',
   'metelskiwiktor/cezar-adapter',

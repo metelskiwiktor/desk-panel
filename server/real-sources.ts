@@ -24,6 +24,7 @@ import { createGitHubClient } from './github';
 import { createOpenRouterClient } from './openrouter';
 import { SourceError, type PanelSources } from './sources';
 import type { CezarSnapshot, FinishedTask } from '../src/cezar-contract';
+import type { ObserverList } from '../src/observers-contract';
 
 /**
  * A failed read of Gmail for Wektor's tools: the cause goes to the service log (servy/logs/Desk-Panel/stderr.log, with the
@@ -36,7 +37,7 @@ function mailError(what: string, error: unknown): SourceError {
   return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
 }
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[]) => void | Promise<void> }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[]) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList> }): PanelSources {
   const { calendarId, env } = options;
   const dir = join(homedir(), '.desk-panel');
   const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
@@ -166,6 +167,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     bankLabels: () => bankLabels.read(),
     bankLabelAction: action => bankLabels.apply(action),
     bankLedger: () => bankLabels.ledger(),
+    observers: () => options.observers?.() ?? Promise.resolve({ observers: [] }),
+    observerCancel: id => options.observerCancel?.(id) ?? Promise.resolve({ observers: [] }),
     async bankConnect() {
       try { return await bank.begin(); }
       catch { throw new SourceError(409); }
