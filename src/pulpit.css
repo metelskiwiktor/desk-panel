@@ -602,6 +602,39 @@
 .todo-create { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 16px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); color: var(--p2-cal); }
 .todo-create svg { margin-left: 0; }
 .todo:not(.wide):not(.tall) { padding: 6px 8px 8px; }
+/* Workflow marks shrink to dots in narrow tiles. */
+.todo-status { flex: none; max-width: 125px; color: var(--p2-cal); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-status::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: currentColor; }
+.todo-status.przygotowanie { color: #e8bc70; }
+.todo-status.gotowe { color: var(--p2-train); }
+.todo-status.sprawdzenie { color: #c3a4f3; }
+.todo:not(.wide) .todo-status { width: 7px; }
+.todo:not(.wide) .todo-status span { display: none; }
+.todo-blocked { color: #edb36c; }
+.todo-blocked, .todo-abandoned { flex: none; }
+.todo-row.abandoned .todo-text { text-decoration: none; }
+.todo-abandoned { color: var(--p2-faint); }
+.todo-dlg-section { border-top: 1px solid var(--p2-line); padding-top: 10px; }
+.todo-dlg-section h3 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--p2-muted); }
+.todo-dlg-section button { min-height: 34px; padding: 5px 10px; border-radius: 8px; background: var(--p2-surface); color: var(--p2-text); font-size: 13px; }
+.todo-dlg-inline { display: flex; align-items: center; gap: 8px; }
+.todo-dlg-inline > input, .todo-dlg-inline > p { flex: 1; min-width: 0; }
+.todo-dlg-inline > button { flex: none; }
+.todo-dlg-inline p { margin: 0; overflow-wrap: anywhere; }
+.todo-links, .todo-history { margin: 0 0 8px; padding: 0; list-style: none; }
+.todo-links li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.todo-links li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; overflow-wrap: anywhere; }
+.todo-links a { color: var(--p2-cal); font-size: 13px; }
+.todo-links small, .todo-history small, .todo-dlg-muted { color: var(--p2-muted); font-size: 11px; }
+.todo-links li > div > button { padding-left: 0; background: transparent; color: var(--p2-cal); text-align: left; overflow-wrap: anywhere; }
+.todo-history { max-height: 170px; overflow-y: auto; }
+.todo-history li { padding: 5px 0; border-bottom: 1px solid var(--p2-line); }
+.todo-history p { margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.todo-dlg .todo-comment { height: 65px; min-height: 65px; margin: 6px 0; }
+.todo-dlg-muted { margin: 4px 0; }
+.todo-dlg > .todo-dlg-note:not(.bank-dlg-comment) { height: 80px; min-height: 60px; }
+.todo-dlg > input, .todo-dlg > select, .todo-dlg > textarea { flex-shrink: 0; }
+
 .todo-row.hot { border-radius: 8px; background: color-mix(in srgb, var(--p2-cal) 14%, transparent); }
 
 /* One task opened for editing: a dialog over the whole panel, the same at every tile size. */

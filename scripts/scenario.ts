@@ -185,8 +185,8 @@ if (!values.shot) {
                 await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
               }
               await page.waitForTimeout(400);
-            } else if (values.open?.startsWith('tile:')) {
-              const tileKind = values.open.slice('tile:'.length).trim();
+            } else if ((values.open?.startsWith('tile:') || values.open === 'todo-dialog')) {
+              const tileKind = values.open === 'todo-dialog' ? 'todo' : values.open!.slice('tile:'.length).trim();
               const tileId = tileKind === 'todo' ? 'todo#1' : tileKind;
               const rightTop = tileKind === 'mail' ? 'quota:Claude' : 'mail';
               const rightBottom = tileKind === 'cezar' ? 'quota:Codex' : 'cezar';
@@ -213,6 +213,10 @@ if (!values.shot) {
                 await page.reload();
                 await page.waitForTimeout(800);
               }
+              if (values.open === 'todo-dialog') {
+                await page.locator('.todo-title').first().click();
+                await page.getByRole('dialog', { name: 'Zadanie' }).waitFor();
+              }
             } else if (values.open === 'mail') {
               await page.locator('.p2-mrow').first().click();
               await page.waitForTimeout(300);
@@ -233,8 +237,14 @@ if (!values.shot) {
             if (values.file) mkdirSync(dirname(path), { recursive: true });
             const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
             await page.screenshot({ path, fullPage: true });
-            await hidden?.evaluate(node => (node as Element).remove());
             console.log(path);
+            if (values.open === 'todo-dialog') {
+              await page.getByRole('button', { name: 'Zapisz', exact: true }).scrollIntoViewIfNeeded();
+              const historyPath = shot(pageName, 'history');
+              await page.screenshot({ path: historyPath, fullPage: true });
+              console.log(historyPath);
+            }
+            await hidden?.evaluate(node => (node as Element).remove());
           }
         });
       } finally {

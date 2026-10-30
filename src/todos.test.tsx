@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
@@ -6,8 +6,11 @@ import { scenarioFetch, type ScenarioName } from './test-fixtures';
 import { useState } from 'react';
 import { TodoTile } from './TodoTile';
 import { WORKSPACE_KEY, configure, type Tile } from './tile-grid';
+import { FakeSource } from './chat.test-kit';
 import { useTodos } from './useTodos';
 
+// Preload the lazy chat bundle, as in chat-pointing.test.tsx, outside interaction timeouts.
+beforeAll(() => import('./ChatWindow'), 60_000);
 const now = new Date('2026-10-14T10:00:00Z').getTime();
 beforeEach(() => {
   localStorage.clear();
@@ -131,12 +134,26 @@ describe('the Zadania tile', () => {
     expect(within(first).queryByRole('img', { name: 'Dodał agent czatu' })).toBeNull();
   });
 
-  it('is named after its list, so two tiles can be told apart', async () => {
+  it('names tiles after their list and opens a linked conversation without a turn or extra Cezar reads', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('EventSource', FakeSource);
+    FakeSource.instances = [];
     arrange(todo(1, 0, 0, 2, 2, { list: A }), todo(2, 2, 0, 2, 2, { list: B }));
-    renderApp();
+    const { fetcher } = renderApp();
     await within(tileOf('todo#2')).findByText('Kupić żarówki do przedpokoju');
     expect(screen.getByRole('button', { name: 'Wyłącz kafelek: Zadania · Do poprawy - Chat Agy' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wyłącz kafelek: Zadania · Dom' })).toBeTruthy();
+    const reads = () => fetcher.mock.calls.filter(([url]) => String(url).includes('/api/cezar')).length;
+    const before = reads();
+    await user.click(within(tileOf('todo#1')).getByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    expect(within(dialog).getByRole('link', { name: 'Widok notatki gotowy do przeglądu' })).toBeTruthy();
+    expect(within(dialog).getByText('Do przeglądu')).toBeTruthy();
+    expect(reads()).toBe(before);
+    await user.click(within(dialog).getByRole('button', { name: 'Ustalenia' }));
+    await waitFor(() => expect(FakeSource.instances.some(s => s.url === '/api/chats/scenario-todo-chat/events')).toBe(true));
+    expect(screen.queryByRole('dialog', { name: 'Zadanie' })).toBeNull();
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
   it('adds a task with Enter (the user is the author), clears the field, and refuses an empty one', async () => {
@@ -186,7 +203,7 @@ describe('the Zadania tile', () => {
     await user.click(row);
     const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
     expect(dialog.parentElement!.parentElement).toBe(document.body); // not inside the tile
-    expect(within(dialog).getByRole('heading').textContent).toBe('Zadanie · Do poprawy - Chat Agy');
+    expect(within(dialog).getByRole('heading', { level: 2 }).textContent).toBe('Zadanie · Do poprawy - Chat Agy');
     const title = within(dialog).getByRole('textbox', { name: 'Tytuł' }) as HTMLInputElement;
     expect(document.activeElement).toBe(title);
     expect(title.value).toBe('Odpowiedź bez sformułowania „nie mam dostępu”');
@@ -211,6 +228,45 @@ describe('the Zadania tile', () => {
     expect(posts()).toEqual([{ action: 'updateTask', task: 't-a0000002', title: 'Krótszy tytuł', note: 'Jeszcze to.' }]);
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(titles(tile)).toContain('Krótszy tytuł'));
+  });
+
+  it('writes workflow actions immediately, preserves the title draft, and shows links and authored history', async () => {
+    const user = userEvent.setup();
+    const { posts } = renderTiles([todo(1, 0, 0, 1, 1, { list: A })]);
+    await user.click(await screen.findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), '!');
+    expect(within(dialog).getByRole('button', { name: 'Ustalenia' })).toBeTruthy();
+    expect(within(dialog).getByText('Najpierw ustalmy zakres zmian.')).toBeTruthy();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Stan' }), 'realizacja');
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Stan' }) as HTMLSelectElement).value).toBe('realizacja'));
+    expect(posts().at(-1)).toEqual({ action: 'setStatus', task: 't-a0000001', status: 'realizacja' });
+    await user.click(screen.getByRole('button', { name: 'Zdejmij blokadę' }));
+    await screen.findByRole('textbox', { name: 'Powód blokady' });
+    expect(posts().at(-1)).toEqual({ action: 'setBlocked', task: 't-a0000001', reason: null });
+    await user.type(screen.getByRole('textbox', { name: 'Powód blokady' }), 'Brak danych');
+    await user.click(screen.getByRole('button', { name: 'Zablokuj' }));
+    await screen.findByRole('button', { name: 'Zdejmij blokadę' });
+    expect(posts().at(-1)).toEqual({ action: 'setBlocked', task: 't-a0000001', reason: 'Brak danych' });
+    await user.type(screen.getByRole('textbox', { name: 'Dodaj komentarz' }), 'Pierwsza linia{Enter}Druga{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(within(dialog).getByText('Pierwsza linia Druga')).toBeTruthy());
+    expect(posts().at(-1)).toEqual({ action: 'addComment', task: 't-a0000001', text: 'Pierwsza linia\nDruga' });
+    expect((screen.getByRole('textbox', { name: 'Dodaj komentarz' }) as HTMLTextAreaElement).value).toBe('');
+    await user.type(screen.getByRole('textbox', { name: 'URL pull requesta' }), 'https://example.com/no');
+    await user.click(screen.getByRole('button', { name: 'Dodaj PR' }));
+    expect(posts()).toHaveLength(4);
+    expect(within(dialog).getByRole('alert').textContent).toContain('Podaj adres PR-a');
+    await user.clear(screen.getByRole('textbox', { name: 'URL pull requesta' }));
+    await user.type(screen.getByRole('textbox', { name: 'URL pull requesta' }), 'https://github.com/example/panel/pull/43');
+    await user.click(screen.getByRole('button', { name: 'Dodaj PR' }));
+    const link = await within(dialog).findByRole('link', { name: 'https://github.com/example/panel/pull/43' });
+    expect(link.getAttribute('href')).toBe('https://github.com/example/panel/pull/43');
+    expect(posts().at(-1)).toEqual({ action: 'link', task: 't-a0000001', kind: 'pr', id: 'https://github.com/example/panel/pull/43' });
+    await user.click(screen.getByRole('button', { name: 'Usuń powiązanie: https://github.com/example/panel/pull/43' }));
+    await waitFor(() => expect(within(dialog).queryByRole('link', { name: 'https://github.com/example/panel/pull/43' })).toBeNull());
+    expect(posts().at(-1)).toEqual({ action: 'unlink', task: 't-a0000001', kind: 'pr', id: 'https://github.com/example/panel/pull/43' });
+    expect((screen.getByRole('textbox', { name: 'Tytuł' }) as HTMLInputElement).value).toBe('Agent nie wie, ile ma limitu na dziś!');
+    expect(posts().some(p => p.action === 'updateTask')).toBe(false);
   });
 
   it('saves with Enter in the title and sends only the title when only that changed', async () => {
@@ -266,6 +322,7 @@ describe('the Zadania tile', () => {
     const tile = tileOf('todo#1');
     await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
     await user.type(screen.getByRole('textbox', { name: 'Notatka' }), 'Wpisane w trakcie');
+    await user.type(screen.getByRole('textbox', { name: 'Dodaj komentarz' }), 'Szkic komentarza');
     // Meanwhile somebody else ticks this task and the list hides what is done: its row leaves the tile.
     const post = (body: object) => fetcher('/api/todos/action', { method: 'POST', body: JSON.stringify(body) });
     await post({ action: 'updateTask', task: 't-a0000001', done: true });
@@ -273,6 +330,7 @@ describe('the Zadania tile', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
     await waitFor(() => expect(titles(tile)).not.toContain('Agent nie wie, ile ma limitu na dziś'));
     expect((screen.getByRole('textbox', { name: 'Notatka' }) as HTMLTextAreaElement).value).toBe('Dodać limity AI do widoku dla agenta.Wpisane w trakcie');
+    expect((screen.getByRole('textbox', { name: 'Dodaj komentarz' }) as HTMLTextAreaElement).value).toBe('Szkic komentarza');
     await post({ action: 'deleteTask', task: 't-a0000001' });
     await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

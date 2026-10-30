@@ -494,7 +494,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           DESK PANEL <span>Limity AI bez wywołań modelu</span>
         </footer>
       )}
-      {chat.loaded && <Suspense fallback={null}><ChatWindow view={chat.view} picking={chat.picking} onPickingChange={chat.setPicking} onViewChange={chat.show} onClose={chat.close} /></Suspense>}
+      {chat.loaded && <Suspense fallback={null}><ChatWindow requestedChat={chat.requestedChat} view={chat.view} picking={chat.picking} onPickingChange={chat.setPicking} onViewChange={chat.show} onClose={chat.close} /></Suspense>}
       <button
         type="button"
         className="chat-toggle-fab"

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Check, ListChecks, MoreHorizontal, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, LockKeyhole, ListChecks, MoreHorizontal, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useDismiss } from './popover';
-import { TODO_LIMITS, todoOpenStatus, type TodoList, type TodoTask } from './todo-contract';
+import { TODO_LIMITS, TODO_STATUSES, todoOpenStatus, type TodoList, type TodoTask } from './todo-contract';
 import { TodoDialog } from './TodoDialog';
+import type { CezarSnapshot } from './cezar-contract';
 import type { TileConfig } from './tile-grid';
 import { taskContext } from './todo-context';
 import { ctx } from './chat-context';
@@ -20,12 +21,15 @@ function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: 
     lists: data.lists.map(l => ({ ...l, tasks: l.tasks.map(t => t.id === task.id ? { ...t, status: task.done ? todoOpenStatus(task) : 'zakonczone', done: !task.done, completedAt: task.done ? null : Date.now() } : t) })),
   }));
   const point = (() => { const c = taskContext(list, task); return ctx('todo', c.id, c.title, c.text); })();
-  return <li className={`todo-row${task.done ? ' done' : ''}${hot ? ' hot' : ''}`} {...point}>
+  return <li className={`todo-row${task.done ? ' done' : ''}${task.status === 'porzucone' ? ' abandoned' : ''}${hot ? ' hot' : ''}`} {...point}>
     <input type="checkbox" className="todo-check" checked={task.done} aria-label={task.title} onChange={toggle} />
     <button type="button" className="todo-title" aria-label={`Edytuj zadanie: ${task.title}`} onClick={e => edit(e.currentTarget)}>
       <span className="todo-text">{task.title}</span>
       {notes && task.note && <span className="todo-note">{task.note}</span>}
     </button>
+    {task.status !== 'pomysl' && !task.done && <span className={`todo-status ${task.status}`} aria-label={TODO_STATUSES[task.status]} title={TODO_STATUSES[task.status]}><span>{TODO_STATUSES[task.status]}</span></span>}
+    {task.status === 'porzucone' && <span className="todo-abandoned" title="Porzucone" aria-label="Porzucone">–</span>}
+    {task.blocked && <span className="todo-blocked" role="img" aria-label={`Blokada: ${task.blocked}`} title={`Blokada: ${task.blocked}`}><LockKeyhole size={15} aria-hidden="true" /></span>}
     {list.showAgent && task.by === 'agent' && <span className="todo-by" role="img" aria-label="Dodał agent czatu" title="Dodał agent czatu"><Sparkles size={14} aria-hidden="true" /></span>}
   </li>;
 }
@@ -37,8 +41,8 @@ function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: 
  * tasks scroll under it) until the + is pressed again. What fits follows the tile's cells (`wide`: two or more columns,
  * `tall`: two or more rows): notes show only when there is room both ways, a wide short tile lays tasks in two columns.
  */
-export function TodoTile({ todos, config, setConfig, wide = true, tall = true }: {
-  todos: TodosState; config?: TileConfig; setConfig: (patch: Record<string, string | boolean | undefined>) => void; wide?: boolean; tall?: boolean;
+export function TodoTile({ todos, config, setConfig, wide = true, tall = true, snapshot }: {
+  snapshot?: CezarSnapshot | null; todos: TodosState; config?: TileConfig; setConfig: (patch: Record<string, string | boolean | undefined>) => void; wide?: boolean; tall?: boolean;
 }) {
   const { source, error, clearError, act } = todos;
   const lists = source.data?.lists ?? null;
@@ -155,6 +159,6 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true }:
       <p className="p2-empty">Nie ma jeszcze żadnej listy.</p>
       {!naming && <button type="button" className="todo-create" onClick={() => startNaming('new')}><Plus size={16} aria-hidden="true" /> Utwórz listę</button>}
     </div> : <p className="p2-empty">{source.status === 'loading' ? 'Ładowanie zadań…' : source.message || 'Zadania są niedostępne.'}</p>}
-    {list && editTask && <TodoDialog key={editTask.id} list={list} task={editTask} act={act} close={closeEditor} />}
+    {list && editTask && <TodoDialog key={editTask.id} list={list} task={editTask} act={act} error={error} snapshot={snapshot} close={closeEditor} />}
   </section>;
 }

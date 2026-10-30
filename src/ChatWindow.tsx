@@ -21,7 +21,7 @@ import { LoadingSurface } from './cockpit/LoadingSurface';
 
 export { groupOf } from './cockpit/ConversationSidebar';
 type InspectorMode = 'auto' | 'full' | 'summary' | 'hidden';
-interface WindowProps { onClose(): void; view?: ChatView; picking?: boolean; onPickingChange?(on: boolean): void; onViewChange?(view: ChatView): void }
+interface WindowProps { requestedChat?: { id: string }; onClose(): void; view?: ChatView; picking?: boolean; onPickingChange?(on: boolean): void; onViewChange?(view: ChatView): void }
 const mockOptions = () => {
   const query = new URLSearchParams(window.location.search);
   return query.get('cockpit') === 'mock' ? { hermesDown: query.get('hermes') === 'down', speed: Number(query.get('cockpitSpeed')) || 1 } : null;
@@ -31,7 +31,10 @@ const readInspector = (): InspectorMode => {
   return 'auto';
 };
 
-function CockpitWindow({ source, onClose, view: controlledView, picking: controlledPicking, onPickingChange, onViewChange }: WindowProps & { source: CockpitSource }) {
+function CockpitWindow({ requestedChat, source, onClose, view: controlledView, picking: controlledPicking, onPickingChange, onViewChange }: WindowProps & { source: CockpitSource }) {
+  const openConversation = useRef(source.open);
+  openConversation.current = source.open;
+  useEffect(() => { if (requestedChat) openConversation.current(requestedChat.id); }, [requestedChat]);
   const [ownView, setOwnView] = useState<ChatView>('full');
   const view = controlledView ?? ownView;
   const [ownPicking, setOwnPicking] = useState(false);

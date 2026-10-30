@@ -18,14 +18,21 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
   dwa kafelki mogą pokazywać różne listy. Jeśli zapisana lista zniknęła, kafelek pokazuje pierwszą.
 - **Menu ⋯** (ustawienia listy): „Ukryj ukończone” i „Pokaż, co dodał agent” (pola wyboru), nowa lista, zmiana nazwy, „Wyczyść ukończone (N)” i „Usuń listę” (drugie dotknięcie
   potwierdza i mówi, ile zadań zniknie).
-- **Zadania**: pole wyboru przy zadaniu (zaznaczenie widać od razu); dotknięcie tytułu otwiera zadanie w **oknie nad całym pulpitem** (`src/TodoDialog.tsx`,
-  poza kafelkiem, więc wygląda tak samo w kafelku każdego rozmiaru). Okno ma tytuł, notatkę i przyciski „Usuń” (drugie dotknięcie potwierdza), „Anuluj”
-  i „Zapisz”; zapis wysyła tylko to, co się zmieniło, Enter w tytule i Ctrl+Enter w notatce zapisują, Esc i „Anuluj” porzucają zmiany, a dotknięcie
-  przyciemnionego tła zamyka okno tylko wtedy, gdy nic nie wpisano. Fokus zostaje w oknie (Tab krąży) i wraca na zadanie. Okno trzyma stan w kafelku
-  (po id zadania), więc odczyt co 5 s go nie zamyka ani nie gubi wpisanego tekstu, nawet gdy zadanie zniknie z widoku (np. ukończone przy „Ukryj
-  ukończone”); zamyka się dopiero, gdy zadanie zostało usunięte gdzie indziej. Wiersz edytowanego zadania jest podświetlony. Otwarte zadania są przed
-  ukończonymi (te skreślone, na końcu); ikona ✦ (domyślnie niewidoczna, włącza ją „Pokaż, co dodał agent” w menu ⋯) oznacza, że dodał je agent. Tytuł ma
-  jedną linię (w wąskim, wysokim kafelku dwie). Licznik „ukończone/wszystkie” jest w nagłówku.
+- **Zadania**: pole wyboru zaznacza „Zakończone”, odznaczenie przywraca poprzedni nieterminalny stan (jak w modelu poniżej).
+  Zadania otwarte stoją przed terminalnymi; zakończone są skreślone, porzucone wyszarzone bez skreślenia, ze znakiem „–”.
+  Stan inny niż „Pomysł” ma mały znacznik (w wąskim kafelku kolorową kropkę, etykietę w title/aria), blokada ikonę kłódki z powodem w title/aria.
+  Ikona ✦ (włączana przez „Pokaż, co dodał agent”) oznacza autora zadania. Licznik „ukończone/wszystkie” obejmuje oba stany terminalne.
+- **Okno zadania** (`src/TodoDialog.tsx`, nad całym pulpitem, niezależnie od rozmiaru kafelka): tytuł i notatka są szkicem do „Zapisz”;
+  zapis wysyła tylko zmienione pola, Enter w tytule i Ctrl+Enter w notatce zapisują. Wybór jednego z siedmiu stanów, włączenie blokady z powodem,
+  zdjęcie blokady, dodanie PR-a i usunięcie powiązania wysyłają od razu osobne akcje. Komentarz (do 2000 znaków) wysyła przycisk albo Ctrl+Enter;
+  pole czyści się po udanym zapisie. „Anuluj” i Esc porzucają szkice, lecz nie cofają już zapisanych akcji. „Usuń” wymaga drugiego dotknięcia.
+  Powiązania pokazują rozmowę Wektora (przycisk otwiera ją w czacie, bez wysyłania wiadomości), task Cezara (tytuł, stan i PR z już czytanego
+  snapshotu, bez dodatkowego odpytywania; brak taska jest jawnie opisany) oraz zewnętrzny PR. Dodawany URL musi odpowiadać kontraktowi GitHub
+  poniżej, bez query/fragmentu. Historia pokazuje komentarze jako zwykły tekst z nowymi liniami oraz zmiany stanu, blokad i powiązań, z autorem
+  „Ty”, „Wektor” lub „panel” i lokalnym czasem; przewija się osobno.
+  Fokus zostaje w oknie (Tab krąży po polach, przyciskach i linkach) i wraca na zadanie. Tło zamyka okno tylko bez szkiców.
+  Okno jest trzymane po id: odczyt co 5 s nie zamyka go ani nie gubi wpisanej notatki, komentarza, powodu czy URL-a, również gdy zadanie znika
+  z widoku przez „Ukryj ukończone”. Zamknięcie następuje, gdy zadanie usunięto gdzie indziej; edytowany wiersz jest podświetlony.
 - **Dodawanie**: „+” w nagłówku pokazuje pole „Dodaj zadanie…” pływające nad dołem kafelka (zadania przewijają się pod nim). Enter zapisuje, a pole zostaje
   otwarte na kolejne; zamyka je dopiero ponowne dotknięcie „+” (albo Esc).
 - **„Ukryj ukończone”** jest ustawieniem **listy**, nie kafelka: leży w danych listy (`hideDone`, akcja `setListOptions`), więc każdy kafelek, który ją pokazuje (także na

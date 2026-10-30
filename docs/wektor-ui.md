@@ -4,6 +4,9 @@ Ten dokument dotyczy frontendu rozmowy. Zachowanie produktu i API opisuje [czat.
 Nowe narzędzie lub umiejętność agenta wymaga także procedury `skills/wektor-capabilities`; sama zmiana GUI jej nie uruchamia.
 Zmiana GUI nie wymaga restartu Hermesa, dopóki nie zmienia narzędzi ani ich schematów.
 
+Powiązanie rozmowy w oknie zadania otwiera pełny czat przez `openChatConversation` (`src/useChatPresentation.ts`),
+które przekazuje żądanie do `ChatWindow` i istniejącego `source.open(id)`. Samo otwarcie nie wysyła wiadomości ani nie zaczyna tury.
+
 ## Gdzie zmieniać kod
 
 | Odpowiedzialność | Pliki |

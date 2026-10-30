@@ -181,7 +181,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={openDetail} roomy={roomy} threshold={systemThreshold} />;
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'smart-actions') return <SmartActionsTile mail={mail} tasks={data.tasks} wide={tile.w > 1} tall={tile.h > 1} />;
-    if (tile.kind === 'todo') return <TodoTile todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
+    if (tile.kind === 'todo') return <TodoTile snapshot={snapshot} todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     if (tile.kind === 'github-pr') return <GitHubPrTile wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'openrouter') return <OpenRouterUsageTile wide={tile.w > 1} tall={tile.h > 1} />;

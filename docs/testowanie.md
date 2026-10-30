@@ -25,6 +25,7 @@ just screenshots standard --nav                        # keep the bottom navigat
 npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapytaniem w adresie (zegar nocny)
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
+just screenshots standard --pages pulpit --open todo-dialog     # zadanie oraz drugi zrzut przewinięty do historii
 just screenshots standard --pages pulpit --open chat-skills     # nowe menu umiejętności Wektora
 just screenshots standard --pages pulpit --open chat-compact    # czat obok pulpitu
 just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
