@@ -185,6 +185,7 @@ export function useLiveCockpit(): CockpitSource {
     createdAt: active?.createdAt,
     open: (id: string | null) => { nonce.current = null; if (id) chat.open(id); else chat.startNew(); },
     remove: () => void chat.remove(),
+    rename: title => void chat.rename(title),
     cockpit,
     cockpitError: cockpitError || undefined,
   };

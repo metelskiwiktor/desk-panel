@@ -66,6 +66,21 @@ describe('helpers', () => {
 chatHooks();
 
 describe('ChatWindow', () => {
+  it('edits the title with Enter and cancels with Escape', async () => {
+    const calls = mockServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    await user.click(await screen.findByRole('button', { name: 'Zmień nazwę rozmowy' }));
+    const input = screen.getByLabelText('Nazwa rozmowy');
+    await user.clear(input); await user.type(input, 'Nowa nazwa{Escape}');
+    expect(screen.queryByLabelText('Nazwa rozmowy')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Zmień nazwę rozmowy' }));
+    await user.clear(screen.getByLabelText('Nazwa rozmowy')); await user.type(screen.getByLabelText('Nazwa rozmowy'), 'Nowa nazwa{Enter}');
+    await waitFor(() => expect(calls.some(c => c.method === 'PATCH' && c.body?.title === 'Nowa nazwa')).toBe(true));
+  });
+
   it('lists conversations and continues one with its history', async () => {
     mockServer();
     const user = userEvent.setup();

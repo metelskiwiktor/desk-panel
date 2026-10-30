@@ -164,3 +164,9 @@
 @keyframes wektor-content-in { from { opacity:.65; } to { opacity:1; } }
 @keyframes wektor-loading-in { from { opacity:0; } to { opacity:1; } }
 @media (prefers-reduced-motion:reduce) { .wektor-root *, .wektor-root *::before, .wektor-root *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+
+.wektor-root .wektor-title-edit { border:0; background:transparent; color:var(--wk-muted); cursor:pointer; margin-left:8px; vertical-align:middle; }
+.wektor-root .wektor-heading input { width:100%; max-width:360px; font:inherit; color:inherit; background:transparent; border:1px solid var(--wk-muted); border-radius:4px; padding:2px 5px; }
+.wektor-root .wektor-title-row { display:flex; align-items:center; min-width:0; }
+.wektor-root .wektor-title-row h1 { flex:0 1 auto; min-width:0; }
+.wektor-root .wektor-title-edit { flex:none; }

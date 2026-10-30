@@ -61,8 +61,9 @@ export async function createScenarioChat(options: { hermes?: 'up' | 'down'; tool
   const dir = mkdtempSync(join(tmpdir(), 'desk-panel-scenario-chat-'));
   const mock = await startMockHermes({ stepMs: 60, toolScript: options.toolScript });
   if (options.hermes === 'down') mock.setDown(true);
-  const agy = createAgentChat({ dir, launch: scriptedAgent() });
-  const hermes = createHermesChat({ dir, client: createHermesClient({ url: mock.url }) });
+  const namer = async () => 'Terminy wizyty u psychologa';
+  const agy = createAgentChat({ dir, launch: scriptedAgent(), namer });
+  const hermes = createHermesChat({ dir, namer, client: createHermesClient({ url: mock.url }) });
   const chat = createChatHub({ dir, engines: { hermes, agy } });
   let disposing: Promise<void> | undefined;
   return Object.assign(chat, {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, ChevronLeft, Columns2, Maximize2, MessageSquare, Minus, PanelLeft, PanelRight, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Columns2, Maximize2, MessageSquare, Minus, PanelLeft, PanelRight, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import type { ContextItem } from './chat-contract';
 import { getChatDraft, setChatDraftContext } from './chat-draft';
 import type { ChatView } from './useChatPresentation';
@@ -48,6 +48,9 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
   const closeHistory = () => { setHistory(false); setCompactHistory(false); };
   const [inspector, setInspector] = useState<InspectorMode>(readInspector);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  useEffect(() => { setEditingTitle(false); }, [source.activeId]);
   const section = useRef<HTMLElement>(null);
   const launcher = useRef<HTMLElement | null>(null);
   const setPicking = (on: boolean) => { setOwnPicking(on); onPickingChange?.(on); };
@@ -101,7 +104,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
       <header className="wektor-header">
         {!picking && <button type="button" className="wektor-icon" aria-label="Pokaż rozmowy" title="Historia rozmów" aria-expanded={historyShown} onClick={toggleHistory}><PanelLeft size={19} /></button>}
         <span className="wektor-brand"><Sparkles size={18} aria-hidden="true" /></span>
-        <div className="wektor-heading"><span>WEKTOR{source.mode === 'mock' ? ' · makieta' : ''}</span><h1>{source.title}</h1></div>
+        <div className="wektor-heading"><span>WEKTOR{source.mode === 'mock' ? ' · makieta' : ''}</span>{editingTitle ? <input aria-label="Nazwa rozmowy" autoFocus maxLength={120} value={titleDraft} onChange={e => setTitleDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEditingTitle(false); } else if (e.key === 'Enter') { e.preventDefault(); const title = titleDraft.trim(); setEditingTitle(false); if (title && title !== source.title) source.rename?.(title); } }} /> : <div className="wektor-title-row"><h1>{source.title}</h1>{source.activeId && source.rename && <button type="button" className="wektor-title-edit" aria-label="Zmień nazwę rozmowy" onClick={() => { setTitleDraft(source.title); setEditingTitle(true); }}><Pencil size={13} /></button>}</div>}</div>
         <div className="wektor-header-actions">
           {picking ? <button type="button" className="wektor-icon" aria-label="Rozwiń czat" title="Zakończ wskazywanie" onClick={() => setPicking(false)}><ChevronLeft size={20} /></button> : <>
             <button type="button" className="wektor-icon" aria-label="Nowy czat" title="Nowy czat" onClick={() => source.open(null)}><Plus size={19} /></button>

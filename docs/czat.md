@@ -214,7 +214,7 @@ kształt odpowiedzi i przeliczać czasy.
   `--dangerously-skip-permissions` (`agyPermissionArgs`; jak `run_command`, który i tak działał bez pytania). Zmienia to tylko argumenty uruchomienia,
   nigdy ustawień `agy`; `DESK_AGY_SKIP_PERMISSIONS=0` (albo `false`, `no`, `off`) wyłącza flagę, wtedy odmowy wracają i widać je w oknie oraz w `denied`.
 - `-p` zjada następny token, stąd `-p ''` na końcu argumentów. Pomoc drukuje na stderr. Zamknięcie stdin kończy proces.
-- Każda wiadomość zużywa limit konta `agy`. Panel nie odpytuje agenta w tle: tura zaczyna się tylko od wiadomości użytkownika.
+- Każda wiadomość zużywa limit konta `agy`. Po pierwszej zakończonej odpowiedzi panel raz w tle prosi agy o krótką polską nazwę rozmowy (bez narzędzi, z limitem 20 s); model wybiera `DESK_AGY_TITLE_MODEL`, a domyślnie `DESK_AGY_MODEL`. Przy błędzie zostaje nazwa z pierwszej wiadomości. Użytkownik może zmienić nazwę w nagłówku; jego nazwa nie jest nadpisywana. Poza tym wywołaniem tura zaczyna się tylko od wiadomości użytkownika.
 
 ## Szwy do rozszerzania
 

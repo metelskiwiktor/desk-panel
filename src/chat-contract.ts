@@ -238,6 +238,7 @@ export interface ChatMessage {
 }
 
 export interface ChatSummary {
+  userNamed?: boolean;
   id: string;
   title: string;
   createdAt: number;
