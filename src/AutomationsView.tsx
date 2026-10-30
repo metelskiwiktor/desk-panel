@@ -6,7 +6,7 @@ import { stamp } from './format';
 import { usePollingEnabled } from './polling';
 import { openChatConversation } from './useChatPresentation';
 import {
-  ACTION_HINTS, ACTION_LABELS, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
+  CHANGE_LABELS, changeValue, ACTION_HINTS, ACTION_LABELS, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
   type Automation, type AutomationRun, type AutomationStatus,
 } from './automation-contract';
 
@@ -19,6 +19,7 @@ type Tab = 'runs' | 'goal' | 'notebook' | 'chat';
 
 const RUN_CLASS = { 'not-yet': 'idle', done: 'ok', error: 'bad', skipped: 'skip' } as const;
 const STATUS_CLASS: Record<AutomationStatus, string> = { active: 'ok', paused: 'warn', done: 'idle', expired: 'idle', cancelled: 'idle' };
+const briefChange = (field: string, value: unknown) => { const text = changeValue(field, value); return text.length > 180 ? `${text.slice(0, 177)}…` : text; };
 const when = (at?: number) => at ? stamp(at) : '—';
 const latestRun = (a: Automation): AutomationRun | undefined => [...a.runs].sort((x, y) => y.at - x.at)[0];
 const runTime = (at: number) => new Date(at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -247,6 +248,13 @@ export function AutomationsView() {
                 </div>}
               </div>}
               {tab === 'goal' && <div className="automation-tab" role="tabpanel" aria-label="Cel i akcje">
+                <h3>Historia zmian</h3>
+                {chosen.changes.length === 0 ? <p className="meta">Brak zmian.</p> : <ul>
+                  {[...chosen.changes].reverse().map((change, i) => <li key={i}>
+                    <span className="meta">{when(change.at)} · {change.by === 'user' ? 'użytkownik' : 'Wektor'}</span>
+                    {Object.entries(change.fields).map(([field, value]) => <p key={field} className="automation-goal" title={`${changeValue(field, value.before)} → ${changeValue(field, value.after)}`}>{CHANGE_LABELS[field] ?? field}: {briefChange(field, value.before)} → {briefChange(field, value.after)}</p>)}
+                  </li>)}
+                </ul>}
                 <h3>Cel</h3>
                 <p className="automation-goal">{chosen.goal}</p>
                 {chosen.doneWhen && <><h3>Cel osiągnięty, gdy</h3><p>{chosen.doneWhen}</p></>}

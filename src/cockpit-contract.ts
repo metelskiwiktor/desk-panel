@@ -169,9 +169,9 @@ export const COCKPIT_TOOLS = {
     effect: 'automat zapisuje się w panelu (widok Automaty, sekcja Jednorazowe); po zadziałaniu panel zaczyna w tej rozmowie run automatu z poleceniem zapisanym przy tworzeniu, a automat kończy się po raporcie. Limit aktywnych pilnuje panel. Karty nie ma: to zapis automatu, nie zapis danych użytkownika. Ty niczego poza tym nie zapisujesz, nie zlecasz i nie zatwierdzasz.',
   },
   panel_automation_propose: {
-    purpose: 'Karta zgody „Nowy automat”: name, goal (polecenie użytkownika słowo w słowie), trigger (once/daily/weekly/cezar/pr), opcjonalnie doneWhen, actions (etap 1: [{kind:"message"}]), learn i opcjonalnie replaces (id automatu, który ma zastąpić).',
-    when: 'gdy użytkownik chce, żebyś coś sprawdzał cyklicznie (codziennie, w dany dzień) albo założył automat na stałe, a nie jednorazowy obserwator (panel_observe). Najpierw ustal cel i harmonogram słowami; kartę pokaż po jego zgodzie albo przy wyraźnej prośbie. Zmiana celu, akcji albo harmonogramu to nowa karta z replaces.',
-    effect: 'użytkownik widzi kartę z harmonogramem po polsku, warunkiem celu, akcjami i przełącznikiem „Ucz się między runami”; automat powstaje dopiero po kliknięciu „Utwórz automat”. Ty niczego nie zapisujesz. Run cykliczny to nowa rozmowa automatu, a wynik wraca do tej rozmowy po raporcie.',
+    purpose: 'Karta zgody „Nowy automat”: name, goal (polecenie użytkownika słowo w słowie), trigger (once/daily/weekly/cezar/pr), opcjonalnie doneWhen, actions (etap 1: [{kind:"message"}]), learn i opcjonalnie replaces (id automatu aktualizowanego na miejscu, z zachowaniem historii i notatnika).',
+    when: 'gdy użytkownik chce, żebyś coś sprawdzał cyklicznie (codziennie, w dany dzień) albo założył automat na stałe, a nie jednorazowy obserwator (panel_observe). Najpierw ustal cel i harmonogram słowami; kartę pokaż po jego zgodzie albo przy wyraźnej prośbie. Zmiana istniejącego automatu (cel, warunek celu, harmonogram, akcje, nazwa, learn) to panel_automation_propose z replaces: aktualizacja na miejscu, historia runów i notatnik zostają; nowy automat bez replaces tylko dla nowego celu.',
+    effect: 'użytkownik widzi kartę z harmonogramem po polsku, warunkiem celu, akcjami i przełącznikiem „Ucz się między runami”; automat powstaje dopiero po kliknięciu „Utwórz automat”; replaces pokazuje porównanie przed → po i „Zapisz zmiany”, które aktualizuje istniejący rekord. Ty niczego nie zapisujesz. Run cykliczny to nowa rozmowa automatu, a wynik wraca do tej rozmowy po raporcie.',
     card: 'automation',
   },
   panel_automations: {
@@ -180,7 +180,7 @@ export const COCKPIT_TOOLS = {
     effect: 'tylko odczyt; niczego nie zmienia i nie uruchamia.',
   },
   panel_automation_update: {
-    purpose: 'Bez karty: pause, resume, cancel albo runNow jednego automatu (id z panel_automations); opcjonalnie notebook lub name.',
+    purpose: 'Bez karty: pause, resume, cancel albo runNow jednego automatu (id z panel_automations); opcjonalnie notebook (nazwę zmieniaj kartą z replaces).',
     when: 'na wyraźną prośbę użytkownika („wstrzymaj”, „wznów”, „anuluj”, „uruchom teraz”, „zmień notatnik”). Nie zmieniaj celu, akcji ani harmonogramu: to nowa karta panel_automation_propose z replaces.',
     effect: 'zmiana jest natychmiastowa i lokalna; runNow uruchamia run teraz, reszta tylko zmienia stan.',
   },

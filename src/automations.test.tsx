@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AutomationsView } from './AutomationsView';
@@ -72,4 +72,51 @@ describe('Automaty view', () => {
     await user.click(screen.getByRole('button', { name: /Wstrzymaj/ }));
     expect(await screen.findByRole('button', { name: /Wznów/ })).toBeTruthy();
   });
+});
+
+
+it('compares only changed fields using Polish labels, saves once, and keeps the comparison after approval', async () => {
+  const current = {
+    id: 'a-111111111111', name: 'Obecna nazwa', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00' },
+    actions: [], learn: true, status: 'active', notebook: 'Notatka', runs: [], createdAt: 1, chatId: 'origin', changes: [],
+  };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ automations: [current] }))));
+  const respond = vi.fn(async () => {});
+  const props: any = { toolCallId: 'message:call', args: { name: current.name, goal: current.goal, trigger: { kind: 'weekly', weekday: 1, time: '18:00' }, actions: [{ kind: 'message' }], learn: false, replaces: current.id } };
+  const wrap = (result?: any) => <CardActions.Provider value={{ respond, running: false }}><AutomationCard {...props} result={result} /></CardActions.Provider>;
+  const { rerender } = render(wrap());
+  expect(screen.getByText('Zmienić automat?')).toBeTruthy();
+  await screen.findByText(/Codziennie 07:00/);
+  const comparison = within(screen.getByLabelText('Porównanie zmian'));
+  expect(comparison.getByText(/poniedziałek 18:00/)).toBeTruthy();
+  expect(comparison.getByText('Wiadomość w tej rozmowie')).toBeTruthy();
+  expect(comparison.getByText('Uczenie się')).toBeTruthy();
+  expect(comparison.queryByText('Cel')).toBeNull();
+  expect(comparison.queryByText('Nazwa')).toBeNull();
+  const user = userEvent.setup({ delay: null });
+  await user.click(screen.getByRole('button', { name: 'Zapisz zmiany' }));
+  expect(respond).toHaveBeenCalledWith('message:call', { kind: 'automation', decision: 'create', actions: [{ kind: 'message' }], learn: false });
+  rerender(wrap({ decision: 'updated', at: 2, automationId: current.id, name: current.name, before: current }));
+  expect(screen.getByText(/Zaktualizowano automat/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Otwórz widok Automaty' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Zapisz zmiany' })).toBeNull();
+  expect(comparison.getByText(/Codziennie 07:00/)).toBeTruthy();
+});
+
+it('shows recorded before/after changes in Cel i akcje', async () => {
+  const base = scenarioFetch('standard');
+  vi.stubGlobal('fetch', async (input: any, init: any) => {
+    const response = await base(input, init);
+    if (String(input) !== '/api/automations') return response;
+    const data = await response.json();
+    data.automations[0].changes = [{ at: 1793358000000, by: 'user', fields: { name: { before: 'Stara nazwa', after: 'Nowa nazwa' }, learn: { before: false, after: true } } }];
+    return new Response(JSON.stringify(data));
+  });
+  const user = userEvent.setup({ delay: null });
+  render(<AutomationsView />);
+  await screen.findAllByText('Ceny prądu u dostawcy');
+  await user.click(screen.getByRole('tab', { name: 'Cel i akcje' }));
+  expect(screen.getByText('Historia zmian')).toBeTruthy();
+  expect(screen.getByText('Nazwa: Stara nazwa → Nowa nazwa')).toBeTruthy();
+  expect(screen.getByText('Uczenie się: nie → tak')).toBeTruthy();
 });

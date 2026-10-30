@@ -74,7 +74,7 @@ export interface SmartRuleArgs { tytul?: unknown; rule?: unknown; remove?: unkno
 /** The consent card for a new automation (`panel_automation_propose`): the plan as the model wrote it (checked by the card). */
 export const AUTOMATION = 'automation';
 export interface AutomationArgs { name?: unknown; goal?: unknown; trigger?: unknown; doneWhen?: unknown; actions?: unknown; learn?: unknown; replaces?: unknown; refused?: string }
-export type AutomationResult = { decision: 'created'; at: number; automationId: string; name: string } | { decision: 'rejected'; at: number };
+export type AutomationResult = import('../automation-contract').AutomationOutcome;
 
 /** A Hermes tool waiting for the user's yes or no (approval part of the live chat). */
 export const HERMES_APPROVAL = 'hermes_approval';

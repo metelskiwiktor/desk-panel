@@ -211,8 +211,9 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       // The card may only narrow the plan: turning „learn” off works, turning it on cannot.
       if (input.learn === false && plan.learn) plan = { ...plan, learn: false };
       const create = async () => {
+        const before = plan.replaces ? await automations.get(plan.replaces) : undefined;
         const automation = await automations.createFromPlan(id, plan);
-        return { decision: 'created' as const, at: Date.now(), automationId: automation.id, name: automation.name };
+        return { decision: plan.replaces ? 'updated' as const : 'created' as const, ...(before ? { before } : {}), at: Date.now(), automationId: automation.id, name: automation.name };
       };
       return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
     } else if (action === 'stop' && req.method === 'POST') {
