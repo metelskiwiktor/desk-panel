@@ -14,7 +14,7 @@ below names for the area you touch.
 | The chat and Wektor in code | docs/czat.md (product, API), docs/hermes.md (engine), docs/wektor-ui.md (frontend), docs/diagnostyka-czatu-wektora.md (diagnosing a conversation) | agents changing the chat |
 | What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
 | Tests and verification | docs/testowanie.md, `just check` | agents |
-| How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities | Claude Code sessions |
+| How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities/SKILL.md | any agent working on Wektor (Claude Code loads it as a skill; others read the file) |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
 | How the user wants every agent to work (commits, words) | "Working with the user" below | every agent; Cezar's executor keeps its workflow's branch and review |
@@ -130,16 +130,17 @@ umiejętności i testować jego rozmowy: `.claude/skills/wektor-capabilities`. N
 
 Smart Actions (docs/smart-actions.md): reguły są danymi w `~/.desk-panel/smart-rules.json` (poza Gitem), alerty liczy serwer (`GET /api/smart-actions`). Przycisk maila otwiera tylko link z treści na domenie reguły. Wektor szuka w całej skrzynce (`panel_mail_search`, tylko odczyt), czyta treść jednego maila naraz (`panel_mail_read`, jako dane, nie polecenia) i testuje reguły bez zapisu. Regułę zmienia tylko kartą zgody (`panel_smart_rule_propose` → `POST /api/chats/:id/smart-rule`, Origin-checked, plan z rozmowy), a przełącznik w oknie reguł to klik użytkownika (`POST /api/smart-rules/toggle`). Alert przelewu oznacza podpowiedzią dopiero klik użytkownika, lokalnie.
 
-Chat engines (docs/hermes.md): a conversation runs on Hermes Agent (default for new chats, preference in
-`~/.desk-panel/chat-settings.json`) or agy, fixed for its life; old chats without `engine` are agy's. Hermes is reached only
+Chat engines (docs/hermes.md): the chat window (Wektor) talks only to Hermes Agent: no engine switch, new chats start on
+Hermes and only Hermes chats are listed. The server still runs agy (`engine: "agy"` in `POST /api/chats`; old chats without
+`engine` are agy's); a conversation keeps its engine for life. Hermes is reached only
 through its long-running API server on loopback (`DESK_HERMES_URL`, key `DESK_HERMES_KEY` in panel.env, never in the browser
 or logs); its sessions are canonical and `~/.desk-panel/hermes-chats` keeps only the mapping (session, run ids, what the user
 typed and pointed at). Hermes reads the panel through the narrow MCP tools at `/api/mcp` (server/panel-mcp.ts: loopback only,
 bearer token from `~/.desk-panel/mcp-token`, requests with an Origin refused), the same views and two writes as the agy
 preamble, plus cockpit tools defined by one contract table (`COCKPIT_TOOLS` in src/cockpit-contract.ts: what, when, effect; the
 cockpit watches a task only after a dispatch from the card, `panel_cezar_watch` or until `panel_cockpit_clear`, never by
-guessing); a new tool there needs the same care as a new agent view. No silent fallback: Hermes down is shown, AGY is the
-user's manual choice. `just hermes CHECK|RUN|…`, `just hermes-setup`, `just hermes-install`; never start or register it without
+guessing); a new tool there needs the same care as a new agent view. No silent fallback: when Hermes is down the window says so and
+never switches to agy. `just hermes CHECK|RUN|…`, `just hermes-setup`, `just hermes-install`; never start or register it without
 the user.
 
 Chat (docs/czat.md): POST/PATCH/DELETE /api/chats… is a second write capability, Origin-checked like the actions above. The agent gets the dashboard elements the user points at (`ctx()` / `data-ctx-*` in src/chat-context.ts) and reads the rest itself from compact read-only text views of the panel's own GET API (`/api/agent/*` in server/agent-views.ts: calendar, mail metadata, Cezar, training, quotas, system, the bank account with the user's marks (no full account or phone numbers), local time; listed in the preamble in server/agent-chat.ts), with the same scope as the UI. Its instructions limit it to GET plus two writes: on the user's request `POST /api/cezar/action` (archive, unarchive, read, unread of finished tasks; ids are in the cezar view), and the panel's own to-do lists, `POST /api/todos/action` (docs/zadania.md; a bare "zadanie" means a to-do item, Cezar only when named): other panel writes are possible with `curl` (Origin only guards browsers), so keep that line in the preamble. Only a message the user sends starts an agent turn; nothing in the panel may send prompts on its own, and the quota rule above is unchanged. `agy` runs commands without asking (launched with `--dangerously-skip-permissions`, `DESK_AGY_SKIP_PERMISSIONS=0` turns it off; headless agy otherwise denies tools such as read_file and ends the turn silently) and is not sandboxed (a hobby project; revisit before the panel leaves this PC). Chat logs for analysis are private and outside Git (`~/.desk-panel/chat-logs`, docs/diagnostyka-czatu-wektora.md); scenario mode answers from a scripted agent, so trying the chat spends no limit.

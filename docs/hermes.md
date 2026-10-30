@@ -2,11 +2,12 @@
 
 Analiza problemów konkretnej rozmowy: [diagnostyka-czatu-wektora.md](diagnostyka-czatu-wektora.md).
 
-Czat panelu ma dwa silniki: **Hermes** (Hermes Agent, domyślny dla nowych rozmów) i **AGY** (Antigravity CLI, jak dotąd,
-zob. [czat.md](czat.md)). Wybór jest w oknie czatu (przełącznik „Hermes / AGY” obok przycisku wysyłania) i serwer go pamięta
-(`~/.desk-panel/chat-settings.json`, wspólny dla komputera i telefonu). Rozmowa należy do jednego silnika na zawsze: wybór
-drugiego przy otwartej rozmowie przechodzi do nowego czatu tego silnika (szkic i wskazane elementy zostają, poprzednia rozmowa
-jest dalej na liście). Lista rozmów pokazuje silnik przy każdej; wpisanie „hermes” albo „agy” w wyszukiwarkę je filtruje.
+Serwer panelu ma dwa silniki czatu: **Hermes** (Hermes Agent) i **AGY** (Antigravity CLI, zob. [czat.md](czat.md)). Okno
+czatu (Wektor) pisze **tylko do Hermesa**: nie ma przełącznika silników, nowe rozmowy startują na Hermesie, a lista pokazuje
+tylko rozmowy Hermesa (`useChat('hermes')`, `src/cockpit/live.ts`). AGY zostaje na serwerze: `POST /api/chats` z `engine: "agy"`
+i jego stare rozmowy (bez pola `engine`) dalej działają, tylko okno ich nie pokazuje. Zapamiętany wybór silnika
+(`~/.desk-panel/chat-settings.json`, `/api/chats/engine`) serwer dalej trzyma, ale okno go nie używa. Rozmowa należy do jednego
+silnika na zawsze.
 
 ## Jak to działa
 
