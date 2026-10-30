@@ -280,3 +280,22 @@ describe('Gmail reader', () => {
     expect(projectThread('user@gmail.com', rawNestedMultipart).body).toBe('Zagnieżdżony tekst plain');
   });
 });
+
+describe('Gmail search (Smart Actions)', () => {
+  it('reads the whole mailbox once for the same query asked twice, and tries again once when Gmail limits the rate', async () => {
+    let refusals = 1;
+    const request = vi.fn(async (_service: GoogleService, url: string, init: Init = {}) => {
+      if (url === `${BASE}/threads`) return { threads: [{ id: 'b1', historyId: '1' }, { id: 'b2', historyId: '1' }] };
+      if (url.endsWith('/b2') && refusals-- > 0) throw { response: { status: 429 } };
+      const id = url.split('/').at(-1)!;
+      expect(init.params).toMatchObject({ format: 'full' });
+      return { id, historyId: '1', messages: [message('INEA <e-rachunek@inea.com.pl>', `Rachunek ${id}`, id === 'b1' ? 2 : 1, false)] };
+    });
+    const reader = createMailReader([{ email: 'me@x.pl', request }]);
+    const [a, b] = await Promise.all([reader.search('from:inea.com.pl', 30), reader.search('from:inea.com.pl', 30)]);
+    expect(a).toBe(b);
+    expect(a.map(t => [t.threadId, t.address, t.unread])).toEqual([['b1', 'e-rachunek@inea.com.pl', false], ['b2', 'e-rachunek@inea.com.pl', false]]);
+    expect(request.mock.calls.filter(([, url]) => url === `${BASE}/threads`)).toHaveLength(1);
+    expect(request.mock.calls.filter(([, url]) => url.endsWith('/b2'))).toHaveLength(2);
+  });
+});

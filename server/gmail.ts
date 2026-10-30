@@ -167,10 +167,29 @@ export function createMailReader(accounts: Account[], now = Date.now) {
   /** Conversations a search read, by `email:threadId` (same historyId: no new request), and recent answers by query. */
   const found = new Map<string, { historyId: string; thread: MailThread }>();
   const searches = new Map<string, { at: number; threads: MailThread[] }>();
+  /**
+   * Searches run one at a time and the same one asked twice is one: three rule cards of one chat loading together read
+   * 30 conversations each in parallel and Gmail refused them (its per-user rate, 30.10.2026).
+   */
+  const running = new Map<string, Promise<MailThread[]>>();
+  let queue: Promise<unknown> = Promise.resolve();
+  const limited = (error: unknown) => {
+    const failure = error as { response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } } };
+    return failure.response?.status === 429 || !!failure.response?.data?.error?.errors?.some(e => /rateLimitExceeded|userRateLimitExceeded/.test(e.reason ?? ''));
+  };
+  /** A request Gmail refused for its rate is tried once more after a second. */
+  async function get(account: Account, url: string, params: Record<string, string>): Promise<unknown> {
+    try { return await account.request('mail', url, { params }); }
+    catch (error) {
+      if (!limited(error)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      return account.request('mail', url, { params });
+    }
+  }
   async function full(account: Account, id: string, historyId?: string): Promise<MailThread> {
     const key = `${account.email}:${id}`, known = found.get(key);
     if (known && historyId && known.historyId === historyId) return known.thread;
-    const raw = await account.request('mail', `${BASE}/threads/${id}`, { params: { format: 'full' } });
+    const raw = await get(account, `${BASE}/threads/${id}`, { format: 'full' });
     const thread = projectThread(account.email, raw);
     if (found.size > 500) found.clear();
     found.set(key, { historyId: threadDetail.parse(raw).historyId, thread });
@@ -184,16 +203,23 @@ export function createMailReader(accounts: Account[], now = Date.now) {
     async search(q: string, limit: number): Promise<MailThread[]> {
       const key = `${limit}:${q}`, known = searches.get(key);
       if (known && now() - known.at < 120_000) return known.threads;
-      const threads: MailThread[] = [];
-      for (const account of accounts) {
-        const page = threadList.parse(await account.request('mail', `${BASE}/threads`, { params: { q, maxResults: String(limit) } }));
-        const listed = page.threads ?? [];
-        for (let i = 0; i < listed.length; i += 10) threads.push(...await Promise.all(listed.slice(i, i + 10).map(t => full(account, t.id, t.historyId))));
-      }
-      threads.sort((a, b) => b.receivedAt - a.receivedAt);
-      if (searches.size > 50) searches.clear();
-      searches.set(key, { at: now(), threads });
-      return threads;
+      const pending = running.get(key);
+      if (pending) return pending;
+      const work = queue.catch(() => {}).then(async () => {
+        const threads: MailThread[] = [];
+        for (const account of accounts) {
+          const page = threadList.parse(await get(account, `${BASE}/threads`, { q, maxResults: String(limit) }));
+          const listed = page.threads ?? [];
+          for (let i = 0; i < listed.length; i += 5) threads.push(...await Promise.all(listed.slice(i, i + 5).map(t => full(account, t.id, t.historyId))));
+        }
+        threads.sort((a, b) => b.receivedAt - a.receivedAt);
+        if (searches.size > 50) searches.clear();
+        searches.set(key, { at: now(), threads });
+        return threads;
+      });
+      queue = work;
+      running.set(key, work);
+      try { return await work; } finally { running.delete(key); }
     },
     /** One conversation by account and id, read or not. */
     async thread(email: string, threadId: string): Promise<MailThread> {
