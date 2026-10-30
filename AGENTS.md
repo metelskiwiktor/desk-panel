@@ -36,6 +36,9 @@ rule changes) in the same commit; documentation is part of the change, not a fol
 - "Zadanie" / "zadania" is an item of the panel's to-do lists (docs/zadania.md), never a Cezar task; Cezar is meant only
   when the user names it or points at a Cezar tile or task. In code and API to-do items are `todo`, never a bare `task`
   (that is Cezar's). A widget is a kind (Poczta, Zadania); a kafelek is one placed on the grid.
+- After a larger task (several commits, a new area, much searching or throw-away testing), end with a short retrospective
+  of what would have made it faster (skills/retro/SKILL.md): at most 3 findings with evidence, proposals only. Not after a
+  small fix.
 
 ## Commands
 
