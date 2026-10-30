@@ -1,3 +1,4 @@
+import type { ChatNamer } from './chat-title';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -131,7 +132,7 @@ export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
  * One agy conversation on disk. `engine` came with Hermes (schema 2): a file without it is an agy chat from before, and
  * is tagged on load, everything else in it kept as it was.
  */
-interface Stored { id: string; engine?: 'agy'; title: string; createdAt: number; updatedAt: number; agy: string | null; items: ChatMessage[] }
+interface Stored { id: string; engine?: 'agy'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; agy: string | null; items: ChatMessage[] }
 /** What the diagnostic log needs to know about the turn that is running. */
 interface TurnTrace {
   number: number; startedAt: number; ask: string; context: string[];
@@ -169,6 +170,7 @@ export interface ChatOptions {
   /** Where chats and the agent's working directory live; `~/.desk-panel` by default. */
   dir?: string;
   launch?: Launcher;
+  namer?: ChatNamer;
   /** Where the agent reads the panel's API from (the service's own loopback address); `DEFAULT_PANEL_URL` by default. */
   panelUrl?: string;
   /** Where raw events and per-turn summaries go for later analysis; `<dir>/chat-logs` by default. */
@@ -250,7 +252,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
   };
 
   const summary = (chat: Stored): ChatSummary => ({
-    id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.items.length,
+    id: chat.id, title: chat.title, ...( chat.userNamed ? { userNamed: true } : {} ), createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.items.length,
     running: !!sessions.get(chat.id)?.agent, engine: 'agy',
   });
   const detail = (chat: Stored): ChatDetail => ({ ...summary(chat), items: chat.items });
@@ -322,6 +324,15 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     chat.updatedAt = now();
     save(chat);
     touch(chat, agent, true);
+    if (status === 'done' && chat.items.length === 2 && !chat.userNamed && !chat.titleAttempted && options.namer) {
+      chat.titleAttempted = true;
+      save(chat);
+      const text = agent.parts.filter(p => p.type === 'text').map(p => p.text).join(' ');
+      void Promise.resolve().then(() => options.namer!(chat.items[0].text ?? '', text)).then(title => {
+        if (!title || chats.get(chat.id) !== chat || chat.userNamed) return;
+        chat.title = title; save(chat); touch(chat, agent, true);
+      }).catch(() => {});
+    }
     if (sessions.get(chat.id) === session) armIdle(chat, session);
   };
 
@@ -446,6 +457,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     async rename(id, title) {
       const chat = await need(id);
       chat.title = title;
+      chat.userNamed = true;
       save(chat);
       const last = chat.items.at(-1);
       if (last) emit(id, { type: 'update', chat: summary(chat), message: last });

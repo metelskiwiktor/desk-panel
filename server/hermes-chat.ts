@@ -1,3 +1,4 @@
+import type { ChatNamer } from './chat-title';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -77,7 +78,7 @@ interface Turn {
   status: MessageStatus;
   error?: string;
 }
-interface Stored { schema: 1; id: string; engine: 'hermes'; title: string; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+interface Stored { schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
 
 interface Live {
   record: Stored;
@@ -101,6 +102,7 @@ interface History { at: number; groups?: { user: string; parts: ChatPart[] }[]; 
 
 export interface HermesChatOptions {
   client: HermesClient;
+  namer?: ChatNamer;
   /** Where the mapping lives (`<dir>/hermes-chats`); `~/.desk-panel` by default. */
   dir?: string;
   log?: ChatLog;
@@ -328,7 +330,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
 
   // ── what the window sees ──
   const summary = (record: Stored): ChatSummary => ({
-    id: record.id, title: record.title, createdAt: record.createdAt, updatedAt: record.updatedAt,
+    id: record.id, title: record.title, ...( record.userNamed ? { userNamed: true } : {} ), createdAt: record.createdAt, updatedAt: record.updatedAt,
     messages: record.turns.length * 2, running: lives.has(record.id), engine: 'hermes',
   });
   const items = (record: Stored): ChatMessage[] => {
@@ -600,6 +602,15 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     histories.delete(record.id);
     save(record);
     touch(record, message, true);
+    if (answer === 'done' && record.turns.length === 1 && !record.userNamed && !record.titleAttempted && options.namer) {
+      record.titleAttempted = true;
+      save(record);
+      const text = message.parts.filter(p => p.type === 'text').map(p => p.text).join(' ');
+      void Promise.resolve().then(() => options.namer!(turn.text, text)).then(title => {
+        if (!title || records.get(record.id) !== record || record.userNamed) return;
+        record.title = title; save(record); sendState(record);
+      }).catch(() => {});
+    }
     // The steps as the session has them, whole (cards need a tool's arguments): the window gets the answer once more.
     void ensureHistory(record).then(() => {
       const groups = histories.get(record.id)?.groups;
@@ -709,6 +720,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     async rename(id, title) {
       const record = await need(id);
       record.title = title;
+      record.userNamed = true;
       save(record);
       sendState(record);
     },

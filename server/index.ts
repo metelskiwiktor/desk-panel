@@ -1,3 +1,4 @@
+import { createAgyNamer } from './chat-title';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,12 +25,14 @@ const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').m
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
+const namer = createAgyNamer();
 const hermes = createHermesChat({
+  namer,
   client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
   turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
   silenceMs: Number(process.env.DESK_HERMES_SILENCE_MS) || undefined,
 });
-const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ panelUrl: `http://127.0.0.1:${port}` }) } });
+const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ namer, panelUrl: `http://127.0.0.1:${port}` }) } });
 // The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
 const cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
 const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));

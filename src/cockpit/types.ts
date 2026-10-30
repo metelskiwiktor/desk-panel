@@ -116,6 +116,7 @@ export interface CockpitSource {
   createdAt?: number;
   open(id: string | null): void;
   remove(): void;
+  rename?(title: string): void;
   cockpit: CockpitState;
   /** The cockpit could not be read (live only), in Polish. */
   cockpitError?: string;

@@ -81,8 +81,15 @@ if (!values.shot) {
             await entry.click();
             await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
             await page.waitForTimeout(600);
-            if (values.open === 'chat' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills') {
+            if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills') {
               await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
+              if (values.open === 'chat' || values.open === 'chat-edit') {
+                await page.getByLabel('Wiadomość do agenta').fill('Chciałbym znaleźć dogodny termin wizyty u psychologa w przyszłym tygodniu i sprawdzić mój kalendarz');
+                await page.getByLabel('Wiadomość do agenta').press('Enter');
+                await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor();
+                await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20000 });
+              }
+              if (values.open === 'chat-edit') await page.getByRole('button', { name: 'Zmień nazwę rozmowy' }).click();
               if (values.open === 'chat-compact') await page.getByRole('button', { name: 'Zminimalizuj czat' }).click();
               if (values.open === 'chat-skills') await page.getByLabel('Wiadomość do agenta').fill('@');
               await page.waitForTimeout(300);

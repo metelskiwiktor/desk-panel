@@ -60,6 +60,28 @@ function simpleTurn(agent: FakeAgent, id = 'c1') {
 }
 
 describe('czat z agentem', () => {
+  it('names in the background once, without overriding a user rename', async () => {
+    let resolve!: (title: string | null) => void;
+    const namer = vi.fn(() => new Promise<string | null>(r => { resolve = r; }));
+    service.close(); service = createAgentChat({ dir, launch, namer });
+    const { id } = await service.create({ text: 'Pierwsze pytanie' });
+    simpleTurn(agents[0]);
+    expect((await service.get(id)).running).toBe(false);
+    await vi.waitFor(() => expect(namer).toHaveBeenCalledOnce());
+    await service.send(id, { text: 'Drugie' });
+    await service.rename(id, 'Moja nazwa');
+    resolve('Nazwa od agenta');
+    await vi.waitFor(async () => expect((await service.get(id)).title).toBe('Moja nazwa'));
+    simpleTurn(agents[0]);
+    expect(namer).toHaveBeenCalledOnce();
+  });
+  it.each([['Nowy tytuł', 'Nowy tytuł'], [null, 'Pierwsze pytanie']])('uses a background title or retains the original', async (result, expected) => {
+    service.close(); service = createAgentChat({ dir, launch, namer: async () => result });
+    const { id } = await service.create({ text: 'Pierwsze pytanie' });
+    simpleTurn(agents[0]);
+    await vi.waitFor(async () => expect((await service.get(id)).title).toBe(expected));
+  });
+
   it('nowa rozmowa: zaczyna od instrukcji, kontekstu i pytania, a odpowiedź składa ze strumienia', async () => {
     const { id } = await service.create({ text: 'Zrób z tego zadanie', context: [mail] });
     expect(agents).toHaveLength(1);
