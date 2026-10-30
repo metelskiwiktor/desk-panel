@@ -40,7 +40,7 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   Utrata fokusu czyści stan fizycznych klawiszy, bez zmiany przełącznika wskazywania. „Gotowe”, Esc i zamknięcie czatu kończą
   wskazywanie, a Alt+W je kończy i przełącza widok. Kliknięcia dodają
   kontekst do szkicu, nigdy same nie wysyłają wiadomości.
-  `Esc` zamyka najpierw menu skillów, wskazywanie albo szufladę historii, potem ukrywa okno. Pełny ekran zatrzymuje fokus
+  `Esc` zamyka najpierw menu komend lub skillów, wskazywanie albo szufladę historii, potem ukrywa okno. Pełny ekran zatrzymuje fokus
   klawiatury w oknie; animacje respektują `prefers-reduced-motion`.
 - **Szkice**: tekst i wskazane elementy są zapisywane lokalnie osobno dla każdej rozmowy oraz dla nowej, jeszcze niewysłanej
   rozmowy (`src/chat-draft.ts`). Zmiana rozmowy ani widoku nie przenosi szkicu do innego czatu. Przyjęcie wiadomości przez
@@ -344,7 +344,42 @@ strony, żeby sprawdzanie `Origin` działało też w trybie deweloperskim.
 
 ## Dalsze kroki (jeszcze nie zrobione)
 
-Własne skille w czacie (menu po `/`; natywne skille `agy` leżą w `<katalog roboczy>/.agents/skills/<nazwa>/SKILL.md` i rozwijają
-się przez `/nazwa`), notatki oraz widget list zadań w interfejsie i wskazywanie go w czacie (dane i dostęp agenta już są, zob. [docs/zadania.md](zadania.md)).
+Notatki pozostają planowane (`/notatka` jest nieaktywna). Skille panelu działają pod `@`, a komendy rozmowy pod `/` (opis poniżej).
 
 Akcje trwającego runu automatu wykonuje panel_automation_act tylko w granicach jednorazowej zgody na karcie tworzenia/zmiany automatu; wyjątek dla wydarzenia Google i alertu Smart Actions opisuje [Automaty](automaty.md#akcje-zatwierdzone-raz-na-karcie). Zwykła rozmowa nadal tylko proponuje wydarzenie kartą.
+
+
+## Komendy, archiwum i rozmowy tymczasowe
+
+Wpisanie `/` na początku pola otwiera menu nad kompozytorem, z sekcjami „Rozmowa” i „Zrób z tego”. Tekst filtruje nazwy
+oraz opisy (także bez polskich znaków); ↑↓ wybiera aktywną pozycję, Enter lub kliknięcie wykonuje, Esc zamyka menu.
+`/nowa` otwiera nowy czat, `/tymczasowa` nowy tymczasowy, `/archiwizuj` archiwizuje bieżący zapisany czat. Bez bieżącej
+rozmowy oraz w trybie tymczasowym archiwizacja jest wyłączona. `/notatka` jest widoczna, nieaktywna, z etykietą „później”.
+`/zadanie` rozwija prośbę o zadanie na liście panelu (nie Cezara), `/automat` prośbę o propozycję automatu z kartą zgody.
+Wybór i Enter/kliknięcie są działaniem użytkownika: prośba jest wysyłana jak jego zwykła wiadomość. Jeżeli trwa odpowiedź
+lub odświeżanie, pozostaje w polu do wysłania. Same renderowanie i otwarcie menu nie wysyłają tury.
+Skille pozostają pod `@`. W AGY istnieje natywne rozwijanie `/nazwa` do skilla przez CLI; panel wcześniej nie miał takiego
+pickera (wzmianka w dawnych „Dalszych krokach” była planem). Okno obsługuje tylko Hermesa i przechwytuje wyłącznie znane
+komendy panelu; API i proces AGY pozostają bez zmian. Nieznany tekst `/…` jest zwykłą wiadomością.
+
+`/koszt` dopisuje wyłącznie lokalną odpowiedź panelu w tej rozmowie, bez wysłania wiadomości, modelu i dodatkowego kosztu.
+Czyta `items[].usage` z GET bieżącej rozmowy: tokeny zakończonych runów Hermesa, zapisane przy turach mapowania. Podaje
+liczbę tur objętych danymi; brak danych lub częściowe dane są jawne. Kwotę USD pokazuje wyłącznie przy pełnym pokryciu
+jawnym `cost_usd` z runów; przypięty Hermes zwykle zwraca tylko tokeny. Nie wycenia tokenów według cennika.
+Cache kafelka OpenRouter (`server/openrouter.ts`, [openrouter.md](openrouter.md)) zachowuje generację, model, dzień i koszt,
+ale nie powiązanie z sesją/runem, więc nie wolno przypisać sumy dnia tej rozmowie. `/koszt` nie czyta logów użytkownika,
+nie odpytuje OpenRoutera ani `/api/v1/activity`. Lokalna odpowiedź nie jest zapisywana w historii serwera i znika przy zmianie rozmowy.
+
+Historia ma zakładki „Rozmowy” i „Archiwum · N”. Licznik obejmuje całe archiwum, wyszukiwanie wyłącznie bieżącą zakładkę.
+Przycisk przy wierszu pozwala archiwizować/przywracać; jest widoczny po hoverze/fokusie, stale na ekranie dotykowym i zawsze
+osiągalny Tabem. Origin-checked PATCH `/api/chats/:id` przyjmuje opcjonalne `title`, `archived: boolean` i `temporary: false`
+(co najmniej jedno pole). Hermes zapisuje `archived` i `archivedAt` w mapowaniu; stare pliki bez pól oznaczają aktywną rozmowę.
+Archiwizacja nie usuwa ani nie przerywa runu. Przy starcie serwera i co 24 h tylko nieaktywne rozmowy o tytule zaczynającym
+się dokładnie od `[test]` i ostatniej aktywności sprzed co najmniej 7 dni trafiają do archiwum. Bieżąca tura jest pomijana.
+Zwykły automat ani jego run nie są samodzielnym powodem archiwizacji; podlegają wyłącznie tej samej regule `[test]`.
+
+Rozmowa tymczasowa jest wyborem nowej rozmowy; pierwsza wiadomość tworzy ją przez POST z `temporary: true`. Ma przerywane
+ramki i baner z „Zachowaj rozmowę”. Serwer wyklucza ją z listy, a klient także z aktualizacji SSE i ostatniej rozmowy w
+localStorage. Szkic tymczasowy jest tylko w pamięci okna przeglądarki, bez zapisu w localStorage. Przełączenie, nowa rozmowa lub ukrycie okna usuwa mapowanie; opuszczenie strony wysyła best-effort DELETE.
+Restart serwera sprząta osierocone mapowania. „Zachowaj” zdejmuje flagę przez PATCH i rozmowa trafia do zwykłej historii;
+przed pierwszą wiadomością zmienia jedynie tryb nowego czatu. Szczegóły sprzątania sesji i ograniczenie pamięci: [hermes.md](hermes.md#rozmowy-tymczasowe).

@@ -36,7 +36,7 @@ export class HermesError extends Error {
 }
 
 export type RunState = 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'unknown';
-export interface RunStatus { state: RunState; output?: string; error?: string; session?: string }
+export interface RunStatus { usage?: Record<string, unknown>; state: RunState; output?: string; error?: string; session?: string }
 /** What a failed run says when Hermes gave no reason. */
 export const UNFINISHED = 'Hermes nie dokończył odpowiedzi.';
 
@@ -71,6 +71,7 @@ export interface HermesClient {
   approve(run: string, approval: string, approve: boolean): Promise<void>;
   cancel(run: string): Promise<void>;
   history(session: string): Promise<HistoryMessage[]>;
+  deleteSession?(session: string): Promise<void>;
 }
 
 export interface HermesClientOptions {
@@ -117,6 +118,7 @@ export function runStatusOf(body: unknown): RunStatus {
   const raw = String(first(o, 'status', 'state') ?? first(run, 'status', 'state') ?? '').toLowerCase();
   const output = first(o, 'output', 'final_response', 'response', 'result') ?? first(run, 'output', 'final_response', 'response');
   return {
+    ...(Object.keys(rec(o.usage ?? run.usage)).length ? { usage: rec(o.usage ?? run.usage) } : {}),
     state: STATES[raw] ?? 'unknown',
     output: typeof output === 'string' ? output : str(rec(output).text) ?? str(rec(output).content),
     error: errorText(first(o, 'error', 'last_error') ?? first(run, 'error')),
@@ -301,6 +303,10 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
         if (!(error instanceof HermesError) || (error.status !== 404 && error.status !== 405)) throw error;
         await request(HERMES_ROUTES.stop(run), { method: 'POST', body: {} });
       }
+    },
+    async deleteSession(session) {
+      if (!HERMES_ID.test(session)) throw new HermesError(400, 'Nieprawidłowe ID sesji.');
+      await request(`/api/sessions/${encodeURIComponent(session)}`, { method: 'DELETE' });
     },
     async history(session) {
       const pages: HistoryMessage[][] = [];

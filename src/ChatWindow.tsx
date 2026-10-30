@@ -40,6 +40,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
   const [ownPicking, setOwnPicking] = useState(false);
   const picking = controlledPicking ?? ownPicking;
   const visible = view !== 'hidden' || picking;
+  useEffect(() => { if (!visible) source.closeTemporary?.(); }, [visible, source.closeTemporary]);
   const mode = picking ? 'dock' : view === 'full' ? 'window' : 'compact';
   const [history, setHistory] = useState(() => window.innerWidth >= 1100);
   const [compactHistory, setCompactHistory] = useState(false);
@@ -55,7 +56,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
   const launcher = useRef<HTMLElement | null>(null);
   const setPicking = (on: boolean) => { setOwnPicking(on); onPickingChange?.(on); };
   const setView = (next: ChatView) => { setPicking(false); setOwnView(next); onViewChange?.(next); };
-  const close = () => { setPicking(false); onClose(); };
+  const close = () => { source.closeTemporary?.(); setPicking(false); onClose(); };
   useEffect(() => { if (view === 'hidden') setOwnPicking(false); }, [view]);
   useEffect(() => { setConfirmDelete(false); }, [source.activeId]);
   useEffect(() => {
@@ -99,7 +100,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
     return () => { document.body.style.overflow = overflow; };
   }, [visible, mode]);
 
-  return createPortal(<div className="chat-root ck-root wektor-root tw:font-ck tw:text-ck-text" data-mode={mode} hidden={!visible}>
+  return createPortal(<div className="chat-root ck-root wektor-root tw:font-ck tw:text-ck-text" data-mode={mode} data-temporary={source.temporary || undefined} hidden={!visible}>
     <section ref={section} className="wektor-shell" role={mode === 'window' ? 'dialog' : 'complementary'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem">
       <header className="wektor-header">
         {!picking && <button type="button" className="wektor-icon" aria-label="Pokaż rozmowy" title="Historia rozmów" aria-expanded={historyShown} onClick={toggleHistory}><PanelLeft size={19} /></button>}
@@ -117,7 +118,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
       </header>
       <div className="wektor-body">
         {historyShown && !picking && <><button type="button" className="wektor-history-backdrop" aria-label="Zamknij historię" onClick={closeHistory} /><ConversationSidebar source={source} close={closeHistory} /></>}
-        <ConversationWorkspace key={source.activeId ?? 'new'} source={source} picking={visible && picking} setPicking={setPicking} compact={mode !== 'window'} visible={visible} inspector={inspector} setInspector={setInspector} />
+        <ConversationWorkspace key={source.activeId ?? (source.temporary ? 'temporary' : 'new')} source={source} picking={visible && picking} setPicking={setPicking} compact={mode !== 'window'} visible={visible} inspector={inspector} setInspector={setInspector} />
       </div>
     </section>
   </div>, document.body);

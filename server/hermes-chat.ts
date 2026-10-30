@@ -12,7 +12,7 @@ import { stableAppointmentCardId } from './appointment-cards';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
-import { HermesError, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
+import { HermesError, HERMES_ID, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type RunStatus } from './hermes-api';
 import {
   automationPrompt, titleFrom, withContext,
   type ChatAutomation, type ChatAutomationInput, type ChatDetail, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ContextItem, type MessageStatus,
@@ -84,8 +84,9 @@ interface Turn {
   request?: Parameters<HermesClient['startRun']>[0];
   status: MessageStatus;
   error?: string;
+  usage?: ChatMessage['usage'];
 }
-interface Stored { schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+interface Stored { archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
 
 interface Live {
   record: Stored;
@@ -332,19 +333,57 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     void turn.then(() => { if (writes.get(record.id) === turn) writes.delete(record.id); }, () => {});
     return turn;
   };
+  // Only session/run ids survive a failed deletion; no temporary conversation content is kept here.
+  const cleanupDir = path.join(dir, 'hermes-session-cleanup');
+  const deleting = new Set<string>();
+  const cleanupSession = async (id: string, session: string, runs: string[]) => {
+    if (!client.deleteSession || deleting.has(id) || closed) return;
+    deleting.add(id);
+    const marker = path.join(cleanupDir, `${id}.json`);
+    try {
+      for (const run of runs) await client.cancel(run).catch(() => {});
+      try { await client.deleteSession(session); }
+      catch (error) { if (!(error instanceof HermesError && error.status === 404)) throw error; }
+      await rm(marker, { force: true });
+    } catch { later(30_000, () => { void cleanupSession(id, session, runs); }); }
+    finally { deleting.delete(id); }
+  };
+  const queueSessionCleanup = async (record: Stored) => {
+    if (!client.deleteSession) return;
+    const runs = record.turns.filter(t => t.status === 'streaming' && t.run).map(t => t.run!);
+    await mkdir(cleanupDir, { recursive: true });
+    const marker = path.join(cleanupDir, `${record.id}.json`);
+    await writeFile(`${marker}.tmp`, JSON.stringify({ session: record.session, runs }), 'utf8');
+    await rename(`${marker}.tmp`, marker);
+    void cleanupSession(record.id, record.session, runs);
+  };
   const notifyTurn = (record: Stored, turn: Turn, ended: boolean) => {
     if (turn.automation && turn.nonce && turn.run) options.onAutomationTurn?.({ chatId: record.id, turnId: turn.id, runId: turn.run, ended });
   };
   const load = () => loading ??= (async () => {
     await mkdir(chatsDir, { recursive: true });
+    for (const name of await readdir(cleanupDir).catch(() => [] as string[])) {
+      const id = name.replace(/\.json$/, '');
+      if (!name.endsWith('.json') || !ID.test(id)) continue;
+      try {
+        const pending = JSON.parse(await readFile(path.join(cleanupDir, name), 'utf8')) as { session: string; runs: string[] };
+        if (typeof pending.session === 'string' && HERMES_ID.test(pending.session) && Array.isArray(pending.runs) && pending.runs.every(r => typeof r === 'string' && HERMES_ID.test(r))) void cleanupSession(id, pending.session, pending.runs);
+      } catch { /* keep the marker for inspection/retry, never act on malformed data */ }
+    }
     for (const name of await readdir(chatsDir)) {
       if (!name.endsWith('.json')) continue;
       try {
         const value = JSON.parse(await readFile(path.join(chatsDir, name), 'utf8')) as Stored;
-        if (value.engine !== 'hermes' || typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.turns) || typeof value.session !== 'string') continue;
+        if (value.engine !== 'hermes' || typeof value.id !== 'string' || !ID.test(value.id) || !Array.isArray(value.turns) || typeof value.session !== 'string' || !HERMES_ID.test(value.session) || typeof value.title !== 'string') continue;
+        if (value.temporary === true) {
+          await queueSessionCleanup(value);
+          await rm(file(value.id), { force: true });
+          continue;
+        }
         records.set(value.id, value);
       } catch { /* a damaged file is not a chat */ }
     }
+    await archiveTests();
     // A turn that was running when the panel stopped goes on in Hermes: follow it again (or say it never got there).
     for (const record of records.values()) {
       const turn = record.turns.at(-1);
@@ -365,6 +404,17 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       void follow(live);
     }
   })();
+  const archiveTests = async () => {
+    for (const record of records.values()) {
+      if (!record.archived && !record.temporary && record.title.startsWith('[test]') && !lives.has(record.id) && record.turns.at(-1)?.status !== 'streaming' && now() - record.updatedAt >= 7 * 86_400_000) {
+        record.archived = true; record.archivedAt = now(); await save(record, true);
+      }
+    }
+  };
+  const maintenance = () => later(86_400_000, () => { void load().then(archiveTests).catch(() => {}).finally(maintenance); });
+  maintenance();
+  // Load at startup, including orphan cleanup; no user turn is created.
+  void Promise.resolve().then(load).catch(() => {});
   const need = async (id: string) => {
     await load();
     const record = ID.test(id) ? records.get(id) : undefined;
@@ -375,6 +425,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   // ── what the window sees ──
   const summary = (record: Stored): ChatSummary => ({
     id: record.id, title: record.title, ...( record.userNamed ? { userNamed: true } : {} ), createdAt: record.createdAt, updatedAt: record.updatedAt,
+    archived: record.archived ?? false, archivedAt: record.archivedAt, temporary: record.temporary ?? false,
     messages: record.turns.length * 2, running: lives.has(record.id), engine: 'hermes',
   });
   const items = (record: Stored): ChatMessage[] => {
@@ -395,13 +446,13 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         const answered = group.parts.some(p => p.type === 'text');
         const status = answered && turn.status === 'error' ? 'done' : turn.status;
         const parts = group.parts.map(p => p.type === 'tool' && p.name.includes('panel_cezar_propose') ? { ...p, id: `${turn.agent}:${p.id}` } : { ...p });
-        const restored: ChatMessage = { id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) };
+        const restored: ChatMessage = { usage: turn.usage, id: turn.agent, role: 'agent', at: turn.at, parts, status, ...(status === 'error' ? { error: turn.error } : {}) };
         stabilizeBankCards(restored);
         out.push(restored);
       } else {
         const missing = turn.run && turn.status !== 'error' && history?.error;
         out.push({
-          id: turn.agent, role: 'agent', at: turn.at, parts: [],
+          usage: turn.usage, id: turn.agent, role: 'agent', at: turn.at, parts: [],
           status: missing ? 'error' : turn.status,
           error: missing ? `Nie można teraz wczytać odpowiedzi z sesji Hermesa (${history!.error}). Zostaje w Hermesie i wróci, gdy będzie dostępny.` : turn.error,
         });
@@ -635,11 +686,13 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     message.status = answer;
     message.notice = undefined;
     if (error) message.error = error; else delete message.error;
-    if (usage) {
+    usage ??= status.usage;
+    if (usage && [usage.input_tokens ?? usage.prompt_tokens, usage.output_tokens ?? usage.completion_tokens].every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0)) {
       const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
-      message.usage = { input: n(usage.input_tokens ?? usage.prompt_tokens), output: n(usage.output_tokens ?? usage.completion_tokens), thinking: n(usage.reasoning_tokens), cached: n(usage.cache_read_tokens ?? usage.cached_tokens), calls: n(usage.api_calls), tools: tools(live).length };
+      message.usage = { ...(typeof usage.cost_usd === 'number' && Number.isFinite(usage.cost_usd) && usage.cost_usd >= 0 ? { costUsd: usage.cost_usd } : {}), input: n(usage.input_tokens ?? usage.prompt_tokens), output: n(usage.output_tokens ?? usage.completion_tokens), thinking: n(usage.reasoning_tokens), cached: n(usage.cache_read_tokens ?? usage.cached_tokens), calls: n(usage.api_calls), tools: tools(live).length };
     }
     turn.status = answer;
+    turn.usage = message.usage;
     if (error) turn.error = error; else delete turn.error;
     record.updatedAt = now();
     if (lives.get(record.id) === live) lives.delete(record.id);
@@ -647,7 +700,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     histories.delete(record.id);
     save(record);
     touch(record, message, true);
-    if (answer === 'done' && record.turns.length === 1 && !turn.automation && !record.userNamed && !record.titleAttempted && options.namer) {
+    if (answer === 'done' && record.turns.length === 1 && !turn.automation && !record.temporary && !record.userNamed && !record.titleAttempted && options.namer) {
       record.titleAttempted = true;
       save(record);
       const text = message.parts.filter(p => p.type === 'text').map(p => p.text).join(' ');
@@ -714,7 +767,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     const first = !record.turns.some(t => t.run);
     const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, context);
     let started: { run: string; session?: string };
-    turn.request = { input: first ? `${intro}\n\n${prompt}` : prompt, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
+    turn.request = { input: `${record.temporary ? '[Rozmowa tymczasowa] Nie zapisuj niczego z tej rozmowy do pamięci długotrwałej, profilu użytkownika ani notatek.\n\n' : ''}${first ? `${intro}\n\n${prompt}` : prompt}`, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
     try {
       if (nonce) { record.turns.push(turn); await save(record, true); }
       started = await client.startRun(turn.request);
@@ -744,14 +797,14 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       catch (error) { health = { at: now(), value: { available: false, error: error instanceof Error ? error.message : 'Hermes nie odpowiada.' } }; }
       return health.value;
     },
-    async list() { await load(); return [...records.values()].filter(r => r.turns.length).map(summary).sort((a, b) => b.updatedAt - a.updatedAt); },
+    async list() { await load(); return [...records.values()].filter(r => r.turns.length && !r.temporary).map(summary).sort((a, b) => b.updatedAt - a.updatedAt); },
     async get(id) { const record = await need(id); await ensureHistory(record); return detail(record); },
     async create(input) {
       await load();
       const at = now();
       const id = randomUUID();
       // The session is named after the chat, so a run that reached Hermes before the panel saved the mapping is still found.
-      const record: Stored = { schema: 1, id, engine: 'hermes', title: titleFrom(input.text), createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
+      const record: Stored = { schema: 1, id, engine: 'hermes', title: titleFrom(input.text), temporary: input.temporary === true, createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
       records.set(id, record);
       try { await service.send(id, input); }
       catch (error) { records.delete(id); throw error; }
@@ -815,6 +868,17 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       save(record);
       sendState(record);
     },
+    async update(id, changes) {
+      const record = await need(id);
+      if (changes.archived !== undefined) {
+        if (record.temporary) throw new ChatError(409, 'Najpierw zachowaj rozmowę tymczasową.');
+        record.archived = changes.archived;
+        if (changes.archived) record.archivedAt = now(); else delete record.archivedAt;
+      }
+      if (changes.temporary === false) record.temporary = false;
+      await save(record, true);
+      sendState(record);
+    },
     async remove(id) {
       const record = await need(id);
       const live = lives.get(id);
@@ -823,8 +887,9 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         clearInterval(live.watchdog);
         live.abort.abort();
         lives.delete(id);
-        if (live.turn.run) void client.cancel(live.turn.run).catch(() => {});
+        if (live.turn.run && !record.temporary) void client.cancel(live.turn.run).catch(() => {});
       }
+      if (record.temporary) await queueSessionCleanup(record);
       log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'chat-deleted' });
       records.delete(id);
       histories.delete(id);

@@ -5,10 +5,12 @@ const keyOf = (id: string | null) => `desk-panel:chat-draft:${id ?? 'new'}`;
 export interface ChatDraft { text: string; context: ContextItem[] }
 const empty = (): ChatDraft => ({ text: '', context: [] });
 const drafts = new Map<string, ChatDraft>();
+const ephemeral = new Set<string>();
 
 /** Every conversation, including the not-yet-sent new chat, owns its text and picked context. */
 export function getChatDraft(id: string | null = null): ChatDraft {
   const key = keyOf(id);
+  if (ephemeral.has(key)) return drafts.get(key) ?? empty();
   try {
     // Migrate the old global draft to the new-chat composer once.
     if (id === null && !localStorage.getItem(key)) {
@@ -26,6 +28,7 @@ export function getChatDraft(id: string | null = null): ChatDraft {
 function save(id: string | null, draft: ChatDraft) {
   const key = keyOf(id);
   drafts.set(key, draft);
+  if (ephemeral.has(key)) { try { localStorage.removeItem(key); } catch { /* memory only */ } return; }
   try {
     if (draft.text || draft.context.length) localStorage.setItem(key, JSON.stringify(draft));
     else localStorage.removeItem(key);
@@ -40,4 +43,11 @@ export const CHAT_DRAFT_EVENT = 'desk-panel:chat-draft';
 export function applyChatDraft(text: string, id: string | null = null) {
   setChatDraftText(text, id);
   window.dispatchEvent(new CustomEvent(CHAT_DRAFT_EVENT, { detail: { id, text } }));
+}
+
+/** Temporary composers never persist their draft to browser storage. Saving promotes the current in-memory draft. */
+export function setChatDraftTemporary(id: string | null, temporary: boolean) {
+  const draft = getChatDraft(id), key = keyOf(id);
+  if (temporary) ephemeral.add(key); else ephemeral.delete(key);
+  save(id, draft);
 }

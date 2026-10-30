@@ -92,11 +92,17 @@ export interface CockpitState {
   pr?: CockpitPr;
 }
 
-export interface CockpitChat { id: string; title: string; running: boolean; createdAt?: number; updatedAt: number }
+export interface CockpitChat { archived?: boolean; archivedAt?: number; temporary?: boolean; id: string; title: string; running: boolean; createdAt?: number; updatedAt: number }
 
 /** Where the window gets its conversation and cockpit: the mock (scenarios, `?cockpit=mock`) or Hermes. */
 export interface CockpitSource {
   mode: 'mock' | 'live';
+  temporary?: boolean;
+  startTemporary?(): void;
+  closeTemporary?(): void;
+  keep?(): void;
+  archive?(id: string, archived: boolean): void;
+  cost?(): Promise<string>;
   title: string;
   messages: CockpitMessage[];
   running: boolean;

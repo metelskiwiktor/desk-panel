@@ -84,7 +84,7 @@ if (!values.shot) {
             if (values.open?.startsWith('automation:')) {
               await page.getByRole('navigation', { name: 'Lista automatów' }).getByRole('button', { name: new RegExp(values.open.slice('automation:'.length)) }).click();
               await page.waitForTimeout(200);
-            } else if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills') {
+            } else if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills' || values.open === 'chat-commands' || values.open === 'chat-archive' || values.open === 'chat-temporary') {
               await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
               if (values.open === 'chat' || values.open === 'chat-edit') {
                 await page.getByLabel('Wiadomość do agenta').fill('Chciałbym znaleźć dogodny termin wizyty u psychologa w przyszłym tygodniu i sprawdzić mój kalendarz');
@@ -95,6 +95,22 @@ if (!values.shot) {
               if (values.open === 'chat-edit') await page.getByRole('button', { name: 'Zmień nazwę rozmowy' }).click();
               if (values.open === 'chat-compact') await page.getByRole('button', { name: 'Zminimalizuj czat' }).click();
               if (values.open === 'chat-skills') await page.getByLabel('Wiadomość do agenta').fill('@');
+              if (values.open === 'chat-commands') await page.getByLabel('Wiadomość do agenta').fill('/');
+              if (values.open === 'chat-temporary') {
+                await page.getByLabel('Wiadomość do agenta').fill('/tymczasowa');
+                await page.getByLabel('Wiadomość do agenta').press('Enter');
+                await page.getByText('Rozmowa tymczasowa', { exact: true }).waitFor();
+              }
+              if (values.open === 'chat-archive') {
+                await page.getByLabel('Wiadomość do agenta').fill('Plan tygodnia');
+                await page.getByLabel('Wiadomość do agenta').press('Enter');
+                await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor();
+                await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20000 });
+                await page.getByLabel('Wiadomość do agenta').fill('/archiwizuj');
+                await page.getByLabel('Wiadomość do agenta').press('Enter');
+                await page.getByRole('tab', { name: 'Archiwum · 1', exact: true }).waitFor();
+                await page.getByRole('tab', { name: 'Archiwum · 1', exact: true }).click();
+              }
               await page.waitForTimeout(300);
             } else if (cockpit) {
               // The mock's flow: @Zaimplementuj zadanie → recon → approval card → Cezar watched → PR in review.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { MessageSquare, Plus, Search, X } from 'lucide-react';
+import { Archive, ArchiveRestore, MessageSquare, Plus, Search, X } from 'lucide-react';
 import type { CockpitSource } from './types';
 
 const clock = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
@@ -19,6 +19,7 @@ const readWidth = () => {
 
 export function ConversationSidebar({ source, close }: { source: CockpitSource; close(): void }) {
   const [query, setQuery] = useState('');
+  const [archived, setArchived] = useState(false);
   const [width, setWidth] = useState(readWidth);
   const sidebar = useRef<HTMLElement>(null);
   const dragging = useRef(false);
@@ -31,12 +32,16 @@ export function ConversationSidebar({ source, close }: { source: CockpitSource; 
   };
   const resize = (value: number) => { const { min, max } = bounds(); setWidth(Math.round(Math.max(min, Math.min(max, value)))); };
   const now = Date.now();
-  const chats = source.chats?.filter(c => fold(`${c.title} ${c.id}`).includes(fold(query)));
+  const chats = source.chats?.filter(c => !c.temporary && !!c.archived === archived && fold(`${c.title} ${c.id}`).includes(fold(query)));
   let group = '';
   const open = (id: string | null) => { source.open(id); if (window.innerWidth < 1100) close(); };
   return <aside ref={sidebar} className="wektor-history" aria-label="Historia rozmów" style={{ '--wk-history-width': `${width}px` } as CSSProperties}>
     <header><span>Twoje rozmowy</span><button type="button" className="wektor-icon" aria-label="Ukryj historię" title="Ukryj historię" onClick={close}><X size={16} /></button></header>
     <button type="button" className="wektor-new" onClick={() => open(null)}><Plus size={17} />Nowy czat</button>
+    <div className="wektor-history-tabs" role="tablist" aria-label="Rozmowy i archiwum">
+      <button type="button" role="tab" aria-selected={!archived} onClick={() => setArchived(false)}>Rozmowy</button>
+      <button type="button" role="tab" aria-selected={archived} onClick={() => setArchived(true)}>Archiwum · {source.chats?.filter(c => c.archived && !c.temporary).length ?? 0}</button>
+    </div>
     <label className="wektor-search"><Search size={15} /><input aria-label="Szukaj rozmów" placeholder="Szukaj po nazwie lub ID" value={query} onChange={e => setQuery(e.target.value)} />{query && <button type="button" className="wektor-icon" aria-label="Wyczyść wyszukiwanie" onClick={() => setQuery('')}><X size={14} /></button>}</label>
     <div className="wektor-history-list" role="group" aria-label="Poprzednie rozmowy">
       {chats === undefined && <p className="wektor-hint">Wczytuję rozmowy…</p>}
@@ -44,11 +49,12 @@ export function ConversationSidebar({ source, close }: { source: CockpitSource; 
       {chats?.map(c => {
         const next = groupOf(c.updatedAt, now), heading = group !== next;
         group = next;
-        return <div key={c.id}>{heading && <h2>{next}</h2>}<button type="button" className="wektor-history-item" aria-current={c.id === source.activeId ? 'true' : undefined} onClick={() => open(c.id)} title={c.title}>
+        return <div key={c.id}>{heading && <h2>{next}</h2>}<div className="wektor-history-row"><button type="button" className="wektor-history-item" aria-current={c.id === source.activeId ? 'true' : undefined} onClick={() => open(c.id)} title={c.title}>
           <MessageSquare size={15} aria-hidden="true" /><span><strong>{c.title}</strong><small>{groupOf(c.updatedAt, now) === 'Dziś' ? clock.format(c.updatedAt) : date.format(c.updatedAt)}</small></span>{c.running && <i className="wektor-live-dot" aria-label="Agent odpowiada" />}
-        </button></div>;
+        </button>{source.archive && <button type="button" className="wektor-archive wektor-icon" aria-label={archived ? 'Przywróć rozmowę' : 'Archiwizuj rozmowę'} aria-description={c.title} title={`${archived ? 'Przywróć' : 'Archiwizuj'}: ${c.title}`} onClick={() => source.archive?.(c.id, !archived)}>{archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}</button>}</div></div>;
       })}
     </div>
+    <p className="wektor-hint">Rozmowy „[test]” trafiają do archiwum po 7 dniach bez aktywności.</p>
     <div className="wektor-history-resize" role="separator" aria-label="Szerokość historii" aria-orientation="vertical" aria-valuemin={bounds().min} aria-valuemax={bounds().max} aria-valuenow={Math.min(width, bounds().max)} tabIndex={0} title="Przeciągnij, aby zmienić szerokość historii. Dwuklik przywraca domyślną."
       onPointerDown={e => { if (e.button !== 0) return; e.preventDefault(); dragging.current = true; e.currentTarget.setPointerCapture?.(e.pointerId); }}
       onPointerMove={e => { if (dragging.current) { e.preventDefault(); resize(e.clientX - (sidebar.current?.getBoundingClientRect().left ?? 0)); } }}

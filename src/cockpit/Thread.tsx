@@ -105,13 +105,28 @@ export function detectAtSkill(draft: string): { start: number; query: string; to
 }
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l');
 
-interface Shared {
+const COMMANDS = [
+  { id: 'nowa', label: 'Nowa rozmowa', section: 'Rozmowa' },
+  { id: 'tymczasowa', label: 'Rozmowa, która nie zostaje w historii', section: 'Rozmowa' },
+  { id: 'archiwizuj', label: 'Przenieś tę rozmowę do archiwum', section: 'Rozmowa' },
+  { id: 'koszt', label: 'Tokeny i koszt tej rozmowy', section: 'Rozmowa' },
+  { id: 'zadanie', label: 'Załóż zadanie z ustaleń tej rozmowy', section: 'Zrób z tego' },
+  { id: 'automat', label: 'Zaproponuj automat', section: 'Zrób z tego' },
+  { id: 'notatka', label: 'Zapisz w notatkach', section: 'Zrób z tego', disabled: true },
+];
+interface ThreadProps {
   source: CockpitSource;
   context: ContextItem[];
   setContext: (fn: (list: ContextItem[]) => ContextItem[]) => void;
   picking: boolean;
   setPicking: (on: boolean) => void;
   empty: ReactNode;
+  localMessage?(text: string): void;
+  resetLocal?(): void;
+  commandRef?: { current: ((id: string) => Promise<void>) | null };
+}
+interface Shared extends ThreadProps {
+  commandMenu: ReactNode;
   matching: readonly ChatSkill[];
   active: number;
   pick(skill: ChatSkill): void;
@@ -125,9 +140,11 @@ function Welcome() { return <>{usePanel().empty}</>; }
 
 /** Above the field: the skill picker, the panel's error and the card when Hermes is down. */
 function ComposerHeader() {
-  const { source, matching, active, pick } = usePanel();
+  const { source, matching, active, pick, commandMenu } = usePanel();
   const down = !source.hermes.up;
   return <>
+    {source.temporary && <div className="wektor-temporary-banner"><div><b>Rozmowa tymczasowa</b><p>Nie trafi do historii; Wektor dostał polecenie, by nic z niej nie zapamiętywał. Zniknie po zamknięciu.</p></div><button type="button" className="wektor-text-button" onClick={source.keep}>Zachowaj rozmowę</button></div>}
+    {commandMenu}
     {matching.length > 0 && <div role="listbox" id="wektor-skills" aria-label="Wybór skillów" className="wektor-skills">
       <div className="wektor-skills-heading"><span>Umiejętności Wektora</span><span>↑ ↓ wybierz · Enter dodaj · Esc zamknij</span></div>
       {matching.map((s, i) => <button key={s.id} type="button" role="option" aria-selected={i === active}
@@ -201,7 +218,7 @@ function AssistantMessageFooter() {
 const SLOTS: ThreadComponents = { Welcome, ComposerHeader, ComposerTop, ComposerExtra, UserMessageHeader, AssistantMessageFooter };
 
 /** Inside the runtime: the `@` picker's state and keys, given to the slots and to the field. */
-function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
+function Conversation(props: ThreadProps) {
   const { source, context, setContext, picking } = props;
   const aui = useAui();
   const draft = useAuiState(s => s.composer.text);
@@ -238,6 +255,34 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     setChatDraftText(draft, source.activeId);
   }, [draft]);
 
+  const slash = /^\/([^\n]*)$/.exec(draft);
+  const commands = slash && dismissed !== draft ? COMMANDS.filter(c => fold(`${c.id} ${c.label}`).includes(fold(slash[1]))) : [];
+  const choices = commands.filter(c => !c.disabled && (c.id !== 'archiwizuj' || source.activeId && !source.temporary));
+  const commandActive = choices.length ? Math.min(index, choices.length - 1) : 0;
+  const command = async (id: string) => {
+    aui.composer().setText(''); setChatDraftText('', source.activeId); setDismissed(null); setIndex(0);
+    if (id === 'nowa') { setContext(() => []); props.resetLocal?.(); source.open(null); return; }
+    if (id === 'tymczasowa') { setContext(() => []); props.resetLocal?.(); source.startTemporary?.(); return; }
+    if (id === 'archiwizuj') { if (source.activeId) source.archive?.(source.activeId, true); return; }
+    if (id === 'koszt') {
+      try { props.localMessage?.(await source.cost?.() ?? 'Brak danych o tokenach i koszcie tej rozmowy.'); }
+      catch { props.localMessage?.('Nie udało się odczytać danych o koszcie tej rozmowy.'); }
+      return;
+    }
+    const text = id === 'zadanie' ? 'Załóż zadanie z ustaleń tej rozmowy na liście zadań panelu. Uwzględnij uzgodniony cel i szczegóły.' : 'Zaproponuj automat z ustaleń tej rozmowy. Pokaż kartę zgody z celem, harmonogramem i parametrami akcji.';
+    aui.composer().setText(text); setChatDraftText(text, source.activeId);
+    if (!running && !source.refreshing && !source.loading && source.hermes.up) queueMicrotask(() => aui.composer().send());
+  };
+  if (props.commandRef) props.commandRef.current = command;
+  let commandSection = '';
+  const commandMenu = commands.length > 0 ? <div className="wektor-skills wektor-commands" role="listbox" id="wektor-commands" aria-label="Komendy rozmowy">
+    {commands.map(c => {
+      const heading = commandSection !== c.section; commandSection = c.section;
+      const disabled = c.disabled || c.id === 'archiwizuj' && (!source.activeId || source.temporary);
+      return <div key={c.id}>{heading && <div className="wektor-skills-heading">{c.section}</div>}<button type="button" role="option" id={`wektor-command-${c.id}`} aria-selected={choices[commandActive]?.id === c.id} aria-disabled={disabled || undefined} disabled={disabled} className="wektor-skill" onMouseDown={e => e.preventDefault()} onClick={() => void command(c.id)}><code>/{c.id}</code><span>{c.label}</span>{c.disabled && <small>później</small>}</button></div>;
+    })}<div className="wektor-skills-heading">Skille pod @ · ↑↓ wybór · Enter · Esc</div>
+  </div> : null;
+  useEffect(() => { document.getElementById(`wektor-command-${choices[commandActive]?.id}`)?.scrollIntoView?.({ block: 'nearest' }); }, [commandActive, choices[commandActive]?.id]);
   const at = detectAtSkill(draft);
   const matching = at && dismissed !== at.token ? CHAT_SKILLS.filter(s => !at.query || fold(s.title).includes(fold(at.query)) || s.id.includes(fold(at.query))) : [];
   const active = matching.length ? Math.min(index, matching.length - 1) : 0;
@@ -258,6 +303,11 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     setIndex(0);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (commands.length) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDismissed(draft); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => choices.length ? (i + (e.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : 0); return; }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (choices[commandActive]) void command(choices[commandActive].id); return; }
+    }
     if (matching.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setIndex(i => (i + 1) % matching.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => (i - 1 + matching.length) % matching.length); return; }
@@ -279,13 +329,13 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
         setChatDraftText((e.target as HTMLTextAreaElement).value, source.activeId);
       },
       'aria-label': 'Wiadomość do agenta',
-      'aria-controls': matching.length ? 'wektor-skills' : undefined,
-      'aria-expanded': matching.length > 0,
-      'aria-activedescendant': matching[active] ? `wektor-skill-${matching[active].id}` : undefined,
+      'aria-controls': commands.length ? 'wektor-commands' : matching.length ? 'wektor-skills' : undefined,
+      'aria-expanded': matching.length > 0 || commands.length > 0,
+      'aria-activedescendant': commands.length && choices[commandActive] ? `wektor-command-${choices[commandActive].id}` : matching[active] ? `wektor-skill-${matching[active].id}` : undefined,
       placeholder: picking ? 'Co z tym zrobić?' : 'Napisz do Wektora…',
     },
   };
-  return <Panel.Provider value={{ ...props, matching, active, pick }}>
+  return <Panel.Provider value={{ ...props, matching, active, pick, commandMenu }}>
     <AuiThread components={components} />
   </Panel.Provider>;
 }
@@ -294,14 +344,23 @@ function Conversation(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
  * The left column: the conversation (assistant-ui over the cockpit's source). The source keeps the messages;
  * assistant-ui renders them and reports what the user sends or stops.
  */
-export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
+export function Thread(props: ThreadProps) {
   const { source, setContext } = props;
+  const [localMessages, setLocalMessages] = useState<CockpitMessage[]>([]);
+  const commandRef = useRef<((id: string) => Promise<void>) | null>(null);
   const contextRef = useRef(props.context);
   contextRef.current = props.context;
   const runtimeRef = useRef<ReturnType<typeof useExternalStoreRuntime> | null>(null);
   const onNew = async (message: AppendMessage) => {
     const text = message.content.map(p => p.type === 'text' ? p.text : '').join('').trim();
     if (!text) return;
+    const slash = /^\/([a-z]+)$/.exec(text);
+    const command = slash && COMMANDS.find(c => c.id === slash[1]);
+    if (command) {
+      if (!command.disabled && (command.id !== 'archiwizuj' || source.activeId && !source.temporary)) await commandRef.current?.(command.id);
+      else runtimeRef.current?.thread.composer.setText(text);
+      return;
+    }
     // On failure the draft and the picked elements stay, so nothing is lost while Hermes is down.
     if (await source.send(text, contextRef.current)) {
       setContext(() => []);
@@ -312,7 +371,7 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
     }
   };
   const runtime = useExternalStoreRuntime<CockpitMessage>({
-    messages: source.messages,
+    messages: [...source.messages, ...localMessages].sort((a, b) => a.at - b.at),
     convertMessage: toThreadMessage,
     isRunning: source.running,
     isDisabled: source.unavailable,
@@ -328,7 +387,7 @@ export function Thread(props: Omit<Shared, 'matching' | 'active' | 'pick'>) {
       <CardActions.Provider value={actions}>
         <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><MailListUI /><SmartRuleUI /><AutomationUI /><ApprovalUI />
         <div className="tw:relative tw:min-h-0 tw:flex-1">
-          <Conversation {...props} />
+          <Conversation {...props} commandRef={commandRef} resetLocal={() => setLocalMessages([])} localMessage={text => setLocalMessages(list => [...list, { id: crypto.randomUUID(), role: 'assistant', at: Date.now(), status: 'done', parts: [{ type: 'text', text }] }])} />
         </div>
       </CardActions.Provider>
     </TooltipProvider>

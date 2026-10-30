@@ -463,3 +463,117 @@ describe('chat presentation and drafts', () => {
     expect(screen.getByRole('button', { name: 'Usuń z kontekstu: Zaimplementuj zadanie' })).toBeTruthy();
   });
 });
+
+
+describe('conversation commands and archive', () => {
+  chatHooks();
+  it('filters commands, navigates by keyboard, keeps @ skills, and shows local cost without a model turn', async () => {
+    const calls = mockServer([]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    const input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.type(input, '/');
+    expect(screen.getAllByRole('option')).toHaveLength(7);
+    expect((screen.getByRole('option', { name: /notatka/ }) as HTMLButtonElement).disabled).toBe(true);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    await user.clear(input); await user.type(input, '/kos');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('Brak danych o tokenach i koszcie tej rozmowy.')).not.toBeNull();
+    expect(calls.filter(c => c.method === 'POST')).toEqual([]);
+    await user.type(input, '/'); await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
+    expect((input as HTMLTextAreaElement).value).toBe('');
+    await user.type(input, '/tym'); await user.keyboard('{Enter}');
+    expect(await screen.findByText('Rozmowa tymczasowa')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Zachowaj rozmowę' }));
+    await waitFor(() => expect(screen.queryByText('Rozmowa tymczasowa')).toBeNull());
+    await user.type(input, '@');
+    expect(screen.getByRole('listbox', { name: 'Wybór skillów' })).not.toBeNull();
+  });
+
+  it.each([
+    ['/zadanie', 'Załóż zadanie z ustaleń tej rozmowy'],
+    ['/automat', 'Zaproponuj automat z ustaleń tej rozmowy'],
+  ])('sends %s as an expanded user request only on selection', async (command, request) => {
+    const calls = mockServer([]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await user.type(screen.getByRole('textbox', { name: 'Wiadomość do agenta' }), command);
+    expect(calls.filter(c => c.method === 'POST')).toEqual([]);
+    await user.click(screen.getByRole('option', { name: new RegExp(command) }));
+    await waitFor(() => expect(calls.find(c => c.method === 'POST')?.body.text).toContain(request));
+    expect(calls.filter(c => c.method === 'POST')).toHaveLength(1);
+  });
+
+  it('searches only the selected history tab and archives the active conversation from /', async () => {
+    const archived = summary({ id: '11111111-1111-4111-8111-111111111111', title: 'Dawna rozmowa', archived: true });
+    const calls = mockServer([summary(), archived]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    const input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.type(input, '/arch'); await user.keyboard('{Enter}');
+    await waitFor(() => expect(calls.some(c => c.method === 'PATCH' && c.body.archived === true)).toBe(true));
+    expect(screen.queryByRole('button', { name: /Dawna rozmowa/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Pokaż rozmowy' }));
+    await user.click(screen.getByRole('tab', { name: 'Archiwum · 1' }));
+    expect(screen.getByRole('button', { name: /Dawna rozmowa/ })).not.toBeNull();
+    await user.type(screen.getByRole('textbox', { name: 'Szukaj rozmów' }), 'Zadanie');
+    expect(screen.queryByRole('button', { name: /Zadanie z maila/ })).toBeNull();
+    await user.clear(screen.getByRole('textbox', { name: 'Szukaj rozmów' }));
+    await user.click(screen.getByRole('button', { name: 'Przywróć rozmowę' }));
+    await waitFor(() => expect(calls.some(c => c.method === 'PATCH' && c.body.archived === false)).toBe(true));
+  });
+
+  it('saves an active temporary chat and keeps it after switching', async () => {
+    const calls = mockServer([]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    let input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.type(input, '/tymczasowa'); await user.keyboard('{Enter}');
+    input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.type(input, 'Zachowaj ustalenia'); await user.keyboard('{Enter}');
+    await waitFor(() => expect(FakeSource.instances.length).toBeGreaterThan(0));
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history, { temporary: true }) });
+    await user.click(screen.getByRole('button', { name: 'Zachowaj rozmowę' }));
+    await waitFor(() => expect(calls.some(c => c.method === 'PATCH' && c.body.temporary === false)).toBe(true));
+    await waitFor(() => expect(screen.queryByText('Rozmowa tymczasowa')).toBeNull());
+    expect(localStorage.getItem('desk-panel:last-hermes-chat')).toBe(ID);
+    await user.type(screen.getByRole('textbox', { name: 'Wiadomość do agenta' }), '/nowa'); await user.keyboard('{Enter}');
+    expect(calls.filter(c => c.method === 'DELETE')).toEqual([]);
+  });
+
+  it('deletes an active temporary conversation when the window closes', async () => {
+    const calls = mockServer([]), close = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={close} />);
+    await user.type(screen.getByRole('textbox', { name: 'Wiadomość do agenta' }), '/tymczasowa'); await user.keyboard('{Enter}');
+    await user.type(screen.getByRole('textbox', { name: 'Wiadomość do agenta' }), 'Tylko na chwilę'); await user.keyboard('{Enter}');
+    await waitFor(() => expect(FakeSource.instances.length).toBeGreaterThan(0));
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history, { temporary: true }) });
+    await user.click(screen.getByRole('button', { name: 'Zamknij czat' }));
+    expect(close).toHaveBeenCalledOnce();
+    await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith(ID))).toBe(true));
+  });
+
+  it('removes a temporary conversation on switching', async () => {
+    const calls = mockServer([]);
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    let input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.type(input, '/tymczasowa'); await user.keyboard('{Enter}');
+    await user.type(input, 'Sekret na chwilę'); await user.keyboard('{Enter}');
+    await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.body.temporary === true)).toBe(true));
+    await waitFor(() => expect(FakeSource.instances.length).toBeGreaterThan(0));
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history, { temporary: true }) });
+    expect(screen.queryByRole('button', { name: /Zadanie z maila/ })).toBeNull();
+    await user.type(screen.getByRole('textbox', { name: 'Wiadomość do agenta' }), 'Szkic tymczasowy');
+    expect(localStorage.getItem(`desk-panel:chat-draft:${ID}`)).toBeNull();
+    input = screen.getByRole('textbox', { name: 'Wiadomość do agenta' });
+    await user.clear(input); await user.type(input, '/nowa'); await user.keyboard('{Enter}');
+    await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith(ID))).toBe(true));
+    expect(localStorage.getItem('desk-panel:last-hermes-chat')).toBeNull();
+  });
+});

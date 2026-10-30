@@ -17,7 +17,7 @@ które przekazuje żądanie do `ChatWindow` i istniejącego `source.open(id)`. S
 | Tekst i kontekst niewysłanej wiadomości, osobno dla rozmowy | `src/chat-draft.ts` |
 | Lista rozmów, SSE, snapshoty ostatnich rozmów | `src/useChat.ts` |
 | Mapowanie wiadomości na assistant-ui, odczyt kokpitu i decyzje | `src/cockpit/live.ts`, `src/cockpit/types.ts` |
-| Kompozytor, skille `@`, kontekst, rejestracja kart narzędzi | `src/cockpit/Thread.tsx` |
+| Kompozytor, komendy `/`, skille `@`, kontekst, rejestracja kart narzędzi | `src/cockpit/Thread.tsx` |
 | Komponenty assistant-ui skopiowane i zmodyfikowane w repo | `src/components/thread.aui.tsx`, pozostałe `src/components/*` |
 | Task i PR w kokpicie | `src/cockpit/Cockpit.tsx` |
 | Wizyty: karta, wspólny stan, oś kalendarza | `src/cockpit/appointment-card.tsx`, `appointment-workspace.tsx`, `AppointmentPanel.tsx` |
@@ -73,6 +73,7 @@ Ekrany i skalowania pochodzą wyłącznie z `devices.json`.
 ```powershell
 just wektor-ui all
 just wektor-ui composer
+just wektor-ui commands
 just wektor-ui keyboard
 just wektor-ui history
 just wektor-ui switching --latency 240
@@ -87,6 +88,7 @@ w odczytach przeglądarki, walidowanych kontraktem, aby wykrywać pomieszanie ro
 
 | Przypadek | Co sprawdza |
 | --- | --- |
+| `commands` | Filtrowanie `/`, Esc, ↑↓/Enter, nowa rozmowa, tymczasowa, zachowanie przed wysłaniem i zakładka archiwum; bez tury modelu. |
 | `composer` | Pierwszy znak i usunięcie tekstu bez przesunięcia pola; menu skillów i brak poziomego przepełnienia. |
 | `keyboard` | Ctrl+Alt w obu kolejnościach, wskazanie kontekstu, Ctrl+V/A po przytrzymaniu Ctrl, AltGr, Esc/Gotowe, Alt+W i stały rozmiar. |
 | `history` | Osobne szkice i skille, wyszukiwanie po ID, przeciąganie historii, pamięć szerokości i obsługa separatora klawiaturą. |
@@ -104,3 +106,19 @@ Trace i logi są poza Gitem. Dla archiwum kolejnego porównania podaj inny `--ou
 Przy dopisywaniu przepływu używaj warunku gotowości i stabilnej geometrii, nie stałego opóźnienia „na animację”. Kod
 przesyłany do przeglądarki nie może zależeć od helperów wstrzykiwanych przez transpiler Node (`tsx`), np. `__name`.
 Testy przeglądarkowe mają sprawdzać trwałe zachowania i granice, zgodnie z [testowanie.md](testowanie.md).
+
+
+Komendy, lokalny komunikat `/koszt` i baner trybu tymczasowego należą do `src/cockpit/Thread.tsx`; zakładki, licznik i
+akcje wiersza do `ConversationSidebar.tsx`; wybór/opuszczenie/zachowanie do `useChat.ts` przez `cockpit/live.ts`.
+Powłoka `ChatWindow.tsx` sprząta tryb tymczasowy również przy ukryciu skrótem Alt+W i dostaje `data-temporary` do ramek.
+`wektor.css` używa istniejących tokenów `--wk-*`; nie kopiuje stylów statycznych makiet.
+
+Zrzuty na syntetycznym Hermesie, bez usługi i danych użytkownika:
+
+```powershell
+just screenshots standard --pages pulpit --open chat-commands
+just screenshots standard --pages pulpit --open chat-archive
+just screenshots standard --pages pulpit --open chat-temporary
+```
+
+Pełne zachowanie i ograniczenia pamięci opisuje [czat.md](czat.md#komendy-archiwum-i-rozmowy-tymczasowe).

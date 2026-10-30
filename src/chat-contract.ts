@@ -204,11 +204,12 @@ export const chatSendSchema = z.object({
   context: z.array(contextItemSchema).max(MAX_CONTEXT).default([]),
   /** Only when a conversation starts: the engine it runs on (the saved preference otherwise). */
   engine: z.enum(chatEngines).optional(),
+  temporary: z.boolean().optional(),
   /** One per draft: the same message sent twice (a retry after a timeout) starts one turn, not two. */
   nonce: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
 }).strict();
 export type ChatSend = z.input<typeof chatSendSchema>;
-export const chatRenameSchema = z.object({ title: z.string().trim().min(1).max(120) }).strict();
+export const chatRenameSchema = z.object({ title: z.string().trim().min(1).max(120).optional(), archived: z.boolean().optional(), temporary: z.literal(false).optional() }).strict().refine(v => Object.keys(v).length > 0);
 export const chatEngineSchema = z.object({ engine: z.enum(chatEngines) }).strict();
 /** The user's answer to a tool the agent wants to run. */
 export const chatApprovalSchema = z.object({
@@ -260,7 +261,7 @@ export type MessageStatus = 'streaming' | 'done' | 'error' | 'stopped';
  * together), `cached` the tokens read from its prompt cache on top of that, `thinking` is part of `output`.
  * `calls` is how many times the model was called and `tools` how many commands it ran.
  */
-export interface ChatUsage { input: number; output: number; thinking: number; cached: number; calls: number; tools: number }
+export interface ChatUsage { costUsd?: number; input: number; output: number; thinking: number; cached: number; calls: number; tools: number }
 export interface ChatMessage {
   id: string;
   role: 'user' | 'agent';
@@ -280,6 +281,9 @@ export interface ChatMessage {
 }
 
 export interface ChatSummary {
+  archived?: boolean;
+  archivedAt?: number;
+  temporary?: boolean;
   userNamed?: boolean;
   id: string;
   title: string;
