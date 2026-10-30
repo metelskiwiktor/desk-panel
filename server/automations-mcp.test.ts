@@ -139,6 +139,27 @@ describe('automation card route', () => {
     expect(await before.list()).toHaveLength(0);
   });
 
+  it('applies an update once under concurrent clicks, keeps its before preview after restart', async () => {
+    const automations = make();
+    const a = await automations.createFromPlan(chatId, plan as never);
+    const updatedPlan = { ...plan, replaces: a.id, goal: 'Sprawdź nowy cennik.' };
+    const detail = JSON.parse(JSON.stringify(conversation()));
+    detail.items[0].parts[0].input = JSON.stringify(updatedPlan);
+    const chatStub = { get: async () => detail } as never;
+    const keeper = cockpit();
+    const responses = [response(), response()];
+    await Promise.all(responses.map(res => handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), res as never, url, 'http://panel', chatStub, keeper, undefined, automations)));
+    const result = JSON.parse(responses[0].body);
+    expect(result).toMatchObject({ decision: 'updated', automationId: a.id, before: { goal: plan.goal } });
+    expect(JSON.parse(responses[1].body)).toEqual(result);
+    expect(await automations.list()).toHaveLength(1);
+    expect((await automations.get(a.id))!.changes).toHaveLength(1);
+    const again = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), again as never, url, 'http://panel', chatStub, cockpit(), undefined, automations);
+    expect(JSON.parse(again.body)).toEqual(result);
+    expect((await automations.get(a.id))!.changes).toHaveLength(1);
+  });
+
   it('keeps the decision in the cockpit: a second answer creates nothing and a reload shows it', async () => {
     const automations = make();
     const chatStub = { get: async () => conversation() } as never;

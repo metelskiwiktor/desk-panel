@@ -70,6 +70,11 @@ export const RUN_REPORT_TIMEOUT_MS = 15 * 60_000;
 /** Cykliczny automat bez `until` kończy się po 90 dniach. */
 export const CYCLE_DEFAULT_DAYS = 90;
 
+export const automationChangeSchema = z.object({
+  at: z.number(), by: z.enum(['user', 'agent']),
+  fields: z.record(z.string(), z.object({ before: z.unknown(), after: z.unknown() })),
+});
+
 export const automationSchema = z.object({
   id: z.string().regex(/^a-[0-9a-f]{12}$/),
   name: z.string().trim().min(1).max(120),
@@ -90,13 +95,14 @@ export const automationSchema = z.object({
   nextRunAt: z.number().int().nonnegative().optional(),
   lastRunAt: z.number().int().nonnegative().optional(),
   runs: z.array(automationRunSchema).max(MAX_RUNS),
+  changes: z.array(automationChangeSchema).max(50).default([]),
 });
 export type Automation = z.infer<typeof automationSchema>;
 
 export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional() });
 export type AutomationList = z.infer<typeof automationListSchema>;
 
-/** The plan a `panel_automation_propose` card carries; `replaces` says which automation it replaces. */
+/** The plan a `panel_automation_propose` card carries; `replaces` identifies an automation to update in place. */
 export const automationPlanSchema = z.object({
   name: z.string().trim().min(1).max(120),
   goal: z.string().trim().min(1).max(4000),
@@ -128,7 +134,7 @@ export const automationDecisionSchema = z.object({
 
 /** The user's answer on a card, kept in `cockpit.json`: answered twice, done once and shown after a reload. */
 export const automationOutcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('created'), at: z.number(), automationId: z.string().regex(/^a-[0-9a-f]{12}$/), name: z.string().min(1).max(120) }),
+  z.object({ decision: z.enum(['created', 'updated']), before: automationSchema.optional(), at: z.number(), automationId: z.string().regex(/^a-[0-9a-f]{12}$/), name: z.string().min(1).max(120) }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 export type AutomationOutcome = z.infer<typeof automationOutcomeSchema>;
@@ -211,4 +217,28 @@ export const OUTCOME_LABELS: Record<RunOutcome, string> = {
 export function parseClock(time: string): { hour: number; minute: number } {
   const [hour, minute] = time.split(':').map(Number);
   return { hour, minute };
+}
+
+/** Values that a full consent plan changes; an omitted optional condition keeps its current value. */
+export function automationPlanValues(current: Automation, plan: AutomationPlan) {
+  let trigger = plan.trigger;
+  if (isCyclic(current.trigger) && isCyclic(trigger)) {
+    const old = current.trigger as Extract<AutomationTrigger, { kind: 'daily' | 'weekly' }>;
+    trigger = { ...trigger, from: ('from' in trigger ? trigger.from : undefined) ?? old.from, until: ('until' in trigger ? trigger.until : undefined) ?? old.until } as AutomationTrigger;
+  }
+  return { name: plan.name, goal: plan.goal, trigger, doneWhen: plan.doneWhen ?? current.doneWhen, actions: plan.actions, learn: plan.learn };
+}
+
+export const CHANGE_LABELS: Record<string, string> = { name: 'Nazwa', goal: 'Cel', doneWhen: 'Warunek celu', trigger: 'Harmonogram', actions: 'Akcje', learn: 'Uczenie się', notebook: 'Notatnik' };
+export function changeValue(field: string, value: unknown): string {
+  if (value == null) return 'brak';
+  if (field === 'trigger') return describeTriggerRange(triggerSchema.parse(value));
+  if (field === 'actions') return (value as AutomationAction[]).map(a => ACTION_LABELS[a.kind]).join(', ') || 'brak';
+  if (typeof value === 'boolean') return value ? 'tak' : 'nie';
+  return String(value);
+}
+
+export function automationDiff(before: Record<string, unknown>, after: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(after).filter(([key, value]) => JSON.stringify(before[key]) !== JSON.stringify(value))
+    .map(([key, value]) => [key, { before: before[key] ?? null, after: value ?? null }]));
 }

@@ -67,14 +67,25 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - `panel_automation_propose {name, goal, trigger, doneWhen?, actions, learn, replaces?}` — karta „Nowy automat”. Zapis
   dopiero po kliknięciu: `POST /api/chats/:id/automation` (Origin-checked); plan jest czytany z wywołania narzędzia w tej
   rozmowie, żądanie może tylko zawęzić plan: odznaczyć akcje i wyłączyć `learn` (włączyć się nie da). Karta ma stałe id
-  liczone z planu, więc działa na żywo i po odświeżeniu. `replaces` anuluje stary automat dopiero po walidacji nowego. Decyzja karty (utworzony automat albo
+  liczone z planu, więc działa na żywo i po odświeżeniu. `replaces: <id>` aktualizuje istniejący automat na miejscu: id, chatId, createdAt, runy i notatnik zostają.
+  Zmienia nazwę, cel, harmonogram, akcje i learn oraz podany warunek celu (pominięty zostaje bez zmian). Aktywny pozostaje aktywny,
+  wstrzymany pozostaje wstrzymany. Zakończony, wygasły i anulowany odmawiają zmiany: trzeba zaproponować nowy automat bez replaces.
+  Aktualizacja nie zużywa miejsca w limicie 20 aktywnych, także gdy zmieniany automat jest wstrzymany.
+  Karta „Zmienić automat?” pokazuje obecną nazwę i tylko zmienione pola przed → po (harmonogram słownie, akcje etykietami),
+  z przyciskami „Zapisz zmiany” / „Odrzuć”. Zapis zatwierdzonej karty zachowuje też podgląd sprzed zmiany.
+  nextRunAt jest przeliczany z harmonogramu, nie wcześniej niż teraz; pominięty zakres dat cyklu zachowuje poprzedni zakres.
+  Trwający lub oczekujący run zachowuje swoją rezerwację, turę i ustawienia (także learn i akcje) aż do końca;
+  nowe ustawienia dostaje następny run. Ustawienia runu są zapisywane razem z rezerwacją i przeżywają restart.
+  Każda faktyczna zmiana ustawień zapisuje `changes: [{at, by: 'user'|'agent', fields: {pole: {before, after}}}]`
+  w tym samym atomowym zapisie co rekord (ostatnie 50; brak poprzedniej wartości jako null). Zgoda na karcie to `user`,
+  bezpośrednia zmiana przez narzędzie Wektora to `agent`. Starsze rekordy mają pustą historię. Decyzja karty (utworzony automat albo
   odrzucenie) trafia do `~/.desk-panel/cockpit.json` po `toolCallId`, jak odpowiedzi kart banku i Smart Actions: drugie
-  kliknięcie nic nie tworzy, a po przeładowaniu karta pokazuje „Utworzono automat …” z linkiem do widoku Automaty.
+  kliknięcie nic nie tworzy, a po przeładowaniu karta pokazuje „Utworzono automat …” albo „Zaktualizowano automat …” z linkiem do widoku Automaty.
 - `panel_observe {create|list|cancel}` — bez karty, zapisuje jednorazowy automat (`once`/`cezar`/`pr`) w rozmowie, w której
   trwa tura.
 - `panel_automations {id?}` — lista albo szczegóły (runy, notatnik) do analizy.
-- `panel_automation_update {id, pause|resume|cancel|runNow, notebook?, name?}` — bez karty, na wyraźną prośbę. Zmiana celu,
-  akcji albo harmonogramu to nowa karta `panel_automation_propose` z `replaces`.
+- `panel_automation_update {id, pause|resume|cancel|runNow, notebook?, name?}` — bez karty, na wyraźną prośbę. Zmiana celu, warunku celu, nazwy, learn,
+  akcji albo harmonogramu to karta `panel_automation_propose` z `replaces`.
 - `panel_automation_report {runId, token, …}` — tylko w runie o tym `runId`, w bieżącej turze jego rozmowy.
 
 ## UI
@@ -88,6 +99,7 @@ w jednej linii z nazwą i zakładki-pigułki Runy / Cel i akcje / Notatnik / Roz
 jest na górze i rozwinięty (data, czas, koszt, summary, „notatnik zmieniony / bez zmian”, link do rozmowy runu), starsze
 mają jedną linię „data — summary”. Obok osi stoją ramki „Wektor o tych runach” (link otwiera rozmowę automatu z gotowym
 pytaniem w polu wiadomości; nic nie wysyła się samo) i „Gdy cel zostanie osiągnięty” (warunek i zatwierdzone akcje).
+Zakładka „Cel i akcje” pokazuje również historię zmian: data, autor, pola i wartości przed → po, od najnowszej.
 Na wąskim ekranie lista stoi nad szczegółami. Przyciski to Origin-checked POST-y `/api/automations/action`; lista z
 `GET /api/automations`. Dotychczasowa karta obserwatorów w Ustawieniach prowadzi teraz do tego widoku. Automat jest
 wskazywalny w czacie (`ctx('automation', …)`).

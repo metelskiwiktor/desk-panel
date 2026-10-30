@@ -575,11 +575,11 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       doneWhen: { type: 'string', description: 'Warunek celu jednym zdaniem; przy nim outcome done kończy automat' },
       actions: { type: 'array', description: 'Zatwierdzone akcje; etap 1 tylko [{kind:"message"}]', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message'] } }, required: ['kind'] } },
       learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },
-      replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), gdy ta karta zmienia jego cel, akcje albo harmonogram' },
+      replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), do aktualizacji na miejscu; historia i notatnik zostają' },
     }, ['name', 'goal', 'trigger', 'actions', 'learn']),
     async run(args) {
       const plan = automationPlanSchema.parse(args);
-      return `${CARD_SHOWN.automation}: ${plan.name}, ${describeTrigger(plan.trigger)}. Automat powstaje dopiero po kliknięciu użytkownika. Nie pisz, że go utworzyłeś. Zakończ odpowiedź jednym zdaniem.`;
+      return `${CARD_SHOWN.automation}: ${plan.name}, ${describeTrigger(plan.trigger)}. ${plan.replaces ? 'Zmiany istniejącego automatu zapiszą się na miejscu' : 'Automat powstaje'} dopiero po kliknięciu użytkownika. Nie pisz, że go utworzyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
   panel_automations: {
@@ -621,7 +621,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     async run(args, ctx) {
       if (!ctx.automations) throw new AgentViewError(503, 'Automaty nie są dostępne.');
       try {
-        const a = await ctx.automations.update(args as any);
+        const a = await ctx.automations.update(args as any, 'agent');
         return `Automat ${a.id} (${a.name}): ${a.status}, ${scheduleLabel(a.trigger)}.`;
       } catch (error) {
         if (error instanceof AutomationError) throw new AgentViewError(error.status, error.message);

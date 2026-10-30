@@ -9,7 +9,7 @@ import type { CezarSnapshot, FinishedTask } from '../src/cezar-contract';
 import type { CockpitPrView } from '../src/cockpit-contract';
 import {
   CYCLE_DEFAULT_DAYS, MAX_ACTIVE_AUTOMATIONS, MAX_NOTEBOOK, MAX_RUNS, RUN_REPORT_TIMEOUT_MS,
-  automationPlanSchema, isCyclic, isOneShot, parseClock, scheduleLabel, type Automation, type AutomationPlan, type AutomationReport,
+  automationChangeSchema, automationDiff, automationPlanValues, automationPlanSchema, isCyclic, isOneShot, parseClock, scheduleLabel, type Automation, type AutomationPlan, type AutomationReport,
   type AutomationRun, type AutomationStatus, type AutomationTrigger, type AutomationUpdate, type RunOutcome,
 } from '../src/automation-contract';
 
@@ -52,6 +52,7 @@ const recordSchema = z.object({
   lastRunAt: z.number().optional(),
   /** Internal: what the watched Cezar task / PR looked like, so the first read is a baseline, not a change. */
   snapshot: z.record(z.string(), z.unknown()).default({}),
+  changes: z.array(automationChangeSchema).max(50).default([]),
   runs: z.array(z.object({
     id: z.string(), at: z.number(), chatId: z.string(), outcome: z.enum(['not-yet', 'done', 'error', 'skipped']),
     token: z.string().optional(), hermesRunId: z.string().optional(), turnId: z.string().optional(), summary: z.string(), notebookChanged: z.boolean(), previousNotebook: z.string().optional(), costUsd: z.number().optional(), seconds: z.number().optional(),
@@ -69,6 +70,7 @@ const pendingSchema = z.object({
   startedAt: z.number().default(0),
   deadline: z.number().optional(),
   sent: z.boolean().default(false),
+  settings: recordSchema.optional(),
   detail: z.string(),
   reason: z.string(),
 });
@@ -193,7 +195,7 @@ export function nextRunFor(trigger: AutomationTrigger, after: number, zone = ZON
 function migratedAutomation(o: z.infer<typeof oldObserverSchema>, now: number): Stored {
   const common = {
     id: `a-${randomBytes(6).toString('hex')}`, name: '', goal: o.instruction, status: 'active' as AutomationStatus,
-    notebook: '', learn: false, actions: [{ kind: 'message' }], chatId: o.chatId, createdAt: o.createdAt, snapshot: { ...o.snapshot }, runs: [],
+    notebook: '', learn: false, actions: [{ kind: 'message' }], chatId: o.chatId, createdAt: o.createdAt, snapshot: { ...o.snapshot }, runs: [], changes: [],
   } satisfies Partial<Stored>;
   if (o.kind === 'time') {
     const at = Number(o.snapshot.at) || o.createdAt;
@@ -225,13 +227,13 @@ export interface AutomationChat {
 }
 
 export interface Automations {
-  /** From a consent card (`POST /api/chats/:id/automation`): creates the automation, or cancels the one it replaces. */
+  /** From a consent card (`POST /api/chats/:id/automation`): creates the automation, or updates the existing one in place. */
   createFromPlan(chatId: string, plan: AutomationPlan): Promise<Automation>;
   /** `panel_observe`: a card-free one-shot automation (time, Cezar task, PR). */
   createObserver(input: { chatId: string; kind: 'cezar' | 'pr' | 'time'; target: string; instruction: string }): Promise<Automation>;
   list(): Promise<Automation[]>;
   get(id: string): Promise<Automation | undefined>;
-  update(input: AutomationUpdate): Promise<Automation>;
+  update(input: AutomationUpdate, by?: 'user' | 'agent'): Promise<Automation>;
   /** `panel_automation_report`: requires the one-time token and the reserved Hermes turn to still be live. */
   report(input: AutomationReport): Promise<AutomationRun>;
   /** Hermes lifecycle notification: bind the native run, or close it immediately when its turn ends. */
@@ -374,7 +376,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       id: `a-${randomBytes(6).toString('hex')}`,
       name: plan.name, goal: plan.goal, trigger, status: 'active', ...(plan.doneWhen ? { doneWhen: plan.doneWhen } : {}),
       notebook: '', learn: plan.learn, actions: plan.actions, chatId, createdAt: at,
-      ...(nextRunAt !== undefined ? { nextRunAt } : {}), snapshot: {}, runs: [],
+      ...(nextRunAt !== undefined ? { nextRunAt } : {}), snapshot: {}, runs: [], changes: [],
     };
   }
 
@@ -382,11 +384,13 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     assertEnabled();
     const plan = automationPlanSchema.parse(raw);
     const at = now();
-    if (plan.replaces) {
-      const old = find(plan.replaces);
-      if (!old) throw new AutomationError(404, `Panel nie zna automatu ${plan.replaces}.`);
-    }
-    if (active().length + (plan.replaces && find(plan.replaces)?.status === 'active' ? 0 : 1) > MAX_ACTIVE_AUTOMATIONS) {
+    const old = plan.replaces ? find(plan.replaces) : undefined;
+    if (plan.replaces && !old) throw new AutomationError(404, `Panel nie zna automatu ${plan.replaces}.`);
+    const assertEditable = () => {
+      if (old && old.status !== 'active' && old.status !== 'paused') throw new AutomationError(409, 'Ten automat jest zakończony, wygasły albo anulowany. Zaproponuj nowy automat bez replaces.');
+    };
+    assertEditable();
+    if (!old && active().length >= MAX_ACTIVE_AUTOMATIONS) {
       throw new AutomationError(409, `Limit aktywnych automatów to ${MAX_ACTIVE_AUTOMATIONS}. Wstrzymaj albo anuluj któryś w widoku Automaty.`);
     }
     if (plan.trigger.kind === 'pr' && !PR_URL.test(plan.trigger.url)) throw new AutomationError(400, 'PR to pełny adres: https://github.com/owner/repo/pull/n.');
@@ -395,7 +399,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       if (!rawTask) throw new AutomationError(404, `Cezar nie zna taska ${plan.trigger.taskId}.`);
     }
     // Build and validate the replacement completely before touching the old one: a refused plan changes nothing.
-    const record = buildRecord(chatId, { ...plan, replaces: undefined }, at);
+    const values = old ? automationPlanValues(view(old), plan) : plan;
+    const record = buildRecord(chatId, values, at);
     if (record.trigger.kind === 'cezar' && readTask) {
       const rawTask = await readTask(record.trigger.taskId).catch(() => null);
       record.snapshot.state = cezarStateOf(rawTask);
@@ -405,11 +410,20 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         if (first.state !== 'UNKNOWN') record.snapshot.signature = prSignature(first);
       } catch { /* the first successful read becomes the baseline */ }
     }
-    if (plan.replaces) {
-      const old = find(plan.replaces)!;
-      old.status = 'cancelled';
-      store.pending = store.pending.filter(p => p.automationId !== old.id);
-      writeLog(`automat ${old.id} zastąpiony przez nowy.`);
+    if (old) {
+      assertEditable(); // Provider reads may have allowed an open run to finish.
+      const fields = automationDiff(view(old), { ...values, trigger: record.trigger });
+      // Freeze settings even for reservations persisted by the previous version.
+      for (const pending of pendingOf(old.id)) pending.settings ??= structuredClone(old);
+      const previous = structuredClone(store);
+      Object.assign(old, values, { trigger: record.trigger });
+      const next = nextRunFor(record.trigger as AutomationTrigger, now(), zone);
+      if (next === undefined) delete old.nextRunAt; else old.nextRunAt = Math.max(now(), next);
+      if (fields.trigger) old.snapshot = record.snapshot;
+      if (Object.keys(fields).length) old.changes = [...old.changes, { at, by: 'user' as const, fields }].slice(-50);
+      try { save(); } catch (error) { store = previous; throw error; }
+      ensureClock();
+      return view(old);
     }
     store.automations.push(record);
     prune();
@@ -452,7 +466,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     }
     const record: Stored = {
       id: `a-${randomBytes(6).toString('hex')}`, name, goal: instruction, trigger, status: 'active', notebook: '', learn: false,
-      actions: [{ kind: 'message' }], chatId, createdAt: at, ...(nextRunFor(trigger, at, zone) !== undefined ? { nextRunAt: nextRunFor(trigger, at, zone) } : {}), snapshot, runs: [],
+      actions: [{ kind: 'message' }], chatId, createdAt: at, ...(nextRunFor(trigger, at, zone) !== undefined ? { nextRunAt: nextRunFor(trigger, at, zone) } : {}), snapshot, runs: [], changes: [],
     };
     store.automations.push(record);
     prune();
@@ -467,6 +481,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     ...(a.doneWhen ? { doneWhen: a.doneWhen } : {}), notebook: a.notebook, learn: a.learn,
     actions: a.actions.map(x => ({ kind: 'message' as const })), chatId: a.chatId, createdAt: a.createdAt,
     ...(a.nextRunAt !== undefined ? { nextRunAt: a.nextRunAt } : {}), ...(a.lastRunAt !== undefined ? { lastRunAt: a.lastRunAt } : {}),
+    changes: structuredClone(a.changes),
     runs: a.runs.map(({ token: _token, ...run }) => run) as AutomationRun[],
   });
 
@@ -508,7 +523,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     try {
       const created = await chat.createAutomation({
         chatId: pending.chatId, nonce: pending.turnId,
-        text: runText(a, pending.detail, pending.id, pending.token!), title: `Automat · ${a.name} · ${DateTime.fromMillis(now(), { zone }).toFormat('yyyy-LL-dd')}`,
+        text: runText(pending.settings ?? a, pending.detail, pending.id, pending.token!), title: `Automat · ${a.name} · ${DateTime.fromMillis(now(), { zone }).toFormat('yyyy-LL-dd')}`,
         automation: { source: 'automation', reason: pending.reason },
       });
       pending.chatId = created.id;
@@ -531,7 +546,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     const cyclic = isCyclic(a.trigger as AutomationTrigger);
     const pending: Pending = {
       id: `run-${randomBytes(6).toString('hex')}`, automationId: a.id, token: randomBytes(16).toString('hex'), chatId: cyclic ? randomUUID() : a.chatId, turnId: randomUUID(),
-      startedAt: 0, sent: false, detail, reason,
+      startedAt: 0, sent: false, settings: structuredClone(a), detail, reason,
     };
     // Durable before any send: a crash after the conversation was created must not lose this occurrence.
     store.pending.push(pending);
@@ -573,7 +588,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       store.execution = { id: pending.id, chatId: pending.chatId, turnId: pending.turnId, hermesRunId: pending.hermesRunId };
       save();
       const a = find(pending.automationId);
-      if (a && isCyclic(a.trigger as AutomationTrigger)) await startCyclic(pending);
+      if (a && isCyclic((pending.settings ?? a).trigger as AutomationTrigger)) await startCyclic(pending);
       else await deliver(pending);
     })().finally(() => { draining = undefined; });
     return draining;
@@ -588,7 +603,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       const a = find(pending.automationId);
       if (!a || a.status === 'cancelled' || !pending.chatId) { store.pending = store.pending.filter(p => p.id !== pending.id); save(); return; }
       try {
-        await sendTurn(a, pending.chatId, runText(a, pending.detail, pending.id, pending.token!), pending.reason, pending.turnId!, pending.reason.startsWith('obserwator') ? 'observer' : 'automation');
+        await sendTurn(a, pending.chatId, runText(pending.settings ?? a, pending.detail, pending.id, pending.token!), pending.reason, pending.turnId!, pending.reason.startsWith('obserwator') ? 'observer' : 'automation');
         pending.sent = true;
         pending.startedAt = now();
         pending.deadline = now() + RUN_REPORT_TIMEOUT_MS;
@@ -611,9 +626,10 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       summary = summary.replaceAll(pending.token, '[redacted]');
       notebook = notebook?.replaceAll(pending.token, '[redacted]');
     }
-    const changed = a.learn && !!notebook && notebook.trim() !== a.notebook.trim();
+    const settings = pending.settings ?? a;
+    const changed = settings.learn && !!notebook && notebook.trim() !== a.notebook.trim();
     const previousNotebook = changed ? a.notebook : undefined;
-    if (a.learn && notebook !== undefined) a.notebook = notebook.slice(0, MAX_NOTEBOOK);
+    if (settings.learn && notebook !== undefined) a.notebook = notebook.slice(0, MAX_NOTEBOOK);
     const run: Stored['runs'][number] = {
       token: pending.token,
       id: pending.id, at, chatId: pending.chatId ?? a.chatId, outcome, turnId: pending.turnId, hermesRunId: pending.hermesRunId, summary: summary.slice(0, 1000),
@@ -622,7 +638,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     };
     a.runs = [...a.runs, run].slice(-MAX_RUNS);
     a.lastRunAt = at;
-    if (outcome === 'done' || isOneShot(a.trigger as AutomationTrigger)) {
+    if (outcome === 'done' || (isOneShot(settings.trigger as AutomationTrigger) && JSON.stringify(settings.trigger) === JSON.stringify(a.trigger))) {
       a.status = 'done';
       delete a.nextRunAt;
     } else if (isCyclic(a.trigger as AutomationTrigger)) {
@@ -630,7 +646,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       if (next == null) { a.status = 'expired'; delete a.nextRunAt; }
       else a.nextRunAt = next;
     }
-    if ((outcome === 'done' || outcome === 'error') && a.actions.some(x => x.kind === 'message')) {
+    if ((outcome === 'done' || outcome === 'error') && settings.actions.some(x => x.kind === 'message')) {
       store.outbox.push({ chatId: a.chatId, text: `Automat „${a.name}”: ${summary}`, reason: `automat: ${a.name}`, source: 'automation', nonce: randomUUID() });
     }
     save();
@@ -741,11 +757,12 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
 
     async get(id) { const a = find(id); return a ? view(a) : undefined; },
 
-    update(input) {
+    update(input, by = 'user') {
       return serialize(async () => {
         if (unsafeFile) throw new AutomationError(503, loadError!);
         const a = find(input.id);
         if (!a) throw new AutomationError(404, `Panel nie zna automatu ${input.id}.`);
+        const before = view(a);
         if (input.name !== undefined) a.name = input.name;
         if (input.notebook !== undefined) { a.notebook = input.notebook.slice(0, MAX_NOTEBOOK); a.learn = true; }
         const activate = () => {
@@ -778,6 +795,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
             }
           }
         }
+        const fields = automationDiff(before, { name: a.name, notebook: a.notebook, learn: a.learn });
+        if (Object.keys(fields).length) a.changes = [...a.changes, { at: now(), by, fields }].slice(-50);
         save();
         ensureClock();
         return view(a);
@@ -816,7 +835,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       }
       const a = find(pending.automationId);
       if (!a) throw new AutomationError(404, 'Automat tego runu już nie istnieje.');
-      const notebook = input.notebook !== undefined && a.learn ? input.notebook : undefined;
+      const notebook = input.notebook !== undefined && (pending.settings ?? a).learn ? input.notebook : undefined;
       finishRun(pending, input.outcome, input.summary, notebook);
       return view(a).runs.at(-1)!;
     },

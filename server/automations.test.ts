@@ -310,3 +310,61 @@ describe('one-shot observers', () => {
     expect(await automations.list()).toHaveLength(1);
   });
 });
+
+
+describe('in-place consent updates', () => {
+  it('preserves identity, history, notebook and paused status at the active limit, persists the diff and recalculates the schedule', async () => {
+    const automations = make();
+    const original = await automations.createFromPlan('origin', plan());
+    await automations.update({ id: original.id, notebook: 'Ważna notatka' });
+    await automations.update({ id: original.id, action: 'runNow' });
+    const run = stored().pending[0];
+    automations.turnChanged({ chatId: run.chatId, turnId: run.turnId, runId: 'hermes-run', ended: false });
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Jeszcze nie.' });
+    await automations.update({ id: original.id, action: 'pause' });
+    for (let i = 0; i < 20; i++) await automations.createFromPlan('other', plan());
+    const before = (await automations.get(original.id))!;
+    clock += 60_000;
+    const updated = await automations.createFromPlan('different-chat', plan({ replaces: original.id, name: 'Nowa nazwa', goal: 'Nowy cel', trigger: { kind: 'daily', time: '18:00' } }));
+    expect(updated).toMatchObject({ id: original.id, chatId: 'origin', createdAt: original.createdAt, status: 'paused', notebook: before.notebook, runs: before.runs });
+    expect(updated.nextRunAt).toBe(Date.parse('2026-10-30T18:00:00+01:00'));
+    expect(updated.changes.at(-1)).toMatchObject({ at: clock, by: 'user', fields: { name: { before: 'Ceny', after: 'Nowa nazwa' }, goal: { before: 'Sprawdź cennik.', after: 'Nowy cel' }, trigger: { before: before.trigger, after: updated.trigger } } });
+    expect((await make().get(original.id))!.changes).toEqual(updated.changes);
+    // Updating an active record at 20 active entries also consumes no new slot.
+    const active = (await automations.list()).find(a => a.status === 'active')!;
+    expect((await automations.createFromPlan('different-chat', plan({ replaces: active.id, name: 'Aktywny' }))).status).toBe('active');
+    expect(await automations.list()).toHaveLength(21);
+    for (let i = 0; i < 55; i++) await automations.createFromPlan('origin', plan({ replaces: original.id, name: `Nazwa ${i}` }));
+    expect((await make().get(original.id))!.changes).toHaveLength(50);
+  });
+
+  it('keeps a pending run and its settings across an update and restart; the following run gets the new settings', async () => {
+    let automations = make();
+    const original = await automations.createFromPlan('origin', plan({ learn: true }));
+    await automations.update({ id: original.id, action: 'runNow' });
+    const run = stored().pending[0];
+    automations.turnChanged({ chatId: run.chatId, turnId: run.turnId, runId: 'hermes-run', ended: false });
+    await automations.createFromPlan('elsewhere', plan({ replaces: original.id, goal: 'Nowy cel', learn: false, trigger: { kind: 'daily', time: '18:00' } }));
+    expect(stored().pending[0]).toMatchObject({ id: run.id, token: run.token, hermesRunId: 'hermes-run', settings: { learn: true, goal: 'Sprawdź cennik.' } });
+    automations = make();
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Dokończony.', notebook: 'Z poprzedniego runu' });
+    expect((await automations.get(original.id))!.notebook).toBe('Z poprzedniego runu');
+    expect((await automations.get(original.id))!.runs).toHaveLength(1);
+    expect((await automations.get(original.id))!.nextRunAt).toBe(Date.parse('2026-10-30T18:00:00+01:00'));
+    const execution = stored().execution;
+    automations.turnChanged({ chatId: execution.chatId, turnId: execution.turnId, runId: 'hermes-run', ended: true });
+    await automations.update({ id: original.id, action: 'runNow' });
+    expect(sent.at(-1)!.text).toContain('Nowy cel');
+    expect(stored().pending[0].settings.learn).toBe(false);
+  });
+
+  it.each(['done', 'expired', 'cancelled'] as const)('refuses a %s record without changing history', async status => {
+    const automations = make();
+    const a = await automations.createFromPlan('origin', plan());
+    const data = stored(); data.automations[0].status = status;
+    writeFileSync(join(dir, 'automations.json'), JSON.stringify(data));
+    const reloaded = make();
+    await expect(reloaded.createFromPlan('origin', plan({ replaces: a.id }))).rejects.toThrow(/nowy automat bez replaces/);
+    expect(stored()).toEqual(data);
+  });
+});
