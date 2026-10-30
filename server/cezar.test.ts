@@ -52,14 +52,14 @@ describe('createCezarRun', () => {
   });
 
   it('names the steps whose runner the workflow fixes, as the dispatch card must show them', async () => {
-    // The repository's own workflow: the steps that write code on Codex, the review on another family.
+    // The repository's own workflow: the steps that write code on opencode with Wektor's model, the review on another family.
     const request = (async () => new Response(JSON.stringify({ defaultRunner: 'agy' }))) as typeof fetch;
     const { pinned } = await readCezarDefaults('http://cezar.test', 'desk-panel-task', undefined, request);
     expect(pinned).toEqual([
-      { id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' },
-      { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' },
+      { id: 'implement', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017' },
+      { id: 'fix', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017', follows: 'implement' },
       { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' },
-      { id: 'address', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' },
+      { id: 'address', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017', follows: 'implement' },
     ]);
     // Only node keys count: a prompt that mentions "runner:" deeper in its text does not pin anything.
     const yaml = 'nodes:\r\n  - id: a\r\n    type: agent\r\n    prompt: |\r\n      runner: claude\r\n  - id: b\r\n    type: check\r\n    runner: agy\r\n  - id: c\r\n    type: agent\r\n    runner: claude\r\n';
