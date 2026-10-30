@@ -43,7 +43,7 @@ export interface CockpitPrView {
   checksError?: string;
 }
 export type DispatchOutcome =
-  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number; runner?: string; model?: string; steps?: StepOverrides }
+  | { decision: 'dispatched'; taskId: string; prompt: string; url: string; at: number; todoId?: string; runner?: string; model?: string; steps?: StepOverrides }
   | { decision: 'rejected'; at: number };
 export interface CockpitView {
   observedAt: number;

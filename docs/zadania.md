@@ -103,10 +103,13 @@ Błędy: `400` (zła akcja lub pola), `404` (nie ma takiej listy lub zadania), `
 Nowe akcje zwracają `{ok:true, list:{id,name}, task:{id}}`. `by` zmian domyślnie `user`; `panel` oznacza automatykę panelu,
 `agent` wywołania Wektora. Puste komentarze i powody blokady są odrzucane; do usunięcia blokady służy null.
 
-Jedyna automatyka stanu: po udanym utworzeniu taska Cezara z karty dispatch z `todoId` (`server/cockpit.ts`) panel dopina link `cezar`
-(id, tytuł) i `chat` (id rozmowy), następnie ustawia `realizacja`, wszystko z `by: panel`. Nieistniejące zadanie lub błąd zapisu jest
-logowany i nie unieważnia udanego dispatchu. Bez `todoId` listy pozostają nietknięte. Nie ma odpytywania Cezara/PR-a na potrzeby zmian
-zadania, innych automatycznych przejść ani startowania agenta. Samo proponowanie karty nic nie zmienia.
+Jedyna automatyka: po udanym utworzeniu taska Cezara z karty dispatch z `todoId` (`server/cockpit.ts`) panel dopina link `cezar`
+(id, tytuł) i `chat` (id rozmowy), następnie ustawia `realizacja`, wszystko z `by: panel`. Gdy ten task dostanie PR, panel dopina
+link `pr` (pełny URL, tytuł, jeśli jest pod ręką) z `by: panel`, a stanu nie zmienia. `todoId` jest zapamiętany w zapisie dispatchu
+(`~/.desk-panel/cockpit.json`), więc link działa też po restarcie i przy zamkniętym oknie czatu; PR pochodzi z istniejącego odczytu
+zakończonych zadań Cezara, bez nowego odpytywania. Nieistniejące/usunięte zadanie, błąd zapisu i limit 20 powiązań są tylko logowane
+i nie unieważniają udanego dispatchu; powtórzenie istniejącego linku nic nie dopisuje do historii. Bez `todoId` listy pozostają
+nietknięte. Nie ma innych automatycznych przejść ani startowania agenta. Samo proponowanie karty nic nie zmienia.
 
 ## Wskazywanie w czacie
 

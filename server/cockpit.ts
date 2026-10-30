@@ -26,7 +26,7 @@ export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
  */
 
 const outcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
+  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), todoId: z.string().optional(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
@@ -110,6 +110,11 @@ export interface Cockpit {
   /** `items`: the conversation as the chat has it; the watched task follows from it by the contract (`watchedTask`). */
   view(chatId: string, items: Parameters<typeof watchedTask>[0], decisions?: Record<string, DispatchOutcome>): Promise<CockpitView>;
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
+  /**
+   * The PR of a finished Cezar task, linked once to the to-do item it was dispatched from (`link` is idempotent).
+   * The to-do id comes from the kept dispatch, so this works after a restart and with no chat open.
+   */
+  linkPrs(tasks: readonly { id: string; pullRequestUrl?: string; title?: string }[]): Promise<void>;
   /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. Answered twice: done once. */
   bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
   /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
@@ -134,6 +139,29 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     renameSync(`${file}.tmp`, file);
   };
   const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, updatedAt: now() };
+  /** PR links already tried, so a read every few seconds does not write the same link again (the action itself is idempotent). */
+  const linkedPrs = new Set<string>();
+  /** The to-do a run was dispatched from, kept with the dispatch: it survives a restart and needs no open chat. */
+  const todoIdOf = (taskId: string) => {
+    for (const chat of Object.values(store.chats))
+      for (const outcome of Object.values(chat.dispatches))
+        if (outcome.decision === 'dispatched' && outcome.taskId === taskId && outcome.todoId) return outcome.todoId;
+    return undefined;
+  };
+  async function linkPr(taskId: string, prUrl: string, title?: string) {
+    if (!PR_URL.test(prUrl)) return;
+    const todoId = todoIdOf(taskId);
+    if (!todoId) return;
+    const key = `${todoId}|${taskId}|${prUrl}`;
+    if (linkedPrs.has(key)) return;
+    linkedPrs.add(key);
+    try {
+      await sources.todoAction({ action: 'link', task: todoId, kind: 'pr', id: prUrl, ...(title ? { title } : {}), by: 'panel' });
+    } catch {
+      // The task may be gone or already hold 20 links: the PR is still shown, linking is best-effort.
+      console.warn(`todos: nie udało się powiązać PR ${prUrl} z ${todoId}.`);
+    }
+  }
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
   const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
   const pendingAssigns = new Map<string, Promise<BankAssignOutcome | SmartRuleOutcome>>();
@@ -184,8 +212,10 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         if (raw) {
           task = cezarTaskView(id, raw, cezarUrl);
           if (task.prUrl) {
-            pr = await prOf(task.prUrl, { title: task.title, branch: task.branch });
+            const prUrl = task.prUrl;
+            pr = await prOf(prUrl, { title: task.title, branch: task.branch });
             task = cezarTaskView(id, raw, cezarUrl, pr.state);
+            await linkPr(task.id, prUrl, pr.title);
           }
         }
       }
@@ -218,7 +248,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}),
         ...(input.todoId ? { todoId: input.todoId } : {}),
       });
-      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}), ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}) };
+      const outcome: DispatchOutcome = { decision: 'dispatched', taskId: created.id, prompt: input.prompt, url: created.url, at: now(), ...(input.todoId ? { todoId: input.todoId } : {}), ...(input.runner ? { runner: input.runner } : {}), ...(input.model ? { model: input.model } : {}), ...(input.steps && Object.keys(input.steps).length ? { steps: input.steps } : {}) };
       chat.dispatches[input.toolCallId] = outcome;
       chat.runs = [...chat.runs.filter(r => r !== created.id), created.id].slice(-20);
       chat.updatedAt = now();
@@ -234,6 +264,10 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       })();
       pendingDispatches.set(key, operation);
       try { return await operation; } finally { pendingDispatches.delete(key); }
+    },
+
+    async linkPrs(tasks) {
+      for (const task of tasks) if (task.pullRequestUrl) await linkPr(task.id, task.pullRequestUrl, task.title);
     },
 
     async bankAssign(chatId, input, plan) {

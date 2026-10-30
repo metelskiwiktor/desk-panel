@@ -105,7 +105,7 @@ node_modules or dist. Do not print credentials in tool output.
 
 ## Areas
 
-Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i stan „W realizacji” po udanym dispatchu z karty z `todoId`, bez startowania agenta.
+Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i `pr` po PR-ze taska oraz stan „W realizacji” po udanym dispatchu z karty z `todoId`, bez startowania agenta.
 
 Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
 Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez

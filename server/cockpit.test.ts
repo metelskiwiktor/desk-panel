@@ -216,6 +216,66 @@ describe('the cockpit of a conversation', () => {
     expect(todo.history.map(h => [h.kind, h.by])).toEqual([['link', 'panel'], ['link', 'panel'], ['status', 'panel']]);
   });
 
+  it('links the PR of a dispatched task to its to-do once, from the kept dispatch and without the chat', async () => {
+    const { cockpit, todos, sources, file } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    await cockpit.dispatch(CHAT, { toolCallId: 'pr-dispatch', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId });
+    const pr = 'https://github.com/metelskiwiktor/desk-panel/pull/32';
+    // A restarted panel, with no conversation read: the to-do id comes from the kept dispatch.
+    const restarted = createCockpit({ sources, file, cezarUrl: CEZAR, gh: async () => '{}' });
+    await restarted.linkPrs([{ id: RUN, pullRequestUrl: pr, title: 'Paski' }]);
+    await restarted.linkPrs([{ id: RUN, pullRequestUrl: pr, title: 'Paski' }]);
+    const todo = (await todos.read()).data!.lists[0].tasks[0];
+    expect(todo).toMatchObject({ status: 'realizacja', done: false, links: [
+      { kind: 'cezar', id: RUN, title: 'Paski' }, { kind: 'chat', id: CHAT }, { kind: 'pr', id: pr, title: 'Paski' },
+    ] });
+    expect(todo.history.filter(h => h.kind === 'link').map(h => [h.text, h.by]))
+      .toEqual([[`+ cezar ${RUN} — Paski`, 'panel'], [`+ chat ${CHAT}`, 'panel'], [`+ pr ${pr} — Paski`, 'panel']]);
+  });
+
+  it('links the PR from the cockpit view as soon as the watched task has one, once', async () => {
+    const { cockpit, todos } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    await cockpit.dispatch(CHAT, { toolCallId: 'view-dispatch', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId });
+    const watched = [tool('panel_cezar_propose', 'view-dispatch')];
+    await cockpit.view(CHAT, watched);
+    await cockpit.view(CHAT, watched);
+    const todo = (await todos.read()).data!.lists[0].tasks[0];
+    expect(todo.links.filter(l => l.kind === 'pr')).toEqual([
+      { kind: 'pr', id: 'https://github.com/metelskiwiktor/desk-panel/pull/32', title: 'Paski', at: expect.any(Number) },
+    ]);
+  });
+
+  it('does nothing for a dispatch without a to-do id', async () => {
+    const { cockpit, todos } = setup();
+    await cockpit.dispatch(CHAT, { toolCallId: 'no-todo', decision: 'dispatch', title: 'Paski', prompt: PROMPT });
+    await cockpit.linkPrs([{ id: RUN, pullRequestUrl: 'https://github.com/metelskiwiktor/desk-panel/pull/32', title: 'Paski' }]);
+    expect((await todos.read()).data!.lists).toEqual([]);
+  });
+
+  it('never breaks the read when the to-do is gone', async () => {
+    const { cockpit, todos } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    await cockpit.dispatch(CHAT, { toolCallId: 'gone', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId });
+    await todos.apply({ action: 'deleteTask', task: todoId });
+    await expect(cockpit.linkPrs([{ id: RUN, pullRequestUrl: 'https://github.com/metelskiwiktor/desk-panel/pull/32', title: 'Paski' }])).resolves.toBeUndefined();
+  });
+
+  it('never breaks the read when the to-do already has 20 links', async () => {
+    const { cockpit, todos } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    await cockpit.dispatch(CHAT, { toolCallId: 'full', decision: 'dispatch', title: 'Paski', prompt: PROMPT, todoId });
+    for (let i = 0; i < 18; i++) await todos.apply({ action: 'link', task: todoId, kind: 'chat', id: `chat-${i}`, by: 'panel' });
+    await cockpit.linkPrs([{ id: RUN, pullRequestUrl: 'https://github.com/metelskiwiktor/desk-panel/pull/32', title: 'Paski' }]);
+    const todo = (await todos.read()).data!.lists[0].tasks[0];
+    expect(todo.links).toHaveLength(20);
+    expect(todo.links.some(l => l.kind === 'pr')).toBe(false);
+  });
+
   it('without the GitHub CLI says the checks are not known, and keeps the PR', async () => {
     const { sources, file } = setup();
     const cockpit = createCockpit({ sources, file, cezarUrl: CEZAR, gh: async () => { throw new Error('gh: not found'); } });

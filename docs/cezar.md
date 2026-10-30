@@ -40,8 +40,10 @@ Private api-client Cezara nie jest publikowany: integracja waliduje dokumentowan
 podzbiór kontraktu bez importów do sąsiedniego checkoutu.
 
 `todoId` łączy task Cezara z zadaniem listy panelu. Po udanym dispatchu z karty panel dopina do zadania linki Cezara i rozmowy,
-ustawia „W realizacji” z autorem `panel`; błąd powiązania nie psuje zlecenia. Stan zadania pozostaje niezależny od taska Cezara
-i PR-a, bez dalszych automatycznych przejść ([zadania.md](zadania.md)).
+ustawia „W realizacji” z autorem `panel`; błąd powiązania nie psuje zlecenia. `todoId` zostaje też w zapisie dispatchu
+(`~/.desk-panel/cockpit.json`), więc gdy odczyt zakończonych zadań Cezara pokaże PR, panel dopina link `pr` — także bez otwartego
+czatu i bez nowego odpytywania. Stan zadania pozostaje niezależny od taska Cezara i PR-a, bez dalszych automatycznych przejść
+([zadania.md](zadania.md)).
 
 ## Limity AI
 

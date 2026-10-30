@@ -22,7 +22,10 @@ const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const calendarId = process.env.DESK_CALENDAR_ID || 'metelski.wiktor@gmail.com';
 // Gmail accounts shown in the mail list; the calendar account by default.
 const mailAccounts = (process.env.DESK_MAIL_ACCOUNTS || calendarId).split(',').map(e => e.trim()).filter(Boolean);
-const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env });
+let cockpit: ReturnType<typeof createCockpit> | undefined;
+const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env,
+  // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
+  onFinished: tasks => cockpit?.linkPrs(tasks) });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
 const namer = createAgyNamer();
@@ -34,7 +37,7 @@ const hermes = createHermesChat({
 });
 const chat = createChatHub({ engines: { hermes, agy: createAgentChat({ namer, panelUrl: `http://127.0.0.1:${port}` }) } });
 // The chat cockpit: the Cezar task a conversation watches, its PR and subtasks; the dispatches it made (ids only).
-const cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
+cockpit = createCockpit({ sources, file: join(homedir(), '.desk-panel', 'cockpit.json'), cezarUrl: cezar.href });
 const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

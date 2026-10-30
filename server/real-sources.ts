@@ -23,6 +23,7 @@ import { createWarmupClient } from './warmup';
 import { createGitHubClient } from './github';
 import { createOpenRouterClient } from './openrouter';
 import { SourceError, type PanelSources } from './sources';
+import type { FinishedTask } from '../src/cezar-contract';
 
 /**
  * A failed read of Gmail for Wektor's tools: the cause goes to the service log (servy/logs/Desk-Panel/stderr.log, with the
@@ -35,7 +36,7 @@ function mailError(what: string, error: unknown): SourceError {
   return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
 }
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; onFinished?: (tasks: FinishedTask[]) => void | Promise<void> }): PanelSources {
   const { calendarId, env } = options;
   const dir = join(homedir(), '.desk-panel');
   const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
@@ -107,6 +108,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
       }
       // Finished tasks are a bonus: a Cezar that cannot list them still shows the rest, with the last list it gave.
       lastFinished = await finishedReader.read().catch(() => lastFinished);
+      // The PR these tasks opened, linked to the to-do they were dispatched from; best-effort, never blocks the read.
+      Promise.resolve().then(() => options.onFinished?.(lastFinished)).catch(() => {});
       return { ...cache!, finished: lastFinished };
     },
     async cezarRun(id) {
