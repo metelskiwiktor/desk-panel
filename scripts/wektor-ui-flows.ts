@@ -34,7 +34,7 @@ async function stableRect(locator: Locator): Promise<Rect> {
 function sameRect(before: Rect, after: Rect, label: string) {
   for (const field of ['x', 'y', 'width', 'height'] as const) assert.ok(Math.abs(before[field] - after[field]) <= .5, `${label}: ${field} zmieniło się z ${before[field]} na ${after[field]}`);
 }
-const inputOf = (page: Page) => page.getByRole('textbox', { name: 'Wiadomość do agenta' });
+const inputOf = (page: Page) => page.getByRole('combobox', { name: 'Wiadomość do agenta' });
 const picking = (page: Page) => page.locator('body').evaluate(element => element.hasAttribute('data-picking'));
 const toggle = (page: Page, altFirst = false) => page.keyboard.press(altFirst ? 'AltLeft+ControlLeft' : 'ControlLeft+AltLeft');
 
@@ -48,7 +48,7 @@ async function openConversation(page: Page, id: string) {
   const button = page.getByRole('button', { name: 'Pokaż rozmowy' });
   if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
   await page.getByRole('textbox', { name: 'Szukaj rozmów' }).fill(id);
-  await page.getByRole('group', { name: 'Poprzednie rozmowy' }).getByRole('button').click();
+  await page.getByRole('tabpanel').locator('.wektor-history-item').click();
 }
 
 async function seedVisits({ page, url, fixtures }: FlowContext) {
@@ -79,6 +79,37 @@ async function visitReady(page: Page) {
     const slot = document.querySelector<HTMLButtonElement>('.visit-slot');
     return slot && !slot.disabled && document.querySelector('.wektor-workspace')?.getAttribute('aria-busy') === 'false';
   }, undefined, { timeout: 20_000 });
+}
+
+async function commands({ page, screenshot }: FlowContext) {
+  await openNew(page);
+  const input = inputOf(page);
+  await input.fill('/');
+  await page.getByRole('listbox', { name: 'Komendy rozmowy' }).waitFor();
+  assert.equal(await page.getByRole('option').count(), 7);
+  await screenshot('commands');
+  await input.fill('/tym');
+  assert.equal(await page.getByRole('option').count(), 1);
+  await input.press('Escape');
+  assert.equal(await page.getByRole('listbox', { name: 'Komendy rozmowy' }).count(), 0);
+  await input.fill('/tymczasowa'); await input.press('Enter');
+  await page.getByText('Rozmowa tymczasowa', { exact: true }).waitFor();
+  await screenshot('temporary');
+  await page.getByRole('button', { name: 'Zachowaj rozmowę' }).click();
+  await input.fill('/'); await input.press('Enter');
+  assert.equal(await input.inputValue(), '/', 'Sam slash wykonał komendę.');
+  await input.press('ArrowDown'); await input.press('Enter');
+  const tabs = page.locator('.wektor-history-tabs');
+  const tabBounds = await tabs.boundingBox(), newBounds = await page.locator('.wektor-new').boundingBox(), searchBounds = await page.locator('.wektor-search').boundingBox();
+  assert.ok(tabBounds && newBounds && searchBounds);
+  assert.ok(Math.abs(tabBounds.x - newBounds.x) < 1 && Math.abs(tabBounds.x - searchBounds.x) < 1, 'Różne lewe marginesy zakładek.');
+  assert.ok(Math.abs(tabBounds.width - newBounds.width) < 1 && Math.abs(tabBounds.width - searchBounds.width) < 1, 'Różne prawe marginesy zakładek.');
+  await page.getByRole('tab', { name: 'Rozmowy', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.getByRole('tab', { name: /^Archiwum/ }).getAttribute('aria-selected'), 'true');
+  await page.getByRole('tabpanel').waitFor();
+  await screenshot('archive');
+  return { filtered: true, temporary: true, keyboard: true };
 }
 
 async function composer(context: FlowContext) {
@@ -223,4 +254,4 @@ async function switching(context: FlowContext) {
   } finally { await recording.evaluate(state => { state.running = false; }).catch(() => {}); await recording.dispose(); }
 }
 
-export const wektorFlows = { composer, keyboard, history, switching };
+export const wektorFlows = { commands, composer, keyboard, history, switching };

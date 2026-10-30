@@ -1,3 +1,4 @@
+import { clearChatDraft, setChatDraftTemporary } from './chat-draft';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_ENGINE, type ChatDetail, type ChatEngine, type ChatEvent, type ChatList, type ChatMessage, type ChatSummary, type ContextItem, type EngineStatus } from './chat-contract';
 import { rememberSnapshot } from './chat-snapshots';
@@ -18,7 +19,7 @@ async function call(path: string, method = 'GET', body?: unknown): Promise<unkno
 const byRecent = (a: ChatSummary, b: ChatSummary) => b.updatedAt - a.updatedAt;
 const LAST_CHAT = 'desk-panel:last-hermes-chat';
 const readLastChat = () => { try { return localStorage.getItem(LAST_CHAT); } catch { return null; } };
-const summaryOf = (chat: ChatDetail): ChatSummary => ({ id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.messages, running: chat.running, ...(chat.engine ? { engine: chat.engine } : {}) });
+const summaryOf = (chat: ChatDetail): ChatSummary => ({ archived: chat.archived, archivedAt: chat.archivedAt, temporary: chat.temporary, id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, messages: chat.messages, running: chat.running, ...(chat.engine ? { engine: chat.engine } : {}) });
 /** A chat from a server that predates engines is agy's. */
 export const engineOf = (chat: Pick<ChatSummary, 'engine'>): ChatEngine => chat.engine ?? 'agy';
 
@@ -42,6 +43,11 @@ export function useChat(fixed?: ChatEngine) {
   const [syncedId, setSyncedId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [temporary, setTemporary] = useState(false);
+  const temporaryRef = useRef(false);
+  const selection = useRef(0);
+  const temporaryIds = useRef(new Set<string>());
+  const cleanups = useRef(new Map<string, Promise<unknown>>());
   /** Which engines can take a message (null: the server does not say), and the one new chats start on. */
   const [engines, setEngines] = useState<EngineStatus[] | null>(null);
   /** `fixed`: the window offers one engine only, so new chats start on it whatever the server remembers. */
@@ -54,7 +60,7 @@ export function useChat(fixed?: ChatEngine) {
   const refresh = useCallback(async () => {
     try {
       const { chats: list, engines: status, engine } = await call('/api/chats') as ChatList;
-      setChats([...list].sort(byRecent));
+      setChats([...list].filter(c => !c.temporary).sort(byRecent));
       if (restored.current) {
         const id = restored.current;
         restored.current = null;
@@ -79,8 +85,8 @@ export function useChat(fixed?: ChatEngine) {
   }, [refresh]);
   useEffect(() => {
     if (fixed !== 'hermes') return;
-    try { if (activeId) localStorage.setItem(LAST_CHAT, activeId); else localStorage.removeItem(LAST_CHAT); } catch { /* optional preference */ }
-  }, [activeId, fixed]);
+    try { if (activeId && !temporary) localStorage.setItem(LAST_CHAT, activeId); else localStorage.removeItem(LAST_CHAT); } catch { /* optional preference */ }
+  }, [activeId, fixed, temporary]);
   const listed = activeId ? chats?.find(c => c.id === activeId) : undefined;
   const engine: ChatEngine = active ? engineOf(active) : listed ? engineOf(listed) : preferred;
   const engineDown = engines?.find(e => e.engine === engine && !e.available);
@@ -104,7 +110,7 @@ export function useChat(fixed?: ChatEngine) {
         rememberSnapshot(snapshots.current, activeId, event.chat);
         setActive(event.chat);
         setSyncedId(activeId);
-        setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), summaryOf(event.chat)].sort(byRecent));
+        setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), ...(!event.chat.temporary ? [summaryOf(event.chat)] : [])].sort(byRecent));
       } else {
         const previous = snapshots.current.get(activeId);
         if (previous) {
@@ -112,7 +118,7 @@ export function useChat(fixed?: ChatEngine) {
           rememberSnapshot(snapshots.current, activeId, next);
           setActive(next);
         }
-        setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), event.chat].sort(byRecent));
+        setChats(previous => previous && [...previous.filter(c => c.id !== event.chat.id), ...(!event.chat.temporary ? [event.chat] : [])].sort(byRecent));
       }
     };
     source.onerror = () => {
@@ -136,9 +142,16 @@ export function useChat(fixed?: ChatEngine) {
    */
   const send = useCallback((text: string, context: ContextItem[], nonce?: string) => guard(async () => {
     const id = activeRef.current;
+    const selected = selection.current, temp = temporaryRef.current;
     if (id) await call(`/api/chats/${id}/messages`, 'POST', { text, context, ...(nonce ? { nonce } : {}) });
     else {
-      const created = await call('/api/chats', 'POST', { text, context, engine: preferredRef.current, ...(nonce ? { nonce } : {}) }) as { id: string };
+      const created = await call('/api/chats', 'POST', { text, context, engine: preferredRef.current, ...(temp ? { temporary: true } : {}), ...(nonce ? { nonce } : {}) }) as { id: string };
+      if (selected !== selection.current) {
+        if (temp) await call(`/api/chats/${created.id}?temporary=1`, 'DELETE');
+        return true;
+      }
+      if (temp) { temporaryIds.current.add(created.id); setChatDraftTemporary(created.id, true); }
+      activeRef.current = created.id;
       setActiveId(created.id);
     }
     void refresh();
@@ -171,10 +184,53 @@ export function useChat(fixed?: ChatEngine) {
     if (!id) return;
     await call(`/api/chats/${id}`, 'DELETE');
     snapshots.current.delete(id);
+    temporaryIds.current.delete(id); clearChatDraft(id); setChatDraftTemporary(id, false);
+    temporaryRef.current = false; setTemporary(false); setChatDraftTemporary(null, false);
+    activeRef.current = null;
     setActive(null);
     setActiveId(null);
     await refresh();
   }), [guard, refresh]);
+
+  const leaveTemporary = useCallback(async () => {
+    const id = activeRef.current;
+    if (id && temporaryIds.current.has(id)) {
+      let cleanup = cleanups.current.get(id);
+      if (!cleanup) { cleanup = call(`/api/chats/${id}?temporary=1`, 'DELETE'); cleanups.current.set(id, cleanup); }
+      try { await cleanup; } catch { /* durable startup cleanup remains the backstop */ } finally { cleanups.current.delete(id); }
+      temporaryIds.current.delete(id);
+      snapshots.current.delete(id);
+      clearChatDraft(id); setChatDraftTemporary(id, false);
+    }
+    if (temporaryRef.current) { clearChatDraft(null); setChatDraftTemporary(null, false); }
+  }, []);
+  const select = useCallback((id: string | null, temp = false) => guard(async () => {
+    if (id && activeRef.current === id) return;
+    const selected = ++selection.current;
+    await leaveTemporary();
+    if (selected !== selection.current) return;
+    setChatDraftTemporary(null, temp);
+    temporaryRef.current = temp; setTemporary(temp);
+    activeRef.current = id;
+    setError(''); setActive(id ? snapshots.current.get(id) ?? null : null); setSyncedId(null); setActiveId(id);
+  }), [guard, leaveTemporary]);
+  const update = useCallback((id: string, changes: { archived?: boolean; temporary?: false }) => guard(async () => {
+    const wasTemporary = changes.temporary === false && temporaryIds.current.delete(id);
+    try { await call(`/api/chats/${id}`, 'PATCH', changes); }
+    catch (error) { if (wasTemporary) temporaryIds.current.add(id); throw error; }
+    if (changes.temporary === false) {
+      temporaryIds.current.delete(id); setChatDraftTemporary(id, false);
+      if (activeRef.current === id) { temporaryRef.current = false; setTemporary(false); setChatDraftTemporary(null, false); }
+      setActive(previous => previous?.id === id ? { ...previous, temporary: false } : previous);
+    }
+    await refresh();
+  }), [guard, refresh]);
+  // Page exit is best effort; startup cleanup is the durable backstop.
+  useEffect(() => {
+    const cleanup = () => { for (const id of temporaryIds.current) { clearChatDraft(id); void fetch(`/api/chats/${id}?temporary=1`, { method: 'DELETE', keepalive: true }).catch(() => {}); } };
+    window.addEventListener('pagehide', cleanup);
+    return () => { window.removeEventListener('pagehide', cleanup); cleanup(); };
+  }, []);
 
   return {
     chats, unavailable, active, activeId, error, busy, engines, preferred,
@@ -182,11 +238,11 @@ export function useChat(fixed?: ChatEngine) {
     /** The engine the composer writes to: the open chat's, or the preferred one for a new chat; and why it cannot, if so. */
     engine, engineDown,
     chooseEngine, approve,
-    open: useCallback((id: string) => {
-      if (activeRef.current === id) return;
-      setError(''); setActive(snapshots.current.get(id) ?? null); setSyncedId(null); setActiveId(id);
-    }, []),
-    startNew: useCallback(() => { setError(''); setActive(null); setSyncedId(null); setActiveId(null); }, []),
+    temporary, update,
+    keepTemporary: () => { if (activeRef.current) void update(activeRef.current, { temporary: false }); else { temporaryRef.current = false; setTemporary(false); setChatDraftTemporary(null, false); } },
+    open: (id: string) => void select(id),
+    startNew: (temp = false) => void select(null, temp),
+    closeTemporary: useCallback(() => { if (temporaryRef.current) void select(null); }, [select]),
     send, stop, rename, remove, refresh, clearError: useCallback(() => setError(''), []),
   };
 }

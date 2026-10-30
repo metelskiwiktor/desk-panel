@@ -260,6 +260,11 @@ ${JSON.stringify({ result: t.output })}
         return json(res, 200, { ok: true, status: run.status });
       }
     }
+    const deletedSession = /^\/api\/sessions\/([^/]+)$/.exec(url.pathname);
+    if (deletedSession && req.method === 'DELETE') {
+      const id = decodeURIComponent(deletedSession[1]);
+      return json(res, 200, { deleted: sessions.delete(id) });
+    }
     // The history where Hermes keeps it now (`/api/sessions`, pages of the newest first, each oldest first), or where it
     // was before 0.21 (`/v1/sessions`, whole) when `legacySessions` is set.
     const sessionMatch = (options.legacySessions ? /^\/v1\/sessions\/([^/]+)\/messages$/ : /^\/api\/sessions\/([^/]+)\/messages$/).exec(url.pathname);

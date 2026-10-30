@@ -110,8 +110,16 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       if (req.method === 'POST') return json(res, 201, await chat.create(parse(chatSendSchema, await readBody(req)))), true;
     } else if (!action) {
       if (req.method === 'GET') return json(res, 200, await chat.get(id)), true;
-      if (req.method === 'PATCH') { await chat.rename(id, parse(chatRenameSchema, await readBody(req)).title); return json(res, 200, { ok: true }), true; }
-      if (req.method === 'DELETE') { await chat.remove(id); return json(res, 200, { ok: true }), true; }
+      if (req.method === 'PATCH') {
+        const { title, ...changes } = parse(chatRenameSchema, await readBody(req));
+        if (Object.keys(changes).length) {
+          if (!chat.update) throw new ChatError(409, 'Ten silnik nie obsługuje archiwum.');
+          await chat.update(id, changes);
+        }
+        if (title !== undefined) await chat.rename(id, title);
+        return json(res, 200, { ok: true }), true;
+      }
+      if (req.method === 'DELETE') { await chat.remove(id, { temporary: url.searchParams.get('temporary') === '1' }); return json(res, 200, { ok: true }), true; }
     } else if (action === 'messages' && req.method === 'POST') {
       await chat.send(id, parse(chatSendSchema, await readBody(req)));
       return json(res, 202, { ok: true }), true;

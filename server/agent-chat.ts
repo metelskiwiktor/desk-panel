@@ -160,7 +160,8 @@ export interface ChatService {
   activeTurns?(): string[];
   stop(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
-  remove(id: string): Promise<void>;
+  update?(id: string, changes: { archived?: boolean; temporary?: false }): Promise<void>;
+  remove(id: string, options?: { temporary?: boolean }): Promise<void>;
   /** The user's answer to a tool the agent asked about. Only engines that ask (Hermes) have it. */
   approve?(id: string, approval: ChatApproval): Promise<void>;
   /** Which engines can take a message, and the preferred one; only the router of both engines has them. */

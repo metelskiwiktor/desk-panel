@@ -248,3 +248,44 @@ Konfiguracja usługi Hermesa jest w `servy/hermes.json` (`arguments: ["gateway"]
   w `server/hermes-api.ts` i atrapa.
 - Historia z sesji nie zawiera próśb o zgodę ani czasów narzędzi: po restarcie panelu widać tekst i narzędzia, bez kart zgody.
 - Gdy Hermes skompresuje albo rozdzieli sesję (nowe id), panel przyjmuje id sesji podane przez Hermesa w odpowiedzi przebiegu.
+
+
+## Rozmowy tymczasowe
+
+Mapowanie `hermes-chats/<id>.json` ma opcjonalne `temporary`, `archived`, `archivedAt`, `keepUnarchived`, `previousSessions`; brak pól zachowuje stare rozmowy.
+Regułę autoarchiwizacji i trwały wyjątek po przywróceniu opisuje [czat.md](czat.md#komendy-archiwum-i-rozmowy-tymczasowe).
+Tokeny `usage` z końca runu (SSE lub statusu odczytanego przy rekoncyliacji) są zachowane przy turze, również po restarcie.
+Częściowe usage pozostaje widoczne (brakujące liczniki mają 0). Końcowe `_run_usage` w przypiętym
+`api_server_runs.py:716–723` bierze wyłącznie `_USAGE_FIELDS` (tokeny i cache, bez kosztu); `cost_usd` w zdarzeniach subagenta
+nie jest kosztem całej tury. Panel przyjmuje kwotę tylko przy `cost_status: actual` i zapisuje dowód jako `usage.costStatus`;
+nie traktuje nieoznaczonego zera ani `estimated_cost_usd` jako rzeczywistej kwoty.
+Nie ma rekonstrukcji kosztów starszych tur z dziennego cache OpenRoutera; szczegóły `/koszt`: [czat.md](czat.md#komendy-archiwum-i-rozmowy-tymczasowe).
+
+Sprawdzono źródła wersji z `servy/hermes.lock.json`, commit `71d34bad1045610252eda02ee79549436896e784`:
+[`gateway/platforms/api_server.py`](https://github.com/NousResearch/hermes-agent/blob/71d34bad1045610252eda02ee79549436896e784/gateway/platforms/api_server.py)
+obsługuje DELETE `/api/sessions/{session_id}` (może zwrócić 409 przy aktywnym zapisie), a
+[`api_server_runs.py`](https://github.com/NousResearch/hermes-agent/blob/71d34bad1045610252eda02ee79549436896e784/gateway/platforms/api_server_runs.py)
+nie daje pola wyłączającego pamięć dla jednego runu. Parametry modelu i `instructions` nie są takim przełącznikiem;
+manager pamięci Hermesa jest współdzielony przez kolejne tury sesji.
+
+Twarde: tymczasowy czat nie trafia na listę historii panelu. Opuszczenie go usuwa mapowanie, snapshot i szkic, anuluje
+bieżący run oraz żąda usunięcia sesji przez powyższe API. Po restarcie sprzątane są pozostałe tymczasowe mapowania przed
+wznowieniem runów. Gdy Hermes jest niedostępny albo blokuje usunięcie aktywnym zapisem, zapisane poza historią w
+`hermes-session-cleanup/<id>.json` pozostają wyłącznie id sesji i runów; próba wraca co 30 s i po restarcie. Usunięcie sesji
+jest więc zależne od dostępności Hermesa, a nie obietnicą natychmiastowego wymazania przy awarii. Zwykłe usuwanie zapisanych
+rozmów zachowuje dotychczasowe znaczenie: usuwa mapowanie panelu. Prywatne logi diagnostyczne panelu i logi Hermesa nie są
+historią UI ani kasowane przez ten tryb; to nie jest tryb bez śladów na dysku.
+
+Miękkie: każda tura tymczasowa dostaje instrukcję „Nie zapisuj niczego z tej rozmowy do pamięci długotrwałej, profilu
+użytkownika ani notatek”. Nie zmieniamy globalnej konfiguracji ani pamięci Hermesa. Model ma techniczną możliwość
+zignorowania instrukcji, więc baner mówi tylko o wydanym poleceniu, bez gwarancji braku pamięci. Tymczasowej rozmowy nie
+nazywa dodatkowa tura AGY w tle. Zachowanie rozmowy zdejmuje flagę i przestaje dodawać tę instrukcję w następnych turach;
+nie cofa wcześniejszych instrukcji w kontekście sesji.
+
+Rozdzielenie sesji przez Hermesa zapisuje poprzednie id w `previousSessions` przy każdej zmianie id (start, wznowienie,
+koniec runu). Sprzątanie rozmowy tymczasowej usuwa wszystkie znane sesje, także po restarcie. Każda ma osobny trwały
+znacznik z id sesji i runów w `hermes-session-cleanup`; 409 i inne błędy wracają do kolejki. Dawne mapowania bez listy
+poprzednich sesji pozwalają sprzątnąć tylko znane bieżące id; panel nie odtwarza nieznanych historycznych rozdzieleń.
+
+Ładowanie mapowań pozostaje lazy. Błędne pola/JSON i nieudany odczyt mapowania dają ślad `mapping-skipped` bez treści
+pliku. Błąd zapisu autoarchiwizacji cofa flagi danego rekordu i nie przerywa wznawiania runów ani odczytów innych rozmów.

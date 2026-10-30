@@ -170,3 +170,24 @@
 .wektor-root .wektor-title-row { display:flex; align-items:center; min-width:0; }
 .wektor-root .wektor-title-row h1 { flex:0 1 auto; min-width:0; }
 .wektor-root .wektor-title-edit { flex:none; }
+
+/* Commands and conversation lifecycle share the existing Wektor palette. */
+.wektor-history-tabs { margin: 0 14px; display: flex; gap: 4px; padding: 8px 0; }
+.wektor-root .wektor-history-tabs button { flex: 1; padding: 8px 4px; border-radius: 20px; color: var(--wk-muted); background: var(--wk-raised); font-size: 12px; }
+.wektor-root .wektor-history-tabs button[aria-selected="true"] { color: var(--wk-text); background: var(--wk-line); }
+.wektor-history-row { display: flex; align-items: center; gap: 2px; }
+.wektor-history-row .wektor-history-item { flex: 1; min-width: 0; }
+.wektor-archive { opacity: 0; flex-shrink: 0; }
+.wektor-history-row:hover .wektor-archive, .wektor-history-row:focus-within .wektor-archive { opacity: 1; }
+@media (hover: none) { .wektor-archive { opacity: 1; } }
+.wektor-commands { max-height: min(480px, 58dvh); overflow: auto; }
+.wektor-commands code { min-width: 100px; color: var(--wk-accent); font-size: 13px; }
+.wektor-commands .wektor-skill > span { flex: 1; font-size: 13px; }
+.wektor-commands .wektor-skill:disabled { opacity: .45; cursor: default; }
+.wektor-commands small { border: 1px solid var(--wk-line); border-radius: 12px; padding: 2px 6px; }
+.wektor-temporary-banner { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; border: 1px dashed var(--wk-accent); border-radius: 12px; font-size: 13px; color: var(--wk-muted); }
+.wektor-temporary-banner p { margin: 4px 0 0; }
+.wektor-temporary-banner b { color: var(--wk-accent); }
+.wektor-temporary-banner button { flex-shrink: 0; }
+.wektor-root[data-temporary] .wektor-header { border-bottom: 1px dashed var(--wk-accent); }
+.wektor-root[data-temporary] [data-slot="aui_composer-shell"] { border-style: dashed !important; border-color: var(--wk-accent) !important; }

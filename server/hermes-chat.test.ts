@@ -1,11 +1,13 @@
+import { createServer } from 'node:http';
+import { handleChatRoute } from './chat-routes';
 import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatDetail, ChatMessage, ContextItem } from '../src/chat-contract';
 import { ChatError, createAgentChat, type AgentProcess, type ChatService } from './agent-chat';
 import { createChatHub } from './chat-hub';
-import { createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
+import { HermesError, createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
 import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableAutomationCardId, stableBankCardId } from './hermes-chat';
 import { watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
@@ -108,6 +110,199 @@ describe('Hermes API client', () => {
 });
 
 describe('Hermes chat', () => {
+  it('temporary-only cleanup cannot delete a chat after keep', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'keep', temporary: true });
+    await finishedChat(service, id);
+    await service.update!(id, { temporary: false });
+    await service.remove(id, { temporary: true });
+    expect((await service.get(id)).temporary).toBe(false);
+  });
+
+  it('failed autoarchive does not poison loading and leaves memory unchanged', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'old' });
+    await finishedChat(service, id); await service.drain(); service.close();
+    const file = path.join(dir, 'hermes-chats', `${id}.json`);
+    const record = JSON.parse(await readFile(file, 'utf8'));
+    record.title = '[test] old'; record.updatedAt = 0;
+    await writeFile(file, JSON.stringify(record));
+    await mkdir(`${file}.tmp`);
+    const restarted = hermes();
+    expect(await restarted.list()).toMatchObject([{ id, archived: false }]);
+    expect(await restarted.list()).toHaveLength(1);
+    await rm(`${file}.tmp`, { recursive: true });
+  });
+
+  it('failed strict update rolls back keep and archive and can be retried', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'keep', temporary: true });
+    await finishedChat(service, id); await service.drain();
+    const file = path.join(dir, 'hermes-chats', `${id}.json`);
+    await mkdir(`${file}.tmp`);
+    await expect(service.update!(id, { temporary: false })).rejects.toThrow();
+    expect((await service.get(id)).temporary).toBe(true);
+    expect(JSON.parse(await readFile(file, 'utf8')).temporary).toBe(true);
+    await rm(`${file}.tmp`, { recursive: true });
+    await service.update!(id, { temporary: false });
+    await mkdir(`${file}.tmp`);
+    await expect(service.update!(id, { archived: true })).rejects.toThrow();
+    expect((await service.get(id)).archived).toBe(false);
+    await rm(`${file}.tmp`, { recursive: true });
+    await service.update!(id, { archived: true });
+    expect((await service.get(id)).archived).toBe(true);
+  });
+
+  it('manual restore permanently exempts a test chat from autoarchive across restarts', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'old' });
+    await finishedChat(service, id); await service.drain(); service.close();
+    const file = path.join(dir, 'hermes-chats', `${id}.json`);
+    const record = JSON.parse(await readFile(file, 'utf8'));
+    record.title = '[test] old'; record.updatedAt = 0;
+    await writeFile(file, JSON.stringify(record));
+    const restarted = hermes();
+    expect((await restarted.get(id)).archived).toBe(true);
+    await restarted.update!(id, { archived: false });
+    restarted.close(); await restarted.drain();
+    expect((await hermes().get(id)).archived).toBe(false);
+  });
+
+  it.each([
+    [{ input_tokens: 12, cost_usd: 0, cost_status: 'unknown' }, undefined],
+    [{ output_tokens: 8, cost_usd: 0.5, cost_status: 'estimated' }, undefined],
+    [{ api_calls: 2, cost_usd: 1 }, undefined],
+    [{ input_tokens: 12, cost_usd: 0, cost_status: 'actual' }, 0],
+    [{ input_tokens: 12, cost_usd: 0.5, cost_status: 'actual' }, 0.5],
+  ])('preserves partial usage and accepts only actual cost: %j', async (usage, cost) => {
+    const real = createHermesClient({ url: mock.url, key: KEY });
+    const service = hermes({ client: { ...real, events: (run, on, options) => real.events(run, (event, id) => on(event.kind === 'completed' ? { ...event, usage } : event, id), options) } });
+    const { id } = await service.create({ text: 'usage' });
+    const chat = await finishedChat(service, id);
+    expect(chat.items[1].usage).toMatchObject({ input: 'input_tokens' in usage ? 12 : 0, output: 'output_tokens' in usage ? 8 : 0 });
+    expect(chat.items[1].usage?.costUsd).toBe(cost);
+    expect(chat.items[1].usage?.costStatus).toBe(cost === undefined ? undefined : 'actual');
+  });
+
+  it('retains and cleans every split session after a restart', async () => {
+    const real = createHermesClient({ url: mock.url, key: KEY });
+    const service = hermes({ client: { ...real, events: (run, on, options) => real.events(run, (event, id) => on(event.kind === 'completed' ? { ...event, session: 'split-session' } : event, id), options) } });
+    const { id } = await service.create({ text: 'private', temporary: true });
+    await finishedChat(service, id); await service.drain(); service.close();
+    const stored = JSON.parse(await readFile(path.join(dir, 'hermes-chats', `${id}.json`), 'utf8'));
+    expect(stored.previousSessions).toContain(`desk-panel-${id}`);
+    const deleteSession = vi.fn(real.deleteSession!.bind(real));
+    await hermes({ client: { ...real, deleteSession } }).list();
+    await vi.waitFor(() => expect(deleteSession).toHaveBeenCalledWith(`desk-panel-${id}`));
+    await vi.waitFor(() => expect(deleteSession).toHaveBeenCalledWith('split-session'));
+    await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
+  });
+
+  it('loads lazily and logs invalid mapping fields without hiding valid chats', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'valid' });
+    await finishedChat(service, id); await service.drain(); service.close();
+    const badId = '00000000-0000-4000-8000-000000000000';
+    await writeFile(path.join(dir, 'hermes-chats', `${badId}.json`), JSON.stringify({ id: badId, engine: 'hermes', session: '../bad', turns: [], title: 'bad' }));
+    const log = { trace: vi.fn(), turn: vi.fn(), drain: async () => {} };
+    const restarted = hermes({ log });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(log.trace).not.toHaveBeenCalled();
+    expect(await restarted.list()).toMatchObject([{ id }]);
+    expect(log.trace).toHaveBeenCalledWith(badId, expect.objectContaining({ kind: 'mapping-skipped' }));
+  });
+
+  it('persists archive and restore through Origin-checked PATCH and reads old mappings', async () => {
+    const service = hermes();
+    const hub = createChatHub({ dir, engines: { hermes: service } });
+    const { id } = await service.create({ text: 'Archiwum' });
+    await finishedChat(service, id);
+    const server = createServer(async (req, res) => { await handleChatRoute(req, res, new URL(req.url!, 'http://localhost'), base, hub); });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+    const patch = (body: unknown, origin?: string) => fetch(`${base}/api/chats/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) }, body: JSON.stringify(body) });
+    try {
+      expect((await patch({ archived: true })).status).toBe(403);
+      expect((await patch({ archived: true }, 'http://evil.test')).status).toBe(403);
+      expect((await patch({ archived: true }, base)).status).toBe(200);
+      const restored = hermes();
+      expect((await restored.get(id))).toMatchObject({ archived: true, archivedAt: expect.any(Number) });
+      expect((await patch({ archived: false }, base)).status).toBe(200);
+      expect((await fetch(`${base}/api/chats/${id}?temporary=1`, { method: 'DELETE', headers: { Origin: base } })).status).toBe(200);
+      expect((await service.get(id)).archived).toBe(false);
+      const file = path.join(dir, 'hermes-chats', `${id}.json`);
+      const old = JSON.parse(await readFile(file, 'utf8')); delete old.archived; delete old.archivedAt;
+      await writeFile(file, JSON.stringify(old));
+      expect((await hermes().get(id)).archived).toBe(false);
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+
+  it('hides temporary chats, instructs every turn, deletes sessions and cleans orphans on startup; keep persists', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'Tymczasowa', temporary: true });
+    await finishedChat(service, id);
+    expect(await service.list()).toEqual([]);
+    expect((await service.get(id)).temporary).toBe(true);
+    expect((runs().at(-1)?.body as { input: string }).input).toContain('Nie zapisuj niczego');
+    await service.send(id, { text: 'Druga' }); await finishedChat(service, id);
+    expect((runs().at(-1)?.body as { input: string }).input).toContain('Nie zapisuj niczego');
+    await service.remove(id);
+    await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
+    await expect(service.get(id)).rejects.toMatchObject({ status: 404 });
+    const orphan = await service.create({ text: 'Osierocona', temporary: true });
+    await finishedChat(service, orphan.id); service.close(); await service.drain();
+    const restarted = hermes(); await restarted.list();
+    await expect(restarted.get(orphan.id)).rejects.toMatchObject({ status: 404 });
+    await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
+    const kept = await restarted.create({ text: 'Zachowana', temporary: true });
+    await finishedChat(restarted, kept.id); await restarted.update!(kept.id, { temporary: false });
+    expect(await restarted.list()).toMatchObject([{ id: kept.id, temporary: false }]);
+    restarted.close(); await restarted.drain();
+    expect((await hermes().get(kept.id)).temporary).toBe(false);
+  });
+
+  it('retries session deletion after an active-write conflict using a content-free durable marker', async () => {
+    const client = createHermesClient({ url: mock.url, key: KEY });
+    const service = hermes({ client });
+    const { id } = await service.create({ text: 'Nie przechowuj treści', temporary: true });
+    await finishedChat(service, id);
+    const original = client.deleteSession!.bind(client);
+    let attempts = 0;
+    client.deleteSession = async session => { if (++attempts === 1) throw new HermesError(409, 'session_active_turn'); await original(session); };
+    vi.useFakeTimers();
+    try {
+      await service.remove(id);
+      const marker = path.join(dir, 'hermes-session-cleanup', `${id}.json`);
+      const saved = JSON.parse(await readFile(marker, 'utf8'));
+      expect(Object.keys(saved).sort()).toEqual(['runs', 'session']);
+      await expect(service.get(id)).rejects.toMatchObject({ status: 404 });
+      await vi.advanceTimersByTimeAsync(30_000);
+      vi.useRealTimers();
+      expect(attempts).toBe(2);
+      await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
+      await vi.waitFor(async () => expect(await readdir(path.dirname(marker))).not.toContain(`${id}.json`));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('archives only inactive [test] chats after seven days at startup and daily, including test automation runs', async () => {
+    let clock = Date.now();
+    const day = 86_400_000;
+    await mkdir(path.join(dir, 'hermes-chats'), { recursive: true });
+    const titles = ['[test] old', '[test] young', 'Zwykła stara', 'Automat · stary', '[test] automat'];
+    for (let i = 0; i < titles.length; i++) {
+      const id = `00000000-0000-4000-8000-00000000000${i}`;
+      await writeFile(path.join(dir, 'hermes-chats', `${id}.json`), JSON.stringify({ schema: 1, id, engine: 'hermes', title: titles[i], createdAt: clock - 9 * day, updatedAt: clock - (i === 1 ? 6 : 8) * day, session: `s${i}`, turns: [{ id: 'u', agent: 'a', at: clock, text: 'x', run: null, status: 'done', ...(i > 2 ? { automation: { source: 'automation', reason: 'test' } } : {}) }] }));
+    }
+    vi.useFakeTimers();
+    try {
+      const service = hermes({ now: () => clock });
+      const flags = async () => Object.fromEntries((await service.list()).map(c => [c.title, c.archived]));
+      expect(await flags()).toEqual({ '[test] old': true, '[test] young': false, 'Zwykła stara': false, 'Automat · stary': false, '[test] automat': true });
+      clock += day; await vi.advanceTimersByTimeAsync(day);
+      expect((await flags())['[test] young']).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('restores appointment card identities after panel restart from canonical Hermes history', async () => {
     const args = { profile: 'https://www.znanylekarz.pl/profil/anna-maj', service: 'konsultacja dermatologiczna', mode: 'online' };
     const output = 'Karta terminów jest u użytkownika; ref=a-11111111111111111111111111111111.';

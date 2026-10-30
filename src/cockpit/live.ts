@@ -134,6 +134,21 @@ export function useLiveCockpit(): CockpitSource {
 
   return {
     mode: 'live',
+    temporary: chat.temporary,
+    startTemporary: () => chat.startNew(true),
+    closeTemporary: chat.closeTemporary,
+    keep: chat.keepTemporary,
+    archive: (id, archived) => { void chat.update(id, { archived }); },
+    async cost() {
+      if (!chat.activeId) return 'Brak danych o tokenach i koszcie tej rozmowy.';
+      const detail = await call(`/api/chats/${chat.activeId}`) as import('../chat-contract').ChatDetail;
+      const turns = detail.items.filter(m => m.role === 'agent');
+      const usage = turns.flatMap(m => m.usage ? [m.usage] : []);
+      if (!usage.length) return 'Brak danych o tokenach i koszcie tej rozmowy.';
+      const sum = (key: 'input' | 'output') => usage.reduce((n, u) => n + u[key], 0).toLocaleString('pl-PL');
+      const costs = usage.flatMap(u => u.costStatus !== 'actual' || u.costUsd === undefined ? [] : [u.costUsd]);
+      return `Tokeny: wejście ${sum('input')}, wyjście ${sum('output')}. Dane dla ${usage.length}/${turns.length} tur. ${costs.length === turns.length ? `Koszt: ${costs.reduce((a, b) => a + b, 0).toFixed(6)} USD.` : 'Brak pełnych danych o koszcie tej rozmowy.'}`;
+    },
     title: active?.title ?? chat.chats?.find(c => c.id === chat.activeId)?.title ?? 'Nowy czat',
     messages,
     running: active?.running ?? false,
@@ -188,7 +203,7 @@ export function useLiveCockpit(): CockpitSource {
       await call(`/api/chats/${activeId}/dispatch`, 'POST', { toolCallId: id, decision: r.decision, title: r.title, prompt: r.prompt, ...(r.workflow ? { workflow: r.workflow } : {}), ...(r.todoId ? { todoId: r.todoId } : {}), ...(r.runner ? { runner: r.runner } : {}), ...(r.model ? { model: r.model } : {}), ...(r.steps ? { steps: r.steps } : {}) });
       refresh();
     },
-    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ id: c.id, title: c.title, running: c.running, createdAt: c.createdAt, updatedAt: c.updatedAt })) ?? null,
+    chats: chat.chats?.filter(c => engineOf(c) === 'hermes').map(c => ({ archived: c.archived, archivedAt: c.archivedAt, id: c.id, title: c.title, running: c.running, createdAt: c.createdAt, updatedAt: c.updatedAt })) ?? null,
     activeId,
     createdAt: active?.createdAt,
     open: (id: string | null) => { nonce.current = null; if (id) chat.open(id); else chat.startNew(); },
