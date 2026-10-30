@@ -11,7 +11,8 @@ const stateTitle: Partial<Record<NonNullable<WeekItem['state']>, string>> = { do
 
 /** What the agent is told when a day is pointed at: its date and what is planned in it. */
 function dayContext(day: WeekDay) {
-  return ctx('tile', `day:${day.date}`, `Dzień: ${dayTitle(day)}`, dayText(day));
+  // A day pointed at on its own says it is free, so the agent can tell an empty day from one it knows nothing about.
+  return ctx('tile', `day:${day.date}`, `Dzień: ${dayTitle(day)}`, day.items.length ? dayText(day) : `${dayText(day)}\nBrak pozycji`);
 }
 /** A workout or a meeting inside a day: pointed at on its own, it wins over the day. */
 function itemContext(item: WeekItem) {
