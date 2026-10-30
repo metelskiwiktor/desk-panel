@@ -19,10 +19,11 @@ nodes:
   - id: implement
     name: Implement
     type: agent
-    # The code is written on the user's Codex subscription (fix and address continue its session); the review runs on
-    # another family. Gemini 3.8 Flash judged worse than the others in the dispatcher benchmarks of 28.10.2026.
-    runner: codex
-    model: gpt-6.1-terra
+    # The code is written by opencode on OpenRouter with Wektor's model (fix and address continue its session), keeping
+    # the Codex subscription free (user's choice, 30.10.2026); the review runs on another family.
+    # Gemini 3.8 Flash judged worse than the others in the dispatcher benchmarks of 28.10.2026.
+    runner: opencode
+    model: openrouter/deepseek/deepseek-v4.1-flash-1017
     prompt: |
       {{task}}
 
@@ -118,8 +119,8 @@ nodes:
   - id: fix
     name: Fix verification or commit
     type: agent
-    runner: codex
-    model: gpt-6.1-terra
+    runner: opencode
+    model: openrouter/deepseek/deepseek-v4.1-flash-1017
     session:
       continue: implement
     prompt: |
@@ -191,8 +192,8 @@ nodes:
   - id: address
     name: Address review findings
     type: agent
-    runner: codex
-    model: gpt-6.1-terra
+    runner: opencode
+    model: openrouter/deepseek/deepseek-v4.1-flash-1017
     session:
       continue: implement
     prompt: |

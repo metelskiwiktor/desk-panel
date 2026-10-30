@@ -153,7 +153,8 @@ Ten sam klucz ma też OpenCode (`~/.local/share/opencode/auth.json`, wpis `openr
 jego runner `opencode` go czyta), żeby taski Cezara mogły iść na DeepSeeku: `~/.config/opencode/opencode.jsonc` pokazuje z
 OpenRoutera tylko `deepseek/deepseek-v4-pro-0813` i `deepseek/deepseek-v4.1-flash-1017` (`whitelist`, z `data_collection: deny`),
 a karta zlecenia ma je w liście modeli runnera `opencode`. Przy wymianie klucza zmień go we wszystkich czterech miejscach (dwa
-`.env` Hermesa, `panel.env`, ten `auth.json`). W `desk-panel-task` kroki implement/fix/address i review mają wykonawcę z workflow,
+`.env` Hermesa, `panel.env`, ten `auth.json`). W `desk-panel-task` kroki implement/fix/address idą domyślnie na `opencode` z modelem Wektora
+(`deepseek-v4.1-flash-1017`, od 30.10.2026, żeby nie zużywać subskrypcji Codexa), a review na agy; mają wykonawcę z workflow,
 więc wybór DeepSeeka dotyczy tam tylko pozostałych kroków; w `analysis`, `implement` i `quick-task` obowiązuje cały run.
 
 Wybór z trzech testów na tym samym zestawie (skill „Zaimplementuj zadanie”, prawdziwy panel, każdy model po razie): zadanie już zrobione
