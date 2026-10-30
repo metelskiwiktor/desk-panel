@@ -1,21 +1,30 @@
 # Desk Panel
 
-Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
-Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez
-`with[]=service.duration`, nigdy z odstępów między terminami. Użytkownik wybiera dzień/godzinę na karcie, panel ponownie
-sprawdza dostępność i daje zweryfikowany link do osobnego okna. Wszystkie godziny dnia wybiera się w prawym panelu,
-obok kalendarza na wspólnej osi; karta po lewej pokazuje wybór. Kolizje ostrzegają, nie blokują. Respektuj Google transparency,
-wyłączny koniec i coverage: niepełny/stary odczyt lub dzień poza zakresem nigdy nie oznaczają wolnego czasu. Rezerwację, zgody i płatność kończy wyłącznie użytkownik.
-Dopiero jego „Zarezerwowałem ten termin — zapisz” tworzy wydarzenie Google. Zwykłe wydarzenie Wektor tylko proponuje przez
-`panel_calendar_propose`; zapisuje przycisk karty. Origin-checked POST-y `/api/chats/:id/appointment` i `calendar-plan` czytają
-propozycję z zakończonego wywołania w tej rozmowie, a nie z żądania. Stan i zamrożone zapisy są w `appointments.dpapi`, poza
-Gitem; powtórzenie używa tego samego id Google. Nie klikaj tych potwierdzeń w prawdziwych rozmowach podczas testów. Scope
-`calendar.events.owned` wymaga ponownej zgody Google, stare tokeny zachowują odczyt agendy. Agent nie ma bezpośredniego
-narzędzia zapisu, nie edytuje/usuwa wydarzeń, nie zaprasza gości ani nie rezerwuje wizyt.
+Local React/TypeScript dashboard with a Node HTTP server. Keep the server bound to loopback; credentials stay on the
+backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI. Read README.md, then the file the map
+below names for the area you touch.
 
-Local React/TypeScript dashboard with a Node HTTP server. Read README.md, then the matching file in docs/
-(cezar, gmail, calendar, garmin, zdarzenia, system, tailscale, testowanie, desk-panel, czat, hermes, github, openrouter, smart-actions) for integration details. Keep the server bound to loopback; credentials stay on the
-backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
+## Where knowledge lives
+
+| What | Where | Who reads it |
+| --- | --- | --- |
+| Rules every change must keep (security, writes, what never happens) | this file | every agent session, Cezar's executor |
+| Setup, running, service, kiosk | README.md, docs/desk-panel.md, docs/system.md, servy/README.md, docs/tailscale.md | people, agents |
+| How one area works | docs/bank.md, calendar.md, cezar.md, garmin.md (+ garmin-data.md), github.md, gmail.md, openrouter.md, smart-actions.md, zadania.md, zdarzenia.md, znanylekarz.md | agents changing that area |
+| The chat and Wektor in code | docs/czat.md (product, API), docs/hermes.md (engine), docs/wektor-ui.md (frontend), docs/diagnostyka-czatu-wektora.md (diagnosing a conversation) | agents changing the chat |
+| What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
+| Tests and verification | docs/testowanie.md, `just check` | agents |
+| How we give Wektor new abilities and judge his answers | .claude/skills/wektor-capabilities | Claude Code sessions |
+| Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
+| `@Zaimplementuj zadanie` | `CHAT_SKILLS` in src/chat-contract.ts is the source; docs/agent-workflows/skills/zaimplementuj-zadanie.md is an older copy that has drifted, do not edit it as the source | Wektor |
+| The user's personal preferences (how he likes to work) | Claude Code memory, outside the repo; never project facts | Claude Code sessions |
+
+Adding something: put it where the map says. A rule every change must keep goes here as one line with a link to its
+area's document; how the area works goes into that document; what Wektor should do goes into his code (row above); how
+we work on Wektor goes into the skill. Write a fact once and link to it instead of copying it. If the map has no place
+for it, add the row first.
+
+## Commands
 
 - `just setup`: install locked dependencies and Playwright Chromium.
 - `just dev`: run API and Vite during development.
@@ -48,12 +57,16 @@ backend and outside Git. Google refresh tokens use user-scoped Windows DPAPI.
 - `just install`: first-time Servy registration; may need Windows credentials
   entered by the user in the native dialog. See servy/README.md.
 
+## Phone access
+
 Phone access: Tailscale (installed on this PC and the phone, account metelski.wiktor@gmail.com) runs
 `tailscale serve --bg 5174`, giving `https://desktop-sgur9l8.tail244683.ts.net` inside the tailnet only.
 The server stays on 127.0.0.1; `DESK_ALLOWED_HOST` (in `%USERPROFILE%\.desk-panel\panel.env`, outside Git)
 admits that one name and its https Origin. CLI: `C:\Program Files\Tailscale\tailscale.exe` (`status`,
 `serve status`). Never use `tailscale funnel` (public) or share the tailnet: the panel has no login of its own.
 Details and setup from scratch: docs/tailscale.md.
+
+## Architecture and guardrails
 
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and
@@ -70,6 +83,21 @@ recordings' basics reach the UI (no body, sleep, places or ids); what else the a
 docs/garmin-data.md. GitHub (docs/github.md) is read-only through the user's own `gh` (`pr list`/`pr view`, one module
 `server/github.ts` for the PR tile and the cockpit), cached 30–90 s; the panel never merges, comments or reviews. OpenRouter (docs/openrouter.md): spend tile reads key usage and credits using `OPENROUTER_API_KEY` (shared with Hermes in `panel.env`, never in browser), scans Hermes log (`%LOCALAPPDATA%/hermes/logs/agent.log` or `HERMES_LOG_PATH`) for completed `provider=openrouter` calls with an id, queries generation cost from `/api/v1/generation?id=...` and caches locally in `~/.desk-panel/openrouter-cache.json` without calling `/api/v1/activity`. Do not commit .env, OAuth clients, tokens, logs, screenshots,
 node_modules or dist. Do not print credentials in tool output.
+
+## Areas
+
+Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
+Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez
+`with[]=service.duration`, nigdy z odstępów między terminami. Użytkownik wybiera dzień/godzinę na karcie, panel ponownie
+sprawdza dostępność i daje zweryfikowany link do osobnego okna. Wszystkie godziny dnia wybiera się w prawym panelu,
+obok kalendarza na wspólnej osi; karta po lewej pokazuje wybór. Kolizje ostrzegają, nie blokują. Respektuj Google transparency,
+wyłączny koniec i coverage: niepełny/stary odczyt lub dzień poza zakresem nigdy nie oznaczają wolnego czasu. Rezerwację, zgody i płatność kończy wyłącznie użytkownik.
+Dopiero jego „Zarezerwowałem ten termin — zapisz” tworzy wydarzenie Google. Zwykłe wydarzenie Wektor tylko proponuje przez
+`panel_calendar_propose`; zapisuje przycisk karty. Origin-checked POST-y `/api/chats/:id/appointment` i `calendar-plan` czytają
+propozycję z zakończonego wywołania w tej rozmowie, a nie z żądania. Stan i zamrożone zapisy są w `appointments.dpapi`, poza
+Gitem; powtórzenie używa tego samego id Google. Nie klikaj tych potwierdzeń w prawdziwych rozmowach podczas testów. Scope
+`calendar.events.owned` wymaga ponownej zgody Google, stare tokeny zachowują odczyt agendy. Agent nie ma bezpośredniego
+narzędzia zapisu, nie edytuje/usuwa wydarzeń, nie zaprasza gości ani nie rezerwuje wizyt.
 
 Bank (docs/bank.md): kafelek Konto czyta PKO BP przez Enable Banking (restricted production, własne konto), tylko odczyt (saldo i
 booked operacje); `POST /api/bank/connect` startuje zgodę (Origin-checked), `GET /api/bank/callback` ją kończy. Klucz prywatny
