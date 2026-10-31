@@ -6,7 +6,8 @@ Serwer panelu ma dwa silniki czatu: **Hermes** (Hermes Agent) i **AGY** (Antigra
 czatu (Wektor) pisze **tylko do Hermesa**: nie ma przełącznika silników, nowe rozmowy startują na Hermesie, a lista pokazuje
 tylko rozmowy Hermesa (`useChat('hermes')`, `src/cockpit/live.ts`). AGY zostaje na serwerze: `POST /api/chats` z `engine: "agy"`
 i jego stare rozmowy (bez pola `engine`) dalej działają, tylko okno ich nie pokazuje. Zapamiętany wybór silnika
-(`~/.desk-panel/chat-settings.json`, `/api/chats/engine`) serwer dalej trzyma, ale okno go nie używa. Rozmowa należy do jednego
+(`~/.desk-panel/chat-settings.json`, `/api/chats/engine`) serwer dalej trzyma, ale nie wybiera on silnika nowej rozmowy: każda
+rozmowa bez `engine` w żądaniu (także z API i rozmowy runów automatów) startuje na Hermesie. Rozmowa należy do jednego
 silnika na zawsze.
 
 ## Jak to działa

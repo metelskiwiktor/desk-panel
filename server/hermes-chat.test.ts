@@ -754,21 +754,20 @@ describe('both engines', () => {
     return chat;
   }
 
-  it('new chats start on Hermes by default; the chosen engine is remembered', async () => {
+  it('new chats start on Hermes unless the request names agy, even with agy stored as preferred', async () => {
     const chat = hub();
     expect(await chat.preferred!()).toBe('hermes');
     const { id: h } = await chat.create({ text: 'Do Hermesa' });
     await chat.prefer!('agy');
     expect(JSON.parse(await readFile(path.join(dir, 'chat-settings.json'), 'utf8'))).toEqual({ engine: 'agy' });
-    const { id: a } = await chat.create({ text: 'Do agy' });
+    const { id: still } = await chat.create({ text: 'Nadal Hermes' });
+    expect((await chat.get(still)).engine).toBe('hermes');
+    const { id: a } = await chat.create({ text: 'Do agy', engine: 'agy' });
     const list = await chat.list();
-    expect(Object.fromEntries(list.map(c => [c.id, c.engine]))).toEqual({ [h]: 'hermes', [a]: 'agy' });
-    expect(runs()).toHaveLength(1); // the agy chat never reached Hermes
-    // A new hub (panel restart) still prefers agy.
+    expect(Object.fromEntries(list.map(c => [c.id, c.engine]))).toEqual({ [h]: 'hermes', [still]: 'hermes', [a]: 'agy' });
+    expect(runs()).toHaveLength(2); // the agy chat never reached Hermes
+    // A new hub (panel restart) still reports the stored preference, but it no longer picks the engine of a new chat.
     expect(await createChatHub({ dir, engines: {} }).preferred!()).toBe('agy');
-    // The engine named in the request wins over the preference.
-    const { id: explicit } = await chat.create({ text: 'Jednak Hermes', engine: 'hermes' });
-    expect((await chat.get(explicit)).engine).toBe('hermes');
     // An automation run is a Wektor conversation: it goes to Hermes even with agy stored as preferred.
     const run = await chat.createAutomation!({ text: 'Run automatu', title: 'Automat · test', automation: { source: 'automation', reason: 'test' } });
     expect((await chat.get(run.id)).engine).toBe('hermes');

@@ -74,7 +74,9 @@ export function createChatHub(options: ChatHubOptions): ChatService {
     async get(id) { return (await find(id)).get(id); },
     create(input) {
       return once(input.nonce, async () => {
-        const engine = input.engine ?? readPreference();
+        // New chats start on Hermes (AGENTS.md); agy only when the request names it. A preference stored before Hermes
+        // ({"engine":"agy"}) sent API-created chats to agy and broke an automation run on 31.10.2026.
+        const engine = input.engine ?? DEFAULT_ENGINE;
         if (input.temporary && engine !== 'hermes') throw new ChatError(409, 'Rozmowy tymczasowe obsługuje tylko Hermes.');
         if (input.files?.length && engine !== 'hermes') throw new ChatError(400, 'Załączniki obsługuje tylko Hermes.');
         const created = await serviceOf(engine).create(input);
