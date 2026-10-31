@@ -42,7 +42,7 @@ export interface MockHermes {
   url: string;
   key?: string;
   runs: Map<string, MockRun>;
-  sessions: Map<string, { role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string }[]>;
+  sessions: Map<string, { role: string; content: unknown; tool_calls?: unknown[]; tool_call_id?: string }[]>;
   requests: { method: string; path: string; body?: unknown; auth?: string }[];
   /** Ends every open event stream without the end of its run (a dropped connection). */
   dropStreams(): void;
@@ -55,6 +55,17 @@ export interface MockHermes {
   close(): Promise<void>;
 }
 
+/** The user's text from /v1/runs: a plain string, or messages whose last content may be text and image parts. */
+const inputText = (input: unknown): string => {
+  if (typeof input === 'string') return input;
+  if (!Array.isArray(input)) return '';
+  return input.flatMap(message => {
+    const content = (message as { content?: unknown } | null)?.content;
+    if (typeof content === 'string') return [content];
+    if (!Array.isArray(content)) return [];
+    return content.flatMap(part => typeof (part as { text?: unknown } | null)?.text === 'string' ? [(part as { text: string }).text] : []);
+  }).join('\n');
+};
 /** What the user typed: the end of the input, after the preamble and the [Kontekst] block. */
 const messageOf = (input: string) => input.includes('[Wiadomość]\n') ? input.slice(input.lastIndexOf('[Wiadomość]\n') + '[Wiadomość]\n'.length) : input.split('\n\n').at(-1) ?? input;
 const answerFor = (input: string) => {
@@ -211,7 +222,8 @@ ${JSON.stringify({ result: t.output })}
     if (url.pathname === '/health') return json(res, 200, { status: 'ok', platform: 'hermes-agent' });
     if (options.key && req.headers.authorization !== `Bearer ${options.key}`) return json(res, 401, { error: { message: 'Invalid API key' } });
     if (url.pathname === '/v1/runs' && req.method === 'POST') {
-      if (!body || typeof body.input !== 'string') return json(res, 400, { error: 'input required' });
+      const text = inputText(body?.input);
+      if (!text) return json(res, 400, { error: 'input required' });
       const key = req.headers['idempotency-key'];
       const replay = typeof key === 'string' ? admitted.get(key) : undefined;
       if (replay) {
@@ -219,7 +231,7 @@ ${JSON.stringify({ result: t.output })}
         return json(res, 202, { run_id: replay.run.id, session_id: replay.run.session });
       }
       const session = typeof body.session_id === 'string' ? body.session_id : `sess_${randomUUID()}`;
-      const run: MockRun = { id: `run_${randomUUID().replace(/-/g, '').slice(0, 16)}`, session, input: body.input, status: 'running', events: [], streams: new Set(), timers: new Set() };
+      const run: MockRun = { id: `run_${randomUUID().replace(/-/g, '').slice(0, 16)}`, session, input: text, status: 'running', events: [], streams: new Set(), timers: new Set() };
       runs.set(run.id, run);
       if (typeof key === 'string') admitted.set(key, { body: JSON.stringify(body), run });
       if (!sessions.has(session)) sessions.set(session, []);

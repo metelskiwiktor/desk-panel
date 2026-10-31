@@ -652,3 +652,90 @@ describe('conversation commands and archive', () => {
     expect(localStorage.getItem('desk-panel:last-hermes-chat')).toBeNull();
   });
 });
+
+describe('attachments in the composer', () => {
+  const fileInput = () => document.querySelector<HTMLInputElement>('input[type=file]')!;
+  const add = (...files: File[]) => fireEvent.change(fileInput(), { target: { files } });
+  const open = async () => {
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail(history) });
+    return user;
+  };
+
+  it('adds a screenshot and a text file from the picker, and removes them', async () => {
+    mockServer();
+    const user = await open();
+    add(new File(['png'], 'zrzut.png', { type: 'image/png' }), new File(['# Plan'], 'notatki.md', { type: 'text/markdown' }));
+    expect(await screen.findByAltText('zrzut.png')).toBeTruthy();
+    expect(await screen.findByText('notatki.md')).toBeTruthy();
+    expect(screen.getByText('MD · 6 B')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Usuń załącznik: zrzut.png' }));
+    expect(screen.queryByAltText('zrzut.png')).toBeNull();
+  });
+
+  it('takes a pasted image and a dropped file', async () => {
+    mockServer();
+    await open();
+    fireEvent.paste(screen.getByLabelText('Wiadomość do agenta'), { clipboardData: { files: [new File(['png'], 'wklejony.png', { type: 'image/png' })] } });
+    expect(await screen.findByAltText('wklejony.png')).toBeTruthy();
+    fireEvent.drop(document.querySelector('[data-slot=aui_composer-shell]')!, { dataTransfer: { files: [new File(['x'], 'upuszczony.txt', { type: 'text/plain' })], types: ['Files'] } });
+    expect(await screen.findByText('upuszczony.txt')).toBeTruthy();
+  });
+
+  it('refuses a PDF and more than four attachments, with a readable reason and no send', async () => {
+    const calls = mockServer();
+    await open();
+    add(new File(['x'], 'umowa.pdf', { type: 'application/pdf' }));
+    expect(await screen.findByText('PDF jeszcze nieobsługiwany.')).toBeTruthy();
+    expect(screen.queryByText('umowa.pdf')).toBeNull();
+    add(new File(['x'], 'program.exe', { type: 'application/x-msdownload' }));
+    expect(await screen.findByText(/Nieobsługiwany typ pliku: program\.exe/)).toBeTruthy();
+    expect(screen.queryByText('program.exe')).toBeNull();
+    add(...Array.from({ length: 5 }, (_, i) => new File(['x'], `plik${i}.txt`, { type: 'text/plain' })));
+    await waitFor(() => expect(screen.getAllByText(/^plik\d\.txt$/)).toHaveLength(4));
+    expect(screen.getByText('Najwyżej 4 załączniki w jednej wiadomości.')).toBeTruthy();
+    expect(calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('shows the total attachment limit and refuses a batch over 6 MB without sending', async () => {
+    const calls = mockServer();
+    await open();
+    add(new File([new Uint8Array(4 * 1024 * 1024)], 'one.png', { type: 'image/png' }),
+      new File([new Uint8Array(3 * 1024 * 1024)], 'two.png', { type: 'image/png' }));
+    await screen.findByAltText('one.png');
+    expect(await screen.findByText(/Załączniki mogą mieć łącznie najwyżej 6 MB/)).toBeTruthy();
+    expect(screen.getByText(/Limit: 4 pliki, 5 MB na plik, 6 MB łącznie/)).toBeTruthy();
+    expect(screen.queryByAltText('two.png')).toBeNull();
+    expect(calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('sends the attachments with the message and clears them only once it is taken', async () => {
+    const calls = mockServer();
+    const user = await open();
+    add(new File(['png'], 'zrzut.png', { type: 'image/png' }));
+    await screen.findByAltText('zrzut.png');
+    await user.type(screen.getByLabelText('Wiadomość do agenta'), 'Zobacz{Enter}');
+    await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.url === `/api/chats/${ID}/messages`)).toBe(true));
+    expect(calls.find(c => c.method === 'POST')?.body.files).toEqual([{ name: 'zrzut.png', type: 'image/png', size: 3, data: 'cG5n' }]);
+    await waitFor(() => expect(screen.queryByAltText('zrzut.png')).toBeNull());
+  });
+
+  it('shows attachments sent earlier: images open full size, files download', async () => {
+    mockServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([{ id: 'u1', role: 'user', at: NOW, text: 'Zobacz', files: [
+      { id: '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b21', name: 'zrzut.png', type: 'image/png', size: 3 },
+      { id: '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22', name: 'notatki.md', type: 'text/markdown', size: 6 },
+    ] }]) });
+    const image = await screen.findByAltText('zrzut.png');
+    expect(image.getAttribute('src')).toBe(`/api/chats/${ID}/files/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b21`);
+    expect(image.closest('a')?.getAttribute('target')).toBe('_blank');
+    const download = screen.getByText('notatki.md').closest('a')!;
+    expect(download.getAttribute('href')).toBe(`/api/chats/${ID}/files/0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b22`);
+    expect(download.getAttribute('download')).toBe('notatki.md');
+  });
+});

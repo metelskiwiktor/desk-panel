@@ -42,6 +42,27 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   kontekst do szkicu, nigdy same nie wysyłają wiadomości.
   `Esc` zamyka najpierw menu komend lub skillów, wskazywanie albo szufladę historii, potem ukrywa okno. Pełny ekran zatrzymuje fokus
   klawiatury w oknie; animacje respektują `prefers-reduced-motion`.
+- **Załączniki**: w polu wiadomości `Ctrl+V` wkleja obraz ze schowka, upuszczenie pliku na okno czatu go dodaje, a spinacz
+  otwiera wybór plików. Przed wysłaniem widać miniatury obrazów albo chipy plików (nazwa, typ, rozmiar) z „Usuń załącznik”.
+  Najwyżej 4 załączniki; obraz do 5 MB (PNG/JPEG/WebP/GIF), plik do 5 MB (TXT/MD/CSV/JSON), łącznie do 6 MB
+  (limity plików liczone w MiB: 1 MB w interfejsie = 1 048 576 bajtów). Kompozytor pokazuje limity i przyczynę odmowy.
+  Serwer sprawdza rzeczywiste bajty: sygnaturę PNG/JPEG/WebP/GIF oraz jej zgodność z deklarowanym MIME; SVG odrzuca
+  także pod typem tekstowym. Tekst musi być poprawnym UTF-8 (bez zastępowania błędnych sekwencji).
+  Całe żądanie do Hermesa po serializacji JSON musi mieć **mniej niż 9 000 000 bajtów**; serwer liczy również preambułę,
+  kontekst, tekst i data URL obrazów, przed utrwaleniem oczekującej tury i przed wywołaniem Hermesa. Przekroczenie daje 413.
+  Przekroczenie limitu albo obcy typ
+  daje czytelny komunikat i nic nie jest wysyłane. PDF jest na liście wyboru, ale panel go jeszcze nie czyta: „PDF jeszcze
+  nieobsługiwany” (Hermes odrzuca części plikowe, a w zależnościach nie ma czytnika). Obrazy idą do Hermesa w tej samej turze
+  jako części `image_url` (data URL), a treść plików tekstowych — w części tekstowej z nagłówkiem nazwy (do 20 000 znaków na plik,
+  nadmiar ucięty z informacją). Po wysłaniu wiadomość pokazuje miniatury (klik otwiera pełny obraz) i chipy (klik pobiera) nad
+  tekstem, także po przeładowaniu i w kolejnych turach. Bajty leżą w `~/.desk-panel/chat-files/<id rozmowy>/<id pliku>.<rozszerzenie>`
+  (poza Gitem), a rozmowa trzyma tylko odnośnik (id, nazwa, typ, rozmiar). `GET /api/chats/<id>/files/<fileId>` serwuje plik
+  wyłącznie z jego rozmowy (walidacja id, `Content-Type` z białej listy, `Content-Disposition` dla nie-obrazów,
+  `X-Content-Type-Options: nosniff`); usunięcie rozmowy, także tymczasowej, usuwa jej katalog.
+  Rozmowa jest zajmowana przed pierwszym asynchronicznym zapisem; równoległa wysyłka dostaje 409.
+  Każdy plik powstaje przez plik tymczasowy i atomowe rename. Wycofanie tury sprząta wyłącznie jej pliki, także po częściowym
+  zapisie. Oczekująca tura utrwalona z `nonce` zachowuje pliki po błędzie startu Hermesa; ponowienie tego samego `nonce`
+  (również utworzenia rozmowy po restarcie) używa tej samej rozmowy, zamrożonego żądania i plików.
 - **Szkice**: tekst i wskazane elementy są zapisywane lokalnie osobno dla każdej rozmowy oraz dla nowej, jeszcze niewysłanej
   rozmowy (`src/chat-draft.ts`). Zmiana rozmowy ani widoku nie przenosi szkicu do innego czatu. Przyjęcie wiadomości przez
   serwer czyści tylko wysłany szkic; błąd go zachowuje. Stary wspólny szkic jest jednorazowo przenoszony do nowej rozmowy.
@@ -313,12 +334,13 @@ Wszystko poza odczytem wymaga nagłówka `Origin` równego adresowi panelu (jak 
 | Trasa | Działanie |
 | --- | --- |
 | `GET /api/chats` | `{ chats: ChatSummary[], engines, engine }` (każda rozmowa ma `engine`; `engines` mówi, który silnik przyjmie wiadomość) |
-| `POST /api/chats` | nowa rozmowa z pierwszą wiadomością `{ text, context, engine?, nonce? }` → `201 { id }` |
+| `POST /api/chats` | nowa rozmowa z pierwszą wiadomością `{ text, context, files?, engine?, nonce? }` → `201 { id }` |
 | `PUT /api/chats/engine` | `{ engine: "hermes" \| "agy" }`: silnik nowych rozmów |
 | `GET /api/chats/<id>` | cała rozmowa |
 | `PATCH /api/chats/<id>` | `{ title }` |
-| `DELETE /api/chats/<id>` | usuwa rozmowę i kończy jej proces |
-| `POST /api/chats/<id>/messages` | `{ text, context, nonce? }` → `202`; `409`, gdy agent jeszcze odpowiada; `503`, gdy silnik rozmowy nie działa |
+| `DELETE /api/chats/<id>` | usuwa rozmowę, kończy jej proces i usuwa katalog plików |
+| `POST /api/chats/<id>/messages` | `{ text, context, files?, nonce? }` → `202`; `409`, gdy agent jeszcze odpowiada; `503`, gdy silnik rozmowy nie działa |
+| `GET /api/chats/<id>/files/<fileId>` | bajty załącznika tej rozmowy; inna rozmowa albo ścieżka poza id → `404` |
 | `POST /api/chats/<id>/approval` | `{ approvalId, decision: "approve" \| "deny" }`: odpowiedź na prośbę o zgodę (tylko Hermes); `409`, gdy nieaktualna |
 | `POST /api/chats/<id>/stop` | zatrzymuje odpowiedź |
 | `GET /api/chats/<id>/events` | strumień SSE |

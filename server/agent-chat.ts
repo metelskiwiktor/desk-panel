@@ -151,6 +151,8 @@ export interface ChatService {
   get(id: string): Promise<ChatDetail>;
   create(input: ChatSend): Promise<{ id: string }>;
   send(id: string, input: ChatSend): Promise<void>;
+  /** One file of a sent message, from this conversation's own directory; undefined when the chat has no such file. */
+  file?(id: string, fileId: string): Promise<{ data: Buffer; name: string; type: string } | undefined>;
   /** A turn the panel starts itself (never the user's message); the conversation marks it as automation. */
   automationTurn?(runId: string): { chatId: string; turnId: string; runId: string } | undefined;
   sendAutomation?(id: string, input: ChatAutomationInput): Promise<void>;

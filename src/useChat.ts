@@ -1,6 +1,6 @@
 import { clearChatDraft, setChatDraftTemporary } from './chat-draft';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEFAULT_ENGINE, type ChatDetail, type ChatEngine, type ChatEvent, type ChatList, type ChatMessage, type ChatSummary, type ContextItem, type EngineStatus } from './chat-contract';
+import { DEFAULT_ENGINE, type ChatDetail, type ChatEngine, type ChatEvent, type ChatFileUpload, type ChatList, type ChatMessage, type ChatSummary, type ContextItem, type EngineStatus } from './chat-contract';
 import { rememberSnapshot } from './chat-snapshots';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -140,12 +140,13 @@ export function useChat(fixed?: ChatEngine) {
    * Writes in the open conversation, or starts one on the chosen engine when none is open. Returns true once the agent
    * has the message; on failure the caller keeps the draft. `nonce` is one per draft, so a retry is not a second turn.
    */
-  const send = useCallback((text: string, context: ContextItem[], nonce?: string) => guard(async () => {
+  const send = useCallback((text: string, context: ContextItem[], nonce?: string, files: ChatFileUpload[] = []) => guard(async () => {
     const id = activeRef.current;
     const selected = selection.current, temp = temporaryRef.current;
-    if (id) await call(`/api/chats/${id}/messages`, 'POST', { text, context, ...(nonce ? { nonce } : {}) });
+    const attachments = files.length ? { files } : {};
+    if (id) await call(`/api/chats/${id}/messages`, 'POST', { text, context, ...attachments, ...(nonce ? { nonce } : {}) });
     else {
-      const created = await call('/api/chats', 'POST', { text, context, engine: preferredRef.current, ...(temp ? { temporary: true } : {}), ...(nonce ? { nonce } : {}) }) as { id: string };
+      const created = await call('/api/chats', 'POST', { text, context, ...attachments, engine: preferredRef.current, ...(temp ? { temporary: true } : {}), ...(nonce ? { nonce } : {}) }) as { id: string };
       if (selected !== selection.current) {
         if (temp) await call(`/api/chats/${created.id}?temporary=1`, 'DELETE');
         return true;

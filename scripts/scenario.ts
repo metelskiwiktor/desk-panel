@@ -13,9 +13,39 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { deflateSync } from 'node:zlib';
 import { devices } from '../src/devices';
 import { launchChromium, selectViewports, startScenario } from './scenario-runtime';
 import { screenshotPath, validateSingleScreenshot, withPageErrors } from './browser-checks';
+
+/** A small PNG that looks like a dashboard card, so the attachment screenshots show a real thumbnail. */
+function previewPng(): Buffer {
+  const width = 320, height = 180, raw = Buffer.alloc((width * 3 + 1) * height);
+  const card = [27, 36, 64], panel = [44, 56, 84], line = [138, 150, 173], accent = [139, 124, 246];
+  for (let y = 0; y < height; y++) {
+    raw[y * (width * 3 + 1)] = 0;
+    for (let x = 0; x < width; x++) {
+      let color = card;
+      if (x >= 24 && x < width - 24 && y >= 18 && y < height - 18) color = panel;
+      if (y >= 32 && y < 40 && x >= 40 && x < 152) color = accent;
+      for (const [top, right] of [[54, 258], [68, 226], [82, 244], [104, 280], [118, 200], [138, 264]] as const) {
+        if (y >= top && y < top + 6 && x >= 40 && x < right) color = line;
+      }
+      const at = y * (width * 3 + 1) + 1 + x * 3;
+      raw[at] = color[0]; raw[at + 1] = color[1]; raw[at + 2] = color[2];
+    }
+  }
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (data: Buffer) => { let c = 0xffffffff; for (const byte of data) c = table[(c ^ byte) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type: string, data: Buffer) => {
+    const head = Buffer.alloc(4); head.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const sum = Buffer.alloc(4); sum.writeUInt32BE(crc(body));
+    return Buffer.concat([head, body, sum]);
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 const PAGES = { pulpit: 'Pulpit', zadania: 'Zadania', kalendarz: 'Kalendarz', system: 'System', zdarzenia: 'Zdarzenia', automaty: 'Automaty', ustawienia: 'Ustawienia' } as const;
 type PageName = keyof typeof PAGES;
@@ -84,7 +114,7 @@ if (!values.shot) {
             if (values.open?.startsWith('automation:')) {
               await page.getByRole('navigation', { name: 'Lista automatów' }).getByRole('button', { name: new RegExp(values.open.slice('automation:'.length)) }).click();
               await page.waitForTimeout(200);
-            } else if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills' || values.open === 'chat-commands' || values.open === 'chat-archive' || values.open === 'chat-temporary') {
+            } else if (values.open === 'chat' || values.open === 'chat-edit' || values.open === 'chat-wide' || values.open === 'chat-compact' || values.open === 'chat-skills' || values.open === 'chat-commands' || values.open === 'chat-archive' || values.open === 'chat-temporary' || values.open === 'chat-attachments' || values.open === 'chat-attachments-sent') {
               await page.getByRole('button', { name: 'Otwórz czat z agentem' }).click();
               if (values.open === 'chat' || values.open === 'chat-edit') {
                 await page.getByLabel('Wiadomość do agenta').fill('Chciałbym znaleźć dogodny termin wizyty u psychologa w przyszłym tygodniu i sprawdzić mój kalendarz');
@@ -110,6 +140,19 @@ if (!values.shot) {
                 await page.getByLabel('Wiadomość do agenta').press('Enter');
                 await page.getByRole('tab', { name: 'Archiwum · 1', exact: true }).waitFor();
                 await page.getByRole('tab', { name: 'Archiwum · 1', exact: true }).click();
+              }
+              if (values.open === 'chat-attachments' || values.open === 'chat-attachments-sent') {
+                await page.locator('input[type=file]').setInputFiles([
+                  { name: 'zrzut-konto.png', mimeType: 'image/png', buffer: previewPng() },
+                  { name: 'notatki.md', mimeType: 'text/markdown', buffer: Buffer.from('# Konto\nSaldo z 23.10.') },
+                ]);
+                await page.getByLabel('Wiadomość do agenta').fill('Zobacz, kafelek Konto pokazuje saldo sprzed tygodnia. Co tu się dzieje?');
+                if (values.open === 'chat-attachments-sent') {
+                  await page.getByLabel('Wiadomość do agenta').press('Enter');
+                  await page.getByAltText('zrzut-konto.png').waitFor({ timeout: 20_000 });
+                  await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ timeout: 20_000 });
+                  await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
+                }
               }
               await page.waitForTimeout(300);
             } else if (cockpit) {
