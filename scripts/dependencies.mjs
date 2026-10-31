@@ -3,12 +3,15 @@
 //   node scripts/dependencies.mjs
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const DEPENDENCIES_MARKER = 'node_modules/.desk-panel-dependencies';
+/** Default `root` keeps the plain relative path (scripts and tests read it as such); a worktree root is joined. */
+const at = (root, path) => (root === '.' ? path : join(root, path));
 /** `npm ci` installs exactly the lockfile, so it alone identifies the installation. */
-export const lockHash = () => createHash('sha256').update(readFileSync('package-lock.json')).digest('hex');
-export const installedMatches = () => existsSync(DEPENDENCIES_MARKER) && readFileSync(DEPENDENCIES_MARKER, 'utf8').trim() === lockHash();
-export const recordInstalled = () => writeFileSync(DEPENDENCIES_MARKER, lockHash() + '\n');
+export const lockHash = (root = '.') => createHash('sha256').update(readFileSync(at(root, 'package-lock.json'))).digest('hex');
+export const installedMatches = (root = '.') => existsSync(at(root, DEPENDENCIES_MARKER)) && readFileSync(at(root, DEPENDENCIES_MARKER), 'utf8').trim() === lockHash(root);
+export const recordInstalled = (root = '.') => writeFileSync(at(root, DEPENDENCIES_MARKER), lockHash(root) + '\n');
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) recordInstalled();

@@ -15,7 +15,7 @@ below names for the area you touch.
 | What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
 | Tests and verification | docs/testowanie.md, `just check` | agents |
 | Agent skills, e.g. how we give Wektor new abilities and judge his answers | skills/<name>/SKILL.md, e.g. skills/wektor-capabilities/SKILL.md; .claude/skills (Claude Code) and .agents/skills (Codex) are local links to skills/, made by `just setup` | any agent: Claude Code and Codex load them as skills |
-| Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md | Cezar |
+| Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md, docs/agent-workflows/executor-brief.md, scripts/executor-prepare.mjs, scripts/executor-run.mjs, scripts/executor-commit.mjs; results: docs/agent-workflows/executor-evaluation-2026-10-31.md | Cezar |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
 | How the user wants every agent to work (commits, words) | "Working with the user" below | every agent; Cezar's executor keeps its workflow's branch and review |
 | What only concerns working with Claude Code | Claude Code memory, outside the repo; never project facts, never a rule other agents need | Claude Code sessions |
@@ -29,8 +29,10 @@ rule changes) in the same commit; documentation is part of the change, not a fol
 ## Working with the user
 
 - In this checkout (Claude Code, Codex): commit everything in the tree and push straight to `main` once `just check`
-  passes; no branches, no pull requests. Cezar's executor works in its own worktree and leaves pushing to Cezar. If
-  origin/main moved, merge it (check overlaps with local work) and run the tests again before pushing.
+  passes; no branches, no pull requests. Cezar's executor works in its own worktree: its agent steps never commit, push,
+  dispatch or open PRs; Cezar's check nodes prepare the worktree, verify with `just check`, review, then commit the
+  approved diff and open the PR (docs/agent-workflows/desk-panel-task.md). If origin/main moved, merge it (check overlaps
+  with local work) and run the tests again before pushing.
 - Commit messages: conventional commits in English (`feat(chat): ...`), with no attribution lines (`Co-Authored-By`,
   "Generated with ..."), even when a tool suggests them.
 - "Zadanie" / "zadania" is an item of the panel's to-do lists (docs/zadania.md), never a Cezar task; Cezar is meant only
@@ -61,6 +63,12 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   scripts as ANSI: keep them ASCII.
 - `just garmin-login`: one-time Garmin Connect sign-in typed by the user in a terminal; only
   DPAPI-encrypted tokens are saved. Never ask for or handle the Garmin password.
+- `just executor-prepare`: prepare a Cezar executor worktree by hand (own `node_modules` for this lockfile, reusable on a
+  repeat run, and the pinned diff base in `.ai/executor-base.json`; no reset/clean/normalization). `just executor-run
+  BRIEF [args]`: the same pinned executor locally (`opencode` + `openrouter/deepseek/deepseek-v4.1-flash-1017`, 20 min wall,
+  4 min without output, raw JSONL and metrics in `~/.desk-panel/executor-runs`). It is told not to commit, push or dispatch;
+  its tool permissions are autonomy, not a filesystem sandbox. Cezar's own check nodes commit the approved diff
+  (docs/agent-workflows/desk-panel-task.md).
 - `just check`: tests, typecheck, dead code (knip, production mode) and frontend build in parallel. Run before publishing;
   `just test-fast` runs only the tests touched by uncommitted changes. Tests guard invariants, not commits: change the
   existing test, merge duplicates, and add no code that only a test uses (docs/testowanie.md).

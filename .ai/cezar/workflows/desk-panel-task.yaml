@@ -1,27 +1,26 @@
 version: 2
 name: desk-panel-task
-description: Implement a Desk Panel task with visually verified before/after screenshots, verify with tests+build, run pre-PR AI code review (with auto-fix round), open a PR ready for review, and post screenshots + review summary.
+description: Implement a Desk Panel task with visually verified before/after screenshots, verify with `just check`, review the finished diff (with one auto-fix round), commit the approved diff deterministically, open a PR ready for review, and post screenshots + review summary.
 
 nodes:
   - id: start
     type: start
 
   - id: prepare
-    name: Prepare worktree (LF line endings, node_modules & .ai helpers)
+    name: Prepare worktree (own node_modules, pinned diff base)
     type: check
+    # No reset/clean/normalization and no linked node_modules: the worktree gets its own npm ci installation for this
+    # package-lock.json, reusable on a repeat run, and the base commit verify diffs against.
     command: |
-      git config core.autocrlf false
-      git rm --cached -r . >/dev/null 2>&1 || true
-      git reset --hard >/dev/null 2>&1 || true
-      mkdir -p .ai/screenshots
-      node -e "const fs=require('fs'),p=require('path'),cp=require('child_process'); for(const rel of ['../../../../node_modules','../../../node_modules']){ if(!fs.existsSync('node_modules')&&fs.existsSync(rel)){ try{fs.symlinkSync(p.resolve(rel),'node_modules','junction');}catch(_){} break; } } for(const base of ['../../../../scripts','../../../scripts','scripts']){ for(const f of ['scenario.ts','pr-screenshots.mjs']){ const src=p.resolve(base,f), dst=p.resolve('.ai',f); if(fs.existsSync(src)){ try{fs.copyFileSync(src,dst);}catch(_){} } } } if(!fs.existsSync('node_modules/.bin/tsc')&&!fs.existsSync('node_modules/.bin/tsc.cmd')){ console.log('node_modules incomplete or tsc binary missing; installing...'); cp.execSync('npm install --no-audit --no-fund',{stdio:'inherit'}); }"
+      node scripts/executor-prepare.mjs
 
   - id: implement
     name: Implement
     type: agent
-    # The code is written by opencode on OpenRouter with Wektor's model (fix and address continue its session), keeping
-    # the Codex subscription free (user's choice, 30.10.2026); the review runs on another family.
-    # Gemini 3.8 Flash judged worse than the others in the dispatcher benchmarks of 28.10.2026.
+    # The code is written by opencode on OpenRouter with Wektor's model, keeping the Codex subscription free (user's
+    # choice, 30.10.2026); the review runs on another family. OpenCode cannot resume a session, so fix and address run
+    # fresh and receive the original task plus the summary/brief files. `session.continue` below stays as metadata so the
+    # dispatch card keeps them with implement's pinned runner and model.
     runner: opencode
     model: openrouter/deepseek/deepseek-v4.1-flash-1017
     prompt: |
@@ -30,12 +29,19 @@ nodes:
       ---
       # Desk Panel Executor Instructions (follow in exact order)
 
+      Read `docs/agent-workflows/executor-brief.md` for the brief shape this run follows. The task text above is the goal;
+      the rules below are the execution contract.
+
       CRITICAL EXECUTION & EFFICIENCY RULES:
-      - Work strictly inside your isolated git worktree (`pwd`).
-      - When calling `read_file`, `view_file`, `edit_file`, or `write_file`, ALWAYS pass full absolute paths inside your current worktree (never relative paths and never paths in the parent checkout `C:/Users/Viktor/AndroidStudioProjects/desk-panel/...` outside `.ai/cezar/worktrees/...`).
+      - Work strictly inside your isolated git worktree (`pwd`). Never touch the parent checkout or another worktree.
+      - When calling `read_file`, `view_file`, `edit_file`, or `write_file`, ALWAYS pass full absolute paths inside your current worktree (never relative paths, and never a path in the parent checkout).
       - Read whole files in a single `read_file` call (omit `StartLine`/`EndLine` unless a file exceeds 500 lines) instead of reading 30 lines at a time.
-      - All files in this worktree use LF (`\n`) line endings — batch contiguous edits into a single multi-line `edit_file` call per region instead of editing one line at a time.
+      - Preserve each file's existing line endings; batch contiguous edits into a single multi-line `edit_file` call per region instead of editing one line at a time.
       - Never call `just check` or the full `npm test` suite during implementation (the automated `verify` step runs the full test suite and build right after you finish). Instead, run only the targeted test file(s) you touched plus typecheck: `npx vitest run <test-file>; npm run typecheck`.
+      - **Read first, then edit.** Before changing code, read the area document named in `AGENTS.md` ("Where knowledge lives") for the area you touch, the production modules you will change, and the complete affected test files plus their fixtures/scenarios. Do not guess a contract from one grep.
+      - **Scope is the task.** Change only what the goal needs. Do not refactor around the task, rename unrelated things or reformat whole files. If the task would need a dependency, module, credential or area the brief did not name, stop and say so in your summary instead of widening the change.
+      - **Forbidden unless the task explicitly asks for it:** Wektor's memory and instructions (`PANEL_GUIDES`, `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy configuration, credentials/secrets, and provider/model selection. Never print credentials.
+      - **The executor never publishes.** Do not run `git commit`, `git push`, `gh`, dispatch Cezar tasks or open PRs. Cezar autosaves the worktree at turn end; verify diffs against the base prepare pinned, so your changes stay reviewable either way. Leave the worktree's changes uncommitted by you.
 
       ## Phase 1 — Prepare Scenario Data & Capture Baseline Screenshot (UI tasks ONLY)
       If Type is `UI` (and Scenario is not `none`):
@@ -47,21 +53,22 @@ nodes:
       2. **Choose the right `--open` target so the feature is prominently showcased**:
          - For a new or modified workspace tile (`smart-actions`, `bank`, `todo`, `system`, `mail`, `cezar`, or any new tile `<kind>`), ALWAYS pass `--open tile:<kind>` (e.g. `--open tile:smart-actions`). This showcases the tile at `2x2` on `after.png` (and falls back cleanly to the default grid on `before.png` if the tile did not exist yet) WITHOUT needing to add optional tiles to `autoTiles` in `src/Workspace.tsx`!
          - For modals/drawers, pass `--open mail`, `--open chat`, `--open chat-wide`, `--open task`, `--open event`, `--open bank`, or a CSS selector.
-      3. **Capture baseline screenshot(s) using `.ai/scenario.ts`** (which loads this worktree's own `server/` and `src/`):
+      3. **Capture baseline screenshot(s) using this worktree's `scripts/scenario.ts`** (copied helpers are not needed; the real script loads this worktree's own `server/` and `src/`):
          ```powershell
          Set-Location "<worktree-abs-path>"
-         npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/before.png
+         npx tsx scripts/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/before.png
          ```
          (Omit `--open <open-target>` only if `open` is `none` and the change is already prominent on the main page.)
          **Multiple views/pages/breakpoints**: When changes span across multiple views, pages, or breakpoints, capture a baseline before screenshot for EACH affected view/page/breakpoint using `--file .ai/screenshots/before-<view>.png` (e.g. `before-pulpit.png`, `before-zadania.png`, `before-mobile.png`). For single-view tasks, default `before.png` remains standard.
 
       ## Phase 2 — Implement & Targeted Check
       1. Make the required code changes in `src/`, `server/`, `scenarios/`, or `docs/` inside this worktree (and add any new schema fields like `body` to `scenarios/<scenario>.json` now).
-         - Do NOT add new optional workspace tiles to `autoTiles(...)` in `src/Workspace.tsx` (default `autoTiles` is strictly for quota cards, `mail`, and `cezar`, and changing it breaks `src/Workspace.test.tsx` and `src/pulpits.test.tsx`). Use `--open tile:<kind>` in `.ai/scenario.ts` to showcase new tiles instead.
+         - Do NOT add new optional workspace tiles to `autoTiles(...)` in `src/Workspace.tsx` (default `autoTiles` is strictly for quota cards, `mail`, and `cezar`, and changing it breaks `src/Workspace.test.tsx` and `src/pulpits.test.tsx`). Use `--open tile:<kind>` in `scripts/scenario.ts` to showcase new tiles instead.
          - A new tile kind must also be listed in `pickable()` in `src/workspace-kinds.ts`, or no empty cell offers it and the user can never place it. `--open tile:<kind>` checks this and fails with "no empty cell offers it" for a tile that renders but cannot be picked.
          - Design compact (`1x1`) tile layouts carefully: a `1x1` cell on `medialove-14` is only `~195px` wide. Never put a badge, a title, and multiple action buttons on a single `nowrap` flex row in a `1x1` tile (that crushes the title into `...`); use `flex-wrap: wrap` so the title gets its own full-width line in `1x1` tiles.
          - If the task explicitly asks for a capability that `AGENTS.md` or `docs/` previously restricted, implement the user's requested task and update the relevant line in `AGENTS.md` / `docs/` to match.
-      2. Update or add unit/integration tests covering your changes. Prefer fixing code over weakening tests.
+         - A change that alters how an area behaves updates that area's document in the same change (AGENTS.md, "Where knowledge lives").
+      2. Update or add unit/integration tests covering your changes. Prefer fixing code over weakening tests. For race, migration or idempotence behaviour, write the failing test first (red) and then the fix (green).
       3. Run your new test file(s) AND existing test files for every module you modified (e.g. if you edited `src/Workspace.tsx` or `src/layout.ts`, include `src/Workspace.test.tsx src/pulpits.test.tsx src/layout.test.ts`) plus typecheck in a single command (with `WaitMsBeforeAsync: 10000` so it does not background):
          ```powershell
          Set-Location "<worktree-abs-path>"; npx vitest run <new-and-affected.test.ts>; npm run typecheck
@@ -69,10 +76,10 @@ nodes:
 
       ## Phase 3 — Capture After Screenshot & Visually Inspect Both (UI tasks ONLY)
       If Type is `UI` (and Scenario is not `none`):
-      1. Run the matching `.ai/scenario.ts` command(s) from your worktree, outputting to `.ai/screenshots/after.png` (or `.ai/screenshots/after-<view>.png` for each affected view/page/breakpoint when changes span multiple views):
+      1. Run the matching `scripts/scenario.ts` command(s) from your worktree, outputting to `.ai/screenshots/after.png` (or `.ai/screenshots/after-<view>.png` for each affected view/page/breakpoint when changes span multiple views):
          ```powershell
          Set-Location "<worktree-abs-path>"
-         npx tsx .ai/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/after.png
+         npx tsx scripts/scenario.ts <scenario> --shot --pages <page> --device medialove-14 --scale primary --open <open-target> --file .ai/screenshots/after.png
          ```
       2. **Mandatory critical visual inspection with `read_file`**:
          - Call `read_file` on each captured screenshot pair in `<worktree-abs-path>/.ai/screenshots/` (e.g. `before.png` + `after.png`, or `before-<view>.png` + `after-<view>.png`) to view all images yourself.
@@ -82,34 +89,34 @@ nodes:
            (c) **Legibility & Layout quality**: Can a human actually read the titles, labels, and values inside the new/modified UI on after screenshot(s)? If titles or text are squashed into `...` (ellipsis with zero/few readable words), clipped, overlapping, or barely visible in a tiny corner, you MUST fix the CSS/layout or `--open` flag and re-capture before finishing!
          - If the task turned out to be purely backend with zero visual UI difference, delete all `.ai/screenshots/*.png`.
 
-      ## Phase 4 — Commit
-      1. Stage only your code/test/scenario/doc changes (`git add <files>` — never stage `.ai/` or `output/`).
-      2. Commit on the current branch (`git commit -m "<concise description>"`).
-      3. Confirm `git status --porcelain` is empty. Do NOT push or open a PR yourself — Cezar runs verification and pre-PR review next.
+      ## Phase 4 — Summary (no commit)
+      Write `<worktree-abs-path>/.ai/executor-summary.md` with:
+      - the changed paths and why each changed;
+      - which area document, production modules, tests, fixtures and scenarios you read first;
+      - the exact test commands you ran and their results (targeted tests + typecheck);
+      - acceptance checks and whether each passed (for race/migration/idempotence: the red test and the green test);
+      - remaining risks or follow-ups, and anything you stopped on instead of widening the change;
+      - confirmation that you made no commit, push, PR or dispatch.
+      Write `<worktree-abs-path>/.ai/commit-message.txt` with exactly one line: a conventional commit subject in English (e.g. `feat(chat): show the task status chip`), no attribution line and no body.
 
       Print this final checklist before finishing, and end with `CEZ:DONE` on the last line:
+      - [ ] read the area document, the production modules and the full affected tests/fixtures before editing
       - [ ] before screenshots captured before code edits & show the "before" problem state (UI) or skipped (non-UI)
       - [ ] targeted tests and typecheck passed
       - [ ] after screenshots captured & visually verified via read_file to differ from before (UI) or skipped (non-UI)
-      - [ ] changes committed, git status --porcelain is empty
+      - [ ] `.ai/executor-summary.md` and `.ai/commit-message.txt` written; no commit/push/PR/dispatch by you
       CEZ:DONE
 
   - id: verify
-    name: Verify (tests + build + clean commit)
+    name: Verify (just check + pinned-base diff)
     type: check
+    # The executor leaves its diff uncommitted (Cezar may autosave it at turn end), so this diffs against the base prepare
+    # pinned and saves every changed file, untracked ones included. No empty-diff fallback hides a broken capture.
     command: |
-      set -e
-      npm test
-      npm run build
+      set -euo pipefail
+      just check
       rm -rf output/screenshots
-      dirty=$(git status --porcelain)
-      if [ -n "$dirty" ]; then
-        echo "Uncommitted tracked/untracked changes remain in the worktree (commit them or remove temporary files outside .ai/):"
-        echo "$dirty"
-        exit 1
-      fi
-      mkdir -p .ai
-      git diff origin/main...HEAD > .ai/diff.patch 2>/dev/null || git diff HEAD~1...HEAD > .ai/diff.patch 2>/dev/null || true
+      node scripts/executor-commit.mjs --diff
 
   - id: verify-retry
     name: Retry after verify
@@ -117,7 +124,7 @@ nodes:
     max: 2
 
   - id: fix
-    name: Fix verification or commit
+    name: Fix verification or summary
     type: agent
     runner: opencode
     model: openrouter/deepseek/deepseek-v4.1-flash-1017
@@ -128,7 +135,24 @@ nodes:
 
       {{nodes.verify.output}}
 
-      Fix the cause (do not weaken or delete tests), re-capture `.ai/screenshots/after*.png` using `npx tsx .ai/scenario.ts ...` if this is a UI task and you changed UI code (then remove `output/screenshots`), and commit all intentional changes so `git status --porcelain` is empty.
+      This is a fresh OpenCode session: you have no memory of the implement turn. The original task was:
+
+      Original task: {{task}}
+
+      Before editing, read `.ai/executor-summary.md` (what was changed and why), `docs/agent-workflows/executor-brief.md`
+      (the brief shape and forbidden areas), the area document named in `AGENTS.md`, and the full failing tests/fixtures
+      plus the modules they cover.
+
+      Fix the cause; do not weaken or delete tests. Scope is the original task: change only what it needs, with no
+      refactor around it and no widening. Forbidden unless the original task explicitly asks for it: Wektor's memory and
+      instructions (`PANEL_GUIDES`, `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy
+      configuration, credentials/secrets and provider/model selection. Never print credentials.
+      Run only targeted tests and typecheck (`npx vitest run <changed.test.ts>; npm run typecheck`), never `just check`.
+      If this is a UI task and you changed UI code, re-capture `.ai/screenshots/after*.png`
+      with `npx tsx scripts/scenario.ts ...` and inspect them with `read_file`, then remove `output/screenshots`.
+      Update `.ai/executor-summary.md` with the new test commands/results and, if the kind of change changed,
+      `.ai/commit-message.txt`.
+      Do not run `git commit`, `git push`, `gh`, dispatch Cezar tasks or open PRs; leave the changes for Cezar.
       End with `CEZ:DONE`.
 
   - id: changed
@@ -143,9 +167,14 @@ nodes:
     name: Pre-PR Code Review
     type: agent
     runner: agy
-    # Another model than the one that wrote the code, from agy's Claude/GPT quota (separate from Gemini's): the same
-    # flash model approved PR #36 with a tile nobody could pick, a tile that never refreshed and dead routes.
-    model: claude-opus-5-5-low
+    # Another model family than the one that wrote the code (user's choice, 30.10.2026), read-only on the finished diff.
+    # Exactly these three tools make Cezar's isReadOnlyTools() switch AGY into read-only isolation: no
+    # --dangerously-skip-permissions and a workspace mutation guard. `review: true` is a fork hint, not this knob.
+    model: gemini-3.8-flash-high
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
     verdicts:
       - approve
       - changes
@@ -156,19 +185,30 @@ nodes:
 
       ---
       CRITICAL REVIEW RULES (fast & read-only):
-      - The `verify` step JUST ran the full `npm test` suite and `npm run build` and both PASSED with zero errors. Do NOT run `npm test`, `npm run build`, or `just check` again.
+      - The `verify` step JUST ran the full `just check` (tests, typecheck, dead code, build) and it PASSED with zero errors. Do NOT run `just check`, `npm test`, `npm run build` or the tests again.
       - Do NOT edit, create, or delete any files, and do NOT run mutating git commands.
       - When calling `read_file`, ALWAYS pass full absolute paths inside your current worktree (`pwd`) and read whole files at once (do not slice into 30-line chunks).
+      - Use ONLY `read_file`, `list_dir`, `grep_search` and `find_by_name`. NEVER use a native `run_command`, `terminal`,
+        node, PowerShell or bash tool, not even for a read-only check or to reproduce something in a scratch directory.
+        Do not run tests, create scratch repositories or write any file anywhere.
+      - Every finding must come from the ready `.ai/diff.patch` and the source/fixtures in the worktree; there is nothing
+        to execute.
+      - A denied tool, a missing verdict marker or an aborted review is an execution failure, never `approve` and never a
+        request to fix code. Say the review failed and stop.
 
       Review procedure:
-      1. Read `<worktree-abs-path>/.ai/diff.patch` in full with `read_file` to see all changes on this branch.
-      2. Read the modified files in `<worktree-abs-path>` with `read_file` where needed to verify context around the diff.
+      1. Read `<worktree-abs-path>/.ai/diff.patch` in full with `read_file` to see the finished diff against the pinned base.
+      2. Read the modified files in `<worktree-abs-path>` with `read_file` where needed to verify context around the diff, and the area document named in `AGENTS.md` ("Where knowledge lives").
       3. If Type is `UI`, inspect all before/after screenshot pairs in `<worktree-abs-path>/.ai/screenshots/` with `read_file`:
          - Are any screenshots identical or showing the wrong view?
          - In after screenshot(s), is the new/modified UI prominently showcased and **genuinely legible** (or are item titles/text squashed into `...` ellipsis, cramped in a tiny corner instead of using `--open tile:<kind>`, or cut off)?
          - If after screenshot(s) are identical to before, barely show the feature, or have unreadable `...`-truncated titles, report it as a `P2` finding (`CEZ:VERDICT changes`) with concrete instructions on how to fix the CSS layout and/or re-capture with `--open tile:<kind>`.
-      4. Check for real issues only:
-         - Correctness & edge cases (e.g. MIME/HTML handling, null/undefined states, broken UI rendering).
+      4. Check scope and correctness:
+         - Does the diff stay inside the task's scope and outside the forbidden areas (Wektor memory/preamble, `PANEL_GUIDES`/`CHAT_SKILLS`/`COCKPIT_TOOLS`, Cezar, credentials, provider selection) unless the task explicitly asked for that area?
+         - Correctness & edge cases (MIME/HTML handling, null/undefined states, broken UI rendering).
+         - Races: two reads/writes or a timer/effect that can interleave, stale responses, polling that is not gentle enough for its source.
+         - Migrations: stored data/shape changes that are not backward compatible, a cache/state file that cannot be read after the change.
+         - Idempotence: a retried action, duplicate refresh or repeated save that duplicates data or writes twice.
          - Security invariants (loopback-only server, `Origin` check on `POST` mutations, no leaked credentials/DPAPI/full account numbers).
          - Zod contract & scenario fixture parity.
          - Note: if the task prompt explicitly requested a capability that `AGENTS.md` previously restricted, implementing that capability is intentional, not a defect.
@@ -181,8 +221,8 @@ nodes:
       6. Format your response concisely:
          - List findings ordered by severity (`P0` blocker, `P1` bug/regression, `P2` edge-case/missing test/identical UI screenshots, `P3` minor nit) as `P<0-3> <repo-relative-path>:<line> — <problem and suggested fix>`, or write `Findings: none`.
       7. End your message with the verdict marker on the final line:
-         - Output `CEZ:VERDICT changes` ONLY if you found at least one real `P0`, `P1`, or `P2` issue that should be fixed before opening the PR.
-         - Output `CEZ:VERDICT approve` if there are no issues or only `P3` minor nits.
+         - Output `CEZ:VERDICT changes` if you found at least one real `P0`, `P1`, or `P2` issue that should be fixed before opening the PR.
+         - Output `CEZ:VERDICT approve` ONLY when there are no issues or only `P3` minor nits.
 
   - id: review-retry
     name: Address review round
@@ -201,12 +241,34 @@ nodes:
 
       {{nodes.review.summary}}
 
-      Fix every P0, P1, and P2 finding above in your worktree:
-      1. Edit the affected source, scenario, and test files using full absolute paths inside your worktree (`pwd`).
-      2. Run targeted tests and typecheck (`npx vitest run <changed.test.ts>; npm run typecheck`).
-      3. If your fix changed visible UI or the reviewer flagged `.ai/screenshots/` images, re-capture them using `npx tsx .ai/scenario.ts ...` inside your worktree and verify them with `read_file`.
-      4. Stage and commit all changes (`git add <files> && git commit -m "Address pre-PR review findings"`) and confirm `git status --porcelain` is empty.
+      This is a fresh OpenCode session: you have no memory of the implement turn. The original task was:
+
+      Original task: {{task}}
+
+      Before editing, read `.ai/executor-summary.md`, `docs/agent-workflows/executor-brief.md`, the area document named
+      in `AGENTS.md`, and the full affected tests/fixtures plus the modules they cover.
+
+      Fix every P0, P1, and P2 finding above, with no widening of the original task and no refactor around it.
+      Forbidden unless the original task explicitly asks for it: Wektor's memory and instructions (`PANEL_GUIDES`,
+      `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy configuration, credentials/secrets
+      and provider/model selection. Never print credentials.
+      1. Edit the affected source, scenario, and test files.
+      2. Run only targeted tests and typecheck (`npx vitest run <changed.test.ts>; npm run typecheck`), never `just check`.
+      3. If your fix changed visible UI or the reviewer flagged `.ai/screenshots/` images, re-capture them using
+         `npx tsx scripts/scenario.ts ...` inside your worktree and verify them with `read_file`.
+      4. Update `.ai/executor-summary.md` with the new test commands/results and `.ai/commit-message.txt` if the kind of
+         change changed.
+      Do not run `git commit`, `git push`, `gh`, dispatch Cezar tasks or open PRs; the deterministic commit step follows
+      the next verify and approval.
       End with `CEZ:DONE`.
+
+  - id: commit
+    name: Commit the approved diff
+    type: check
+    # Deterministic, never an agent: refuses to commit if the worktree moved on since verify/review, and takes a
+    # conventional English subject from `.ai/commit-message.txt` (stripping attribution to the fallback).
+    command: |
+      node scripts/executor-commit.mjs
 
   - id: pr
     name: Open PR
@@ -217,14 +279,8 @@ nodes:
     name: Attach before/after screenshots to PR (non-blocking)
     type: check
     command: |
-      if [ -f .ai/pr-screenshots.mjs ]; then
-        node .ai/pr-screenshots.mjs || true
-      elif [ -f scripts/pr-screenshots.mjs ]; then
+      if [ -f scripts/pr-screenshots.mjs ]; then
         node scripts/pr-screenshots.mjs || true
-      elif [ -f ../../../../scripts/pr-screenshots.mjs ]; then
-        node ../../../../scripts/pr-screenshots.mjs || true
-      elif [ -f ../../../scripts/pr-screenshots.mjs ]; then
-        node ../../../scripts/pr-screenshots.mjs || true
       fi
 
   - id: review-comment
@@ -245,8 +301,23 @@ nodes:
     type: end
     status: success
 
+  - id: prepare-failed
+    name: Prepare failed (dependencies or pinned base missing)
+    type: end
+    status: failed
+
   - id: verify-failed
     name: Verification failed after retries
+    type: end
+    status: failed
+
+  - id: review-failed
+    name: Review not approved after retries
+    type: end
+    status: failed
+
+  - id: commit-failed
+    name: Commit of the approved diff failed
     type: end
     status: failed
 
@@ -261,7 +332,7 @@ edges:
   - from: prepare.pass
     to: implement
   - from: prepare.fail
-    to: implement
+    to: prepare-failed
   - from: implement.done
     to: verify
   - from: verify.pass
@@ -279,15 +350,19 @@ edges:
   - from: changed.false
     to: no-changes
   - from: review.approve
-    to: pr
+    to: commit
   - from: review.changes
     to: review-retry
   - from: review-retry.repeat
     to: address
   - from: review-retry.exhausted
-    to: pr
+    to: review-failed
   - from: address.done
     to: verify
+  - from: commit.pass
+    to: pr
+  - from: commit.fail
+    to: commit-failed
   - from: pr.created
     to: screenshots-comment
   - from: pr.failed

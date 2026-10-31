@@ -71,6 +71,14 @@ test-fast:
     node scripts/ensure-deps.mjs
     npx vitest run --changed
 
+# Prepare a Cezar executor worktree: own node_modules for this lockfile and the pinned diff base (safe to repeat).
+executor-prepare:
+    node scripts/executor-prepare.mjs
+
+# Run the pinned Cezar executor (opencode + DeepSeek) locally on a brief: `just executor-run docs/agent-workflows/executor-brief.md`.
+executor-run brief *args:
+    node scripts/executor-run.mjs --brief "{{brief}}" {{args}}
+
 # Bring origin/main in (stops on any conflict with local work), test, build and restart
 # the service with it, uncommitted local changes included. Pass --force to redeploy.
 update *args:

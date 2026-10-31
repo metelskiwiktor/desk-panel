@@ -58,7 +58,7 @@ describe('createCezarRun', () => {
     expect(pinned).toEqual([
       { id: 'implement', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017' },
       { id: 'fix', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017', follows: 'implement' },
-      { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' },
+      { id: 'review', runner: 'agy', model: 'gemini-3.8-flash-high' },
       { id: 'address', runner: 'opencode', model: 'openrouter/deepseek/deepseek-v4.1-flash-1017', follows: 'implement' },
     ]);
     // Only node keys count: a prompt that mentions "runner:" deeper in its text does not pin anything.
