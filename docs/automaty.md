@@ -79,6 +79,8 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
   bezpośrednia zmiana przez narzędzie Wektora to `agent`. Starsze rekordy mają pustą historię. Decyzja karty (utworzony automat albo
   odrzucenie) trafia do `~/.desk-panel/cockpit.json` po `toolCallId`, jak odpowiedzi kart banku i Smart Actions: drugie
   kliknięcie nic nie tworzy, a po przeładowaniu karta pokazuje „Utworzono automat …” albo „Zaktualizowano automat …” z linkiem do widoku Automaty.
+  Zastąpienie starszej propozycji nowszą jest sprawdzane ponownie w sekcji krytycznej tworzenia, po odczytach Cezara/PR
+  i przed zapisem; karta już rozstrzygnięta zwraca zapisaną decyzję, a 409 dostaje tylko niezdecydowana zastąpiona karta.
 - `panel_observe {create|list|cancel}` — bez karty, zapisuje jednorazowy automat (`once`/`cezar`/`pr`) w rozmowie, w której
   trwa tura.
 - `panel_automations {id?}` — lista albo szczegóły (runy, notatnik) do analizy.

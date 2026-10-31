@@ -145,7 +145,7 @@ export function RuleBody({ preview, state = 'open' }: { preview: SmartRulePrevie
  * mail is worked out by the panel (`GET /api/smart-rules/preview`), and nothing is saved until the user clicks „Wykonaj”.
  */
 export function SmartRuleCard({ toolCallId, args, result }: ToolCallMessagePartProps<SmartRuleArgs>) {
-  const { respond, running } = useContext(CardActions);
+  const { respond, running, superseded } = useContext(CardActions);
   const { tytul, refused, ...rest } = args;
   const plan = smartRulePlanSchema.safeParse(rest);
   const key = plan.success ? JSON.stringify(plan.data) : '';
@@ -175,6 +175,7 @@ export function SmartRuleCard({ toolCallId, args, result }: ToolCallMessagePartP
     finally { setSending(false); }
   };
   const open = !decided;
+  const stale = open && !!superseded?.has(toolCallId);
   return <ConsentShell
     label="Zgoda na regułę Smart Actions"
     heading={!decided ? 'Zapisać regułę?' : decided.decision === 'applied' ? 'Reguła zapisana' : 'Odrzucono'}
@@ -201,6 +202,7 @@ export function SmartRuleCard({ toolCallId, args, result }: ToolCallMessagePartP
     onReject={() => void answer('reject')}
     sending={sending}
     error={error}
+    stale={stale}
   />;
 }
 

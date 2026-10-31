@@ -125,14 +125,19 @@ export interface Cockpit {
    * The to-do id comes from the kept dispatch, so this works after a restart and with no chat open.
    */
   linkPrs(tasks: readonly { id: string; pullRequestUrl?: string; title?: string }[]): Promise<void>;
-  /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. Answered twice: done once. */
-  bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan): Promise<BankPlanOutcome>;
+  /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. `beforeWrite` runs after the last await and before the write. Answered twice: done once. */
+  bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan, beforeWrite?: () => Promise<void>): Promise<BankPlanOutcome>;
   /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
-  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign): Promise<BankAssignOutcome>;
+  bankAssign(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' } & BankAssignChoice, plan: BankAssign, beforeWrite?: () => Promise<void>): Promise<BankAssignOutcome>;
   /** The user's answer on a Smart Actions rule card: the rule is saved (or removed) once, as worked out now. */
-  smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan): Promise<SmartRuleOutcome>;
+  smartRule(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: SmartRulePlan, beforeWrite?: () => Promise<void>): Promise<SmartRuleOutcome>;
   /** The user's answer on a „Nowy automat” card; `work` creates (or rejects) it. Answered twice: done once, kept for a reload. */
   automation(chatId: string, input: { toolCallId: string; decision: 'create' | 'reject' }, work: () => Promise<AutomationOutcome>): Promise<AutomationOutcome>;
+  /**
+   * The answer already kept for this consent card, if the user gave one. A retry gets it even when a newer proposal replaced
+   * the card: only undecided superseded cards are refused.
+   */
+  kept(chatId: string, toolCallId: string): CockpitView['bankPlans'][string] | AutomationOutcome | undefined;
 }
 
 export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader }: {
@@ -288,7 +293,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       save();
     },
 
-    async bankAssign(chatId, input, plan) {
+    async bankAssign(chatId, input, plan, beforeWrite) {
       return decideBankCard<BankAssignOutcome>(chatId, input.toolCallId, async () => {
         if (input.decision === 'reject') {
           let preview: BankAssignPreview | undefined;
@@ -303,12 +308,13 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         const { toolCallId: _id, decision: _decision, ...choice } = input;
         const { items, create } = assignMarks(ledger, plan, choice);
         if (!items.length) throw new BankPlanError(409, 'Nic nie jest zaznaczone ani wybrane: nie ma czego oznaczyć.');
+        await beforeWrite?.();
         const result = await sources.bankLabelAction({ action: 'markMany', create, items });
         return { decision: 'applied', at: now(), assigned: result.assigned ?? items.length, choice, preview };
       });
     },
 
-    async smartRule(chatId, input, plan) {
+    async smartRule(chatId, input, plan, beforeWrite) {
       return decideBankCard<SmartRuleOutcome>(chatId, input.toolCallId, async () => {
         if (!sources.smartRules) throw new SourceError(503);
         // Worked out again now: the card shows the outcome with the test it had, and the rules may have changed meanwhile.
@@ -316,6 +322,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         try { preview = await previewPlan(sources, plan); } catch { /* Gmail unreachable: the decision stands without the test */ }
         if (input.decision === 'reject') return { decision: 'rejected', at: now(), ...(preview ? { preview } : {}) };
         if (preview?.problems.length) throw new SmartRuleError(409, preview.problems.join(' '));
+        await beforeWrite?.();
         sources.smartRules.apply(plan);
         return { decision: 'applied', at: now(), ...(preview ? { preview } : {}) };
       });
@@ -339,7 +346,12 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       try { return await operation; } finally { pendingAutomations.delete(key); }
     },
 
-    async bankPlan(chatId, input, plan) {
+    kept(chatId, toolCallId) {
+      const chat = store.chats[chatId];
+      return (chat?.bankPlans[toolCallId] ?? chat?.automationCards[toolCallId]) as CockpitView['bankPlans'][string] | AutomationOutcome | undefined;
+    },
+
+    async bankPlan(chatId, input, plan, beforeWrite) {
       const chat = chatOf(chatId);
       const known = chat.bankPlans[input.toolCallId];
       if (known) return known as BankPlanOutcome;
@@ -359,6 +371,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           // Worked out again now, from what is kept now: the card's preview may be old.
           const preview = planPreview(await sources.bankLedger(), plan);
           if (preview.problems.length) throw new BankPlanError(409, preview.problems.join(' '));
+          await beforeWrite?.();
           const result = await sources.bankLabelAction({ action: 'mergeInto', from: preview.sources.map(s => s.id), into: plan.into, tags: plan.tags });
           outcome = { decision: 'applied', at: now(), into: preview.into.name, created: !!result.category?.created, moved: result.removed ?? preview.moved, preview };
         }

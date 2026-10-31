@@ -25,7 +25,11 @@ konta z podpowiedzią oznaczenia i zadania Cezara czekające na użytkownika.
 - `GET /api/smart-rules/preview?plan=…`: podgląd propozycji (reguła przed i po, test na mailach z zapytania Gmaila).
 - `GET /api/mail/search?q=…`: wiersze maili dla karty listy. Tylko odczyt.
 - `POST /api/chats/:id/smart-rule` (Origin-checked): decyzja na karcie. Regułę czyta z wywołania w tej rozmowie, nie z żądania,
-  liczy podgląd od nowa i zapisuje raz (odpowiedź trzymana w `cockpit.json`).
+  liczy podgląd od nowa i zapisuje raz (odpowiedź trzymana w `cockpit.json`). Starszą propozycję tej samej reguły (to samo
+  `id`; nazwa tylko, gdy propozycja nie ma `id`) zastąpioną późniejszą propozycją w rozmowie serwer odrzuca 409: jej karta
+  nie ma przycisków („Zastąpiona nowszą propozycją niżej.”, `supersededConsentCards` w `src/consent-cards.ts`). Zastąpienie
+  jest sprawdzane ponownie po podglądzie, tuż przed zapisem, a odpowiedzi na karty jednej rozmowy idą kolejno. Karta już
+  rozstrzygnięta zwraca zapisaną odpowiedź, także po zastąpieniu; 409 dotyczy tylko niezdecydowanej zastąpionej karty.
 
 ## Wektor
 

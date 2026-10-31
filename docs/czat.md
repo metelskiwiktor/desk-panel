@@ -96,6 +96,20 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   „Zleć na Cezarze” albo „Zleć z poprawkami” to panel wywołujący `cezarCreateRun` z promptem w wersji użytkownika, raz na
   kartę (drugie kliknięcie zwraca to samo). Odpowiedź (też „Odrzuć”) i powiązania (rozmowa → runy) panel trzyma
   w `~/.desk-panel/cockpit.json` (poza Gitem, same id i prompty), więc karta pokazuje decyzję także po restarcie.
+- **Zastąpione karty zgody** (`supersededConsentCards` w `src/consent-cards.ts`, wspólnie dla okna i serwera): Wektor może
+  zaproponować tę samą zmianę kilka razy w jednej rozmowie (np. regułę Inea poprawianą kolejno). Późniejsza propozycja
+  tego samego rodzaju i celu zastępuje wcześniejszą: Smart Actions — to samo `id` reguły (nazwa tylko, gdy propozycja nie ma
+  `id`); automat — ten sam `replaces` albo nowy automat o tej samej nazwie (po przycięciu i bez wielkości liter); karty
+  konta (scalanie, masowe oznaczenie) — dowolna późniejsza karta tego samego rodzaju. Ten sam identyfikator karty liczy się
+  raz, na ostatnim wystąpieniu, więc A → B → A zostawia A, a zastępuje B. Zastąpiona i jeszcze niezdecydowana karta nie ma
+  przycisków i mówi „Zastąpiona nowszą propozycją niżej.”; karty już rozstrzygnięte się nie zmieniają. Serwer też odmawia
+  wykonania takiej karty: `POST /api/chats/:id/bank-plan`, `/smart-rule` i `/automation` zwracają 409 z komunikatem, bo
+  schowanie przycisków w oknie jest wygodą, a bezpieczeństwem jest ta kontrola po stronie serwera. Karta, na którą
+  użytkownik już odpowiedział, zwraca swoją zapisaną odpowiedź także wtedy, gdy późniejsza propozycja ją zastąpiła
+  (ponowienie po zgubionej odpowiedzi nie kończy się 409); 409 dostają tylko niezdecydowane zastąpione karty. Odpowiedzi
+  na karty jednej rozmowy są wykonywane kolejno (jedna kolejka na rozmowę), a zastąpienie jest sprawdzane ponownie tuż
+  przed zapisem: dla banku i Smart Actions po podglądzie, dla automatu w sekcji krytycznej tworzenia, po odczytach
+  Cezara/PR i przed zapisem — po każdym `await`, więc wolna karta nie nadpisze nowszej.
 - **Makieta i zrzuty**: `?cockpit=mock` w adresie gra cały przebieg bez serwera (`&hermes=down` bez Hermesa,
   `&cockpitSpeed=0.3` szybciej); `just screenshots standard --pages pulpit --open cockpit-approval` (także `cockpit`,
   `cockpit-recon`, `cockpit-watch`, `cockpit-review`). Prawdziwy przebieg na zastępczym Hermesie scenariusza, z runem

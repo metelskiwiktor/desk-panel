@@ -129,6 +129,10 @@ describe('the live cockpit (Hermes and the panel)', () => {
       if (url === '/api/chats' && method === 'GET') return reply({ chats: [summary({ id: H })] });
       if (url.startsWith('/api/cezar/dispatch-defaults')) return reply({ runner: 'codex', model: 'gpt-6.1-sol', models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' }], catalogSource: 'live', modelsLocked: false, pinned: [{ id: 'implement', runner: 'codex', model: 'gpt-6.1-terra' }, { id: 'fix', runner: 'codex', model: 'gpt-6.1-terra', follows: 'implement' }, { id: 'review', runner: 'agy', model: 'claude-opus-5-5-low' }] });
       if (url.startsWith('/api/bank/plan')) return reply(planPreviewMock);
+      if (url.startsWith('/api/smart-rules/preview')) {
+        const plan = JSON.parse(new URL(url, 'http://panel').searchParams.get('plan') ?? '{}');
+        return reply({ kind: 'new', before: null, after: plan.rule, query: plan.q ?? null, rows: [], problems: [] });
+      }
       if (url.startsWith('/api/bank/assign')) return reply(assignPreviewMock);
       if (url === `/api/chats/${H}/bank-plan` && body?.toolCallId === 'a9:b-1') {
         const { toolCallId: _id, decision: _decision, ...choice } = body;
@@ -370,6 +374,28 @@ describe('the live cockpit (Hermes and the panel)', () => {
     const answer = calls.find(c => c.url === `/api/chats/${H}/bank-plan`)!;
     expect(answer.method).toBe('POST');
     expect(answer.body).toEqual({ toolCallId: 'a8:b1', decision: 'apply' });
+  });
+
+  it('offers no buttons on a consent card a later proposal replaced, and the newest one still saves', async () => {
+    const calls = liveServer();
+    const user = userEvent.setup();
+    render(<ChatWindow onClose={() => {}} />);
+    await openConversation(user, /Zadanie z maila/);
+    const rule = (badge: string) => ({ id: 'inea-rachunek', name: 'Inea – rachunek', source: 'mail', enabled: true, category: 'payment', priority: 'high', badge,
+      match: { from: ['e-rachunek@inea.com.pl'], subject: ['rachunek'] }, button: { label: 'Zapłać rachunek', domain: 'inea.com.pl' } });
+    const proposal = (message: string, id: string, badge: string): ChatMessage => ({ id: message, role: 'agent', at: NOW, status: 'done', parts: [
+      { type: 'tool', id, name: 'mcp__desk_panel__panel_smart_rule_propose', input: JSON.stringify({ tytul: 'Inea', rule: rule(badge), q: 'from:inea' }), output: JSON.stringify({ result: `${CARD_SHOWN.smartRule}: test gotowy.` }), state: 'done' },
+    ] });
+    FakeSource.instances.at(-1)!.emit({ type: 'state', chat: detail([...history, proposal('a4', 'a4:s1', 'Inea'), proposal('a5', 'a5:s2', 'Inea po zmianie')], { id: H }) });
+    const cards = await screen.findAllByRole('region', { name: 'Zgoda na regułę Smart Actions' });
+    expect(cards).toHaveLength(2);
+    await waitFor(() => expect(within(cards[1]).getByRole('button', { name: 'Wykonaj' })).toBeTruthy());
+    // The older revised proposal stays as context, but cannot save a rule the user already saw replaced.
+    expect(within(cards[0]).getByText('Zastąpiona nowszą propozycją niżej.')).toBeTruthy();
+    expect(within(cards[0]).queryByRole('button', { name: 'Wykonaj' })).toBeNull();
+    expect(within(cards[0]).queryByRole('button', { name: 'Odrzuć' })).toBeNull();
+    await user.click(within(cards[1]).getByRole('button', { name: 'Wykonaj' }));
+    await waitFor(() => expect(calls.find(c => c.url === `/api/chats/${H}/smart-rule`)?.body).toEqual({ toolCallId: 'a5:s2', decision: 'apply' }));
   });
 
   it('lists recipients with templates, lets a group or one operation take a template or any category, and sends only the choice with Wykonaj', async () => {

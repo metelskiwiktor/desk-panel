@@ -77,22 +77,13 @@ describe('the answer on the card', () => {
   const OK = stableBankCardId('m1', JSON.stringify(okInput))!, BAD = stableBankCardId('m1', JSON.stringify(badInput))!, REFUSED = stableBankCardId('m1', JSON.stringify(refusedInput))!;
   const card = (id: string, input: unknown, output = answered) => ({ type: 'tool', id, name: 'mcp__desk_panel__panel_bank_propose', input: JSON.stringify(input), output, state: 'done' });
 
-  async function withServer<T>(run: (base: string, sources: Awaited<ReturnType<typeof makeSources>>) => Promise<T>) {
+  // The same plan sent twice in one answer is one card with one id.
+  const only = (...parts: unknown[]) => [{ id: 'm1', role: 'agent', status: 'done', parts }];
+  async function withServer<T>(run: (base: string, sources: Awaited<ReturnType<typeof makeSources>>) => Promise<T>, items: unknown[] = only(card(OK, okInput), card(OK, okInput))) {
     const { createPanelServer } = await import('./app');
     const sources = await makeSources();
     const dir = mkdtempSync(join(tmpdir(), 'bank-plan-'));
     const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
-    const items = [{
-      id: 'm1', role: 'agent', status: 'done', parts: [
-        card(OK, okInput),
-        // the same plan sent twice in one answer is one card with one id
-        card(OK, okInput),
-        card(BAD, badInput),
-        card(REFUSED, refusedInput, JSON.stringify({ result: 'Nie ma kategorii wydatków „Y”.' })),
-        // a card that never got its stable id (Hermes's own call id) cannot be answered
-        card('call_raw', okInput),
-      ],
-    }];
     const chat = { get: async () => ({ engine: 'hermes', items }) } as never;
     const server = createPanelServer(sources, dir, undefined, chat, { cockpit }).listen(0, '127.0.0.1');
     await new Promise(done => server.once('listening', done));
@@ -117,14 +108,6 @@ describe('the answer on the card', () => {
       // A request that carries its own plan is refused: only a card id and a yes or no are taken.
       expect((await post(base, { toolCallId: OK, decision: 'apply', merge: ['Zdrowie'], into: 'Wszystko' })).status).toBe(400);
       expect((await post(base, { toolCallId: 'm1:nope', decision: 'apply' })).status).toBe(409);
-      expect((await post(base, { toolCallId: 'call_raw', decision: 'apply' })).status).toBe(409);
-      const refused = await post(base, { toolCallId: REFUSED, decision: 'apply' });
-      expect(refused.status).toBe(409);
-      expect((await refused.json()).error).toContain('odrzucił');
-      const impossible = await post(base, { toolCallId: BAD, decision: 'apply' });
-      expect(impossible.status).toBe(409);
-      expect((await impossible.json()).error).toContain('Nie ma kategorii wydatków');
-      expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
 
       const applied = await post(base, { toolCallId: OK, decision: 'apply' });
       expect(applied.status).toBe(200);
@@ -142,7 +125,20 @@ describe('the answer on the card', () => {
       expect(await (await post(base, { toolCallId: OK, decision: 'apply' })).json()).toEqual(outcome);
       const view = await (await fetch(`${base}/api/chats/${CHAT}/cockpit`)).json();
       expect(view.bankPlans[OK]).toMatchObject({ decision: 'applied' });
-    });
+    }, only(card(OK, okInput), card(OK, okInput)));
+    // Each of these cards is the conversation's last of its kind, so none is refused as replaced.
+    await withServer(async (base, sources) => {
+      const before = (await sources.bankLedger()).categories.map(c => c.name);
+      // a card that never got its stable id (Hermes's own call id) cannot be answered
+      expect((await post(base, { toolCallId: 'call_raw', decision: 'apply' })).status).toBe(409);
+      const refused = await post(base, { toolCallId: REFUSED, decision: 'apply' });
+      expect(refused.status).toBe(409);
+      expect((await refused.json()).error).toContain('odrzucił');
+      const impossible = await post(base, { toolCallId: BAD, decision: 'apply' });
+      expect(impossible.status).toBe(409);
+      expect((await impossible.json()).error).toContain('Nie ma kategorii wydatków');
+      expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
+    }, only(card(BAD, badInput), card(REFUSED, refusedInput, JSON.stringify({ result: 'Nie ma kategorii wydatków „Y”.' })), card('call_raw', okInput)));
   });
 
   it('a rejection changes nothing and is kept', async () => {
@@ -152,6 +148,23 @@ describe('the answer on the card', () => {
       expect(rejected).toMatchObject({ decision: 'rejected', preview: { into: { name: 'Stałe opłaty' } } });
       expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
       expect((await (await post(base, { toolCallId: OK, decision: 'apply' })).json())).toMatchObject({ decision: 'rejected' });
-    });
+    }, only(card(OK, okInput)));
+  });
+
+  it('refuses an older card that a later proposal in the same conversation replaced', async () => {
+    // The same change proposed again later: two cards, and only the newest one applies.
+    const NEWER = stableBankCardId('m2', JSON.stringify(okInput))!;
+    const items = [
+      { id: 'm1', role: 'agent', status: 'done', parts: [card(OK, okInput)] },
+      { id: 'm2', role: 'agent', status: 'done', parts: [card(NEWER, okInput)] },
+    ];
+    await withServer(async (base, sources) => {
+      const before = (await sources.bankLedger()).categories.map(c => c.name);
+      const stale = await post(base, { toolCallId: OK, decision: 'apply' });
+      expect(stale.status).toBe(409);
+      expect((await stale.json()).error).toContain('zastąpiona nowszą');
+      expect((await sources.bankLedger()).categories.map(c => c.name)).toEqual(before);
+      expect((await post(base, { toolCallId: NEWER, decision: 'apply' })).status).toBe(200);
+    }, items);
   });
 });

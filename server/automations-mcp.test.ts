@@ -139,6 +139,69 @@ describe('automation card route', () => {
     expect(await before.list()).toHaveLength(0);
   });
 
+  it('refuses an older automation proposal that a later proposal of the same automation replaced', async () => {
+    const automations = make();
+    const detail = JSON.parse(JSON.stringify(conversation()));
+    detail.items.push({ id: 'm2', role: 'agent', status: 'done', at: 2, parts: [{ type: 'tool', id: 'm2:call2', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify({ ...plan, goal: 'Sprawdź nowy cennik.' }), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }] });
+    const chatStub = { get: async () => detail } as never;
+    const stale = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), stale as never, url, 'http://panel', chatStub, undefined, undefined, automations);
+    expect(stale.status).toBe(409);
+    expect(stale.body).toContain('zastąpiona nowszą');
+    expect(await automations.list()).toHaveLength(0);
+    const fresh = response();
+    await handleChatRoute(request({ toolCallId: 'm2:call2', decision: 'create' }), fresh as never, url, 'http://panel', chatStub, undefined, undefined, automations);
+    expect(fresh.status).toBe(200);
+    expect((await automations.list())[0]).toMatchObject({ name: 'Ceny', goal: 'Sprawdź nowy cennik.' });
+  });
+
+  it('checks supersession again after the PR read: a stalled older card ends 409 and stores nothing', async () => {
+    const prUrl = 'https://github.com/metelskiwiktor/desk-panel/pull/7';
+    const prPlan = { ...plan, trigger: { kind: 'pr', url: prUrl } };
+    const card = (message: string, goal: string) => ({
+      id: message, role: 'agent', status: 'done', at: 1,
+      parts: [{ type: 'tool', id: `${message}:call-${message}`, name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify({ ...prPlan, goal }), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }],
+    });
+    let current: unknown = { id: chatId, engine: 'hermes', items: [card('m1', 'Stary cel.')] };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let entered!: () => void;
+    const inRead = new Promise<void>(resolve => { entered = resolve; });
+    let reads = 0;
+    const automations = make({
+      // The older card stalls on its first PR read; the newer proposal arrives meanwhile.
+      readPr: async (url: string) => {
+        if (++reads === 1) { entered(); await gate; }
+        return { number: 7, title: 'PR', branch: 'main', url, state: 'OPEN' as const, checks: [] };
+      },
+    });
+    const chatStub = { get: async () => current } as never;
+    const older = response();
+    const applying = handleChatRoute(request({ toolCallId: 'm1:call-m1', decision: 'create' }), older as never, url, 'http://panel', chatStub, undefined, undefined, automations);
+    await inRead;
+    current = { id: chatId, engine: 'hermes', items: [card('m1', 'Stary cel.'), card('m2', 'Nowy cel.')] };
+    release();
+    await applying;
+    expect(older.status).toBe(409);
+    expect(older.body).toContain('zastąpiona nowszą');
+    expect(await automations.list()).toHaveLength(0);
+  });
+
+  it('lets two unrelated new automations in one conversation both apply', async () => {
+    const automations = make();
+    const detail = JSON.parse(JSON.stringify(conversation()));
+    detail.items.push({ id: 'm2', role: 'agent', status: 'done', at: 2, parts: [{ type: 'tool', id: 'm2:call2', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify({ ...plan, name: 'Pogoda' }), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }] });
+    const chatStub = { get: async () => detail } as never;
+    const first = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), first as never, url, 'http://panel', chatStub, undefined, undefined, automations);
+    expect(first.status).toBe(200);
+    const second = response();
+    await handleChatRoute(request({ toolCallId: 'm2:call2', decision: 'create' }), second as never, url, 'http://panel', chatStub, undefined, undefined, automations);
+    expect(second.status).toBe(200);
+    // An unrelated new automation is not a replacement: neither card is stale.
+    expect((await automations.list()).map(a => a.name)).toEqual(['Ceny', 'Pogoda']);
+  });
+
   it('narrows kinds while taking domain and reminder only from the conversation plan', async () => {
     const automations = make();
     const detail = JSON.parse(JSON.stringify(conversation()));
@@ -173,8 +236,9 @@ describe('automation card route', () => {
   it('keeps the decision in the cockpit: a second answer creates nothing and a reload shows it', async () => {
     const automations = make();
     const chatStub = { get: async () => conversation() } as never;
+    const keeper = cockpit();
     const first = response();
-    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), first as never, url, 'http://panel', chatStub, cockpit(), undefined, automations);
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), first as never, url, 'http://panel', chatStub, keeper, undefined, automations);
     const created = JSON.parse(first.body);
     expect(created).toMatchObject({ decision: 'created', name: 'Ceny' });
     expect(created.automationId).toMatch(/^a-[0-9a-f]{12}$/);
@@ -182,6 +246,15 @@ describe('automation card route', () => {
     const second = response();
     await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), second as never, url, 'http://panel', chatStub, cockpit(), undefined, automations);
     expect(JSON.parse(second.body)).toEqual(created);
+    expect(await automations.list()).toHaveLength(1);
+
+    // A newer proposal replaces the card, but the answer already given comes back instead of 409.
+    const replaced = JSON.parse(JSON.stringify(conversation()));
+    replaced.items.push({ id: 'm2', role: 'agent', status: 'done', at: 2, parts: [{ type: 'tool', id: 'm2:call2', name: 'mcp__desk_panel__panel_automation_propose', input: JSON.stringify({ ...plan, goal: 'Sprawdź nowy cennik.' }), output: 'Karta „Nowy automat” jest u użytkownika', state: 'done' }] });
+    const retry = response();
+    await handleChatRoute(request({ toolCallId: 'm1:call1', decision: 'create' }), retry as never, url, 'http://panel', { get: async () => replaced } as never, keeper, undefined, automations);
+    expect(retry.status).toBe(200);
+    expect(JSON.parse(retry.body)).toEqual(created);
     expect(await automations.list()).toHaveLength(1);
 
     const view = await cockpit().view(chatId, (conversation() as unknown as { items: never }).items);

@@ -15,7 +15,7 @@ import type { AutomationArgs, AutomationResult } from './types';
  */
 
 export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePartProps<AutomationArgs, AutomationResult>) {
-  const { respond, running } = useContext(CardActions);
+  const { respond, running, superseded } = useContext(CardActions);
   const plan = automationPlanSchema.safeParse({ ...args, actions: Array.isArray(args.actions) ? args.actions : [{ kind: 'message' }] });
   const [actions, setActions] = useState<AutomationAction[]>(plan.success ? plan.data.actions : []);
   const [learn, setLearn] = useState(plan.success ? plan.data.learn : false);
@@ -49,6 +49,7 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
   const editable = before?.status === 'active' || before?.status === 'paused';
   const title = typeof args.name === 'string' && args.name.trim() ? args.name.trim().slice(0, 120) : 'Nowy automat';
   const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
+  const stale = !decided && !!superseded?.has(toolCallId);
   const answer = async (decision: 'create' | 'reject') => {
     setSending(true); setError('');
     try { await respond(toolCallId, { kind: 'automation', decision, ...(decision === 'create' ? { actions, learn } : {}) }); }
@@ -129,5 +130,6 @@ export function AutomationCard({ toolCallId, args, result }: ToolCallMessagePart
     onReject={() => void answer('reject')}
     sending={sending}
     error={error}
+    stale={stale}
   />;
 }

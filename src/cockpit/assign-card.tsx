@@ -298,7 +298,7 @@ function rangeText(p: BankAssignPreview) {
  * group or one operation, and nothing is marked until „Wykonaj”.
  */
 export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePartProps<BankAssignArgs>) {
-  const { respond, running } = useContext(CardActions);
+  const { respond, running, superseded } = useContext(CardActions);
   const plan = bankAssignSchema.safeParse(args);
   const key = plan.success ? JSON.stringify(plan.data) : '';
   const decided = result && typeof result === 'object' && ['applied', 'rejected'].includes((result as { decision?: string }).decision ?? '') ? result as BankAssignOutcome : undefined;
@@ -331,6 +331,7 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
   const total = sums.reduce((n, t) => n + t.total, 0) + poolDone.total;
   const title = typeof args.tytul === 'string' && args.tytul.trim() ? args.tytul.trim().slice(0, 80) : 'Oznaczenia z podpowiedzi';
   const unidentified = toolCallId.startsWith('pending:') || !toolCallId.includes(':');
+  const stale = !decided && !!superseded?.has(toolCallId);
   const ok = !!preview && !preview.problems.length;
   const answer = async (decision: 'apply' | 'reject') => {
     setSending(true); setError('');
@@ -379,5 +380,6 @@ export function BankAssignCard({ toolCallId, args, result }: ToolCallMessagePart
     onReject={() => void answer('reject')}
     sending={sending}
     error={error}
+    stale={stale}
   />;
 }

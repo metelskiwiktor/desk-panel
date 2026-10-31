@@ -8,7 +8,8 @@ import { chatApprovalSchema, chatEngineSchema, chatFileTypes, chatRenameSchema, 
 import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
-import { cardRefusal, cockpitDispatchSchema, type DispatchOutcome } from '../src/cockpit-contract';
+import { cardRefusal, cockpitDispatchSchema, panelToolName, type DispatchOutcome } from '../src/cockpit-contract';
+import { supersededConsentCards } from '../src/consent-cards';
 import { ChatError, type ChatService } from './agent-chat';
 import type { Cockpit } from './cockpit';
 import { SourceError } from './sources';
@@ -21,6 +22,8 @@ import { AutomationError } from './automations';
 const MAX_BODY = 512 * 1024;
 /** Four 5 MB files as base64 (a third more), plus the message and its context. Only the two message routes use it. */
 const MAX_MESSAGE_BODY = Math.ceil(4 * 5 * 1024 * 1024 * 4 / 3) + MAX_BODY;
+/** What the routes that apply a consent card say when a later proposal in the same conversation replaced that card. */
+const SUPERSEDED = 'Ta propozycja została zastąpiona nowszą w tej rozmowie. Użyj nowszej karty.';
 /** Old decisions used unstable stream ids. Resolve only a unique exact prompt; otherwise block new decisions. */
 export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Record<string, DispatchOutcome>) {
   const resolved = { ...dispatches };
@@ -36,6 +39,25 @@ export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Rec
     resolved[matches[0].id] = decision;
   }
   return { dispatches: resolved, unresolved };
+}
+/** The consent cards of a conversation, in order: what the server needs to refuse a card a later one replaced. */
+const CONSENT_CARD = { panel_bank_propose: 'bankPlan', panel_bank_assign: 'bankAssign', panel_smart_rule_propose: 'smartRule', panel_automation_propose: 'automation' } as const;
+const consentProposals = (conversation: ChatDetail) => conversation.items.flatMap(m => (m.parts ?? []).flatMap(p => {
+  if (p.type !== 'tool') return [];
+  const card = CONSENT_CARD[panelToolName(p.name) as keyof typeof CONSENT_CARD];
+  return [{ id: p.id, name: p.name, args: p.input, ...(card ? { accepted: !cardRefusal(card, p.output, p.error) } : {}) }];
+}));
+/**
+ * Card applications of one conversation run one after another: two clicks cannot interleave their awaits and writes, and
+ * the second one is checked against what the first one left. A failed application never blocks the next.
+ */
+const cardQueues = new Map<string, Promise<unknown>>();
+async function serializeCard<T>(chatId: string, run: () => Promise<T>): Promise<T> {
+  const previous = cardQueues.get(chatId) ?? Promise.resolve();
+  const current = previous.then(run, run);
+  cardQueues.set(chatId, current);
+  try { return await current; }
+  finally { if (cardQueues.get(chatId) === current) cardQueues.delete(chatId); }
 }
 async function readBody(req: IncomingMessage, max = MAX_BODY): Promise<unknown> {
   let body = '';
@@ -73,6 +95,11 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
   const write = req.method !== 'GET';
   if (write && req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return true; }
   try {
+    // Checked again just before the write: the conversation may have grown a newer proposal while the card was working.
+    const assertNotSuperseded = async (chatId: string, toolCallId: string) => {
+      const latest = await chat.get(chatId);
+      if (supersededConsentCards(consentProposals(latest)).has(toolCallId)) throw new ChatError(409, SUPERSEDED);
+    };
     if (fileMatch) {
       if (req.method !== 'GET') { res.writeHead(405).end(); return true; }
       const file = chat.file ? await chat.file(fileMatch[1], fileMatch[2]) : undefined;
@@ -181,67 +208,84 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       // The user's answer on a bank change card: the only way the chat changes the account's categories. Which change it is
       // comes from the conversation's own tool call, never from the request.
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
-      const input = parse(bankPlanDecisionSchema, await readBody(req));
-      const conversation = await chat.get(id);
-      const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
-        ? (m.parts ?? []).filter(p => p.type === 'tool' && (p.name.includes('panel_bank_propose') || p.name.includes('panel_bank_assign')) && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
-        : []) : [];
-      // The id comes from the plan, so the same plan twice in one answer is one card.
-      if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
-      const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
-      if (cardRefusal(card.name.includes('panel_bank_assign') ? 'bankAssign' : 'bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
-      const bad = () => new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
-      if (card.name.includes('panel_bank_assign')) {
+      return await serializeCard(id, async () => {
+        const input = parse(bankPlanDecisionSchema, await readBody(req));
+        const conversation = await chat.get(id);
+        const matches = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+          ? (m.parts ?? []).filter(p => p.type === 'tool' && (p.name.includes('panel_bank_propose') || p.name.includes('panel_bank_assign')) && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+          : []) : [];
+        // The id comes from the plan, so the same plan twice in one answer is one card.
+        if (!matches.length) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        const card = matches[0] as Extract<ChatPart, { type: 'tool' }>;
+        if (cardRefusal(card.name.includes('panel_bank_assign') ? 'bankAssign' : 'bankPlan', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+        const kept = cockpit.kept(id, input.toolCallId);
+        if (kept) return json(res, 200, kept), true;
+        if (input.decision === 'apply' && supersededConsentCards(consentProposals(conversation)).has(input.toolCallId)) throw new ChatError(409, SUPERSEDED);
+        const guard = input.decision === 'apply' ? () => assertNotSuperseded(id, input.toolCallId) : undefined;
+        const bad = () => new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+        if (card.name.includes('panel_bank_assign')) {
+          let plan;
+          try { plan = bankAssignSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
+          return json(res, 200, await cockpit.bankAssign(id, input, plan, guard)), true;
+        }
         let plan;
-        try { plan = bankAssignSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
-        return json(res, 200, await cockpit.bankAssign(id, input, plan)), true;
-      }
-      let plan;
-      try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
-      return json(res, 200, await cockpit.bankPlan(id, input, plan)), true;
+        try { plan = bankPlanSchema.parse(JSON.parse(card.input)); } catch { throw bad(); }
+        return json(res, 200, await cockpit.bankPlan(id, input, plan, guard)), true;
+      });
     } else if (action === 'smart-rule' && req.method === 'POST') {
       // The user's answer on a Smart Actions rule card: the only way the chat changes the rules. The rule comes from the
       // conversation's own tool call, never from the request.
       if (!cockpit || id === 'engine') { res.writeHead(503).end(); return true; }
-      const input = parse(bankPlanDecisionSchema.pick({ toolCallId: true, decision: true }).strict(), await readBody(req));
-      const conversation = await chat.get(id);
-      const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
-        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_smart_rule_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
-        : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
-      if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
-      if (cardRefusal('smartRule', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
-      const plan = smartRulePlanOf(card.input);
-      if (!plan) throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
-      return json(res, 200, await cockpit.smartRule(id, input, plan)), true;
+      return await serializeCard(id, async () => {
+        const input = parse(bankPlanDecisionSchema.pick({ toolCallId: true, decision: true }).strict(), await readBody(req));
+        const conversation = await chat.get(id);
+        const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+          ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_smart_rule_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+          : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+        if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        if (cardRefusal('smartRule', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej wykonać. Poproś Wektora o nową.');
+        const kept = cockpit.kept(id, input.toolCallId);
+        if (kept) return json(res, 200, kept), true;
+        if (input.decision === 'apply' && supersededConsentCards(consentProposals(conversation)).has(input.toolCallId)) throw new ChatError(409, SUPERSEDED);
+        const plan = smartRulePlanOf(card.input);
+        if (!plan) throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.');
+        const guard = input.decision === 'apply' ? () => assertNotSuperseded(id, input.toolCallId) : undefined;
+        return json(res, 200, await cockpit.smartRule(id, input, plan, guard)), true;
+      });
     } else if (action === 'automation' && req.method === 'POST') {
       // The user's answer on a „Nowy automat” card: the only way the chat creates an automation. Its plan comes from the
       // conversation's own tool call, never from the request.
       if (!automations || id === 'engine') { res.writeHead(503).end(); return true; }
-      const input = parse(automationDecisionSchema, await readBody(req));
-      const conversation = await chat.get(id);
-      const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
-        ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_automation_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
-        : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
-      if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
-      if (input.decision === 'reject') {
-        const outcome = { decision: 'rejected' as const, at: Date.now() };
-        return json(res, 200, cockpit ? await cockpit.automation(id, input, async () => outcome) : outcome), true;
-      }
-      if (cardRefusal('automation', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej utworzyć. Poproś Wektora o nową.');
-      let plan;
-      try { plan = automationPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
-      if (input.actions) {
-        plan = { ...plan, actions: plan.actions.filter(a => input.actions!.some(x => x.kind === a.kind)) };
-        if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
-      }
-      // The card may only narrow the plan: turning „learn” off works, turning it on cannot.
-      if (input.learn === false && plan.learn) plan = { ...plan, learn: false };
-      const create = async () => {
-        const before = plan.replaces ? await automations.get(plan.replaces) : undefined;
-        const automation = await automations.createFromPlan(id, plan);
-        return { decision: plan.replaces ? 'updated' as const : 'created' as const, ...(before ? { before } : {}), at: Date.now(), automationId: automation.id, name: automation.name };
-      };
-      return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
+      return await serializeCard(id, async () => {
+        const input = parse(automationDecisionSchema, await readBody(req));
+        const conversation = await chat.get(id);
+        const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+          ? (m.parts ?? []).filter(p => p.type === 'tool' && p.name.includes('panel_automation_propose') && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`))
+          : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+        if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        if (input.decision === 'reject') {
+          const outcome = { decision: 'rejected' as const, at: Date.now() };
+          return json(res, 200, cockpit ? await cockpit.automation(id, input, async () => outcome) : outcome), true;
+        }
+        if (cardRefusal('automation', card.output, card.error)) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej utworzyć. Poproś Wektora o nową.');
+        const kept = cockpit?.kept(id, input.toolCallId);
+        if (kept) return json(res, 200, kept), true;
+        if (supersededConsentCards(consentProposals(conversation)).has(input.toolCallId)) throw new ChatError(409, SUPERSEDED);
+        let plan;
+        try { plan = automationPlanSchema.parse(JSON.parse(card.input)); } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
+        if (input.actions) {
+          plan = { ...plan, actions: plan.actions.filter(a => input.actions!.some(x => x.kind === a.kind)) };
+          if (!plan.actions.length) throw new ChatError(409, 'Nie zaznaczono żadnej akcji, więc automat nie powstał.');
+        }
+        // The card may only narrow the plan: turning „learn” off works, turning it on cannot.
+        if (input.learn === false && plan.learn) plan = { ...plan, learn: false };
+        const create = async () => {
+          const before = plan.replaces ? await automations.get(plan.replaces) : undefined;
+          const automation = await automations.createFromPlan(id, plan, () => assertNotSuperseded(id, input.toolCallId));
+          return { decision: plan.replaces ? 'updated' as const : 'created' as const, ...(before ? { before } : {}), at: Date.now(), automationId: automation.id, name: automation.name };
+        };
+        return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
+      });
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);
       return json(res, 200, { ok: true }), true;

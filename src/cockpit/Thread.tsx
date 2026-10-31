@@ -11,6 +11,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { CHAT_SKILLS, MAX_CHAT_FILES, MAX_CHAT_TOTAL_BYTES, MAX_CONTEXT, automationLabel, isChatImage, skillItem, type ChatAutomation, type ChatFileRef, type ChatFileUpload, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { CHAT_DRAFT_EVENT, clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
+import { supersededConsentCards } from '../consent-cards';
 import { attachmentProblem, chatFileUrl, fileLabel, fileSize, mimeOf, readDraft, UNSUPPORTED_PDF, unsupportedType, type DraftFile } from './attachments';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
@@ -478,7 +479,9 @@ export function Thread(props: ThreadProps) {
     onCancel: async () => source.stop(),
   });
   runtimeRef.current = runtime;
-  const actions = useMemo(() => ({ respond: source.respond, running: source.running || !!source.refreshing, refreshing: source.refreshing, watched: source.cockpit.task, chatId: source.activeId }), [source.respond, source.running, source.refreshing, source.cockpit.task, source.activeId]);
+  // A consent card a later proposal in this conversation replaced offers no buttons; the server refuses it too.
+  const superseded = useMemo(() => supersededConsentCards(source.messages.flatMap(m => (m.parts ?? []).flatMap(p => p.type === 'tool' ? [{ id: p.id, name: p.name, args: p.args }] : []))), [source.messages]);
+  const actions = useMemo(() => ({ respond: source.respond, running: source.running || !!source.refreshing, refreshing: source.refreshing, watched: source.cockpit.task, chatId: source.activeId, superseded }), [source.respond, source.running, source.refreshing, source.cockpit.task, source.activeId, superseded]);
 
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>

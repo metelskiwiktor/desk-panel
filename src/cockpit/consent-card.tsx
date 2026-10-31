@@ -34,6 +34,8 @@ interface ShellProps {
   actionsAlign?: 'start' | 'end';
   /** „Odrzuć” comes before the apply button (the automation card's form order). */
   rejectFirst?: boolean;
+  /** A later proposal in the conversation replaced this undecided card: no buttons, and a line saying so. */
+  stale?: boolean;
 }
 
 export function ConsentShell(p: ShellProps) {
@@ -47,9 +49,10 @@ export function ConsentShell(p: ShellProps) {
     </div>
     <div className="tw:grid tw:gap-3 tw:p-4">
       {p.notices}
+      {p.stale && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zastąpiona nowszą propozycją niżej.</p>}
       {p.body}
       {p.footnote}
-      {!p.outcome && <div className={`tw:flex tw:flex-wrap tw:gap-2 ${p.actionsAlign === 'end' ? 'tw:justify-end' : ''}`}>
+      {!p.outcome && !p.stale && <div className={`tw:flex tw:flex-wrap tw:gap-2 ${p.actionsAlign === 'end' ? 'tw:justify-end' : ''}`}>
         {p.rejectFirst ? <>{reject}{apply}</> : <>{apply}{reject}</>}
       </div>}
       {p.sending && <p className="tw:m-0 tw:text-xs tw:text-ck-muted" role="status">Zapisuję decyzję…</p>}
@@ -126,7 +129,7 @@ function MergeLegend({ preview }: { preview: BankPlanPreview }) {
  * answer is kept with the conversation, so the card shows what was decided later too.
  */
 export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartProps<BankPlanArgs>) {
-  const { respond, running } = useContext(CardActions);
+  const { respond, running, superseded } = useContext(CardActions);
   const plan = bankPlanSchema.safeParse(args);
   const key = plan.success ? JSON.stringify(plan.data) : '';
   const decided = result && typeof result === 'object' && ['applied', 'rejected'].includes((result as { decision?: string }).decision ?? '') ? result as BankPlanOutcome : undefined;
@@ -160,6 +163,7 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
     finally { setSending(false); }
   };
   const open = !decided;
+  const stale = open && !!superseded?.has(toolCallId);
   const ok = !!preview && !preview.problems.length;
   return <ConsentShell
     label="Zgoda na zmianę kategorii"
@@ -183,5 +187,6 @@ export function BankPlanCard({ toolCallId, args, result }: ToolCallMessagePartPr
     onReject={() => void answer('reject')}
     sending={sending}
     error={error}
+    stale={stale}
   />;
 }

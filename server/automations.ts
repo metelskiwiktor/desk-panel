@@ -229,8 +229,11 @@ export interface AutomationChat {
 }
 
 export interface Automations {
-  /** From a consent card (`POST /api/chats/:id/automation`): creates the automation, or updates the existing one in place. */
-  createFromPlan(chatId: string, plan: AutomationPlan): Promise<Automation>;
+  /**
+   * From a consent card (`POST /api/chats/:id/automation`): creates the automation, or updates the existing one in place.
+   * `beforeWrite` runs in the creation critical section, after every provider read and before the write.
+   */
+  createFromPlan(chatId: string, plan: AutomationPlan, beforeWrite?: () => Promise<void>): Promise<Automation>;
   /** `panel_observe`: a card-free one-shot automation (time, Cezar task, PR). */
   createObserver(input: { chatId: string; kind: 'cezar' | 'pr' | 'time'; target: string; instruction: string }): Promise<Automation>;
   list(): Promise<Automation[]>;
@@ -384,7 +387,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     };
   }
 
-  async function createFromPlanOne(chatId: string, raw: AutomationPlan): Promise<Automation> {
+  async function createFromPlanOne(chatId: string, raw: AutomationPlan, beforeWrite?: () => Promise<void>): Promise<Automation> {
     assertEnabled();
     const plan = automationPlanSchema.parse(raw);
     const at = now();
@@ -414,6 +417,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         if (first.state !== 'UNKNOWN') record.snapshot.signature = prSignature(first);
       } catch { /* the first successful read becomes the baseline */ }
     }
+    // Checked inside the critical section, after every provider read: a newer proposal may have arrived meanwhile.
+    await beforeWrite?.();
     if (old) {
       assertEditable(); // Provider reads may have allowed an open run to finish.
       const fields = automationDiff(view(old), { ...values, trigger: record.trigger });
@@ -770,7 +775,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
   }
 
   return {
-    createFromPlan(chatId, plan) { return serialize(() => createFromPlanOne(chatId, plan)); },
+    createFromPlan(chatId, plan, beforeWrite) { return serialize(() => createFromPlanOne(chatId, plan, beforeWrite)); },
 
     createObserver(input) { return serialize(() => createObserverOne(input)); },
 

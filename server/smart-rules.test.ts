@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,10 @@ import type { BankSource } from '../src/bank-contract';
 import type { BankLabelsSource } from '../src/bank-labels-contract';
 import type { SmartRule } from '../src/smart-rules-contract';
 import { alertsOf, buttonLink, createSmartRuleStore, defaultQuery, rulePreview, SEED_RULES, SmartRuleError, smartView } from './smart-rules';
+import { CARD_SHOWN } from '../src/cockpit-contract';
+import { handleChatRoute } from './chat-routes';
+import { createCockpit } from './cockpit';
+import type { PanelSources } from './sources';
 
 const thread = (over: Partial<MailThread>): MailThread => ({
   id: 'me@x.pl:a1', account: 'me@x.pl', threadId: 'a1', from: 'Nadawca', address: 'nadawca@x.pl', subject: 'Temat', snippet: '',
@@ -98,4 +102,103 @@ it('expires automation alerts after 30 days and removes cancelled automations im
   ] }) } as unknown as import('./sources').PanelSources;
   try { expect((await smartView(sources)).alerts.map(x => x.id)).toEqual(['recent']); }
   finally { time.mockRestore(); }
+});
+
+describe('the consent card route for a Smart Actions rule', () => {
+  const CHAT = '0b6d1f0e-7c2a-4c47-9d0e-5f3f0a9a1b44';
+  const rule = (badge: string) => ({ id: 'inea-rachunek', name: 'Inea – rachunek', source: 'mail', enabled: true, category: 'payment', priority: 'high', badge,
+    match: { from: ['e-rachunek@inea.com.pl'], subject: ['rachunek'] }, button: { label: 'Zapłać rachunek', domain: 'inea.com.pl' } });
+  const card = (message: string, badge: string) => ({ type: 'tool', id: `${message}:s-1`, name: 'mcp__desk_panel__panel_smart_rule_propose', input: JSON.stringify({ tytul: 'Inea', rule: rule(badge), q: 'from:inea' }), output: JSON.stringify({ result: `${CARD_SHOWN.smartRule}: test gotowy.` }), state: 'done' });
+  const conversation = () => ({ id: CHAT, engine: 'hermes', items: [
+    { id: 'm1', role: 'agent', status: 'done', at: 1, parts: [card('m1', 'Inea')] },
+    { id: 'm2', role: 'agent', status: 'done', at: 2, parts: [card('m2', 'Inea po zmianie')] },
+  ] }) as never;
+  function response() {
+    let status = 200; let body = '';
+    return {
+      get status() { return status; }, get body() { return body; },
+      setHeader() {}, writeHead(code: number) { status = code; return this; }, end(value?: string) { body = value ?? ''; return this; },
+    };
+  }
+  const request = (body: unknown) => ({ method: 'POST', headers: { origin: 'http://panel' }, setEncoding() {}, async *[Symbol.asyncIterator]() { yield JSON.stringify(body); } }) as never;
+  const url = new URL(`http://panel/api/chats/${CHAT}/smart-rule`);
+
+  it('refuses an older proposal replaced later in the conversation, and applies the newest', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'smart-route-'));
+    const sources = { smartRules: createSmartRuleStore(null) } as unknown as PanelSources;
+    const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    const chat = { get: async () => conversation() } as never;
+    try {
+      const stale = response();
+      await handleChatRoute(request({ toolCallId: 'm1:s-1', decision: 'apply' }), stale as never, url, 'http://panel', chat, cockpit);
+      expect(stale.status).toBe(409);
+      expect(stale.body).toContain('zastąpiona nowszą');
+      expect((await cockpit.view(CHAT, [])).bankPlans).toEqual({});
+      const fresh = response();
+      await handleChatRoute(request({ toolCallId: 'm2:s-1', decision: 'apply' }), fresh as never, url, 'http://panel', chat, cockpit);
+      expect(fresh.status).toBe(200);
+      expect(JSON.parse(fresh.body)).toMatchObject({ decision: 'applied' });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('serializes the cards of one conversation: a stalled older apply ends 409 and the newer value stays', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'smart-race-'));
+    const store = createSmartRuleStore(null);
+    const both = conversation() as unknown as { items: unknown[] };
+    // At first only the older card exists; the newer proposal arrives while its preview stalls.
+    let current: unknown = { ...both, items: [both.items[0]] };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let entered!: () => void;
+    const inPreview = new Promise<void>(resolve => { entered = resolve; });
+    let searches = 0;
+    const sources = {
+      smartRules: store,
+      // The first card's preview stalls; the newer card is proposed and applied meanwhile.
+      mailSearch: async () => { if (++searches === 1) { entered(); await gate; } return []; },
+    } as unknown as PanelSources;
+    const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    const chat = { get: async () => current } as never;
+    try {
+      const older = response();
+      const applying = handleChatRoute(request({ toolCallId: 'm1:s-1', decision: 'apply' }), older as never, url, 'http://panel', chat, cockpit);
+      await inPreview;
+      current = conversation();
+      const newer = response();
+      const waiting = handleChatRoute(request({ toolCallId: 'm2:s-1', decision: 'apply' }), newer as never, url, 'http://panel', chat, cockpit);
+      release();
+      await Promise.all([applying, waiting]);
+      expect(older.status).toBe(409);
+      expect(older.body).toContain('zastąpiona nowszą');
+      expect(newer.status).toBe(200);
+      expect(JSON.parse(newer.body)).toMatchObject({ decision: 'applied' });
+      expect(store.list().find(r => r.id === 'inea-rachunek')?.badge).toBe('Inea po zmianie');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('returns the kept answer of an already applied card, even after a newer proposal replaced it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'smart-retry-'));
+    const store = createSmartRuleStore(null);
+    const sources = { smartRules: store } as unknown as PanelSources;
+    const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    const all = conversation() as unknown as { id: string; engine: string; items: unknown[] };
+    // At first only the older card exists; the newer proposal arrives after it was applied.
+    let current: unknown = { ...all, items: [all.items[0]] };
+    const chat = { get: async () => current } as never;
+    try {
+      const first = response();
+      await handleChatRoute(request({ toolCallId: 'm1:s-1', decision: 'apply' }), first as never, url, 'http://panel', chat, cockpit);
+      expect(first.status).toBe(200);
+      const outcome = JSON.parse(first.body);
+      current = conversation();
+      const retry = response();
+      await handleChatRoute(request({ toolCallId: 'm1:s-1', decision: 'apply' }), retry as never, url, 'http://panel', chat, cockpit);
+      expect(retry.status).toBe(200);
+      expect(JSON.parse(retry.body)).toEqual(outcome);
+      const newer = response();
+      await handleChatRoute(request({ toolCallId: 'm2:s-1', decision: 'apply' }), newer as never, url, 'http://panel', chat, cockpit);
+      expect(newer.status).toBe(200);
+      expect(store.list().find(r => r.id === 'inea-rachunek')?.badge).toBe('Inea po zmianie');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });
