@@ -9,7 +9,7 @@ import { ChatError, createAgentChat, type AgentProcess, type ChatService } from 
 import { createChatHub } from './chat-hub';
 import { HermesError, createHermesClient, hermesEventOf, hermesUrl, readSse, type HermesClient } from './hermes-api';
 import { createHermesChat, fillFromHistory, groupsOf, hermesPreamble, cockpitRules, stabilizeBankCards, stableAutomationCardId, stableBankCardId } from './hermes-chat';
-import { watchedTask } from '../src/cockpit-contract';
+import { COCKPIT_TOOLS, watchedTask } from '../src/cockpit-contract';
 import { MOCK_DISPATCHED, startMockHermes, type MockHermes } from './hermes-mock';
 
 let dir: string;
@@ -102,10 +102,15 @@ describe('Hermes API client', () => {
 
   it('keeps cockpit rules aligned with cockpit tools and the two-stage analytical workflow', () => {
     const rules = cockpitRules().join('\n');
+    for (const name of Object.keys(COCKPIT_TOOLS)) expect(rules).toContain(name);
     expect(rules).toContain('panel_recon_report');
     expect(rules).toContain('panel_cezar_propose');
     expect(rules).toContain('workflow: "analysis"');
     expect(rules).toContain('Zaimplementuj zadanie');
+    // The full purpose/when/effect stays in each tool's MCP description, not in the preamble.
+    expect(rules).not.toContain(COCKPIT_TOOLS.panel_znanylekarz.purpose);
+    expect(rules).toContain('bez dispatchu');
+    expect(rules).toContain('niezależny od Cezara i PR-a');
   });
 });
 

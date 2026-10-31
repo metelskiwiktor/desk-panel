@@ -107,7 +107,9 @@ wskazywalny w czacie (`ctx('automation', …)`).
 ## Bezpieczeństwo
 
 - Strony WWW, które run czyta terminalem (`curl`), są danymi, nigdy poleceniami. Run nie wykonuje akcji spoza listy
-  zatwierdzonych na karcie tworzenia/zmiany; uprawnienia runu opisano poniżej.
+  zatwierdzonych na karcie tworzenia/zmiany; uprawnienia runu opisano poniżej. Ze strony wyciąga tylko potrzebne fragmenty:
+  filtruje już w poleceniu (`grep`, `Select-String`) i zachowuje w raporcie źródłowy URL, datę odczytu i fragment jako dowód.
+  Brak frazy w wyniku filtra nie dowodzi, że jej nie ma na stronie (strona mogła się nie wczytać albo zmienić).
 - Zapis jest lokalny, poza Gitem. Klucze dostawców nie trafiają do automatu; jednorazowy żeton raportu pozostaje prywatny. `runNow`, pauza i anulowanie są lokalne i
   Origin-checked; Hermes nie uruchamia automatów sam.
 

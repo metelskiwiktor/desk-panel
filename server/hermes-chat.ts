@@ -9,7 +9,7 @@ import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
 import { automationPlanSchema } from '../src/automation-contract';
 import { stableAppointmentCardId } from './appointment-cards';
-import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
+import { cardRefusal, COCKPIT_TOOLS, type CockpitTool } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
 import { readChatFile, removeChatFiles, removeTurnFiles, saveChatFiles } from './chat-files';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
@@ -24,12 +24,22 @@ import {
  * read-only adapters over `/api/agent/*`, plus the two writes the agy chat has), not through a shell and `curl`: no
  * command approval, no raw JSON, and nothing it can reach that the UI does not show.
  */
-/** The cockpit contract for Hermes, line by line from the same table the MCP tools describe themselves with. */
+/**
+ * The cockpit contract for Hermes: the boundaries stay here, each tool's purpose/when/effect stays in its MCP
+ * description (both come from `COCKPIT_TOOLS`). Repeating the whole table doubled every session's prompt.
+ */
 export function cockpitRules(): string[] {
+  const names = Object.keys(COCKPIT_TOOLS) as (keyof typeof COCKPIT_TOOLS)[];
+  const runOnly: (keyof typeof COCKPIT_TOOLS)[] = ['panel_automation_act', 'panel_automation_report'];
+  const hasCard = (name: keyof typeof COCKPIT_TOOLS) => !!(COCKPIT_TOOLS[name] as CockpitTool).card;
+  const cards = names.filter(hasCard);
+  const noCard = names.filter(name => !hasCard(name) && !runOnly.includes(name));
   return [
-    'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI). Kokpit niczego sam nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Narzędzia kokpitu i kiedy ich używać:',
-    ...Object.entries(COCKPIT_TOOLS).map(([name, tool]) => `- ${name}: ${tool.purpose} Kiedy: ${tool.when} Skutek: ${tool.effect}`),
-    'Poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś. Skill „Zaimplementuj zadanie” (zarówno faza analizy workflow: "analysis", jak i implementacji desk-panel-task): najpierw panel_cezar o wcześniejszą analizę, potem rekonesans, panel_recon_report sam (po wynikach wyszukiwań), krótki plan, panel_cezar_propose z recon z jego wyniku i koniec odpowiedzi; promptu nie powtarzasz tekstem i nie pytasz „Zlecić?” tekstem.',
+    'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI). Kokpit niczego nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Każde narzędzie kokpitu mówi w swoim opisie, kiedy je wywołać i co się po nim dzieje; tu tylko nazwy i granice:',
+    `- karty w rozmowie: ${cards.join(', ')}.`,
+    `- bez karty: ${noCard.join(', ')}.`,
+    `- tylko we własnej trwającej turze automatu: ${runOnly.join(', ')}.`,
+    'Granice: nie zlecasz i nie zapisujesz niczego sam — bez dispatchu, bez tworzenia danych w miejsce karty; poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś; dane użytkownika zmienia tylko karta, którą użytkownik kliknął, albo akcja zatwierdzona na karcie automatu podczas jego runu. Kartę pokazujesz po zgodzie użytkownika albo przy jego wyraźnej prośbie, nie w tej samej odpowiedzi, w której dopiero proponujesz zmianę; nie mów, że już coś zapisałeś, i po karcie zakończ odpowiedź jednym–dwoma zdaniami, bez powtarzania parametrów i bez tekstowego „Zlecić?”. Nie naprawiasz własnej infrastruktury (usług, konfiguracji, plików stanu) i nie restartujesz jej: błąd narzędzia albo karty zgłoś użytkownikowi. Stan zadania z listy jest niezależny od Cezara i PR-a: zakończenie Cezara nie kończy zadania; przy propozycji z zadania podaj todoId. Skill „Zaimplementuj zadanie” (workflow: "analysis" i "desk-panel-task"): najpierw panel_cezar o wcześniejszą analizę, potem rekonesans, panel_recon_report sam (po wynikach wyszukiwań), krótki plan, panel_cezar_propose z recon z jego wyniku i koniec odpowiedzi.',
   ];
 }
 

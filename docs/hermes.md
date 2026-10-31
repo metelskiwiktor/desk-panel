@@ -29,7 +29,8 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
   (`desk-panel-<id rozmowy>`, więc przebieg, który dotarł do Hermesa przed zapisem mapowania, i tak jest w tej sesji), id przebiegu
   każdej tury, to, co użytkownik napisał i wskazał (chipy), oraz jak tura się skończyła. Odpowiedzi i kroki narzędzi są tylko w
   Hermesie: po restarcie panelu okno czyta je z historii sesji. Pamięć, skills i narzędzia działają po stronie Hermesa tak, jak je
-  skonfigurujesz (panel nie wyłącza niczego). Tury tej samej sesji napisane poza panelem (np. w CLI) są pokazywane na końcu rozmowy.
+  skonfigurujesz; jedyne ograniczenie powierzchni API to to, które dopisuje `just hermes-setup` (niżej, „Koszt kontekstu”),
+  a nie panel w czasie tury. Tury tej samej sesji napisane poza panelem (np. w CLI) są pokazywane na końcu rozmowy.
 - **Pierwsza wiadomość sesji** zaczyna się od instrukcji `hermesPreamble()` (jak `preamble()` agy, ale z narzędziami panelu zamiast
   `curl`), potem blok `[Kontekst]` ze wskazanymi elementami i pytanie (`withContext`, ten sam co dla agy).
 - **Załączniki w turze**: obrazy jadą w ciele `POST /v1/runs` jako lista wiadomości, której ostatnia `content` ma części
@@ -84,6 +85,21 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
     ją w tle (kilka kolejnych wywołań agy na tym samym limicie) i zapisuje lub łata skill. 28.10.2026 utworzył tak skill `cezar`,
     kopię „Zaimplementuj zadanie”, która rozjechałaby się z panelem przy pierwszej zmianie. Instrukcje skilli są w panelu
     (`src/chat-contract.ts`); co Hermes zmienił sam, zapisuje `%LOCALAPPDATA%\hermes\skills\.curator_ledger.jsonl`.
+  - `platform_toolsets.api_server` (`just hermes-setup` dopisuje, gdy brak sekcji lub wpisu): jawna lista tylko `desk-panel`,
+    `terminal`, `file`, `web`, `vision`, `browser`, `skills` oraz `memory` i `session_search` (pamięć preferencji użytkownika,
+    której nie tniemy: mały koszt, a jej utrata zmieniłaby odpowiedzi). Poza powierzchnią API zostają `delegate_task`,
+    `execute_code`, natywny cron, TTS i generacja obrazów: w pomiarze z 31.10.2026 nie były używane, a ich schematy i katalog
+    narzędzi płacą w każdym kroku. Jawna lista jest też listą dozwolonych serwerów MCP, dlatego `desk-panel` musi być nazwany;
+    Hermes przyjmuje nazwę serwera z `mcp_servers` i walidator nie zgłasza jej jako nieznanej. `file` łączy odczyt i wyszukiwanie
+    z zapisem (`read_file`, `search_files`, `write_file`, `patch`) — nie ma osobnego wyłączenia mutatorów. Toolset `skills`
+    (`skills_list`, `skill_view`, `skill_manage`) zostaje, bo Wektor czyta nim skille, m.in. `hermes-agent`; bez niego Hermes
+    ukrywa cały katalog i auto-ładowanie. `skill_manage` jest częścią toolsetu, ale `creation_nudge_interval: 0` wyłącza
+    samodzielne tworzenie i łatanie skilli przez Hermesa.
+  - `skills.platform_disabled.api_server` (też `just hermes-setup`): ukrywa 47 nieużywanych skilli — kreatywne, konektory
+    innych usług (Apple, mail, notatki, biurowe), delegowanie kodowania i autorstwo skilli — żeby katalog w sesji API był mały.
+    `hermes-agent` zostaje; Hermes nie pozwala go wyłączyć (`ESSENTIAL_SKILLS`). Dokładna lista jest w skrypcie; gdy `skills`
+    lub `skills.platform_disabled` już istnieją bez `api_server`, skrypt dopisuje listę pod `platform_disabled`, a istniejących
+    ustawień nie rusza.
   - `agent.max_turns: 40` i `agent.budget_warning_ratio: 0.5` (też `just hermes-setup`): tura kończy się po 40 wywołaniach
     modelu, potem Hermes prosi go jeszcze raz, bez narzędzi, o podsumowanie, a przebieg kończy jako `failed` z tym
     podsumowaniem w `output`. Panel pokazuje je wtedy z wyjaśnieniem i podpowiedzią „dalej”. Przy 20. wywołaniu Hermes dokleja

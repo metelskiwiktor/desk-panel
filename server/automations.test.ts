@@ -122,6 +122,8 @@ describe('runs and reports', () => {
     expect(sent[0].automation.source).toBe('automation');
     expect(sent[0].text).toContain('Sprawdź cennik.');
     expect(sent[0].text).toContain('panel_automation_report');
+    expect(sent[0].text).toContain('filtruj już w poleceniu');
+    expect(sent[0].text).toContain('Brak frazy w wyniku filtra nie dowodzi');
     expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-11-01T07:00:00+01:00'));
   });
 

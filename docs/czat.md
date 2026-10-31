@@ -85,9 +85,10 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   dotyczy rozmowa. Obserwuje task tylko po jawnym zdarzeniu w rozmowie, a liczy się ostatnie: zlecenie z karty
   (`panel_cezar_propose` + „Zleć”), wywołanie `panel_cezar_watch` z id taska, albo `panel_cockpit_clear` (koniec
   obserwowania). Id taska w tekście, w plikach czy w innych narzędziach nic nie zmienia. Rozstrzyga to `watchedTask` na
-  serwerze, z rozmowy, jaką ma czat; okno nie podsuwa żadnego id. Ta sama tabela daje opisy narzędzi MCP („co, kiedy,
-  skutek”) i reguły w preambule Hermesa (`cockpitRules()`), więc instrukcja i zachowanie się nie rozjeżdżają; nowe
-  narzędzie kokpitu to nowy wiersz tabeli i test w `server/cockpit.test.ts`.
+  serwerze, z rozmowy, jaką ma czat; okno nie podsuwa żadnego id. Z tej samej tabeli powstają opisy narzędzi MCP
+  („co, kiedy, skutek”; `cockpitToolDescription`), a preambuła Hermesa (`cockpitRules()`) podaje tylko krótkie granice i
+  nazwy narzędzi pogrupowane (karty, bez karty, tylko run automatu), żeby nie powtarzać całej tabeli w każdej sesji.
+  Instrukcja i zachowanie się nie rozjeżdżają; nowe narzędzie kokpitu to nowy wiersz tabeli i test w `server/cockpit.test.ts`.
 - **Skąd kokpit ma dane** (`server/cockpit.ts`, `GET /api/chats/:id/cockpit`, tylko odczyt): status, kroki worktree, tokeny, worktree (ścieżka w projekcie) i PR czyta z runu Cezara; tytuł, stan
   i checki CI PR-a z GitHub CLI (`gh pr view --json …`, bez powłoki, co 20 s, gdy coś trwa, co 5 min po rozstrzygnięciu;
   bez `gh` karta mówi, że checki są nieznane). REVIEW to zakończony run z otwartym PR-em, DONE po scaleniu. Okno pyta
@@ -260,7 +261,8 @@ scenariusza):
 | `bank` | `from`, `to` (domyślnie ostatnie 30 dni, najwyżej 400), `ruch` (wydatek, przychód, rozliczenie, przełożenie), `kategoria` (także źródło), `etykieta`, `strona` (fragment nazwy), `nieprzypisane=1` | saldo, przychody, wydatki i netto, wydatki według kategorii i przychody według źródła, salda rozliczeń z każdą stroną z całej zapisanej historii, operacje z ruchem, kategorią albo źródłem, drugą stroną, etykietami, cyklicznością, opisem, „do przypisania” i podpowiedzią albo wyborem (zob. [docs/bank.md](bank.md)) |
 
 Nagłówek kalendarza i treningu mówi, jaki jest dziś i z kiedy są dane; źródło bez danych daje wiersz „brak danych (status: …)”, nie
-pustą listę. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany
+pustą listę. `cezar` z parametrem `id` (narzędzie `panel_cezar`) zwraca domyślnie status, błąd główny, kroki do dokończenia i krótki
+ogon wyniku (linie błędów i koniec testów); pełny wynik jednego kroku dopiero z `krok`. Błędny zakres to `400` z tekstem, nieznany widok `404`. Zakres dni liczy się w strefie źródła (także w dniu zmiany
 czasu). Odczyty GET nie wymagają `Origin`, więc zwykłe `curl.exe` działa; w PowerShellu `curl` to alias, dlatego instrukcja podaje
 `curl.exe`, a adres w cudzysłowie (jest w nim `&`). Zakres danych jest ten sam co w UI. Zwykłe trasy JSON (`/api/calendar` itd.) zostają
 dla UI, a instrukcja każe agentowi ich nie używać. Do panelu agent ma słać tylko GET, z dwoma wyjątkami opisanymi w instrukcji. (1) Na prośbę użytkownika może zmieniać **zakończone zadania

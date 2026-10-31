@@ -110,7 +110,7 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     expect(text45).toContain('… i 5 starszych zakończonych (nie pokazano).');
   });
 
-  it('cezar: z parametrem id zwraca pełne szczegóły i błędy zadania', async () => {
+  it('cezar: z parametrem id zwraca status, błąd i ogon wyniku, a nie cały przebieg', async () => {
     const withRun = {
       cezar: async () => ({ observedAt: now, tasks: [], counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 }, partial: false, scheduled: 0, finished: [] }),
       cezarRun: async () => ({
@@ -139,10 +139,12 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
     expect(text).toContain('Zadanie Cezara desk-panel/cb2f59e7: Nieudany task [nieudane]');
     expect(text).toContain('Błąd główny: step "fix" failed: spawn ENAMETOOLONG');
     expect(text).toContain('Worktree: C:/wt/cb2f59e7');
-    expect(text).toContain('  - fix: nieudane — błąd: spawn ENAMETOOLONG');
+    expect(text).toContain('Kroki (3, gotowe 1): verify: oczekuje — błąd: npm test exited non-zero · fix: nieudane — błąd: spawn ENAMETOOLONG');
     expect(text).toContain('Wyjście weryfikacji (błędy):');
     expect(text).toContain('FAIL src/test.tsx');
-    expect(text).toContain('Wynik kroku: panel_cezar z id i krok (verify).');
+    expect(text).toContain('Pełny wynik kroku: panel_cezar z id i krok (verify).');
+    // Steps that already finished are only counted: the full result comes from `krok`.
+    expect(text).not.toContain('prepare: zakończone');
   });
 
   it('cezar: krok pokazuje błędy bez stosu i ostrzega, gdy Cezar uciął wyjście', async () => {

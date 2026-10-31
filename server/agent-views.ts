@@ -98,13 +98,14 @@ const FAILURE_LINE = /^\s*(?:❯|×|FAIL\b)|AssertionError|\bError:|error TS\d|^
  * The lines of a Cezar check (`npm test`, typecheck, build) that say what failed, without stack frames and passing
  * tests, and a warning when Cezar cut the output: the agent must not fill in failures it cannot see (it once did).
  */
-function checkExcerpt(output: string, maxLines: number): string[] {
+function checkExcerpt(output: string, maxLines: number, maxFailing = maxLines): string[] {
   const text = output.replace(/\u001b\[[0-9;]*m/g, '');
   const lines = text.split('\n').filter(l => l.trim() && l.trim() !== CHECK_TRUNCATED);
   const failing = lines.filter(l => FAILURE_LINE.test(l) && !/^\s+at /.test(l));
-  const shown = (failing.length ? failing : lines.slice(-maxLines)).slice(0, maxLines).map(l => `  ${clip(l, 160)}`);
-  if (!text.includes(CHECK_TRUNCATED)) return shown;
-  return [...shown, '  Uwaga: Cezar zapisał tylko początek wyjścia; szczegóły błędów (asercje, diff) mogły się nie zmieścić. Nie dopowiadaj ich: powiedz, że ich nie widać, albo uruchom ten jeden plik testu w worktree.'];
+  const shown = (failing.length ? failing.slice(0, maxFailing) : lines.slice(-maxLines)).map(l => `  ${clip(l, 160)}`);
+  const more = failing.length > maxFailing ? [`  … i ${failing.length - maxFailing} dalszych linii błędów (pełny wynik: panel_cezar z id i krok).`] : [];
+  if (!text.includes(CHECK_TRUNCATED)) return [...shown, ...more];
+  return [...shown, ...more, '  Uwaga: Cezar zapisał tylko początek wyjścia; szczegóły błędów (asercje, diff) mogły się nie zmieścić. Nie dopowiadaj ich: powiedz, że ich nie widać, albo uruchom ten jeden plik testu w worktree.'];
 }
 
 /** One line saying why there is no data, or null when the source answered. */
@@ -177,7 +178,7 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       if (id && sources.cezarRun) {
         const run = await sources.cezarRun(id);
         if (!run) return `Zadanie Cezara „${clip(id, 80)}”: brak danych lub zadanie nie istnieje.`;
-        const state: Record<string, string> = { 'needs-input': 'czeka na odpowiedź', review: 'do przeglądu', running: 'w toku', queue: 'w kolejce', done: 'zakończone', completed: 'zakończone', failed: 'nieudane' };
+        const state: Record<string, string> = { 'needs-input': 'czeka na odpowiedź', review: 'do przeglądu', running: 'w toku', queue: 'w kolejce', done: 'zakończone', completed: 'zakończone', failed: 'nieudane', pending: 'oczekuje', skipped: 'pominięte' };
         const statusText = state[run.status] ?? run.status;
         const out = [
           `Zadanie Cezara ${run.project ? `${run.project}/` : ''}${run.id ?? id}: ${clip(run.titleSummary || run.title || '', 120)} [${statusText}]`,
@@ -202,22 +203,26 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
           if (handoff && existsSync(handoff)) out.push(`Notatka przekazania: ${handoff}`);
         }
         if (run.branch) out.push(`Gałąź: ${run.branch}`);
+        // Default is the status, the last error and a short tail; the full result of a step is `krok`.
         if (Array.isArray(run.steps) && run.steps.length) {
-          out.push('Kroki:');
-          for (const s of run.steps) {
-            const stepStatus = state[s.status] ?? s.status ?? 'nieznany';
-            const err = s.error ? ` — błąd: ${clip(String(s.error), 200)}` : '';
-            out.push(`  - ${s.id ?? s.name ?? 'krok'}: ${stepStatus}${err}`);
-          }
+          const settled = run.steps.filter(s => s.status === 'done' || s.status === 'completed').length;
+          const open = run.steps.filter(s => !(s.status === 'done' || s.status === 'completed'));
+          const counts = `Kroki (${run.steps.length}, gotowe ${settled})`;
+          out.push(open.length
+            ? `${counts}: ${open.map(s => `${s.id ?? s.name ?? 'krok'}: ${state[s.status] ?? s.status ?? 'nieznany'}${s.error ? ` — błąd: ${clip(String(s.error), 200)}` : ''}`).join(' · ')}`
+            : counts);
         }
         const verifyOutput = outputs.verify?.output;
+        const lastOutput = Object.values(outputs).map(r => typeof r?.output === 'string' ? r.output : '').filter(text => text.trim()).at(-1);
         if (typeof verifyOutput === 'string' && verifyOutput.trim()) {
-          out.push('Wyjście weryfikacji (błędy):', ...checkExcerpt(verifyOutput, 12));
+          out.push('Wyjście weryfikacji (błędy):', ...checkExcerpt(verifyOutput, 6, 12));
+        } else if (lastOutput) {
+          out.push('Ostatni wynik (ogon):', ...checkExcerpt(lastOutput, 6, 12));
         }
         const withResult = Object.keys(outputs).filter(k => outputs[k]?.output || outputs[k]?.summary);
-        if (withResult.length) out.push(`Wynik kroku: panel_cezar z id i krok (${withResult.join(', ')}).`);
+        if (withResult.length) out.push(`Pełny wynik kroku: panel_cezar z id i krok (${withResult.join(', ')}).`);
         if (run.task) {
-          out.push(`Zlecenie (początek): ${clip(String(run.task), 250)}`);
+          out.push(`Zlecenie (początek): ${clip(String(run.task), 160)}`);
         }
         return out.join('\n');
       }
