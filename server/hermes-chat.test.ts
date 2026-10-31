@@ -831,6 +831,20 @@ describe('attachments', () => {
     expect(await readdir(path.join(dir, 'chat-files', id))).toHaveLength(1);
   });
 
+  it('follows a run Hermes accepted even when saving the turn fails, so the chat is not left locked', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'start' });
+    await finishedChat(service, id);
+    // A directory where the save's temporary file goes makes that one save fail.
+    const temp = path.join(dir, 'hermes-chats', `${id}.json.tmp`);
+    await mkdir(temp);
+    await service.send(id, { text: 'zapis się nie uda' });
+    await rm(temp, { recursive: true });
+    const chat = await finishedChat(service, id);
+    expect(chat.items.at(-1)?.status).toBe('done');
+    await expect(service.send(id, { text: 'następna' })).resolves.toBeUndefined();
+  });
+
   it('keeps pending creation files with the nonce across a restart', async () => {
     const nonce = '6f1c2a3b-1111-4222-8333-944455566679';
     const service = hermes();

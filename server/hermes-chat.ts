@@ -845,7 +845,10 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     if (started.session && started.session !== record.session) changeSession(record, started.session);
     if (!nonce) record.turns.push(turn);
     record.updatedAt = at;
-    await save(record, !!nonce);
+    // Hermes has accepted the run: a failed save must not leave it unfollowed and the chat locked; the next save
+    // (the run's own events) writes the record again.
+    try { await save(record, !!nonce); }
+    catch (error) { log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'save-failed', error: error instanceof Error ? error.message : null }); }
     notifyTurn(record, turn, false);
     log.trace(id, { turn: record.turns.length, src: 'panel', kind: 'sent', run: started.run, preamble: first, contextItems: context.length, chars: prompt.length, ...(automation ? { automation: automation.source } : {}) });
     sendState(record);
