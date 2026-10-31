@@ -1,16 +1,17 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import {
   AssistantRuntimeProvider, makeAssistantToolUI, useAui, useAuiState, useExternalStoreRuntime,
   type AppendMessage, type ThreadMessageLike,
 } from '@assistant-ui/react';
 import {
-  Activity, Bot, CalendarDays, Crosshair, Landmark, LayoutGrid, ListChecks, Mail, RefreshCw, SquareCheck, Wrench, X, Zap, type LucideIcon,
+  Activity, Bot, CalendarDays, Crosshair, FileText, Landmark, LayoutGrid, ListChecks, Mail, Paperclip, RefreshCw, SquareCheck, Wrench, X, Zap, type LucideIcon,
 } from 'lucide-react';
 import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.aui';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { CHAT_SKILLS, MAX_CONTEXT, automationLabel, skillItem, type ChatAutomation, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
+import { CHAT_SKILLS, MAX_CHAT_FILES, MAX_CONTEXT, automationLabel, isChatImage, skillItem, type ChatAutomation, type ChatFileRef, type ChatFileUpload, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { CHAT_DRAFT_EVENT, clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
+import { attachmentProblem, chatFileUrl, fileLabel, fileSize, mimeOf, readDraft, UNSUPPORTED_PDF, unsupportedType, type DraftFile } from './attachments';
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
 import { MailListCard, SmartRuleCard } from './smart-cards';
@@ -73,7 +74,7 @@ export function toThreadMessage(m: CockpitMessage): ThreadMessageLike {
       ? { type: 'text' as const, text: p.text }
       : { type: 'tool-call' as const, toolCallId: p.id, toolName: p.name, args: p.args as never, argsText: JSON.stringify(p.args), ...(p.result !== undefined ? { result: p.result } : {}), ...(p.error ? { isError: true } : {}) }),
     ...(m.role === 'assistant' ? { status: m.status === 'error' ? { type: 'incomplete', reason: 'error', error: m.error || 'Agent nie odpowiedział.' } : STATUS[m.status] } : {}),
-    metadata: { custom: { context: m.context ?? [], notice: m.notice, status: m.status, ...(m.automation ? { automation: m.automation } : {}) } },
+    metadata: { custom: { context: m.context ?? [], files: m.files, notice: m.notice, status: m.status, ...(m.automation ? { automation: m.automation } : {}) } },
   };
 }
 
@@ -92,8 +93,38 @@ const AutomationUI = makeAssistantToolUI<AutomationArgs, AutomationResult>({ too
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
 
-type Custom = { context: ContextItem[]; notice?: string; status: CockpitMessage['status']; automation?: ChatAutomation };
+type Custom = { context: ContextItem[]; files?: ChatFileRef[]; notice?: string; status: CockpitMessage['status']; automation?: ChatAutomation };
 const useCustom = () => useAuiState(s => s.message.metadata.custom) as Custom;
+
+/** A screenshot or file waiting in the composer: a thumbnail with „Usuń załącznik”, or a chip with its name, type and size. */
+function DraftAttachments({ files, remove }: { files: DraftFile[]; remove: (key: string) => void }) {
+  return <div className="tw:flex tw:flex-wrap tw:items-start tw:gap-2" aria-label="Załączniki do wysłania">
+    {files.map(file => isChatImage(file.type)
+      ? <div key={file.key} className="tw:relative">
+        <img src={file.preview} alt={file.name} className="tw:block tw:h-24 tw:w-32 tw:rounded-xl tw:border tw:border-ck-line-2 tw:bg-ck-surface-2 tw:object-cover" />
+        <button type="button" className="tw:absolute tw:-right-2 tw:-top-2 tw:grid tw:size-6 tw:place-items-center tw:rounded-full tw:border tw:border-ck-line-2 tw:bg-ck-surface tw:text-ck-text tw:hover:bg-ck-line" aria-label={`Usuń załącznik: ${file.name}`} onClick={() => remove(file.key)}><X size={12} aria-hidden="true" /></button>
+      </div>
+      : <div key={file.key} className="tw:flex tw:h-16 tw:max-w-[16rem] tw:items-center tw:gap-2 tw:rounded-xl tw:border tw:border-ck-line-2 tw:bg-ck-surface-2 tw:pl-3 tw:pr-1">
+        <FileText size={18} className="tw:shrink-0 tw:text-ck-agent" aria-hidden="true" />
+        <div className="tw:min-w-0 tw:flex-1"><div className="tw:truncate tw:text-[13px] tw:text-ck-text" title={file.name}>{file.name}</div><div className="tw:text-[11px] tw:text-ck-muted">{fileLabel(file.type)} · {fileSize(file.size)}</div></div>
+        <button type="button" className="tw:grid tw:size-8 tw:place-items-center tw:rounded-lg tw:text-ck-muted tw:hover:bg-ck-line tw:hover:text-ck-text" aria-label={`Usuń załącznik: ${file.name}`} onClick={() => remove(file.key)}><X size={14} aria-hidden="true" /></button>
+      </div>)}
+  </div>;
+}
+
+/** The attachments of a sent message, above its text: images open full size, files download. */
+function SentAttachments({ files, chatId }: { files: ChatFileRef[]; chatId: string }) {
+  return <div className="tw:flex tw:max-w-full tw:flex-wrap tw:justify-end tw:gap-2" aria-label="Załączniki wiadomości">
+    {files.map(file => isChatImage(file.type)
+      ? <a key={file.id} href={chatFileUrl(chatId, file.id)} target="_blank" rel="noreferrer" className="tw:block" title={file.name}>
+        <img src={chatFileUrl(chatId, file.id)} alt={file.name} className="tw:block tw:max-h-52 tw:max-w-[18rem] tw:rounded-xl tw:border tw:border-ck-line-2 tw:bg-ck-surface-2 tw:object-cover" />
+      </a>
+      : <a key={file.id} href={chatFileUrl(chatId, file.id)} download={file.name} className="tw:flex tw:h-14 tw:max-w-[16rem] tw:items-center tw:gap-2 tw:rounded-xl tw:border tw:border-ck-line-2 tw:bg-ck-surface-2 tw:px-3 tw:text-ck-text tw:no-underline tw:hover:border-ck-agent/50">
+        <FileText size={18} className="tw:shrink-0 tw:text-ck-agent" aria-hidden="true" />
+        <span className="tw:min-w-0"><span className="tw:block tw:truncate tw:text-[13px]" title={file.name}>{file.name}</span><span className="tw:block tw:text-[11px] tw:text-ck-muted">{fileLabel(file.type)} · {fileSize(file.size)}</span></span>
+      </a>)}
+  </div>;
+}
 
 /** Detects a trailing `@query` token so typing `@` opens the skill picker. */
 export function detectAtSkill(draft: string): { start: number; query: string; token: string } | null {
@@ -125,7 +156,14 @@ interface ThreadProps {
   resetLocal?(): void;
   commandRef?: { current: ((id: string) => Promise<boolean>) | null };
 }
-interface Shared extends ThreadProps {
+interface AttachmentControls {
+  /** Screenshots and files waiting in this conversation's composer. */
+  files: DraftFile[];
+  fileError: string;
+  addFiles(list: FileList | File[]): void;
+  removeFile(key: string): void;
+}
+interface Shared extends ThreadProps, AttachmentControls {
   commandMenu: ReactNode;
   matching: readonly ChatSkill[];
   active: number;
@@ -167,21 +205,28 @@ function ComposerHeader() {
   </>;
 }
 
-/** Inside the composer, above the field: the picked elements. */
+/** Inside the composer, above the field: the attachments and the picked elements. */
 function ComposerTop() {
-  const { context, setContext } = usePanel();
-  if (!context.length) return null;
-  return <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5 tw:px-1" aria-label="Wskazane elementy">
-    {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
+  const { context, setContext, files, removeFile, fileError } = usePanel();
+  if (!context.length && !files.length && !fileError) return null;
+  return <div className="tw:flex tw:flex-col tw:gap-2 tw:px-1">
+    {files.length > 0 && <DraftAttachments files={files} remove={removeFile} />}
+    {fileError && <p role="alert" className="tw:m-0 tw:rounded-lg tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-2.5 tw:py-1.5 tw:text-[12px] tw:text-[#ffd3d4]">{fileError}</p>}
+    {context.length > 0 && <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5" aria-label="Wskazane elementy">
+      {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
+    </div>}
   </div>;
 }
 
 /** Beside the send button: pointing at the dashboard, and the engine the chat runs on. */
 function ComposerExtra() {
-  const { source, picking, setPicking } = usePanel();
+  const { source, picking, setPicking, addFiles } = usePanel();
   const running = useAuiState(s => s.thread.isRunning);
   const down = !source.hermes.up;
+  const fileInput = useRef<HTMLInputElement>(null);
   return <>
+    <input ref={fileInput} type="file" multiple hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json" onChange={event => { if (event.target.files?.length) addFiles(event.target.files); event.target.value = ''; }} />
+    <button type="button" className="tw:grid tw:size-9 tw:place-items-center tw:rounded-xl tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" aria-label="Dodaj plik" title="Dodaj plik (albo wklej zrzut, albo upuść plik na czat)" onClick={() => fileInput.current?.click()}><Paperclip size={17} aria-hidden="true" /></button>
     {picking
       ? <button type="button" className="tw:min-h-9 tw:rounded-xl tw:bg-ck-cal tw:px-4 tw:text-sm tw:font-semibold tw:text-ck-bg tw:hover:bg-[#9cc0ff]" onClick={() => setPicking(false)}>Gotowe</button>
       : <button type="button" className="tw:inline-flex tw:min-h-9 tw:items-center tw:gap-2 tw:rounded-xl tw:px-3 tw:text-sm tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" onClick={() => setPicking(true)}><Crosshair size={16} aria-hidden="true" />Wskaż element</button>}
@@ -199,11 +244,15 @@ export function AutomationLabel({ automation }: { automation: ChatAutomation }) 
 }
 
 function UserMessageHeader() {
-  const { context, automation } = useCustom();
-  if (!context?.length && !automation) return null;
-  return <div className="tw:flex tw:max-w-full tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5">
-    {automation && <AutomationLabel automation={automation} />}
-    {context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}
+  const { context, automation, files } = useCustom();
+  const { source } = usePanel();
+  if (!context?.length && !automation && !files?.length) return null;
+  return <div className="tw:flex tw:max-w-full tw:flex-col tw:items-end tw:gap-2">
+    {files?.length && source.activeId ? <SentAttachments files={files} chatId={source.activeId} /> : null}
+    {(automation || context.length > 0) && <div className="tw:flex tw:max-w-full tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5">
+      {automation && <AutomationLabel automation={automation} />}
+      {context.map((item, i) => <Chip key={`${item.kind}:${item.id}:${i}`} item={item} />)}
+    </div>}
   </div>;
 }
 
@@ -218,8 +267,8 @@ function AssistantMessageFooter() {
 const SLOTS: ThreadComponents = { Welcome, ComposerHeader, ComposerTop, ComposerExtra, UserMessageHeader, AssistantMessageFooter };
 
 /** Inside the runtime: the `@` picker's state and keys, given to the slots and to the field. */
-function Conversation(props: ThreadProps) {
-  const { source, context, setContext, picking } = props;
+function Conversation(props: ThreadProps & AttachmentControls) {
+  const { source, context, setContext, picking, addFiles } = props;
   const aui = useAui();
   const draft = useAuiState(s => s.composer.text);
   const running = useAuiState(s => s.thread.isRunning);
@@ -334,6 +383,10 @@ function Conversation(props: ThreadProps) {
     ...SLOTS,
     composerInput: {
       onKeyDown, cancelOnEscape: false, disabled: source.unavailable,
+      onPaste: event => {
+        const pasted = event.clipboardData?.files;
+        if (pasted?.length) { event.preventDefault(); addFiles(pasted); }
+      },
       onChange: (e) => {
         hasRestored.current = true;
         setDismissed(null); setArrowChoice(false); setPendingCommand(null);
@@ -363,6 +416,31 @@ function Conversation(props: ThreadProps) {
 export function Thread(props: ThreadProps) {
   const { source, setContext } = props;
   const [localMessages, setLocalMessages] = useState<CockpitMessage[]>([]);
+  const [files, setFiles] = useState<DraftFile[]>([]);
+  const [fileError, setFileError] = useState('');
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  useEffect(() => { setFiles([]); setFileError(''); }, [source.activeId]);
+  const addFiles = useCallback((incoming: FileList | File[]) => {
+    const list = Array.from(incoming);
+    if (!list.length) return;
+    void (async () => {
+      const drafts: DraftFile[] = [];
+      let problem = '';
+      for (const file of list) {
+        const type = mimeOf(file);
+        if (!type) { problem ||= unsupportedType(file.name); continue; }
+        if (type === 'application/pdf') { problem ||= UNSUPPORTED_PDF; continue; }
+        const bad = attachmentProblem(file.name, file.size, filesRef.current.length + drafts.length);
+        if (bad) { problem ||= bad; continue; }
+        try { drafts.push(await readDraft(file, type)); }
+        catch { problem ||= `Nie udało się odczytać pliku ${file.name}.`; }
+      }
+      if (drafts.length) setFiles(current => [...current, ...drafts].slice(0, MAX_CHAT_FILES));
+      setFileError(problem);
+    })();
+  }, []);
+  const removeFile = useCallback((key: string) => { setFiles(list => list.filter(file => file.key !== key)); setFileError(''); }, []);
   const commandRef = useRef<((id: string) => Promise<boolean>) | null>(null);
   const contextRef = useRef(props.context);
   contextRef.current = props.context;
@@ -371,15 +449,19 @@ export function Thread(props: ThreadProps) {
     const text = message.content.map(p => p.type === 'text' ? p.text : '').join('').trim();
     if (!text) return;
     if (await commandRef.current?.(text)) return;
-    // On failure the draft and the picked elements stay, so nothing is lost while Hermes is down.
-    if (await source.send(text, contextRef.current)) {
+    const uploads: ChatFileUpload[] = filesRef.current.map(file => ({ name: file.name, type: file.type, size: file.size, data: file.data }));
+    // On failure the draft, the picked elements and the attachments stay, so nothing is lost while Hermes is down.
+    if (await source.send(text, contextRef.current, uploads.length ? uploads : undefined)) {
       setContext(() => []);
       clearChatDraft(source.activeId);
+      setFiles([]); setFileError('');
     } else {
       runtimeRef.current?.thread.composer.setText(text);
       setChatDraftText(text, source.activeId);
     }
   };
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); };
+  const onDrop = (event: DragEvent<HTMLDivElement>) => { if (event.dataTransfer.files.length) { event.preventDefault(); addFiles(event.dataTransfer.files); } };
   const runtime = useExternalStoreRuntime<CockpitMessage>({
     messages: [...source.messages, ...localMessages].sort((a, b) => a.at - b.at),
     convertMessage: toThreadMessage,
@@ -396,8 +478,8 @@ export function Thread(props: ThreadProps) {
     <TooltipProvider>
       <CardActions.Provider value={actions}>
         <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><MailListUI /><SmartRuleUI /><AutomationUI /><ApprovalUI />
-        <div className="tw:relative tw:min-h-0 tw:flex-1">
-          <Conversation {...props} commandRef={commandRef} resetLocal={() => setLocalMessages([])} localMessage={text => setLocalMessages(list => [...list, { id: crypto.randomUUID(), role: 'assistant', at: Date.now(), status: 'done', parts: [{ type: 'text', text }] }])} />
+        <div className="tw:relative tw:min-h-0 tw:flex-1" onDragOver={onDragOver} onDrop={onDrop}>
+          <Conversation {...props} files={files} fileError={fileError} addFiles={addFiles} removeFile={removeFile} commandRef={commandRef} resetLocal={() => setLocalMessages([])} localMessage={text => setLocalMessages(list => [...list, { id: crypto.randomUUID(), role: 'assistant', at: Date.now(), status: 'done', parts: [{ type: 'text', text }] }])} />
         </div>
       </CardActions.Provider>
     </TooltipProvider>

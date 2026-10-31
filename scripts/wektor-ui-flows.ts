@@ -136,6 +136,26 @@ async function composer(context: FlowContext) {
   return { measurements };
 }
 
+async function attachments({ page, screenshot }: FlowContext) {
+  await openNew(page);
+  const picker = page.locator('input[type=file]');
+  await picker.setInputFiles({ name: 'zrzut.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
+  await page.getByAltText('zrzut.png').waitFor();
+  await page.getByRole('button', { name: 'Usuń załącznik: zrzut.png' }).waitFor();
+  await screenshot('image');
+  await picker.setInputFiles({ name: 'notatki.md', mimeType: 'text/markdown', buffer: Buffer.from('# Plan\nSaldo z 23.10.') });
+  await page.getByText('notatki.md').waitFor();
+  await page.getByText(/^MD · \d+ B$/).waitFor();
+  await screenshot('image-and-file');
+  await page.getByRole('button', { name: 'Usuń załącznik: zrzut.png' }).click();
+  assert.equal(await page.getByAltText('zrzut.png').count(), 0, 'Załącznik nie zniknął po „Usuń”.');
+  await picker.setInputFiles({ name: 'umowa.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+  await page.getByText('PDF jeszcze nieobsługiwany.').waitFor();
+  assert.equal(await page.getByText('umowa.pdf').count(), 0, 'PDF trafił do wiadomości.');
+  await screenshot('pdf-refused');
+  return { image: true, file: true, pdfRefused: true };
+}
+
 async function keyboard(context: FlowContext) {
   const { page } = context;
   await page.getByRole('heading', { name: 'Najbliższe dni', exact: true }).waitFor();
@@ -254,4 +274,4 @@ async function switching(context: FlowContext) {
   } finally { await recording.evaluate(state => { state.running = false; }).catch(() => {}); await recording.dispose(); }
 }
 
-export const wektorFlows = { commands, composer, keyboard, history, switching };
+export const wektorFlows = { commands, composer, keyboard, history, switching, attachments };

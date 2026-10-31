@@ -198,10 +198,32 @@ export const MAX_CONTEXT = 10;
  * Hermes over HTTP and to agy on stdin (stream-json), so no command line limits it; 50 000 is about 12k tokens.
  */
 export const MAX_MESSAGE = 50_000;
+/**
+ * What a message may carry besides text: images (sent to Hermes as image_url parts) and files (text is read into the
+ * message; PDF is not supported yet). The server re-checks the decoded size, never only the browser's claim.
+ */
+export const chatFileTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json'] as const;
+export type ChatFileType = typeof chatFileTypes[number];
+export const MAX_CHAT_FILES = 4;
+export const MAX_CHAT_FILE_BYTES = 5 * 1024 * 1024;
+/** 5 MB as base64, with the JSON around it; the route's body limit is sized for four of these. */
+export const MAX_CHAT_FILE_DATA = Math.ceil(MAX_CHAT_FILE_BYTES / 3) * 4;
+export const chatFileUploadSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  type: z.enum(chatFileTypes),
+  size: z.number().int().positive().max(MAX_CHAT_FILE_BYTES),
+  /** base64 without a data: prefix; the server writes the bytes and keeps only the reference. */
+  data: z.string().min(1).max(MAX_CHAT_FILE_DATA),
+}).strict();
+export type ChatFileUpload = z.infer<typeof chatFileUploadSchema>;
+/** A file of a sent message: the conversation keeps only this reference; the bytes live in `chat-files/<chat>/`. */
+export interface ChatFileRef { id: string; name: string; type: ChatFileType; size: number }
+export const isChatImage = (type: string): boolean => type.startsWith('image/');
 /** A new message, with the dashboard elements it is about. */
 export const chatSendSchema = z.object({
   text: z.string().trim().min(1).max(MAX_MESSAGE, `Wiadomość jest dłuższa niż ${MAX_MESSAGE.toLocaleString('pl-PL')} znaków.`),
   context: z.array(contextItemSchema).max(MAX_CONTEXT).default([]),
+  files: z.array(chatFileUploadSchema).max(MAX_CHAT_FILES).default([]),
   /** Only when a conversation starts: the engine it runs on (the saved preference otherwise). */
   engine: z.enum(chatEngines).optional(),
   temporary: z.boolean().optional(),
@@ -268,6 +290,8 @@ export interface ChatMessage {
   at: number;
   /** User messages: what was typed. */
   text?: string;
+  /** User messages: the screenshots and files sent with it, as references to this conversation's own files. */
+  files?: ChatFileRef[];
   /** User messages: set only when the panel started this turn, so the window can mark it as automation. */
   automation?: ChatAutomation;
   context?: ContextItem[];

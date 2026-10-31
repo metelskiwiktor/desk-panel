@@ -809,6 +809,78 @@ describe('both engines', () => {
   });
 });
 
+describe('attachments', () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const NOTES = Buffer.from('# Plan\nkup mleko').toString('base64');
+  const image = { name: 'zrzut.png', type: 'image/png' as const, size: 68, data: PNG };
+  const notes = { name: 'notatki.md', type: 'text/markdown' as const, size: 15, data: NOTES };
+
+  it('sends images as image_url parts and text files in the text, keeping only references', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'Co widzisz?', files: [image, notes] });
+    const chat = await finishedChat(service, id);
+    const body = runs().at(-1)?.body as { input: unknown };
+    expect(Array.isArray(body.input)).toBe(true);
+    const content = (body.input as { role: string; content: { type: string; text?: string; image_url?: { url: string } }[] }[])[0].content;
+    expect(content[0].type).toBe('text');
+    expect(content[0].text).toContain('[Załącznik: notatki.md (text/markdown)]');
+    expect(content[0].text).toContain('kup mleko');
+    expect(content[1]).toEqual({ type: 'image_url', image_url: { url: `data:image/png;base64,${PNG}` } });
+    const user = chat.items.find(m => m.role === 'user')!;
+    expect(user.text).toBe('Co widzisz?');
+    expect(user.files).toEqual([
+      expect.objectContaining({ name: 'zrzut.png', type: 'image/png' }),
+      expect.objectContaining({ name: 'notatki.md', type: 'text/markdown' }),
+    ]);
+    expect(await readdir(path.join(dir, 'chat-files', id))).toHaveLength(2);
+    // The conversation mapping keeps the reference, never the base64 bytes.
+    expect(await readFile(path.join(dir, 'hermes-chats', `${id}.json`), 'utf8')).not.toContain(PNG);
+    // The same turn is still in the conversation after the panel restarts.
+    const restarted = hermes();
+    expect((await restarted.get(id)).items.find(m => m.role === 'user')?.files).toHaveLength(2);
+  });
+
+  it('refuses a PDF and an oversized file before Hermes is called', async () => {
+    const service = hermes();
+    const before = runs().length;
+    await expect(service.create({ text: 'PDF', files: [{ name: 'x.pdf', type: 'application/pdf', size: 2, data: Buffer.from('x').toString('base64') }] }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining('PDF jeszcze nieobsługiwany') });
+    expect(runs()).toHaveLength(before);
+  });
+
+  it('serves a file only from its own conversation, with safe headers, and deletes it with the chat', async () => {
+    const service = hermes();
+    const hub = createChatHub({ dir, engines: { hermes: service } });
+    const first = await service.create({ text: 'Pierwsza', files: [notes, image] });
+    const second = await service.create({ text: 'Druga' });
+    await finishedChat(service, first.id); await finishedChat(service, second.id);
+    const files = (await service.get(first.id)).items.find(m => m.role === 'user')!.files!;
+    const fileId = files[0].id;
+    const server = createServer(async (req, res) => { if (!(await handleChatRoute(req, res, new URL(req.url!, 'http://localhost'), base, hub))) res.writeHead(404).end(); });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+    try {
+      const own = await fetch(`${base}/api/chats/${first.id}/files/${fileId}`);
+      expect(own.status).toBe(200);
+      expect(own.headers.get('content-type')).toBe('text/markdown');
+      expect(own.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(own.headers.get('content-disposition')).toContain('attachment');
+      expect(await own.text()).toBe('# Plan\nkup mleko');
+      const picture = await fetch(`${base}/api/chats/${first.id}/files/${files[1].id}`);
+      expect(picture.headers.get('content-type')).toBe('image/png');
+      expect(picture.headers.get('content-disposition')).toBeNull();
+      expect((await fetch(`${base}/api/chats/${second.id}/files/${fileId}`)).status).toBe(404);
+      expect((await fetch(`${base}/api/chats/${first.id}/files/..%2F${fileId}`)).status).toBe(404);
+      expect((await fetch(`${base}/api/chats/${first.id}/files/${fileId}`, { method: 'POST', headers: { Origin: base } })).status).toBe(405);
+      const post = (files: unknown) => fetch(`${base}/api/chats`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ text: 'x', files }) });
+      expect((await post([{ name: 'big.png', type: 'image/png', size: 5 * 1024 * 1024 + 1, data: 'cG5n' }])).status).toBe(400);
+      expect((await post([{ name: 'x.html', type: 'text/html', size: 3, data: 'cG5n' }])).status).toBe(400);
+      expect((await fetch(`${base}/api/chats/${first.id}`, { method: 'DELETE', headers: { Origin: base } })).status).toBe(200);
+      await expect(readdir(path.join(dir, 'chat-files', first.id))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+});
+
 describe('agy chats from before engines', () => {
   it('are migrated to agy on load, with nothing lost', async () => {
     const chatsDir = path.join(dir, 'chats');

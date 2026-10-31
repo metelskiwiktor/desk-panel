@@ -61,10 +61,24 @@ export interface HistoryMessage {
   toolCallId?: string;
 }
 
+/**
+ * /v1/runs takes a string or a list of messages whose last `content` may be parts: `text` plus one `image_url` per
+ * screenshot (`data:image/...;base64,...`, the shape its own normalization accepts). There are no file parts.
+ */
+export type HermesInputPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+export interface HermesRunInput {
+  input: string;
+  session: string;
+  instructions?: string;
+  idempotencyKey?: string;
+  /** Data URLs of the screenshots that ride with this turn's text. */
+  images?: string[];
+}
+
 export interface HermesClient {
   readonly url: string;
   health(): Promise<void>;
-  startRun(input: { input: string; session: string; instructions?: string; idempotencyKey?: string }): Promise<{ run: string; session?: string }>;
+  startRun(input: HermesRunInput): Promise<{ run: string; session?: string }>;
   status(run: string): Promise<RunStatus>;
   /** Reads the run's events until the stream ends or `signal` aborts. Resumes after `lastEventId` when given. */
   events(run: string, onEvent: (event: HermesEvent, id: string | null) => void, options: { signal: AbortSignal; lastEventId?: string | null }): Promise<void>;
@@ -260,8 +274,9 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
   return {
     url: base,
     async health() { await request(HERMES_ROUTES.health, { timeoutMs: 3000 }); },
-    async startRun({ input, session, instructions, idempotencyKey }) {
-      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', idempotencyKey, body: { input, session_id: session, ...(instructions ? { instructions } : {}) } }));
+    async startRun({ input, session, instructions, idempotencyKey, images }) {
+      const parts: HermesInputPart[] = [{ type: 'text', text: input }, ...(images ?? []).map(url => ({ type: 'image_url' as const, image_url: { url } }))];
+      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', idempotencyKey, body: { input: images?.length ? [{ role: 'user', content: parts }] : input, session_id: session, ...(instructions ? { instructions } : {}) } }));
       const run = safeId(first(body, 'run_id', 'id') ?? rec(body.run).id);
       if (!run) throw new HermesError(502, 'Hermes nie podał identyfikatora przebiegu.');
       return { run, session: safeId(first(body, 'session_id')) ?? undefined };

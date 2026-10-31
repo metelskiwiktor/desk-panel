@@ -48,7 +48,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
 export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}, automationCards: CockpitView['automationCards'] = {}): CockpitMessage {
-  if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, ...(m.automation ? { automation: m.automation } : {}), status: 'done' };
+  if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, files: m.files, ...(m.automation ? { automation: m.automation } : {}), status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
     status: m.status === 'streaming' ? 'running' : m.status ?? 'done',
@@ -159,9 +159,9 @@ export function useLiveCockpit(): CockpitSource {
     cockpitLoading,
     error: chat.error,
     clearError: chat.clearError,
-    async send(text: string, context: ContextItem[]) {
+    async send(text: string, context: ContextItem[], files?: import('../chat-contract').ChatFileUpload[]) {
       nonce.current ??= crypto.randomUUID();
-      const ok = await chat.send(text, context, nonce.current);
+      const ok = await chat.send(text, context, nonce.current, files);
       if (ok) nonce.current = null;
       return ok;
     },

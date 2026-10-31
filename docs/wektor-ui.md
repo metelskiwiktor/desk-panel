@@ -17,7 +17,7 @@ które przekazuje żądanie do `ChatWindow` i istniejącego `source.open(id)`. S
 | Tekst i kontekst niewysłanej wiadomości, osobno dla rozmowy | `src/chat-draft.ts` |
 | Lista rozmów, SSE, snapshoty ostatnich rozmów | `src/useChat.ts` |
 | Mapowanie wiadomości na assistant-ui, odczyt kokpitu i decyzje | `src/cockpit/live.ts`, `src/cockpit/types.ts` |
-| Kompozytor, komendy `/`, skille `@`, kontekst, rejestracja kart narzędzi | `src/cockpit/Thread.tsx` |
+| Kompozytor, komendy `/`, skille `@`, kontekst, załączniki (wklejanie, upuszczanie, spinacz, miniatury i chipy), rejestracja kart narzędzi | `src/cockpit/Thread.tsx`, `src/cockpit/attachments.ts` |
 | Komponenty assistant-ui skopiowane i zmodyfikowane w repo | `src/components/thread.aui.tsx`, pozostałe `src/components/*` |
 | Task i PR w kokpicie | `src/cockpit/Cockpit.tsx` |
 | Wizyty: karta, wspólny stan, oś kalendarza | `src/cockpit/appointment-card.tsx`, `appointment-workspace.tsx`, `AppointmentPanel.tsx` |
@@ -93,6 +93,7 @@ w odczytach przeglądarki, walidowanych kontraktem, aby wykrywać pomieszanie ro
 | `keyboard` | Ctrl+Alt w obu kolejnościach, wskazanie kontekstu, Ctrl+V/A po przytrzymaniu Ctrl, AltGr, Esc/Gotowe, Alt+W i stały rozmiar. |
 | `history` | Osobne szkice i skille, wyszukiwanie po ID, przeciąganie historii, pamięć szerokości i obsługa separatora klawiaturą. |
 | `switching` | Sześć zmian rozmowy przy opóźnionym API, poprawny właściciel danych, stała szerokość i blokada działań przed świeżym odczytem. |
+| `attachments` | Wybór obrazu i pliku przez spinacz, miniatura i chip, usuwanie oraz odmowa PDF bez wysyłania tury. |
 
 Każdy przypadek ma nowy kontekst przeglądarki. Runner zwalnia modyfikatory, zamyka kontekst, serwery i katalogi tymczasowe.
 Zatrzymuje się przy pierwszym błędzie i zwraca niezerowy kod. Nie klika potwierdzeń zapisu ani nie wysyła wiadomości z UI;
@@ -119,7 +120,13 @@ Zrzuty na syntetycznym Hermesie, bez usługi i danych użytkownika:
 just screenshots standard --pages pulpit --open chat-commands
 just screenshots standard --pages pulpit --open chat-archive
 just screenshots standard --pages pulpit --open chat-temporary
+just screenshots standard --pages pulpit --open chat-attachments
+just screenshots standard --pages pulpit --open chat-attachments-sent
 ```
+
+`chat-attachments` pokazuje pole z miniaturą obrazu i chipem pliku, `chat-attachments-sent` wysłaną wiadomość z miniaturami
+i chipami nad tekstem. Spinacz, `Ctrl+V` ze schowka i upuszczenie pliku dodają załącznik do szkicu; limity i PDF dają komunikat
+w kompozytorze bez wysyłania. Historia czyta załączniki z serwera, więc są widoczne po przeładowaniu i w kolejnych turach.
 
 Pełne zachowanie i ograniczenia pamięci opisuje [czat.md](czat.md#komendy-archiwum-i-rozmowy-tymczasowe).
 

@@ -31,6 +31,15 @@ ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.t
   skonfigurujesz (panel nie wyłącza niczego). Tury tej samej sesji napisane poza panelem (np. w CLI) są pokazywane na końcu rozmowy.
 - **Pierwsza wiadomość sesji** zaczyna się od instrukcji `hermesPreamble()` (jak `preamble()` agy, ale z narzędziami panelu zamiast
   `curl`), potem blok `[Kontekst]` ze wskazanymi elementami i pytanie (`withContext`, ten sam co dla agy).
+- **Załączniki w turze**: obrazy jadą w ciele `POST /v1/runs` jako lista wiadomości, której ostatnia `content` ma części
+  `{"type":"text",…}` i `{"type":"image_url","image_url":{"url":"data:image/…;base64,…"}}`; serwer API Hermesa przekazuje tę
+  listę do pętli rozmowy agenta (ta czyta obrazy natywnie), a nie tylko tekst. Pliki tekstowe panel dokleja do części tekstowej
+  z nagłówkiem nazwy (do 20 000 znaków na plik, nadmiar ucięty z informacją). Części `file`/`input_file` (`_FILE_PART_TYPES`)
+  Hermes odrzuca na endpointach normalizujących treść, a panel nie ma czytnika PDF, więc PDF nie jest wysyłany.
+- **Pliki na dysku**: bajty leżą w `~/.desk-panel/chat-files/<id rozmowy>/<id pliku>.<rozszerzenie>` (poza Gitem), a mapowanie
+  `hermes-chats/<id>.json` trzyma przy turze tylko odnośniki `{id, nazwa, typ, rozmiar}` — nigdy base64. Przy powtórzeniu tury
+  po restarcie panel składa `image_url` ponownie z tych plików; `GET /api/chats/<id>/files/<fileId>` serwuje tylko plik swojej
+  rozmowy, a jej usunięcie (także tymczasowej) kasuje katalog.
 - **Tura automatyki**: panel może zacząć turę sam (pierwsza automatyka: zakończony task Cezara wraca do rozmowy, która go
   zleciła; zob. [czat.md](czat.md)). Hermes dostaje ją jako zwykły tekst z prefiksem `[Automatyka · Cezar] <powód>`, a
   preambuła mówi, że to fakt panelu, nie użytkownik: podsumować i zaproponować następny krok, bez zlecania i zapisów bez karty.

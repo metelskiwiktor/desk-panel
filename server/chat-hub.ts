@@ -76,6 +76,7 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       return once(input.nonce, async () => {
         const engine = input.engine ?? readPreference();
         if (input.temporary && engine !== 'hermes') throw new ChatError(409, 'Rozmowy tymczasowe obsługuje tylko Hermes.');
+        if (input.files?.length && engine !== 'hermes') throw new ChatError(400, 'Załączniki obsługuje tylko Hermes.');
         const created = await serviceOf(engine).create(input);
         owner.set(created.id, engine);
         return created;
@@ -83,7 +84,12 @@ export function createChatHub(options: ChatHubOptions): ChatService {
     },
     async send(id, input) {
       const service = await find(id);
+      if (input.files?.length && owner.get(id) !== 'hermes') throw new ChatError(400, 'Załączniki obsługuje tylko Hermes.');
       return once(input.nonce, () => service.send(id, input));
+    },
+    async file(id, fileId) {
+      const service = await find(id);
+      return service.file?.(id, fileId);
     },
     async sendAutomation(id: string, input: ChatAutomationInput) {
       const service = await find(id);

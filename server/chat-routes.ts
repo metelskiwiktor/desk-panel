@@ -4,7 +4,7 @@ import { appointmentActionSchema, appointmentQuerySchema, appointmentReference, 
 import { stableAppointmentCardId } from './appointment-cards';
 import { AppointmentError } from './znanylekarz';
 import type { AppointmentService } from './appointments';
-import { chatApprovalSchema, chatEngineSchema, chatRenameSchema, chatSendSchema, type ChatDetail, type ChatPart } from '../src/chat-contract';
+import { chatApprovalSchema, chatEngineSchema, chatFileTypes, chatRenameSchema, chatSendSchema, isChatImage, type ChatDetail, type ChatPart } from '../src/chat-contract';
 import { bankPlanDecisionSchema, bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
@@ -19,6 +19,8 @@ import { AutomationError } from './automations';
 
 /** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
 const MAX_BODY = 512 * 1024;
+/** Four 5 MB files as base64 (a third more), plus the message and its context. Only the two message routes use it. */
+const MAX_MESSAGE_BODY = Math.ceil(4 * 5 * 1024 * 1024 * 4 / 3) + MAX_BODY;
 /** Old decisions used unstable stream ids. Resolve only a unique exact prompt; otherwise block new decisions. */
 export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Record<string, DispatchOutcome>) {
   const resolved = { ...dispatches };
@@ -35,9 +37,9 @@ export function resolveLegacyDecisions(conversation: ChatDetail, dispatches: Rec
   }
   return { dispatches: resolved, unresolved };
 }
-async function readBody(req: IncomingMessage): Promise<unknown> {
+async function readBody(req: IncomingMessage, max = MAX_BODY): Promise<unknown> {
   let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) throw new ChatError(413, 'Zbyt duże ciało żądania (>512 KB)'); }
+  for await (const chunk of req) { body += chunk; if (body.length > max) throw new ChatError(413, `Zbyt duże ciało żądania (>${Math.round(max / 1024)} KB)`); }
   return JSON.parse(body || 'null');
 }
 const parse = <T>(schema: ZodType<T>, value: unknown): T => {
@@ -62,13 +64,30 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
 export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations): Promise<boolean> {
+  // The bytes of one attached file, only under the conversation that sent it.
+  const fileMatch = /^\/api\/chats\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})\/?$/.exec(url.pathname);
   const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|automation|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
-  if (!match) return false;
+  if (!match && !fileMatch) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
-  const [, id, action] = match;
+  const [, id, action] = (match ?? []) as RegExpExecArray;
   const write = req.method !== 'GET';
   if (write && req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return true; }
   try {
+    if (fileMatch) {
+      if (req.method !== 'GET') { res.writeHead(405).end(); return true; }
+      const file = chat.file ? await chat.file(fileMatch[1], fileMatch[2]) : undefined;
+      if (!file || !(chatFileTypes as readonly string[]).includes(file.type)) { res.writeHead(404).end(); return true; }
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      res.setHeader('Content-Type', file.type);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (!isChatImage(file.type)) {
+        const fallback = file.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+        const encoded = encodeURIComponent(file.name).replace(/['()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+        res.setHeader('Content-Disposition', `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`);
+      }
+      res.writeHead(200).end(file.data);
+      return true;
+    }
     if (id && id !== 'engine' && (action === 'appointment' || action === 'calendar-plan') && (req.method === 'GET' || req.method === 'POST')) {
       if (!appointments) throw new ChatError(503, 'Karty wizyt i wydarzeń są niedostępne.');
       const body = req.method === 'POST' ? parse(z.object({ toolCallId: z.string().min(1).max(200), action: z.unknown() }).strict(), await readBody(req)) : null;
@@ -107,7 +126,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         const [chats, engines, engine] = await Promise.all([chat.list(), chat.engines?.(), chat.preferred?.()]);
         return json(res, 200, { chats, ...(engines ? { engines } : {}), ...(engine ? { engine } : {}) }), true;
       }
-      if (req.method === 'POST') return json(res, 201, await chat.create(parse(chatSendSchema, await readBody(req)))), true;
+      if (req.method === 'POST') return json(res, 201, await chat.create(parse(chatSendSchema, await readBody(req, MAX_MESSAGE_BODY)))), true;
     } else if (!action) {
       if (req.method === 'GET') return json(res, 200, await chat.get(id)), true;
       if (req.method === 'PATCH') {
@@ -121,7 +140,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
       }
       if (req.method === 'DELETE') { await chat.remove(id, { temporary: url.searchParams.get('temporary') === '1' }); return json(res, 200, { ok: true }), true; }
     } else if (action === 'messages' && req.method === 'POST') {
-      await chat.send(id, parse(chatSendSchema, await readBody(req)));
+      await chat.send(id, parse(chatSendSchema, await readBody(req, MAX_MESSAGE_BODY)));
       return json(res, 202, { ok: true }), true;
     } else if (action === 'approval' && req.method === 'POST') {
       if (!chat.approve) throw new ChatError(409, 'Ten silnik nie pyta o zgodę.');

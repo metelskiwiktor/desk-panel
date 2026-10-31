@@ -1,4 +1,4 @@
-import type { ChatAutomation, ContextItem } from '../chat-contract';
+import type { ChatAutomation, ChatFileRef, ChatFileUpload, ContextItem } from '../chat-contract';
 import type { CezarStatus, CheckState, CockpitPrView, CockpitTaskView, StepState } from '../cockpit-contract';
 
 export type { CezarStatus, CheckState, StepState };
@@ -17,6 +17,8 @@ export interface CockpitMessage {
   at: number;
   parts: CockpitPart[];
   context?: ContextItem[];
+  /** Screenshots and files sent with this user message; the bytes are downloaded from the conversation's own route. */
+  files?: ChatFileRef[];
   /** Set only when the panel, not the user, started this turn: the window labels it as automation. */
   automation?: ChatAutomation;
   status: 'running' | 'done' | 'error' | 'stopped';
@@ -118,7 +120,7 @@ export interface CockpitSource {
   error: string;
   clearError(): void;
   /** False when the message was not taken: the composer keeps it. */
-  send(text: string, context: ContextItem[]): Promise<boolean>;
+  send(text: string, context: ContextItem[], files?: ChatFileUpload[]): Promise<boolean>;
   stop(): void;
   retry(): void;
   /** The user's answer on a card: a dispatch decision or a Hermes approval. */
