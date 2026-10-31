@@ -839,7 +839,11 @@ describe('attachments', () => {
     await finishedChat(service, id);
     // A directory where the save's temporary file goes makes that one save fail.
     const temp = path.join(dir, 'hermes-chats', `${id}.json.tmp`);
-    await mkdir(temp);
+    // A background save of the finished turn may still hold its temporary file for a moment.
+    for (let tries = 0; ; tries++) {
+      try { await mkdir(temp); break; }
+      catch (error) { if (tries > 50) throw error; await new Promise(r => setTimeout(r, 20)); }
+    }
     await service.send(id, { text: 'zapis się nie uda' });
     await rm(temp, { recursive: true });
     const chat = await finishedChat(service, id);
