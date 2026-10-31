@@ -7,7 +7,7 @@ import { PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
-import { automationPlanSchema } from '../src/automation-contract';
+import { automationPlanSchema, type AutomationPlan } from '../src/automation-contract';
 import { stableAppointmentCardId } from './appointment-cards';
 import { cardRefusal, COCKPIT_TOOLS, type CockpitTool } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
@@ -234,11 +234,28 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  */
 export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign') || name.includes('panel_smart_rule_propose');
 export const isAutomationCard = (name: string) => name.includes('panel_automation_propose');
+/**
+ * The plan's hash input. A cyclic trigger with one time is hashed in the legacy `time` shape (with the raw clock string,
+ * so a leading zero is preserved), because cards approved before several times existed were hashed that way. Keeping the
+ * same id is what lets an already-approved card still find its decision in cockpit.json instead of creating a second
+ * automation. A multi-time trigger has no legacy form and is hashed as parsed.
+ */
+function automationCardKey(plan: AutomationPlan, raw: unknown): string {
+  const trigger = plan.trigger;
+  if ((trigger.kind !== 'daily' && trigger.kind !== 'weekly') || trigger.times.length !== 1) return JSON.stringify(plan);
+  const rawTrigger = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>).trigger : undefined;
+  const rawTime = rawTrigger && typeof rawTrigger === 'object' && !Array.isArray(rawTrigger) && typeof (rawTrigger as Record<string, unknown>).time === 'string'
+    ? (rawTrigger as Record<string, unknown>).time as string : trigger.times[0];
+  const legacyTrigger = trigger.kind === 'daily'
+    ? { kind: 'daily', time: rawTime, ...(trigger.from ? { from: trigger.from } : {}), ...(trigger.until ? { until: trigger.until } : {}) }
+    : { kind: 'weekly', weekday: trigger.weekday, time: rawTime, ...(trigger.from ? { from: trigger.from } : {}), ...(trigger.until ? { until: trigger.until } : {}) };
+  return JSON.stringify({ ...plan, trigger: legacyTrigger });
+}
 /** The automation consent card's identity is the plan it proposes, so live, kept and restored reads agree. */
 export function stableAutomationCardId(messageId: string, input: string): string | null {
-  let plan;
-  try { plan = automationPlanSchema.parse(JSON.parse(input)); } catch { return null; }
-  return `${messageId}:x-${createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0, 16)}`;
+  let plan, raw;
+  try { raw = JSON.parse(input); plan = automationPlanSchema.parse(raw); } catch { return null; }
+  return `${messageId}:x-${createHash('sha256').update(automationCardKey(plan, raw)).digest('hex').slice(0, 16)}`;
 }
 export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
   if (name.includes('panel_smart_rule_propose')) {

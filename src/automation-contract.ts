@@ -7,17 +7,59 @@ import { getDomain } from 'tldts';
  * Wspólny dla serwera (`server/automations.ts`) i UI; zapis w `~/.desk-panel/automations.json`, poza Gitem.
  */
 
-export const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'] as const;
+const WEEKDAYS_PLURAL = ['poniedziałki', 'wtorki', 'środy', 'czwartki', 'piątki', 'soboty', 'niedziele'] as const;
 export const weekdaySchema = z.number().int().min(1).max(7);
 
+const clockPattern = /^([01]?\d|2[0-3]):[0-5]\d$/;
+const clockSchema = z.string().regex(clockPattern);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** Max distinct times in one cyclic automation; more belongs in a second automation. */
+const MAX_TRIGGER_TIMES = 6;
+
+const clockMinutes = (time: string) => {
+  const [hour, minute] = time.split(':').map(Number);
+  return hour * 60 + minute;
+};
+const canonicalClock = (time: string) => {
+  const [hour, minute] = time.split(':').map(Number);
+  return `${hour}:${String(minute).padStart(2, '0')}`;
+};
+
+/**
+ * The pre-validation shape: a legacy `time` from live records and old proposals becomes `times: [time]`, and each valid
+ * entry is written without a leading zero (`7:00`). Order and duplicates stay for the schema to validate (and then sort),
+ * so `["7:00","07:00"]` is rejected rather than silently merged.
+ */
+function normalizeTriggerTimes(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const trigger = value as Record<string, unknown>;
+  if (trigger.kind !== 'daily' && trigger.kind !== 'weekly') return value;
+  const { time: _legacyTime, ...rest } = trigger;
+  const source = trigger.times !== undefined ? trigger.times : trigger.time !== undefined ? [trigger.time] : undefined;
+  if (source === undefined) return rest;
+  if (!Array.isArray(source)) return { ...rest, times: source };
+  // Leave an invalid entry for the schema to reject, instead of silently dropping it.
+  if (!source.every(entry => typeof entry === 'string' && clockPattern.test(entry))) return { ...rest, times: source };
+  return { ...rest, times: source.map(canonicalClock) };
+}
+
+/**
+ * One canonical stored form: validated first (so a duplicate after normalizing `07:00` == `7:00` or more than six entries
+ * is rejected), then sorted.
+ */
+const triggerTimesSchema = z.array(clockSchema).min(1).max(MAX_TRIGGER_TIMES)
+  .refine(times => new Set(times).size === times.length, 'Godziny nie mogą się powtarzać.')
+  .transform(times => [...times].sort((a, b) => clockMinutes(a) - clockMinutes(b)));
+
 /** `at` is an epoch millisecond; `from`/`until` are local dates (Europe/Warsaw) in `YYYY-MM-DD`. */
-export const triggerSchema = z.discriminatedUnion('kind', [
+const triggerUnion = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('once'), at: z.number().int().nonnegative() }).strict(),
-  z.object({ kind: z.literal('daily'), time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict(),
-  z.object({ kind: z.literal('weekly'), weekday: weekdaySchema, time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict(),
+  z.object({ kind: z.literal('daily'), times: triggerTimesSchema, from: dateSchema.optional(), until: dateSchema.optional() }).strict(),
+  z.object({ kind: z.literal('weekly'), weekday: weekdaySchema, times: triggerTimesSchema, from: dateSchema.optional(), until: dateSchema.optional() }).strict(),
   z.object({ kind: z.literal('cezar'), taskId: z.string().trim().min(1).max(200) }).strict(),
   z.object({ kind: z.literal('pr'), url: z.string().url().max(1000) }).strict(),
 ]);
+export const triggerSchema = z.preprocess(normalizeTriggerTimes, triggerUnion);
 export type AutomationTrigger = z.infer<typeof triggerSchema>;
 
 /**
@@ -181,6 +223,12 @@ export const automationReportSchema = z.object({
 }).strict();
 export type AutomationReport = z.infer<typeof automationReportSchema>;
 
+/** `7:00`, `7:00 i 19:00`, `7:00, 12:00 i 19:00`. */
+function timesLabel(times: readonly string[]): string {
+  if (times.length <= 1) return times[0] ?? '';
+  return `${times.slice(0, -1).join(', ')} i ${times.at(-1)}`;
+}
+
 /** What the rows card says about an automation, in Polish and without a date library. */
 export function describeTrigger(trigger: AutomationTrigger): string {
   switch (trigger.kind) {
@@ -188,17 +236,17 @@ export function describeTrigger(trigger: AutomationTrigger): string {
       const d = new Date(trigger.at);
       return `jednorazowo ${d.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
     }
-    case 'daily': return `codziennie ${trigger.time}`;
-    case 'weekly': return `co tydzień, ${WEEKDAYS[trigger.weekday - 1]} ${trigger.time}`;
+    case 'daily': return `codziennie ${timesLabel(trigger.times)}`;
+    case 'weekly': return `w ${WEEKDAYS_PLURAL[trigger.weekday - 1]} ${timesLabel(trigger.times)}`;
     case 'cezar': return `gdy task Cezara ${trigger.taskId} skończy albo czeka na odpowiedź`;
     case 'pr': return `gdy PR ${trigger.url} zmieni stan`;
   }
 }
 
-/** The schedule alone, short enough for a row (`codziennie 7:00`). */
+/** The schedule alone, short enough for a row (`codziennie 7:00 i 19:00`). */
 export function scheduleLabel(trigger: AutomationTrigger): string {
-  if (trigger.kind === 'daily') return `codziennie ${trigger.time}`;
-  if (trigger.kind === 'weekly') return `${WEEKDAYS[trigger.weekday - 1]} ${trigger.time}`;
+  if (trigger.kind === 'daily') return `codziennie ${timesLabel(trigger.times)}`;
+  if (trigger.kind === 'weekly') return `${WEEKDAYS_PLURAL[trigger.weekday - 1]} ${timesLabel(trigger.times)}`;
   if (trigger.kind === 'once') return 'jednorazowo';
   if (trigger.kind === 'cezar') return 'task Cezara';
   return 'PR';

@@ -19,13 +19,20 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
   (`active | paused | done | expired | cancelled`), `doneWhen?`, `notebook` (Markdown do 4000 znaków), `learn` (czy run
   może zmieniać notatnik), `actions`, `chatId` (rozmowa, w której automat powstał), `createdAt`, `nextRunAt?`,
   `lastRunAt?`, `runs` (ostatnie 100).
-- Wyzwalacz: `{kind:'once', at}` (epoch ms), `{kind:'daily', time:'HH:MM', from?, until?}`,
-  `{kind:'weekly', weekday:1–7, time, from?, until?}`, `{kind:'cezar', taskId}`, `{kind:'pr', url}`. Strefa
+- Wyzwalacz: `{kind:'once', at}` (epoch ms), `{kind:'daily', times:['7:00','19:00'], from?, until?}`,
+  `{kind:'weekly', weekday:1–7, times, from?, until?}`, `{kind:'cezar', taskId}`, `{kind:'pr', url}`. Strefa
   `Europe/Warsaw`; `from`/`until` to daty lokalne `YYYY-MM-DD`. Cykliczny bez `until` kończy się po 90 dniach.
+  `times` to od 1 do 6 unikalnych pór `H:MM`/`HH:MM`. Walidacja idzie przed porządkowaniem: duplikat po normalizacji
+  (`07:00` = `7:00`) i więcej niż 6 wpisów są odrzucane, dopiero potem lista jest sortowana i zapisywana w jednej
+  kanonicznej formie (`times` bez wiodącego zera). Stary zapis i stara propozycja z jednym `time` są nadal ważne:
+  parsowanie zamienia je na `times: [time]` w jednym miejscu, bez przepisywania pliku przy samym odczycie (zapis przy
+  odczycie zdarza się tylko wtedy, gdy migracja `observers.json` naprawdę nastąpiła w tym odczycie).
+  Jedna pora to `times` z jednym wpisem; kilka pór dnia należy do jednego automatu, nie do kilku.
 - Akcje: lista obiektów `{kind, …}`; `message`, `calendarEvent {domain?}`, `smartAction {domain?}` i `notify {domain?}` (parametry i ograniczenia poniżej).
 - Run: `id` `run-…`, `at`, `chatId` (rozmowa runu), `outcome` (`not-yet | done | error | skipped`), `summary` (1–2
   zdania), `notebookChanged`, `previousNotebook?`, `costUsd?`, `seconds?`.
-- Limity: 20 aktywnych automatów; daily/weekly najwyżej raz na dzień/tydzień; `once` jak dawne obserwatory czasu.
+- Limity: 20 aktywnych automatów; daily/weekly może mieć do 6 pór dnia/tygodnia (jeden automat, jedna historia i
+  notatnik); `once` jak dawne obserwatory czasu.
 
 ## Wykonanie runu
 
@@ -34,14 +41,18 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
   następny run czeka do końca tury Hermesa. Czas 15 minut liczy się dopiero od próby wysyłki, nie podczas oczekiwania w kolejce.
 - Zegar (`server/automations.ts`) chodzi co minutę tylko wtedy, gdy są aktywne automaty. Jeden tick naraz (serializacja),
   po każdym odczycie PR stan jest sprawdzany ponownie, a wspólny cache PR (`createPrReader` w `server/github.ts`) jest ten
-  sam co w kokpicie. Po restarcie zaległy run startuje najwyżej jeden na tick.
+  sam co w kokpicie. `nextRunAt` to najbliższa z pór `times` (dla weekly także właściwy dzień), zawsze z uwzględnieniem
+  `from`/`until`. Następny run liczy się od pory, dla której run był (albo od jego startu, nie od chwili zakończenia), więc
+  pora, która minęła w trakcie trwającego runu, jeszcze wykona się raz. Po restarcie zaległy run startuje najwyżej jeden na
+  tick: pominięte pory nie kumulują się i nie dublują runu, a dwie bliskie pory nadal wykonują się kolejno, po jednym runie.
 - Run jest rezerwowany na dysku (`pending`) przed wysyłką, z trwałymi `chatId` i `turnId` (nonce). Hermes-chat zapisuje
   turę i dokładne żądanie przed POST-em do Hermesa. Nonce jest `Idempotency-Key` tego POST-a: po utracie odpowiedzi
   restart ponawia zamrożone żądanie z tym samym kluczem i odzyskuje istniejący przebieg zamiast drugiego wykonania.
   Istniejąca rozmowa z tym nonce jest odzyskiwana. Wymagane jest trwałe wsparcie idempotencji w przypiętym Hermesie. Dostawa jednego `pending` ma wspólną blokadę, więc callback Cezara i tick nie wyślą go dwa razy.
 - Ostatnie wystąpienie daily/weekly w dniu `until` jeszcze się wykonuje; dopiero raport `not-yet` wygasa automat. Po zmianie
   czasu (np. 02:30 w marcową noc) kolejne dni wracają do godziny z harmonogramu; godzina nieistniejąca danego dnia ląduje
-  na najbliższej istniejącej.
+  na najbliższej istniejącej. Przy kilku porach dnia wybierana jest najwcześniejsza jeszcze przyszła pora, więc skok DST
+  przy jednej porze nie przykrywa wcześniejszej innej pory tego dnia.
 - Run cykliczny = nowa rozmowa Hermesa (zawsze Hermesa, niezależnie od zapisanego preferowanego silnika; świeży kontekst), tytuł `Automat · <name> · <data>`, oznaczona jako tura
   automatyki (`automation.source = 'automation'`). Treść: cel, warunek celu, notatnik, ostatnie 5 runów, zatwierdzone
   akcje i polecenie wykonania sprawdzenia oraz wywołania `panel_automation_report` na końcu.
@@ -63,10 +74,14 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 
 ## Narzędzia Wektora
 
-- `panel_automation_propose {name, goal, trigger, doneWhen?, actions, learn, replaces?}` — karta „Nowy automat”. Zapis
+- `panel_automation_propose {name, goal, trigger, doneWhen?, actions, learn, replaces?}` — karta „Nowy automat”. Dla
+  `daily`/`weekly` `trigger` ma `times` (1–6 pór dnia; jedna pora to tablica z jednym wpisem), więc „rano i wieczorem”
+  to jeden automat, nie dwa. Stary kształt z `time` nadal się parsuje. Zapis
   dopiero po kliknięciu: `POST /api/chats/:id/automation` (Origin-checked); plan jest czytany z wywołania narzędzia w tej
   rozmowie, żądanie może tylko zawęzić plan: odznaczyć akcje i wyłączyć `learn` (włączyć się nie da). Karta ma stałe id
-  liczone z planu, więc działa na żywo i po odświeżeniu. `replaces: <id>` aktualizuje istniejący automat na miejscu: id, chatId, createdAt, runy i notatnik zostają.
+  liczone z planu, więc działa na żywo i po odświeżeniu. Dla pojedynczej pory stary kształt `time` daje ten sam hash co
+  przed zmianą, więc karta zatwierdzona wcześniej nadal znajduje swoją decyzję i nie tworzy drugiego automatu.
+  `replaces: <id>` aktualizuje istniejący automat na miejscu: id, chatId, createdAt, runy i notatnik zostają.
   Zmienia nazwę, cel, harmonogram, akcje i learn oraz podany warunek celu (pominięty zostaje bez zmian). Aktywny pozostaje aktywny,
   wstrzymany pozostaje wstrzymany. Zakończony, wygasły i anulowany odmawiają zmiany: trzeba zaproponować nowy automat bez replaces.
   Aktualizacja nie zużywa miejsca w limicie 20 aktywnych, także gdy zmieniany automat jest wstrzymany.

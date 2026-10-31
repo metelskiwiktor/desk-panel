@@ -444,6 +444,8 @@ describe('Hermes chat', () => {
     const id = (message.parts![0] as { id: string }).id;
     expect(id).toMatch(/^answer:x-[0-9a-f]{16}$/);
     expect(stableAutomationCardId('answer', JSON.stringify(plan))).toBe(id);
+    // a card approved before several times existed keeps the id the old `time` shape produced
+    expect(stableAutomationCardId('answer', JSON.stringify(plan))).toBe('answer:x-4a01cd1d556d11b8');
     expect(stableAutomationCardId('other', JSON.stringify(plan))).not.toBe(id);
     expect(stableAutomationCardId('answer', JSON.stringify({ ...plan, learn: false }))).not.toBe(id);
     expect(stableAutomationCardId('answer', 'not json')).toBeNull();

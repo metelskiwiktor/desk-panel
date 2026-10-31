@@ -54,7 +54,7 @@ describe('automation tools', () => {
 
   it('lists, pauses, resumes and cancels an automation without a card', async () => {
     const automations = make();
-    const created = await automations.createFromPlan('chat-1', { name: 'Ceny', goal: 'Sprawdź.', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: false });
+    const created = await automations.createFromPlan('chat-1', { name: 'Ceny', goal: 'Sprawdź.', trigger: { kind: 'daily', times: ['7:00'] }, actions: [{ kind: 'message' }], learn: false });
     const ctx = { views: {}, sources, now: clock, cezarUrl: 'http://127.0.0.1:4321/', automations, activeChats: () => [] };
     expect(await PANEL_TOOLS.panel_automations.run({ id: created.id }, ctx)).toContain('Ceny');
     await PANEL_TOOLS.panel_automation_update.run({ id: created.id, action: 'pause' }, ctx);

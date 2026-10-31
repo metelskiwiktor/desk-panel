@@ -10,7 +10,7 @@ import type { PanelSources } from './sources';
 import { createPanelServer } from './app';
 import { createAutomations, nextOccurrence, resolveObserverTime } from './automations';
 import { ChatError } from './agent-chat';
-import { RUN_REPORT_TIMEOUT_MS, type Automation } from '../src/automation-contract';
+import { RUN_REPORT_TIMEOUT_MS, describeTrigger, scheduleLabel, triggerSchema, type Automation } from '../src/automation-contract';
 
 const NOW = Date.parse('2026-10-30T12:00:00+01:00');
 let clock = NOW;
@@ -80,6 +80,37 @@ describe('migration from observers.json', () => {
 });
 
 describe('loading the store', () => {
+  it('reads a live record with a legacy time without rewriting the file', async () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      automations: [{
+        id: 'a-eeeeeeeeeeee', name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00', from: '2026-10-30', until: '2026-12-30' },
+        status: 'active', notebook: '', learn: false, actions: [{ kind: 'message' }], chatId: 'origin', createdAt: NOW, runs: [], changes: [],
+      }],
+      pending: [], outbox: [],
+    });
+    writeFileSync(join(dir, 'automations.json'), legacy);
+    const automations = make();
+    expect((await automations.list())[0].trigger).toEqual({ kind: 'daily', times: ['7:00'], from: '2026-10-30', until: '2026-12-30' });
+    expect(readFileSync(join(dir, 'automations.json'), 'utf8')).toBe(legacy);
+  });
+
+  it('does not write on load just because the store was migrated earlier', async () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      migratedFrom: 'observers.json',
+      automations: [{
+        id: 'a-eeeeeeeeeeee', name: 'Ceny', goal: 'Sprawdź cennik.', trigger: { kind: 'daily', time: '07:00', from: '2026-10-30', until: '2026-12-30' },
+        status: 'active', notebook: '', learn: false, actions: [{ kind: 'message' }], chatId: 'origin', createdAt: NOW, runs: [], changes: [],
+      }],
+      pending: [], outbox: [],
+    });
+    writeFileSync(join(dir, 'automations.json'), legacy);
+    const automations = make();
+    expect((await automations.list())[0].trigger).toEqual({ kind: 'daily', times: ['7:00'], from: '2026-10-30', until: '2026-12-30' });
+    expect(readFileSync(join(dir, 'automations.json'), 'utf8')).toBe(legacy);
+  });
+
   it('keeps a corrupt automations.json aside instead of overwriting it with an empty store', async () => {
     writeFileSync(join(dir, 'automations.json'), '{broken');
     const automations = make();
@@ -93,20 +124,112 @@ describe('loading the store', () => {
 describe('daily and weekly scheduling in Europe/Warsaw', () => {
   it('reads the local clock and lands on the next day when today\u2019s hour passed', () => {
     const after = Date.parse('2026-10-30T08:00:00+01:00');
-    expect(nextOccurrence({ kind: 'daily', time: '07:00' }, after)).toBe(Date.parse('2026-10-31T07:00:00+01:00'));
-    expect(nextOccurrence({ kind: 'daily', time: '19:00' }, after)).toBe(Date.parse('2026-10-30T19:00:00+01:00'));
+    expect(nextOccurrence({ kind: 'daily', times: ['7:00'] }, after)).toBe(Date.parse('2026-10-31T07:00:00+01:00'));
+    expect(nextOccurrence({ kind: 'daily', times: ['19:00'] }, after)).toBe(Date.parse('2026-10-30T19:00:00+01:00'));
   });
   it('keeps the local hour across the DST change', () => {
     // Sunday 25.10.2026 is when Europe/Warsaw leaves summer time (03:00 -> 02:00).
     const saturday = Date.parse('2026-10-24T12:00:00+02:00');
-    const next = nextOccurrence({ kind: 'daily', time: '07:00' }, saturday)!;
+    const next = nextOccurrence({ kind: 'daily', times: ['7:00'] }, saturday)!;
     expect(new Date(next).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' })).toBe('07:00');
-    const monday = nextOccurrence({ kind: 'weekly', weekday: 1, time: '07:00' }, Date.parse('2026-10-24T12:00:00+02:00'))!;
+    const monday = nextOccurrence({ kind: 'weekly', weekday: 1, times: ['7:00'] }, Date.parse('2026-10-24T12:00:00+02:00'))!;
     expect(new Date(monday).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' })).toBe('07:00');
   });
   it('honours from and until', () => {
-    expect(nextOccurrence({ kind: 'daily', time: '07:00', from: '2026-11-02', until: '2026-11-05' }, NOW)).toBe(Date.parse('2026-11-02T07:00:00+01:00'));
-    expect(nextOccurrence({ kind: 'daily', time: '07:00', from: '2026-11-02', until: '2026-11-05' }, Date.parse('2026-11-06T00:00:00+01:00'))).toBeNull();
+    expect(nextOccurrence({ kind: 'daily', times: ['7:00'], from: '2026-11-02', until: '2026-11-05' }, NOW)).toBe(Date.parse('2026-11-02T07:00:00+01:00'));
+    expect(nextOccurrence({ kind: 'daily', times: ['7:00'], from: '2026-11-02', until: '2026-11-05' }, Date.parse('2026-11-06T00:00:00+01:00'))).toBeNull();
+  });
+});
+
+describe('several times a day in one automation', () => {
+  it('normalizes a legacy time and sorts distinct times into one canonical form', () => {
+    expect(triggerSchema.parse({ kind: 'daily', time: '07:00' })).toEqual({ kind: 'daily', times: ['7:00'] });
+    expect(triggerSchema.parse({ kind: 'weekly', weekday: 1, time: '18:30' })).toEqual({ kind: 'weekly', weekday: 1, times: ['18:30'] });
+    expect(triggerSchema.parse({ kind: 'daily', times: ['19:00', '7:00', '12:00'] })).toEqual({ kind: 'daily', times: ['7:00', '12:00', '19:00'] });
+    expect(() => triggerSchema.parse({ kind: 'daily', times: [] })).toThrow();
+  });
+
+  it('rejects duplicates after normalizing and more than six entries instead of merging them', () => {
+    expect(() => triggerSchema.parse({ kind: 'daily', times: ['7:00', '07:00'] })).toThrow();
+    expect(() => triggerSchema.parse({ kind: 'daily', times: ['1:00', '2:00', '3:00', '4:00', '5:00', '6:00', '7:00'] })).toThrow();
+    expect(() => triggerSchema.parse({ kind: 'daily', times: ['1:00', '2:00', '3:00', '4:00', '5:00', '6:00', '7:00', '07:00'] })).toThrow();
+  });
+
+  it('picks the earliest upcoming time across a day boundary and respects until and from', () => {
+    const daily = triggerSchema.parse({ kind: 'daily', times: ['7:00', '19:00'] });
+    expect(nextOccurrence(daily, Date.parse('2026-10-30T06:00:00+01:00'))).toBe(Date.parse('2026-10-30T07:00:00+01:00'));
+    expect(nextOccurrence(daily, Date.parse('2026-10-30T08:00:00+01:00'))).toBe(Date.parse('2026-10-30T19:00:00+01:00'));
+    expect(nextOccurrence(daily, Date.parse('2026-10-30T20:00:00+01:00'))).toBe(Date.parse('2026-10-31T07:00:00+01:00'));
+    expect(nextOccurrence(triggerSchema.parse({ kind: 'daily', times: ['7:00', '19:00'], until: '2026-10-30' }), Date.parse('2026-10-30T20:00:00+01:00'))).toBeNull();
+    expect(nextOccurrence(triggerSchema.parse({ kind: 'daily', times: ['7:00', '19:00'], from: '2026-11-02', until: '2026-11-03' }), NOW)).toBe(Date.parse('2026-11-02T07:00:00+01:00'));
+  });
+
+  it('keeps the weekly day and takes the next time on it', () => {
+    const weekly = triggerSchema.parse({ kind: 'weekly', weekday: 1, times: ['7:00', '19:00'] });
+    expect(nextOccurrence(weekly, Date.parse('2026-10-26T08:00:00+01:00'))).toBe(Date.parse('2026-10-26T19:00:00+01:00'));
+    expect(nextOccurrence(weekly, Date.parse('2026-10-26T20:00:00+01:00'))).toBe(Date.parse('2026-11-02T07:00:00+01:00'));
+  });
+
+  it('describes several times in Polish', () => {
+    expect(describeTrigger(triggerSchema.parse({ kind: 'daily', times: ['7:00', '19:00'] }))).toBe('codziennie 7:00 i 19:00');
+    expect(scheduleLabel(triggerSchema.parse({ kind: 'daily', times: ['7:00', '19:00'] }))).toBe('codziennie 7:00 i 19:00');
+    expect(describeTrigger(triggerSchema.parse({ kind: 'weekly', weekday: 1, times: ['7:00', '12:00', '19:00'] }))).toBe('w poniedziałki 7:00, 12:00 i 19:00');
+    expect(scheduleLabel(triggerSchema.parse({ kind: 'weekly', weekday: 1, times: ['7:00', '12:00', '19:00'] }))).toBe('poniedziałki 7:00, 12:00 i 19:00');
+  });
+
+  it('runs each time once and does not double-run when the panel was off', async () => {
+    const automations = make();
+    const created = await automations.createFromPlan('chat-1', { name: 'Zapisy', goal: 'Sprawdź zapisy.', trigger: { kind: 'daily', times: ['7:00', '19:00'] }, actions: [{ kind: 'message' }], learn: false });
+    expect(created.nextRunAt).toBe(Date.parse('2026-10-30T19:00:00+01:00'));
+    clock = Date.parse('2026-10-31T08:00:00+01:00');
+    await automations.tick();
+    expect(sent).toHaveLength(1);
+    expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-10-31T19:00:00+01:00'));
+    const run = stored().pending[0];
+    automations.turnChanged({ chatId: run.chatId, turnId: run.turnId, runId: 'hermes-run', ended: false });
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Jeszcze nie.' });
+    const execution = stored().execution!;
+    automations.turnChanged({ chatId: execution.chatId, turnId: execution.turnId, runId: 'hermes-run', ended: true });
+    await automations.tick();
+    expect(sent).toHaveLength(1);
+    clock = Date.parse('2026-10-31T19:00:00+01:00');
+    await automations.tick();
+    expect(sent).toHaveLength(2);
+  });
+
+  it('keeps the next run a schedule change set while a run was going, instead of backdating it to the old slot', async () => {
+    const automations = make();
+    const created = await automations.createFromPlan('chat-1', { name: 'Zapisy', goal: 'Sprawdź zapisy.', trigger: { kind: 'daily', times: ['7:00'] }, actions: [{ kind: 'message' }], learn: false });
+    clock = Date.parse('2026-10-31T07:00:30+01:00');
+    await automations.tick();
+    const run = stored().pending[0];
+    automations.turnChanged({ chatId: run.chatId, turnId: run.turnId, runId: 'hermes-run', ended: false });
+    clock = Date.parse('2026-10-31T07:05:00+01:00');
+    await automations.createFromPlan('chat-1', { name: 'Zapisy', goal: 'Sprawdź zapisy.', trigger: { kind: 'daily', times: ['7:03', '7:10'] }, actions: [{ kind: 'message' }], learn: false, replaces: created.id });
+    expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-10-31T07:10:00+01:00'));
+    clock = Date.parse('2026-10-31T07:06:00+01:00');
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Jeszcze nie.' });
+    expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-10-31T07:10:00+01:00'));
+  });
+
+  it('runs a slot that passed while a run was in progress instead of skipping it', async () => {
+    const automations = make();
+    const created = await automations.createFromPlan('chat-1', { name: 'Zapisy', goal: 'Sprawdź zapisy.', trigger: { kind: 'daily', times: ['7:00', '7:01'] }, actions: [{ kind: 'message' }], learn: false });
+    expect(created.nextRunAt).toBe(Date.parse('2026-10-31T07:00:00+01:00'));
+    clock = Date.parse('2026-10-31T07:00:30+01:00');
+    await automations.tick();
+    expect(sent).toHaveLength(1);
+    const run = stored().pending[0];
+    automations.turnChanged({ chatId: run.chatId, turnId: run.turnId, runId: 'hermes-run', ended: false });
+    // 07:01 passes while the 07:00 run is still going.
+    clock = Date.parse('2026-10-31T07:02:00+01:00');
+    await automations.report({ runId: run.id, token: run.token, outcome: 'not-yet', summary: 'Jeszcze nie.' });
+    expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-10-31T07:01:00+01:00'));
+    const execution = stored().execution!;
+    automations.turnChanged({ chatId: execution.chatId, turnId: execution.turnId, runId: 'hermes-run', ended: true });
+    await automations.tick();
+    expect(sent).toHaveLength(2);
+    expect((await automations.get(created.id))!.nextRunAt).toBe(Date.parse('2026-11-01T07:00:00+01:00'));
   });
 });
 
@@ -267,9 +390,9 @@ describe('schedules and limits', () => {
 
   it('keeps the scheduled hour across the spring DST gap', () => {
     const after = Date.parse('2026-03-29T04:00:00+02:00');
-    expect(nextOccurrence({ kind: 'daily', time: '02:30' }, after)).toBe(Date.parse('2026-03-30T02:30:00+02:00'));
-    expect(nextOccurrence({ kind: 'weekly', weekday: 7, time: '02:30' }, after)).toBe(Date.parse('2026-04-05T02:30:00+02:00'));
-    expect(nextOccurrence({ kind: 'daily', time: '02:30' }, Date.parse('2026-03-28T12:00:00+01:00'))).toBe(Date.parse('2026-03-29T03:30:00+02:00'));
+    expect(nextOccurrence({ kind: 'daily', times: ['2:30'] }, after)).toBe(Date.parse('2026-03-30T02:30:00+02:00'));
+    expect(nextOccurrence({ kind: 'weekly', weekday: 7, times: ['2:30'] }, after)).toBe(Date.parse('2026-04-05T02:30:00+02:00'));
+    expect(nextOccurrence({ kind: 'daily', times: ['2:30'] }, Date.parse('2026-03-28T12:00:00+01:00'))).toBe(Date.parse('2026-03-29T03:30:00+02:00'));
   });
 
   it('does not let resume bypass the active-automation limit', async () => {

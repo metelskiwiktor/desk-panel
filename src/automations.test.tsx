@@ -87,9 +87,9 @@ it('compares only changed fields using Polish labels, saves once, and keeps the 
   const wrap = (result?: any) => <CardActions.Provider value={{ respond, running: false }}><AutomationCard {...props} result={result} /></CardActions.Provider>;
   const { rerender } = render(wrap());
   expect(screen.getByText('Zmienić automat?')).toBeTruthy();
-  await screen.findByText(/Codziennie 07:00/);
+  await screen.findByText(/Codziennie 7:00/);
   const comparison = within(screen.getByLabelText('Porównanie zmian'));
-  expect(comparison.getByText(/poniedziałek 18:00/)).toBeTruthy();
+  expect(comparison.getByText(/poniedziałki 18:00/)).toBeTruthy();
   expect(comparison.getByText('Wiadomość w tej rozmowie')).toBeTruthy();
   expect(comparison.getByText('Uczenie się')).toBeTruthy();
   expect(comparison.queryByText('Cel')).toBeNull();
@@ -101,7 +101,14 @@ it('compares only changed fields using Polish labels, saves once, and keeps the 
   expect(screen.getByText(/Zaktualizowano automat/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Otwórz widok Automaty' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Zapisz zmiany' })).toBeNull();
-  expect(comparison.getByText(/Codziennie 07:00/)).toBeTruthy();
+  expect(comparison.getByText(/Codziennie 7:00/)).toBeTruthy();
+});
+
+it('shows several times a day on the automation consent card', () => {
+  render(<CardActions.Provider value={{ respond: vi.fn(), running: false }}>
+    <AutomationCard {...({ toolCallId: 'message:many', args: { name: 'Zapisy', goal: 'Sprawdzaj zapisy.', trigger: { kind: 'daily', times: ['7:00', '19:00'] }, actions: [{ kind: 'message' }], learn: false } } as any)} />
+  </CardActions.Provider>);
+  expect(screen.getByText('Codziennie 7:00 i 19:00')).toBeTruthy();
 });
 
 it('shows recorded before/after changes in Cel i akcje', async () => {

@@ -14,7 +14,7 @@ import type { AutomationPlan } from '../src/automation-contract';
 
 const NOW = Date.parse('2026-10-30T12:00:00+01:00');
 const DUE = Date.parse('2026-10-31T07:00:00+01:00');
-const plan: AutomationPlan = { name: 'Probe', goal: 'Read', trigger: { kind: 'daily', time: '07:00' }, actions: [{ kind: 'message' }], learn: false };
+const plan: AutomationPlan = { name: 'Probe', goal: 'Read', trigger: { kind: 'daily', times: ['7:00'] }, actions: [{ kind: 'message' }], learn: false };
 const quiet = { trace() {}, turn() {}, async drain() {} };
 const sources = createScenarioSources(join(process.cwd(), 'scenarios/standard.json'));
 let dir: string;

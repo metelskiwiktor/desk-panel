@@ -571,7 +571,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     schema: schema({
       name: { type: 'string', description: 'Krótka nazwa automatu po polsku' },
       goal: { type: 'string', description: 'Polecenie użytkownika słowo w słowie: co automat ma sprawdzać i robić' },
-      trigger: { type: 'object', description: 'once {at: epoch ms}; daily {time:"HH:MM", from?, until?}; weekly {weekday:1–7, time, from?, until?}; cezar {taskId}; pr {url}' },
+      trigger: { type: 'object', description: 'once {at: epoch ms}; daily {times:["7:00","19:00"], from?, until?}; weekly {weekday:1–7, times, from?, until?}; cezar {taskId}; pr {url}. Jedna pora to times z jednym wpisem; „rano i wieczorem” to jeden automat z dwiema porami (1–6, unikalne, zapis sortuje).' },
       doneWhen: { type: 'string', description: 'Warunek celu jednym zdaniem; przy nim outcome done kończy automat' },
       actions: { type: 'array', description: 'Akcje do jednorazowego zatwierdzenia: message, calendarEvent {reminderMinutes?:60, allDay?, domain?}, smartAction {domain?}, notify {domain?}', items: { type: 'object', properties: { kind: { type: 'string', enum: ['message', 'calendarEvent', 'smartAction', 'notify'] }, domain: { type: 'string', description: 'Własna domena tej akcji, nie sufiks publiczny. Bez domain akcja nie przyjmuje url.' }, reminderMinutes: { type: 'integer' }, allDay: { type: 'boolean' } }, required: ['kind'] } },
       learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },

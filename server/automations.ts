@@ -9,7 +9,7 @@ import type { CezarSnapshot, FinishedTask } from '../src/cezar-contract';
 import type { CockpitPrView } from '../src/cockpit-contract';
 import {
   CYCLE_DEFAULT_DAYS, MAX_ACTIVE_AUTOMATIONS, MAX_NOTEBOOK, MAX_RUNS, RUN_REPORT_TIMEOUT_MS,
-  automationActionSchema, automationActSchema, automationActionResultSchema, type AutomationAct, type AutomationActionResult, automationChangeSchema, automationDiff, automationPlanValues, automationPlanSchema, isCyclic, isOneShot, parseClock, scheduleLabel, type Automation, type AutomationPlan, type AutomationReport,
+  automationActionSchema, automationActSchema, automationActionResultSchema, type AutomationAct, type AutomationActionResult, automationChangeSchema, automationDiff, automationPlanValues, automationPlanSchema, isCyclic, isOneShot, parseClock, scheduleLabel, triggerSchema, type Automation, type AutomationPlan, type AutomationReport,
   type AutomationRun, type AutomationStatus, type AutomationTrigger, type AutomationUpdate, type RunOutcome,
 } from '../src/automation-contract';
 
@@ -34,13 +34,7 @@ const recordSchema = z.object({
   id: z.string().regex(/^a-[0-9a-f]{12}$/),
   name: z.string().min(1).max(120),
   goal: z.string().min(1).max(4000),
-  trigger: z.union([
-    z.object({ kind: z.literal('once'), at: z.number() }).passthrough(),
-    z.object({ kind: z.literal('daily'), time: z.string(), from: z.string().optional(), until: z.string().optional() }).passthrough(),
-    z.object({ kind: z.literal('weekly'), weekday: z.number(), time: z.string(), from: z.string().optional(), until: z.string().optional() }).passthrough(),
-    z.object({ kind: z.literal('cezar'), taskId: z.string() }).passthrough(),
-    z.object({ kind: z.literal('pr'), url: z.string() }).passthrough(),
-  ]),
+  trigger: triggerSchema,
   status: z.enum(['active', 'paused', 'done', 'expired', 'cancelled']).default('active'),
   doneWhen: z.string().max(500).optional(),
   notebook: z.string().max(MAX_NOTEBOOK).default(''),
@@ -68,6 +62,8 @@ const pendingSchema = z.object({
   chatId: z.string().optional(),
   turnId: z.string().optional(),
   hermesRunId: z.string().optional(),
+  /** The slot a cyclic run was for, so its next run is computed from it, not from when the run finished. */
+  scheduledAt: z.number().optional(),
   startedAt: z.number().default(0),
   deadline: z.number().optional(),
   sent: z.boolean().default(false),
@@ -163,7 +159,6 @@ export function resolveObserverTime(input: string, now: number, zone = ZONE): nu
 /** The next local occurrence of a daily/weekly trigger strictly after `after`; null when `until` has passed. */
 export function nextOccurrence(trigger: AutomationTrigger, after: number, zone = ZONE): number | null {
   if (trigger.kind !== 'daily' && trigger.kind !== 'weekly') return null;
-  const { hour, minute } = parseClock(trigger.time);
   const until = trigger.until ? DateTime.fromISO(trigger.until, { zone }).endOf('day') : null;
   let base = DateTime.fromMillis(after, { zone }).startOf('day');
   if (trigger.from) {
@@ -172,19 +167,23 @@ export function nextOccurrence(trigger: AutomationTrigger, after: number, zone =
   }
   // Set the clock after moving the date, never before: a spring DST gap normalizes 02:30 to 03:30 and that would leak
   // into every following day. A missing local hour on its day lands on the nearest existing one, the next day returns.
-  const at = (day: DateTime) => day.set({ hour, minute, second: 0, millisecond: 0 });
-  let candidate: DateTime;
+  // Every time of the day is tried and the earliest still ahead wins, so a normalized gap never hides an earlier time.
+  const laterOn = (day: DateTime) => trigger.times.map(time => {
+    const { hour, minute } = parseClock(time);
+    return day.set({ hour, minute, second: 0, millisecond: 0 }).toMillis();
+  }).filter(at => at > after).sort((a, b) => a - b);
+  let day: DateTime;
   if (trigger.kind === 'daily') {
-    candidate = at(base);
-    if (candidate.toMillis() <= after) candidate = at(base.plus({ days: 1 }));
+    day = base;
   } else {
-    const current = base.weekday;
-    const diff = (trigger.weekday - current + 7) % 7;
-    candidate = at(base.plus({ days: diff }));
-    if (candidate.toMillis() <= after) candidate = at(base.plus({ days: diff + 7 }));
+    const diff = (trigger.weekday - base.weekday + 7) % 7;
+    day = base.plus({ days: diff });
   }
-  if (until && until.isValid && candidate > until) return null;
-  return candidate.toMillis();
+  let candidate = laterOn(day)[0];
+  if (candidate === undefined) candidate = laterOn(day.plus({ days: trigger.kind === 'daily' ? 1 : 7 }))[0];
+  if (candidate === undefined) return null;
+  if (until && until.isValid && candidate > until.toMillis()) return null;
+  return candidate;
 }
 
 /** When a trigger runs next, if the model can say (event triggers have no clock). */
@@ -298,6 +297,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     try { renameSync(value, target); writeLog(`plik ${value} był nieczytelny; zachowano go jako ${target}.`); }
     catch { unsafeFile = true; writeLog(`nie udało się odsunąć nieczytelnego pliku ${value}; zapis jest zablokowany.`); }
   };
+  let migratedThisLoad = false;
   const load = (): Store => {
     if (existsSync(blockedFile)) { unsafeFile = true; loadError = readFileSync(blockedFile, 'utf8'); return empty(); }
     if (existsSync(file)) {
@@ -313,6 +313,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         const old = oldStoreSchema.parse(JSON.parse(readFileSync(observersFile, 'utf8')));
         const store: Store = { version: 1, migratedFrom: 'observers.json', automations: old.observers.map(o => migratedAutomation(o, now())), pending: [], outbox: [] };
         for (const o of old.observers) if (o.status === 'pending' && o.delivery) store.outbox.push({ chatId: o.chatId, text: o.delivery.text, reason: o.delivery.reason, source: 'observer' });
+        migratedThisLoad = true;
         writeLog(`zmigrowano ${old.observers.length} obserwatorów z observers.json.`);
         return store;
       } catch {
@@ -324,9 +325,12 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     return { version: 1, automations: [], pending: [], outbox: [] };
   };
   let store = load();
-  if (!unsafeFile && (store.migratedFrom || store.automations.length || existsSync(file))) {
+  // Only a migration writes on load. Parsing normalizes a legacy `time` in memory; the file keeps its old shape until
+  // an actual change saves it, so reading never rewrites live records (a store that merely records `migratedFrom` is not
+  // a migration happening now).
+  if (!unsafeFile && migratedThisLoad) {
     save();
-    if (store.migratedFrom && observersFile && existsSync(observersFile)) renameSync(observersFile, `${observersFile}.migrated`);
+    if (observersFile && existsSync(observersFile)) renameSync(observersFile, `${observersFile}.migrated`);
   }
 
   const active = () => store.automations.filter(a => a.status === 'active');
@@ -552,12 +556,13 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
   }
 
   /** Starts a run: a fresh Hermes conversation for cyclic automations, the automation's own chat for one-shot ones. */
-  async function startRun(a: Stored, detail: string, reason: string): Promise<void> {
+  async function startRun(a: Stored, detail: string, reason: string, scheduledAt?: number): Promise<void> {
     if (!enabled || a.status !== 'active') return;
     if (pendingOf(a.id).length) return;
     const cyclic = isCyclic(a.trigger as AutomationTrigger);
     const pending: Pending = {
       id: `run-${randomBytes(6).toString('hex')}`, automationId: a.id, token: randomBytes(16).toString('hex'), chatId: cyclic ? randomUUID() : a.chatId, turnId: randomUUID(),
+      ...(scheduledAt !== undefined ? { scheduledAt } : {}),
       startedAt: 0, sent: false, settings: structuredClone(a), detail, reason,
     };
     // Durable before any send: a crash after the conversation was created must not lose this occurrence.
@@ -654,8 +659,14 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     if (outcome === 'done' || (isOneShot(settings.trigger as AutomationTrigger) && JSON.stringify(settings.trigger) === JSON.stringify(a.trigger))) {
       a.status = 'done';
       delete a.nextRunAt;
+    } else if (isCyclic(a.trigger as AutomationTrigger) && JSON.stringify(settings.trigger) !== JSON.stringify(a.trigger) && a.nextRunAt != null) {
+      // The schedule was changed while this run ran: the change already set the next run, and the old slot must not
+      // backdate it (a replacement approved at 7:05 with 7:03 and 7:10 runs at 7:10, not again right away).
     } else if (isCyclic(a.trigger as AutomationTrigger)) {
-      const next = nextOccurrence(a.trigger as AutomationTrigger, at, zone);
+      // Next from the slot this run was for, never from the finish time: a slot that passed while the run ran still
+      // runs once. Clamped to the run's start so time the panel spent off before the run began stays one catch-up.
+      const from = Math.max(pending.scheduledAt ?? at, pending.startedAt || 0);
+      const next = nextOccurrence(a.trigger as AutomationTrigger, from, zone);
       if (next == null) { a.status = 'expired'; delete a.nextRunAt; }
       else a.nextRunAt = next;
     }
@@ -723,19 +734,22 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         if (a.nextRunAt === undefined) { a.status = 'expired'; save(); continue; }
         if (at < a.nextRunAt) continue;
         // Run the occurrence that is due first; only the run's own report decides that there is no next one.
+        const scheduledAt = a.nextRunAt;
         const next = nextOccurrence(a.trigger, at, zone);
         if (next == null) delete a.nextRunAt; else a.nextRunAt = next;
         save();
         started = true;
-        await startRun(a, `Minął zaplanowany czas: ${local(at)} (${zone}).`, `automat cykliczny: ${a.name}`);
+        await startRun(a, `Minął zaplanowany czas: ${local(at)} (${zone}).`, `automat cykliczny: ${a.name}`, scheduledAt);
       }
     }
     // PR automations ride the shared cached reader: never a fresh `gh` per automation.
     for (const a of [...active()]) {
-      if (a.trigger.kind !== 'pr' || !readPr || pendingOf(a.id).length) continue;
+      const trigger = a.trigger;
+      if (trigger.kind !== 'pr' || !readPr || pendingOf(a.id).length) continue;
+      const url = trigger.url;
       let pr: CockpitPrView;
-      try { pr = await readPr(a.trigger.url); }
-      catch (error) { writeLog(`nie udało się odczytać PR ${a.trigger.url}: ${error instanceof Error ? error.message : String(error)}`); continue; }
+      try { pr = await readPr(url); }
+      catch (error) { writeLog(`nie udało się odczytać PR ${url}: ${error instanceof Error ? error.message : String(error)}`); continue; }
       const current = find(a.id);
       if (!current || current.status !== 'active') continue;
       if (pr.state === 'UNKNOWN') continue;
@@ -745,7 +759,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       current.snapshot = { ...current.snapshot, signature };
       const checks = pr.checks.length ? pr.checks.map(c => `${c.name}: ${c.state}`).join(', ') : pr.checksError ?? 'brak checków';
       save();
-      await startRun(current, `PR ${current.trigger.url}: stan ${pr.state}${pr.state === 'MERGED' ? ' (scalony)' : pr.state === 'CLOSED' ? ' (zamknięty bez scalenia)' : ''}, CI: ${checks}.`, `obserwator PR: ${current.trigger.url}`);
+      await startRun(current, `PR ${url}: stan ${pr.state}${pr.state === 'MERGED' ? ' (scalony)' : pr.state === 'CLOSED' ? ' (zamknięty bez scalenia)' : ''}, CI: ${checks}.`, `obserwator PR: ${url}`);
     }
     await drainQueue();
     await flushOutbox();
@@ -918,27 +932,29 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     async active(tasks) {
       if (!enabled) return;
       for (const a of [...active()]) {
-        if (a.trigger.kind !== 'cezar' || pendingOf(a.id).length) continue;
-        const task = tasks.find(t => t.id === a.trigger.taskId);
+        const trigger = a.trigger;
+        if (trigger.kind !== 'cezar' || pendingOf(a.id).length) continue;
+        const task = tasks.find(t => t.id === trigger.taskId);
         if (!task) continue;
         const seen = String(a.snapshot.state ?? '');
         const state = cezarStateOf(task as unknown as Record<string, any>);
         if (seen !== state) { a.snapshot = { ...a.snapshot, state }; save(); }
         if (state !== 'needs-input' || seen === 'needs-input') continue;
-        await startRun(a, `Task Cezara ${a.trigger.taskId} czeka na odpowiedź użytkownika.`, `obserwator taska Cezara: ${a.trigger.taskId}`);
+        await startRun(a, `Task Cezara ${trigger.taskId} czeka na odpowiedź użytkownika.`, `obserwator taska Cezara: ${trigger.taskId}`);
       }
     },
 
     async finished(tasks) {
       if (!enabled) return;
       for (const a of [...active()]) {
-        if (a.trigger.kind !== 'cezar' || pendingOf(a.id).length) continue;
-        const task = tasks.find(t => t.id === a.trigger.taskId);
+        const trigger = a.trigger;
+        if (trigger.kind !== 'cezar' || pendingOf(a.id).length) continue;
+        const task = tasks.find(t => t.id === trigger.taskId);
         if (!task) continue;
         const state = String(task.status ?? '').toLowerCase();
         if (!FINISHED.has(state) || a.snapshot.state === 'done') continue;
         a.snapshot = { ...a.snapshot, state: 'done' }; save();
-        await startRun(a, `Task Cezara ${a.trigger.taskId} (${task.title ?? a.trigger.taskId}) jest zakończony${task.pullRequestUrl ? `; PR: ${task.pullRequestUrl}` : ''}.`, `obserwator taska Cezara: ${a.trigger.taskId}`);
+        await startRun(a, `Task Cezara ${trigger.taskId} (${task.title ?? trigger.taskId}) jest zakończony${task.pullRequestUrl ? `; PR: ${task.pullRequestUrl}` : ''}.`, `obserwator taska Cezara: ${trigger.taskId}`);
       }
     },
 
