@@ -669,7 +669,7 @@ describe('attachments in the composer', () => {
     const user = await open();
     add(new File(['png'], 'zrzut.png', { type: 'image/png' }), new File(['# Plan'], 'notatki.md', { type: 'text/markdown' }));
     expect(await screen.findByAltText('zrzut.png')).toBeTruthy();
-    expect(screen.getByText('notatki.md')).toBeTruthy();
+    expect(await screen.findByText('notatki.md')).toBeTruthy();
     expect(screen.getByText('MD · 6 B')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Usuń załącznik: zrzut.png' }));
     expect(screen.queryByAltText('zrzut.png')).toBeNull();
@@ -696,6 +696,18 @@ describe('attachments in the composer', () => {
     add(...Array.from({ length: 5 }, (_, i) => new File(['x'], `plik${i}.txt`, { type: 'text/plain' })));
     await waitFor(() => expect(screen.getAllByText(/^plik\d\.txt$/)).toHaveLength(4));
     expect(screen.getByText('Najwyżej 4 załączniki w jednej wiadomości.')).toBeTruthy();
+    expect(calls.some(c => c.method === 'POST')).toBe(false);
+  });
+
+  it('shows the total attachment limit and refuses a batch over 6 MB without sending', async () => {
+    const calls = mockServer();
+    await open();
+    add(new File([new Uint8Array(4 * 1024 * 1024)], 'one.png', { type: 'image/png' }),
+      new File([new Uint8Array(3 * 1024 * 1024)], 'two.png', { type: 'image/png' }));
+    await screen.findByAltText('one.png');
+    expect(await screen.findByText(/Załączniki mogą mieć łącznie najwyżej 6 MB/)).toBeTruthy();
+    expect(screen.getByText(/Limit: 4 pliki, 5 MB na plik, 6 MB łącznie/)).toBeTruthy();
+    expect(screen.queryByAltText('two.png')).toBeNull();
     expect(calls.some(c => c.method === 'POST')).toBe(false);
   });
 

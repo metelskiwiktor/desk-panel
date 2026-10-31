@@ -11,9 +11,9 @@ import { automationPlanSchema } from '../src/automation-contract';
 import { stableAppointmentCardId } from './appointment-cards';
 import { cardRefusal, COCKPIT_TOOLS } from '../src/cockpit-contract';
 import { ChatError, type ChatService } from './agent-chat';
-import { readChatFile, removeChatFiles, saveChatFiles } from './chat-files';
+import { readChatFile, removeChatFiles, removeTurnFiles, saveChatFiles } from './chat-files';
 import { createChatLog, type ChatLog, type TurnTool } from './chat-log';
-import { HermesError, HERMES_ID, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type HermesRunInput, type RunStatus } from './hermes-api';
+import { hermesRunBody, HermesError, HERMES_ID, UNFINISHED, type HermesClient, type HermesEvent, type HistoryMessage, type HermesRunInput, type RunStatus } from './hermes-api';
 import {
   automationPrompt, isChatImage, titleFrom, withContext,
   type ChatAutomation, type ChatAutomationInput, type ChatDetail, type ChatEvent, type ChatFileRef, type ChatFileUpload, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ContextItem, type MessageStatus,
@@ -351,7 +351,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
    * The run body from the request frozen before dispatch. Screenshots are read back from this conversation's own files
    * (a data URL per image), so the mapping never holds the image bytes.
    */
-  const startTurn = async (record: Stored, turn: Turn): Promise<{ run: string; session?: string }> => {
+  const prepareTurn = async (record: Stored, turn: Turn): Promise<HermesRunInput> => {
     if (!turn.request) throw new ChatError(500, 'Tura nie ma zapisanego żądania.');
     const images: string[] = [];
     for (const file of turn.files ?? []) {
@@ -361,8 +361,10 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       images.push(`data:${file.type};base64,${bytes.toString('base64')}`);
     }
     const request: HermesRunInput = images.length ? { ...turn.request, images } : turn.request;
-    return client.startRun(request);
+    hermesRunBody(request);
+    return request;
   };
+  const startTurn = async (record: Stored, turn: Turn) => client.startRun(await prepareTurn(record, turn));
   // Only session/run ids survive a failed deletion; no temporary conversation content is kept here.
   const cleanupDir = path.join(dir, 'hermes-session-cleanup');
   const deleting = new Set<string>();
@@ -810,22 +812,30 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
       return;
     }
     if (lives.has(id)) throw new ChatError(409, 'Agent jeszcze odpowiada.');
+    if (record.turns.some(t => !t.run && t.request)) throw new ChatError(409, 'Poprzednia tura czeka na ponowienie.');
     const at = now();
     const uploads = 'files' in input ? input.files ?? [] : [];
-    const savedFiles = uploads.length ? await saveChatFiles(dir, id, uploads) : [];
     const context = input.context ?? [];
-    const turn: Turn = { id: nonce ?? randomUUID(), agent: randomUUID(), at, text: input.text, ...(savedFiles.length ? { files: savedFiles } : {}), ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
+    const turn: Turn = { id: nonce ?? randomUUID(), agent: randomUUID(), at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
     const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
     const first = !record.turns.some(t => t.run);
     const prompt = withTextFiles(withContext(automation ? automationPrompt(input.text, automation) : input.text, context), uploads);
     let started: { run: string; session?: string };
     turn.request = { input: `${record.temporary ? '[Rozmowa tymczasowa] Nie zapisuj niczego z tej rozmowy do pamięci długotrwałej, profilu użytkownika ani notatek.\n\n' : ''}${first ? `${intro}\n\n${prompt}` : prompt}`, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
+    let persisted = false;
     try {
-      if (nonce) { record.turns.push(turn); await save(record, true); }
-      started = await startTurn(record, turn);
+      turn.files = await saveChatFiles(dir, id, uploads);
+      const request = await prepareTurn(record, turn);
+      if (nonce) { record.turns.push(turn); await save(record, true); persisted = true; }
+      started = await client.startRun(request);
     }
     catch (error) {
       lives.delete(id);
+      if (!persisted) {
+        record.turns = record.turns.filter(t => t !== turn);
+        await removeTurnFiles(dir, id, turn.files ?? []);
+      }
+      if (error instanceof HermesError && error.status === 413) throw new ChatError(413, error.message);
       log.trace(id, { turn: record.turns.length + 1, src: 'panel', kind: 'start-failed', error: error instanceof Error ? error.message : null });
       if (error instanceof ChatError) throw error;
       throw unavailable(error);
@@ -861,13 +871,17 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     },
     async create(input) {
       await load();
+      if (input.nonce) {
+        const pending = [...records.values()].find(r => r.turns.some(t => t.nonce === input.nonce));
+        if (pending) { await deliver(pending.id, input); return { id: pending.id }; }
+      }
       const at = now();
       const id = randomUUID();
       // The session is named after the chat, so a run that reached Hermes before the panel saved the mapping is still found.
       const record: Stored = { schema: 1, id, engine: 'hermes', title: titleFrom(input.text), temporary: input.temporary === true, createdAt: at, updatedAt: at, session: `desk-panel-${id}`, turns: [] };
       records.set(id, record);
       try { await service.send(id, input); }
-      catch (error) { records.delete(id); await removeChatFiles(dir, id); throw error; }
+      catch (error) { if (!record.turns.length) { records.delete(id); await removeChatFiles(dir, id); } throw error; }
       return { id };
     },
     async send(id, input) { await deliver(id, input); },

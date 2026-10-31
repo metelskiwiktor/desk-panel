@@ -815,6 +815,98 @@ describe('attachments', () => {
   const image = { name: 'zrzut.png', type: 'image/png' as const, size: 68, data: PNG };
   const notes = { name: 'notatki.md', type: 'text/markdown' as const, size: 15, data: NOTES };
 
+  it('reserves the conversation before asynchronous attachment writes', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'start' });
+    await finishedChat(service, id);
+    const before = runs().length;
+    const results = await Promise.allSettled([
+      service.send(id, { text: 'one', files: [image] }),
+      service.send(id, { text: 'two', files: [image] }),
+    ]);
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find(r => r.status === 'rejected')).toMatchObject({ reason: { status: 409 } });
+    await finishedChat(service, id);
+    expect(runs()).toHaveLength(before + 1);
+    expect(await readdir(path.join(dir, 'chat-files', id))).toHaveLength(1);
+  });
+
+  it('keeps pending creation files with the nonce across a restart', async () => {
+    const nonce = '6f1c2a3b-1111-4222-8333-944455566679';
+    const service = hermes();
+    mock.setDown(true);
+    await expect(service.create({ text: 'retry', nonce, files: [image] })).rejects.toMatchObject({ status: 503 });
+    await service.drain(); service.close();
+    const [mapping] = await readdir(path.join(dir, 'hermes-chats'));
+    const id = mapping.replace('.json', '');
+    expect(await readdir(path.join(dir, 'chat-files', id))).toHaveLength(1);
+    const offline = hermes();
+    await expect(offline.send(id, { text: 'different' })).rejects.toMatchObject({ status: 409 });
+    offline.close();
+    mock.setDown(false);
+    const restarted = hermes();
+    const created = await restarted.create({ text: 'retry', nonce, files: [image] });
+    expect(created.id).toBe(id);
+    await finishedChat(restarted, id);
+    expect(mock.runs.size).toBe(1);
+    expect((await restarted.get(id)).items.filter(m => m.role === 'user')).toHaveLength(1);
+  });
+
+  it('rejects the serialized Hermes request at 9 MB, including escaped text', async () => {
+    const client = createHermesClient({ url: mock.url, key: KEY });
+    await expect(client.startRun({ input: '\u0000'.repeat(1_500_000), session: 's' })).rejects.toMatchObject({ status: 413 });
+    expect(runs()).toHaveLength(0);
+    const service = hermes();
+    const bytes = Buffer.alloc(5 * 1024 * 1024); Buffer.from(PNG, 'base64').copy(bytes);
+    const large = { ...image, size: bytes.length, data: bytes.toString('base64') };
+    await expect(service.create({ text: 'large', files: [large, large] })).rejects.toMatchObject({ status: 413 });
+    expect(runs()).toHaveLength(0);
+  });
+
+  it('rejects forged image signatures, MIME mismatches, SVG and invalid UTF-8', async () => {
+    const service = hermes();
+    for (const file of [
+      { ...image, data: Buffer.from('<svg><script>alert(1)</script></svg>').toString('base64') },
+      { ...image, type: 'image/jpeg' as const },
+      { ...notes, data: Buffer.from([0xc3, 0x28]).toString('base64') },
+      { ...notes, data: Buffer.from('<svg/>').toString('base64') },
+      { ...notes, data: Buffer.from('<s:svg xmlns:s="http://www.w3.org/2000/svg"/>').toString('base64') },
+    ]) await expect(service.create({ text: 'invalid', files: [file] })).rejects.toMatchObject({ status: 400 });
+    expect(runs()).toHaveLength(0);
+  });
+
+  it('accepts all four image signatures only with matching MIME types', async () => {
+    const service = hermes();
+    const formats = [
+      { type: 'image/png' as const, bytes: Buffer.from(PNG, 'base64') },
+      { type: 'image/jpeg' as const, bytes: Buffer.from('ffd8ffe000104a4649460001', 'hex') },
+      { type: 'image/gif' as const, bytes: Buffer.from('GIF89a') },
+      { type: 'image/gif' as const, bytes: Buffer.from('GIF87a') },
+      { type: 'image/webp' as const, bytes: Buffer.from('RIFF1234WEBP') },
+    ];
+    for (const { type, bytes } of formats) {
+      const upload = { name: 'image', type, size: bytes.length, data: bytes.toString('base64') };
+      const { id } = await service.create({ text: 'valid', files: [upload] });
+      await finishedChat(service, id);
+      for (const wrong of ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const) {
+        if (wrong !== type) await expect(service.create({ text: 'wrong', files: [{ ...upload, type: wrong }] })).rejects.toMatchObject({ status: 400 });
+      }
+    }
+  });
+
+  it('removes only the files of a rolled back turn without a nonce', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'start', files: [notes] });
+    await finishedChat(service, id);
+    const before = await readdir(path.join(dir, 'chat-files', id));
+    mock.setDown(true);
+    await expect(service.send(id, { text: 'fail', files: [image] })).rejects.toMatchObject({ status: 503 });
+    expect(await readdir(path.join(dir, 'chat-files', id))).toEqual(before);
+    mock.setDown(false);
+    await service.send(id, { text: 'works', files: [image] });
+    await finishedChat(service, id);
+  });
+
   it('sends images as image_url parts and text files in the text, keeping only references', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'Co widzisz?', files: [image, notes] });

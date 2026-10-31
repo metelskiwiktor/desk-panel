@@ -1,3 +1,5 @@
+import { CHAT_TOTAL_LIMIT_MESSAGE, MAX_HERMES_REQUEST_BYTES } from '../src/chat-contract';
+
 /**
  * The panel's only door to Hermes Agent: its long-running API server (loopback HTTP, bearer key), never the CLI.
  * Everything Hermes-specific about the wire (paths, field and event names) is in this file, so a change of the API is a
@@ -241,6 +243,14 @@ export function historyOf(body: unknown): HistoryMessage[] {
   return out;
 }
 
+/** Validate the complete wire body, including JSON escaping, preamble, context and image data URLs. */
+export function hermesRunBody({ input, session, instructions, images }: HermesRunInput) {
+  const parts: HermesInputPart[] = [{ type: 'text', text: input }, ...(images ?? []).map(url => ({ type: 'image_url' as const, image_url: { url } }))];
+  const body = { input: images?.length ? [{ role: 'user', content: parts }] : input, session_id: session, ...(instructions ? { instructions } : {}) };
+  if (Buffer.byteLength(JSON.stringify(body), 'utf8') >= MAX_HERMES_REQUEST_BYTES) throw new HermesError(413, CHAT_TOTAL_LIMIT_MESSAGE);
+  return body;
+}
+
 export function createHermesClient(options: HermesClientOptions = {}): HermesClient {
   const base = hermesUrl(options.url);
   const timeoutMs = options.timeoutMs ?? 15_000;
@@ -275,8 +285,8 @@ export function createHermesClient(options: HermesClientOptions = {}): HermesCli
     url: base,
     async health() { await request(HERMES_ROUTES.health, { timeoutMs: 3000 }); },
     async startRun({ input, session, instructions, idempotencyKey, images }) {
-      const parts: HermesInputPart[] = [{ type: 'text', text: input }, ...(images ?? []).map(url => ({ type: 'image_url' as const, image_url: { url } }))];
-      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', idempotencyKey, body: { input: images?.length ? [{ role: 'user', content: parts }] : input, session_id: session, ...(instructions ? { instructions } : {}) } }));
+      const payload = hermesRunBody({ input, session, instructions, images });
+      const body = rec(await request(HERMES_ROUTES.runs, { method: 'POST', idempotencyKey, body: payload }));
       const run = safeId(first(body, 'run_id', 'id') ?? rec(body.run).id);
       if (!run) throw new HermesError(502, 'Hermes nie podał identyfikatora przebiegu.');
       return { run, session: safeId(first(body, 'session_id')) ?? undefined };

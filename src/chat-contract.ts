@@ -205,6 +205,9 @@ export const MAX_MESSAGE = 50_000;
 export const chatFileTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json'] as const;
 export type ChatFileType = typeof chatFileTypes[number];
 export const MAX_CHAT_FILES = 4;
+export const MAX_CHAT_TOTAL_BYTES = 6 * 1024 * 1024;
+export const MAX_HERMES_REQUEST_BYTES = 9_000_000;
+export const CHAT_TOTAL_LIMIT_MESSAGE = 'Załączniki mogą mieć łącznie najwyżej 6 MB. Cała wiadomość musi zmieścić się poniżej 9 MB po przygotowaniu dla Hermesa.';
 export const MAX_CHAT_FILE_BYTES = 5 * 1024 * 1024;
 /** 5 MB as base64, with the JSON around it; the route's body limit is sized for four of these. */
 export const MAX_CHAT_FILE_DATA = Math.ceil(MAX_CHAT_FILE_BYTES / 3) * 4;

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Thread as AuiThread, type ThreadComponents } from '@/components/thread.aui';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { CHAT_SKILLS, MAX_CHAT_FILES, MAX_CONTEXT, automationLabel, isChatImage, skillItem, type ChatAutomation, type ChatFileRef, type ChatFileUpload, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
+import { CHAT_SKILLS, MAX_CHAT_FILES, MAX_CHAT_TOTAL_BYTES, MAX_CONTEXT, automationLabel, isChatImage, skillItem, type ChatAutomation, type ChatFileRef, type ChatFileUpload, type ChatSkill, type ContextItem, type ContextKind } from '../chat-contract';
 import { sameContext } from '../chat-context';
 import { CHAT_DRAFT_EVENT, clearChatDraft, getChatDraft, setChatDraftText } from '../chat-draft';
 import { attachmentProblem, chatFileUrl, fileLabel, fileSize, mimeOf, readDraft, UNSUPPORTED_PDF, unsupportedType, type DraftFile } from './attachments';
@@ -211,6 +211,7 @@ function ComposerTop() {
   if (!context.length && !files.length && !fileError) return null;
   return <div className="tw:flex tw:flex-col tw:gap-2 tw:px-1">
     {files.length > 0 && <DraftAttachments files={files} remove={removeFile} />}
+    {files.length > 0 && <p className="tw:m-0 tw:text-xs tw:text-muted-foreground">Limit: {MAX_CHAT_FILES} pliki, 5 MB na plik, {MAX_CHAT_TOTAL_BYTES / (1024 * 1024)} MB łącznie.</p>}
     {fileError && <p role="alert" className="tw:m-0 tw:rounded-lg tw:border tw:border-ck-red/40 tw:bg-ck-red/10 tw:px-2.5 tw:py-1.5 tw:text-[12px] tw:text-[#ffd3d4]">{fileError}</p>}
     {context.length > 0 && <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5" aria-label="Wskazane elementy">
       {context.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} remove={() => setContext(list => list.filter(x => !sameContext(x, item)))} />)}
@@ -226,7 +227,7 @@ function ComposerExtra() {
   const fileInput = useRef<HTMLInputElement>(null);
   return <>
     <input ref={fileInput} type="file" multiple hidden aria-hidden="true" tabIndex={-1} accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json" onChange={event => { if (event.target.files?.length) addFiles(event.target.files); event.target.value = ''; }} />
-    <button type="button" className="tw:grid tw:size-9 tw:place-items-center tw:rounded-xl tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" aria-label="Dodaj plik" title="Dodaj plik (albo wklej zrzut, albo upuść plik na czat)" onClick={() => fileInput.current?.click()}><Paperclip size={17} aria-hidden="true" /></button>
+    <button type="button" className="tw:grid tw:size-9 tw:place-items-center tw:rounded-xl tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" aria-label="Dodaj plik" title="Dodaj plik (albo wklej zrzut, albo upuść plik na czat). Limit: 4 pliki, 5 MB na plik, 6 MB łącznie." onClick={() => fileInput.current?.click()}><Paperclip size={17} aria-hidden="true" /></button>
     {picking
       ? <button type="button" className="tw:min-h-9 tw:rounded-xl tw:bg-ck-cal tw:px-4 tw:text-sm tw:font-semibold tw:text-ck-bg tw:hover:bg-[#9cc0ff]" onClick={() => setPicking(false)}>Gotowe</button>
       : <button type="button" className="tw:inline-flex tw:min-h-9 tw:items-center tw:gap-2 tw:rounded-xl tw:px-3 tw:text-sm tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-foreground" onClick={() => setPicking(true)}><Crosshair size={16} aria-hidden="true" />Wskaż element</button>}
@@ -425,18 +426,23 @@ export function Thread(props: ThreadProps) {
     const list = Array.from(incoming);
     if (!list.length) return;
     void (async () => {
-      const drafts: DraftFile[] = [];
       let problem = '';
       for (const file of list) {
         const type = mimeOf(file);
         if (!type) { problem ||= unsupportedType(file.name); continue; }
         if (type === 'application/pdf') { problem ||= UNSUPPORTED_PDF; continue; }
-        const bad = attachmentProblem(file.name, file.size, filesRef.current.length + drafts.length);
+        const check = () => attachmentProblem(file.name, file.size, filesRef.current.length, filesRef.current.reduce((sum, f) => sum + f.size, 0));
+        const bad = check();
         if (bad) { problem ||= bad; continue; }
-        try { drafts.push(await readDraft(file, type)); }
+        try {
+          const draft = await readDraft(file, type);
+          const changed = check(); // Another paste/drop may have completed while FileReader was working.
+          if (changed) { problem ||= changed; continue; }
+          filesRef.current = [...filesRef.current, draft];
+          setFiles(filesRef.current);
+        }
         catch { problem ||= `Nie udało się odczytać pliku ${file.name}.`; }
       }
-      if (drafts.length) setFiles(current => [...current, ...drafts].slice(0, MAX_CHAT_FILES));
       setFileError(problem);
     })();
   }, []);

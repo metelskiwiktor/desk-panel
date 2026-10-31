@@ -1,4 +1,4 @@
-import { chatFileTypes, isChatImage, MAX_CHAT_FILES, MAX_CHAT_FILE_BYTES, type ChatFileType, type ChatFileUpload } from '../chat-contract';
+import { CHAT_TOTAL_LIMIT_MESSAGE, MAX_CHAT_TOTAL_BYTES, chatFileTypes, isChatImage, MAX_CHAT_FILES, MAX_CHAT_FILE_BYTES, type ChatFileType, type ChatFileUpload } from '../chat-contract';
 
 /** What the composer holds before sending: the base64 body, its preview (images) and a local key for React and removal. */
 export interface DraftFile extends ChatFileUpload { key: string; preview: string }
@@ -15,10 +15,11 @@ export function mimeOf(file: File): ChatFileType | null {
 }
 
 /** Why this file cannot be added, in Polish; null when it can. */
-export function attachmentProblem(name: string, size: number, count: number): string | null {
+export function attachmentProblem(name: string, size: number, count: number, totalBytes = 0): string | null {
   if (count >= MAX_CHAT_FILES) return `Najwyżej ${MAX_CHAT_FILES} załączniki w jednej wiadomości.`;
   if (size <= 0) return `Załącznik ${name} jest pusty.`;
   if (size > MAX_CHAT_FILE_BYTES) return `Załącznik ${name} jest większy niż 5 MB.`;
+  if (totalBytes + size > MAX_CHAT_TOTAL_BYTES) return CHAT_TOTAL_LIMIT_MESSAGE;
   return null;
 }
 

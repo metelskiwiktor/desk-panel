@@ -153,7 +153,16 @@ async function attachments({ page, screenshot }: FlowContext) {
   await page.getByText('PDF jeszcze nieobsługiwany.').waitFor();
   assert.equal(await page.getByText('umowa.pdf').count(), 0, 'PDF trafił do wiadomości.');
   await screenshot('pdf-refused');
-  return { image: true, file: true, pdfRefused: true };
+  await page.getByRole('button', { name: 'Usuń załącznik: notatki.md' }).click();
+  await picker.setInputFiles([
+    { name: 'large.png', mimeType: 'image/png', buffer: Buffer.alloc(4 * 1024 * 1024) },
+    { name: 'overflow.png', mimeType: 'image/png', buffer: Buffer.alloc(3 * 1024 * 1024) },
+  ]);
+  await page.getByText(/Załączniki mogą mieć łącznie najwyżej 6 MB/).waitFor();
+  await page.getByText('Limit: 4 pliki, 5 MB na plik, 6 MB łącznie.').waitFor();
+  assert.equal(await page.getByAltText('overflow.png').count(), 0, 'Przekroczony limit łączny załączników.');
+  await screenshot('total-limit');
+  return { image: true, file: true, pdfRefused: true, totalLimit: true };
 }
 
 async function keyboard(context: FlowContext) {
