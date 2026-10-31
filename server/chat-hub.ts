@@ -91,7 +91,9 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       return service.sendAutomation(id, input);
     },
     async createAutomation(input: ChatAutomationInput) {
-      const engine = readPreference();
+      // Automation runs are Wektor conversations, and the window talks only to Hermes: an old stored preference for agy
+      // (chat-settings.json from before Hermes) must not send them elsewhere — on 31.10.2026 it silently failed a run.
+      const engine: ChatEngine = 'hermes';
       const service = serviceOf(engine);
       if (!service.createAutomation) throw new ChatError(503, `Silnik ${engine} nie zaczyna rozmów automatyki.`);
       const created = await service.createAutomation(input);

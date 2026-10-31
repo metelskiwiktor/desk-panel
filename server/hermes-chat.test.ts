@@ -769,6 +769,9 @@ describe('both engines', () => {
     // The engine named in the request wins over the preference.
     const { id: explicit } = await chat.create({ text: 'Jednak Hermes', engine: 'hermes' });
     expect((await chat.get(explicit)).engine).toBe('hermes');
+    // An automation run is a Wektor conversation: it goes to Hermes even with agy stored as preferred.
+    const run = await chat.createAutomation!({ text: 'Run automatu', title: 'Automat · test', automation: { source: 'automation', reason: 'test' } });
+    expect((await chat.get(run.id)).engine).toBe('hermes');
   });
 
   it('each message goes to its chat’s own engine, never the other', async () => {

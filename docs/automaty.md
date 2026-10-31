@@ -42,7 +42,7 @@ Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: 
 - Ostatnie wystąpienie daily/weekly w dniu `until` jeszcze się wykonuje; dopiero raport `not-yet` wygasa automat. Po zmianie
   czasu (np. 02:30 w marcową noc) kolejne dni wracają do godziny z harmonogramu; godzina nieistniejąca danego dnia ląduje
   na najbliższej istniejącej.
-- Run cykliczny = nowa rozmowa Hermesa (świeży kontekst), tytuł `Automat · <name> · <data>`, oznaczona jako tura
+- Run cykliczny = nowa rozmowa Hermesa (zawsze Hermesa, niezależnie od zapisanego preferowanego silnika; świeży kontekst), tytuł `Automat · <name> · <data>`, oznaczona jako tura
   automatyki (`automation.source = 'automation'`). Treść: cel, warunek celu, notatnik, ostatnie 5 runów, zatwierdzone
   akcje i polecenie wykonania sprawdzenia oraz wywołania `panel_automation_report` na końcu.
 - Run jednorazowy (once/cezar/pr) wraca do rozmowy automatu (`chatId`), jak dawne obserwatory.

@@ -538,6 +538,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       save();
       writeLog(`run ${pending.id} automatu ${a.id} w nowej rozmowie ${created.id}.`);
     } catch (error) {
+      // Always say why: a run that silently never starts only shows up later as a 15-minute timeout.
+      writeLog(`run ${pending.id} automatu ${a.id}: nie udało się zacząć rozmowy runu (${error instanceof ChatError ? error.status : 'błąd'}): ${error instanceof Error ? error.message : String(error)}`);
       if (error instanceof ChatError && (error.status === 409 || error.status >= 500)) return;
       if (store.execution?.id === pending.id && !pending.hermesRunId) delete store.execution;
       finishRun(pending, 'error', `Nie udało się zacząć rozmowy runu: ${error instanceof Error ? error.message : String(error)}`);
