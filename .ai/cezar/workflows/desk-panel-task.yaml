@@ -277,6 +277,11 @@ nodes:
       the next verify and approval.
       End with `CEZ:DONE`.
 
+  - id: address-scope
+    name: Check scope after review changes
+    type: check
+    command: node scripts/executor-scope.mjs --check
+
   - id: commit
     name: Commit the approved diff
     type: check
@@ -381,7 +386,11 @@ edges:
   - from: review-retry.exhausted
     to: review-failed
   - from: address.done
+    to: address-scope
+  - from: address-scope.pass
     to: verify
+  - from: address-scope.fail
+    to: scope-failed
   - from: commit.pass
     to: pr
   - from: commit.fail

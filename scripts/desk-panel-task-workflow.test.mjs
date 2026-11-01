@@ -75,6 +75,13 @@ describe('desk-panel-task workflow', () => {
     expect(yaml).toContain('- from: fix-scope.fail\n    to: scope-failed');
     expect(yaml).toContain('- from: fix-scope.pass\n    to: verify');
     expect(yaml).toContain('node scripts/executor-scope.mjs --save');
+    expect(yaml).toContain('- from: address.done\n    to: address-scope');
+    expect(yaml).toContain('- from: address-scope.pass\n    to: verify');
+    expect(yaml).toContain('- from: address-scope.fail\n    to: scope-failed');
+    expect(yaml).not.toContain('- from: address.done\n    to: verify');
+    const scope = yaml.slice(yaml.indexOf('- id: address-scope\n'), yaml.indexOf('- id: commit\n'));
+    expect(scope).toContain('type: check');
+    expect(scope).toContain('command: node scripts/executor-scope.mjs --check');
     expect(verify).toContain('node scripts/executor-commit.mjs --diff');
     expect(verify).not.toContain('|| true');
   });
