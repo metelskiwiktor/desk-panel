@@ -100,6 +100,8 @@ it.each([
   ['empty', 'no-report'], ['partial', 'incomplete-report'], ['provider', 'provider-error'], ['exit', 'process-error'], ['tool', 'unexpected-tool'],
 ])('does not mistake %s output for a successful report', async (kind, reason) => {
   const f = setup(); const done = runRybka(f.options);
+  // Authentic live failure: the provider ended normally after reasoning, with zero visible output tokens.
+  if (kind === 'empty') event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', tokens: { output: 0, reasoning: 231 } } });
   if (kind === 'partial') report(f.child, 'Niejasność: jedno pole');
   if (kind === 'provider') event(f.child, { type: 'error', error: { message: 'provider failed' } });
   if (kind === 'tool') event(f.child, { type: 'tool_use', part: { tool: 'read' } });
