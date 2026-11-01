@@ -70,6 +70,8 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   4 min without output, raw JSONL and metrics in `~/.desk-panel/executor-runs`). It is told not to commit, push or dispatch;
   its tool permissions are autonomy, not a filesystem sandbox. Cezar's own check nodes commit the approved diff
   (docs/agent-workflows/desk-panel-task.md).
+- `just rybka SPEC`: local specification review with bounded materials, progress and private logs; see
+  [docs/agent-workflows/przygotuj-zadanie.md](docs/agent-workflows/przygotuj-zadanie.md). Never dispatches Cezar or marks a to-do ready.
 - `just check`: tests, typecheck, dead code (knip, production mode) and frontend build in parallel. Run before publishing;
   `just test-fast` runs only the tests touched by uncommitted changes. Tests guard invariants, not commits: change the
   existing test, merge duplicates, and add no code that only a test uses (docs/testowanie.md).

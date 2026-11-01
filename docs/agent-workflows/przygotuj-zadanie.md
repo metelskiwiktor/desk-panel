@@ -47,6 +47,7 @@ ZAŁĄCZNIKI:
 `cezar` wskazuje wykonawcę w workflow Cezara, `lokalnie` pracę w checkoucie, `rozmowa` wykonanie w rozmowie;
 wybierz jedną wartość, ale nie uruchamiaj wykonania podczas przygotowania. `analiza` zamawia ustalenia,
 `implementacja` zmiany. Nie zakładaj dostępu do sąsiedniego repo ani prywatnego pliku jako jedynego załącznika.
+Dopóki nie ma mechanizmu załączników, makieta trafia do executora tylko jako plik śledzony w Gicie; `.ai/` jest ignorowany.
 
 ## Definicja gotowości
 
@@ -70,82 +71,42 @@ mówi „brak uwag”. Błąd, timeout, pusty/niekompletny raport nie spełnia d
 pokazuje go i poprawki użytkownikowi. Istotna zmiana celu/zakresu po raporcie wymaga nowej rybki; usunięcie wskazanego
 braku lub korekta redakcyjna nie wymaga automatycznie kolejnego płatnego przebiegu.
 
-Poniższa komenda dla PowerShell + Node.js + opencode działa z katalogu repo. `.ai/spec.md` zawiera wyłącznie tekst
-specyfikacji, a raporty pozostają w ignorowanym `.ai/`, poza Gitem. Rola jest osobnym promptem agenta, a jedyną
-wiadomością użytkownika jest specyfikacja; nie przekazuj historii ani flag `--continue`, `--session`, `--fork`.
-Proces ma limit 10 minut, dopuszcza tylko odczyt repo, blokuje zapis/powłokę/delegację i wyłącza odziedziczone MCP.
-To uprawnienia narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.
+Uruchom lokalnie z katalogu repo: `just rybka .ai/spec.md` (ogólnie `just rybka SPEC`).
+Implementacja: [scripts/rybka.mjs](../../scripts/rybka.mjs); nie uruchamiaj jej w runie wykonawcy Cezara.
+Plik SPEC zawiera wyłącznie specyfikację. Skrypt tworzy świeżą sesję opencode na przypiętym modelu
+`openrouter/deepseek/deepseek-v4.1-flash-1017`, bez historii i flag continue/session/fork.
+Specyfikacja jest jedyną wiadomością użytkownika; rola recenzenta jest osobnym promptem agenta.
 
-Konfiguracje OpenCode są scalane: puste `mcp: {}` nie wyłącza serwerów hosta. Dlatego komenda najpierw odczytuje
-rozwiązaną konfigurację do pamięci (bez jej drukowania), wyłącza każdy MCP i sprawdza wynik przed startem modelu;
-nie otwiera plików uwierzytelnienia. Zasady konfiguracji: [OpenCode](https://opencode.ai/docs/config/),
+Aby recenzent nie błądził po repo, skrypt odczytuje materiały **raz przed startem modelu**: SPEC, AGENTS.md
+oraz jawne ścieżki plików w sekcji ZAŁĄCZNIKI (najlepiej każda ścieżka w backtickach). Przyjmuje tylko tekstowe
+pliki wewnątrz repo, bez poświadczeń i dowiązań prowadzących poza repo. Limit to 12 różnych plików, licząc SPEC
+i AGENTS.md, oraz 200 000 znaków łącznie. Powtórzone ścieżki nie zwiększają liczby odczytów. Brak pliku,
+przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywołaniem modelu.
+Materiały referencyjne trafiają do promptu roli; model nie dostaje żadnych narzędzi, w tym dalszego odczytu,
+wyszukiwania, zapisu, powłoki ani delegacji. Wszystkie odziedziczone MCP są wyłączone. To ograniczenia wejścia
+i narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.
+
+Konfiguracje OpenCode są scalane: puste `mcp: {}` nie wyłącza serwerów hosta. Skrypt odczytuje rozwiązaną
+konfigurację do pamięci, bez jej drukowania, wyłącza każdy MCP i potwierdza uprawnienia oraz model przed startem.
+Odczyt konfiguracji ma limit 15 s na każde z dwóch wywołań; nie otwieramy plików uwierzytelnienia.
+Zasady: [konfiguracja OpenCode](https://opencode.ai/docs/config/),
 [uprawnienia](https://opencode.ai/docs/permissions/), [agenci](https://opencode.ai/docs/agents/).
 
-```powershell
-# Tylko do późniejszej lokalnej próby; nie uruchamiaj w runie wykonawcy Cezara.
-@'
-const fs = require('node:fs');
-const { spawn, execFileSync } = require('node:child_process');
-const model = 'openrouter/deepseek/deepseek-v4.1-flash-1017';
-const spec = fs.readFileSync('.ai/spec.md', 'utf8').replace(/^\uFEFF/, '');
-if (!spec.trim()) throw Error('Brak specyfikacji');
-const env = { ...process.env, OPENCODE_DISABLE_CLAUDE_CODE: 'true',
-  OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true', OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
-  OPENCODE_DISABLE_AUTOUPDATE: 'true' };
-// Nie dziedzicz inline config hosta; zachowaj jego standardową konfigurację dostawcy.
-delete env.OPENCODE_CONFIG_CONTENT;
-const resolved = () => JSON.parse(execFileSync('opencode', ['debug', 'config', '--pure'],
-  { env, encoding: 'utf8', windowsHide: true }));
-const host = resolved();
-const permission = Object.fromEntries(Object.keys(host.permission || {}).map(k => [k, 'deny']));
-Object.assign(permission, { '*': 'deny', read: { '*': 'allow', '**/.env*': 'deny',
-  '**/auth.json': 'deny', '**/panel.env': 'deny', '**/*token*': 'deny',
-  '**/*.dpapi': 'deny', '**/private.pem': 'deny' }, glob: 'allow', grep: 'allow', list: 'allow',
-  external_directory: 'deny' });
-const agent = 'rybka-' + process.pid;
-const role = 'Recenzujesz specyfikację, nie wykonujesz jej. Przeczytaj zasady repo w AGENTS.md i README.md. ' +
-  'Czytaj tylko repo, bez poświadczeń, tokenów, panel.env, DPAPI ani prywatnych danych poza repo. ' +
-  'Nie zapisuj plików/danych, nie używaj powłoki, delegacji ani MCP. ' +
-  'Dla każdej uwagi podaj: Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie; ' +
-  'przy braku uwag napisz: brak uwag.';
-const config = { model, small_model: model, permission,
-  mcp: Object.fromEntries(Object.keys(host.mcp || {}).map(k => [k, { enabled: false }])),
-  agent: { [agent]: { mode: 'primary', description: 'Niezależny przegląd specyfikacji',
-    model, prompt: role, permission } } };
-env.OPENCODE_CONFIG_CONTENT = JSON.stringify(config);
-if (Object.values(resolved().mcp || {}).some(m => m.enabled !== false)) throw Error('MCP nadal aktywne');
-const rawPath = '.ai/rybka-report.jsonl';
-const out = fs.openSync(rawPath, 'w'), err = fs.openSync('.ai/rybka-stderr.log', 'w');
-const child = spawn('opencode', ['run', '--pure', '--agent', agent, '--model', model,
-  '--format', 'json', spec], { env, stdio: ['ignore', out, err], windowsHide: true });
-let timedOut = false;
-const timer = setTimeout(() => {
-  if (child.exitCode !== null) return;
-  timedOut = true;
-  if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'],
-    { stdio: 'ignore', windowsHide: true });
-  else child.kill('SIGTERM');
-}, 600000);
-child.on('error', () => { process.exitCode = 1; });
-child.on('close', code => {
-  clearTimeout(timer); fs.closeSync(out); fs.closeSync(err);
-  const events = fs.readFileSync(rawPath, 'utf8').split(/\r?\n/).filter(Boolean).flatMap(line => {
-    try { return [JSON.parse(line)]; } catch { return []; }
-  });
-  const report = events.filter(e => e.type === 'text').map(e => e.part?.text || '').join('\n').trim();
-  if (timedOut || code !== 0 || events.some(e => e.type === 'error') || !report) {
-    console.error('Rybka: błąd, timeout lub brak raportu; zadanie nie jest gotowe.');
-    process.exitCode = 1; return;
-  }
-  fs.writeFileSync('.ai/rybka-report.md', report, 'utf8');
-  console.log('Raport: .ai/rybka-report.md — oceń jego kompletność i pokaż użytkownikowi.');
-});
-'@ | node -
-```
+Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdarzenia to 4 minuty od startu modelu
+lub ostatniego zdarzenia. Bajty stderr i niepełne/niepoprawne linie JSON nie resetują limitu ciszy.
+Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie (zwykle „brak”, bo są wyłączone) i pozostały czas.
+Kończy się jawnym powodem: timeout, zawieszenie bez zdarzeń, błąd dostawcy/procesu/konfiguracji, niedozwolone
+narzędzie albo brak/niekompletność raportu. Błąd daje niezerowy kod wyjścia; skrypt kończy tylko własne drzewo procesu.
 
-Nie przedstawiaj samego JSONL z metadanymi jako skutecznego raportu. W tym zadaniu komendę i konfigurację oceniamy
-przez lekturę, bez wywołań dostawców, tworzenia rozmów ani zapisów do panelu. Rzeczywista lokalna próba na specyfikacji
-pilotażu 2 nastąpi po scaleniu i jest poza warunkami odbioru tego zadania.
+Każda próba ma osobny katalog `.ai/rybka-runs/<czas-id>/` poza Gitem: `spec.md`, `events.jsonl`, `stderr.log`,
+`metrics.json` oraz przy sukcesie `report.md` (przy błędzie ewentualnie `partial-report.md`). Stare próby pozostają
+bez zmian. Metryki sumują tokeny/koszt zakończonych kroków i pokazują czas do pierwszego zdarzenia oraz tekstu;
+nie nazywają tych czasów TTFT — dokładnego czasu pierwszego tokenu JSONL nie udostępnia.
+
+Skuteczny raport wymaga poprawnego zakończenia tury i procesu, braku błędów oraz tekstu zawierającego pola
+Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie albo jawne „brak uwag”. Kontrola skryptu nie zastępuje
+oceny kompletności przez słonia i omówienia uwag z użytkownikiem. Sam JSONL, fragment odpowiedzi, timeout lub
+kod 0 bez zakończonej tury nie spełniają definicji gotowości. Nie zmieniaj z tego powodu zadania na `gotowe`.
 
 ## Przykład statyczny: brak wskazanej listy
 
