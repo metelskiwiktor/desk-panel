@@ -94,8 +94,10 @@ Odczyt konfiguracji ma limit 15 s na każde z dwóch wywołań; nie otwieramy pl
 Zasady: [konfiguracja OpenCode](https://opencode.ai/docs/config/),
 [uprawnienia](https://opencode.ai/docs/permissions/), [agenci](https://opencode.ai/docs/agents/).
 
-Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdarzenia to 4 minuty od startu modelu
+Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdarzenia to 8 minut od startu modelu
 lub ostatniego zdarzenia. Bajty stderr i niepełne/niepoprawne linie JSON nie resetują limitu ciszy.
+CLI emituje zamknięte bloki, nie ich przyrosty: udany pilotaż potrzebował 218 s na ostatni krok,
+a większy przegląd przekroczył dawny limit 4 min bez zdarzeń. Cisza JSONL nie dowodzi bezczynności modelu.
 Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie (zwykle „brak”, bo są wyłączone) i pozostały czas.
 Pokazuje też sumę tokenów zakończonych kroków, łącznie z cache (cache dodatkowo osobno), i ostrzega od 800 000.
 Licznik aktualizuje się również od razu po `step_finish`. Przed pierwszym takim zdarzeniem jest „n/d”:

@@ -7,7 +7,9 @@ import { randomUUID } from 'node:crypto';
 import { killProcessTree, metricsFromEvents, MODEL, parseEventLine } from './executor-run.mjs';
 
 const WALL_MS = 10 * 60_000;
-const IDLE_MS = 4 * 60_000;
+// JSON CLI emits a reasoning/text block only when it ends (pilot 1 needed 218 s for a block).
+// Leave room for a longer single-block review; the independent 10-minute wall limit remains.
+const IDLE_MS = 8 * 60_000;
 const MAX_FILES = 12;
 const MAX_CHARS = 200_000;
 const SECRET = /(?:^|\/)(?:\.env[^/]*|panel\.env|auth\.json|private\.pem|[^/]*token[^/]*|[^/]*\.dpapi)(?:$|\/)/i;
@@ -200,7 +202,7 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
     wallTimer = setTimeout(() => stop('timeout'), Math.max(1, wallMs - (now() - started)));
     resetIdle();
     progressTimer = setInterval(progress, progressMs);
-    log(`Rybka: model ${MODEL}; limit 10 min, bez zdarzeń 4 min; postęp co 15 s.`);
+    log(`Rybka: model ${MODEL}; limit 10 min, bez zdarzeń 8 min; postęp co 15 s.`);
   });
 }
 
