@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Makieta · Specyfikacja w zadaniu</title>
+<style>
+:root{color-scheme:dark;font:14px/1.5 'Segoe UI',sans-serif;color:#eaeff6;background:#0d121b;--surface:#141922;--raised:#1b2230;--line:#273044;--muted:#93a0b4;--blue:#7ca9ff}
+*{box-sizing:border-box}body{margin:0;padding:24px}button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 13px}button:hover{border-color:var(--blue)}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}input,textarea,select{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px}textarea{resize:vertical}h1,h2,h3,p{margin:0}h1{font-size:22px;line-height:1.3;font-weight:600}h2{font-size:16px}h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 7px}.muted,small{color:var(--muted)}small{font-size:12px}.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}.dialog{max-width:1180px;height:calc(100dvh - 48px);margin:auto;border:1px solid var(--line);border-radius:18px;background:var(--raised);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px #0008}.head{padding:19px 24px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px}.head>div{flex:1}.head h1{margin-top:6px}.badge{font-size:12px;padding:4px 9px;border-radius:6px;color:#e9c261;background:#e9c26114;border:1px solid #e9c26135}.body{display:grid;grid-template-columns:minmax(0,1fr) 296px;min-height:0;flex:1}.main{min-width:0;padding:0 24px 20px;display:flex;flex-direction:column;min-height:0}.tabs{display:flex;gap:20px;border-bottom:1px solid var(--line);margin-bottom:17px}.tabs button{border:0;border-radius:0;background:none;padding:14px 0 10px;color:var(--muted)}.tabs button[aria-selected=true]{border-bottom:2px solid var(--blue);color:var(--blue)}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.toolbar .tools{display:flex;gap:8px;align-items:center}.toolbar select{width:auto;padding:6px 9px;font-size:12px}.toolbar button{padding:6px 10px;font-size:12px}.paper{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;padding:5px 22px 20px;flex:1;min-height:0}.paper p,.paper li{font-size:14px;line-height:1.7}.paper ul,.paper ol{padding-left:21px;margin:6px 0}.paper code{font:12px Consolas,monospace;color:#b6caff}.paper h3:first-child{margin-top:15px}.aside{background:#17202d;border-left:1px solid var(--line);padding:17px 20px;overflow:auto}.aside h3:first-child{margin-top:0}.aside textarea{font-size:13px;min-height:78px}.aside p{font-size:13px}.aside button{padding:5px 9px;font-size:12px}.link{color:var(--blue)}.footer{border-top:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:10px;min-height:65px}.footer small{flex:1}.primary{background:var(--blue);border-color:var(--blue);color:#0b1020;font-weight:600}.panel{display:none;min-height:0;flex-direction:column;flex:1}.panel.active{display:flex}.timeline{list-style:none;margin:0;padding:0}.timeline li{padding:14px 0;border-bottom:1px solid var(--line)}.timeline strong{font-size:13px}.review-state{border:1px solid #e9c26135;background:#e9c2610b;border-radius:8px;padding:12px;margin:8px 0 16px}.editor{display:none;flex:1;min-height:0;font:13px/1.7 Consolas,monospace;resize:none}.caption{margin:0 0 9px;color:var(--muted);font-size:12px}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.mock-label{font-size:11px;color:var(--muted);margin-left:12px;white-space:nowrap}
+@media(max-width:760px){body{padding:8px}.dialog{height:calc(100dvh - 16px)}.head{padding:15px}.head h1{font-size:18px}.badge{display:none}.body{display:block;overflow:auto}.main{padding:0 15px 15px;min-height:480px}.aside{border-left:0;border-top:1px solid var(--line)}.paper{min-height:330px;max-height:420px}.toolbar{flex-wrap:wrap}.footer{padding:12px 15px}.footer small{display:none}.footer .primary{margin-left:auto}.mock-label{display:none}.two{grid-template-columns:1fr}}
+</style>
+<!-- Makieta samodzielna, bez zależności i połączeń z API. Przykładowe dane nie są raportem prawdziwej rybki.
+     Zakładki pokazują propozycję: specyfikacja z 10 ostatnimi rewizjami i historia z raportami w komentarzach.
+     Zapis wersji przy zleceniu Cezara jest poza zakresem. Dane i raporty w makiecie są fikcyjne.
+     Zapis w tej makiecie niczego nie utrwala; ma pokazać rozmieszczenie i treść kontrolek. -->
+<main class="dialog" role="dialog" aria-modal="true" aria-label="Zadanie">
+ <header class="head"><div><p class="eyebrow">Zadanie · Usprawnienia Wektora</p><h1>Specyfikacja jako część zadania</h1></div><span class="badge">Do przygotowania</span><button aria-label="Zamknij">×</button></header>
+ <div class="body">
+  <section class="main">
+   <nav class="tabs" role="tablist" aria-label="Treść zadania"><button role="tab" aria-selected="true" data-tab="spec">Specyfikacja</button><button role="tab" aria-selected="false" data-tab="history">Historia <small>· 8</small></button></nav>
+   <section id="spec" class="panel active" role="tabpanel">
+    <div class="toolbar"><div><h2>Specyfikacja</h2><small>Codex · 1 listopada 2026, 19:30</small></div><div class="tools"><select aria-label="Wersja specyfikacji" title="Zachowujemy 10 ostatnich rewizji"><option>v2 · aktualna</option><option>v1 · poprzednia</option></select><button id="edit">Edytuj Markdown</button></div></div>
+    <article class="paper" id="preview"><h3>Cel</h3><p>Pełna specyfikacja jest częścią zadania. Można ją przeczytać, zmienić i wykorzystać przy przygotowaniu zlecenia bez składania treści z komentarzy.</p><h3>Zakres</h3><ul><li>Osobne długie pole Markdown, z podglądem w oknie zadania.</li><li>Odczyt pełnej specyfikacji przez Wektora.</li><li>Autorzy zmian: Ty, Wektor, Claude, Codex i panel.</li><li>10 ostatnich rewizji; raporty i rozstrzygnięcia w komentarzach z vN.</li></ul><h3>Poza zakresem</h3><p>Załączniki i przekazywanie plików do worktree Cezara — osobne zadanie.</p><h3>Decyzje</h3><p>2026-11-01 — wykonawca: cezar; repo: desk-panel — źródło: użytkownik.</p><h3>Warunki odbioru</h3><ol><li>Specyfikacja dłuższa niż komentarz zapisuje się w całości — kontrola w UI i odczycie Wektora.</li><li>Komentarze pozostają rozmową o zadaniu — kontrola historii po zapisie specyfikacji.</li></ol><div class="two"><div><h3>Wykonawca</h3><p>cezar</p></div><div><h3>Tryb</h3><p>implementacja</p></div></div><h3>Repo</h3><p>desk-panel · przydzielony worktree</p><h3>Załączniki</h3><p><code>docs/mockups/zadanie-spec.html</code> — makieta referencyjna</p></article>
+    <textarea class="editor" aria-label="Specyfikacja Markdown">CEL:
+Pełna specyfikacja jest częścią zadania. Można ją przeczytać, zmienić i przekazać wykonawcy bez składania treści z komentarzy.
+
+ZAKRES:
+- Osobne długie pole Markdown z podglądem.
+- Pełny odczyt przez Wektora.
+- Rozróżnienie autorów historii.
+
+POZA ZAKRESEM:
+Załączniki i transfer do worktree Cezara — osobne zadanie.
+
+DECYZJE:
+- 2026-11-01 — wykonawca: cezar; repo: desk-panel — źródło: użytkownik.
+
+WARUNKI ODBIORU:
+1. Pełna specyfikacja dostępna w oknie zadania i Wektorowi — kontrola UI i API.
+
+WYKONAWCA: cezar
+REPO: desk-panel
+TRYB: implementacja
+ZAŁĄCZNIKI: docs/mockups/zadanie-spec.html</textarea>
+   </section>
+   <section id="history" class="panel" role="tabpanel"><div class="toolbar"><div><h2>Historia zadania</h2><small>Komentarze i zmiany, z autorem</small></div></div><article class="paper"><ol class="timeline"><li><small>Codex · 19:30</small><p>Zapisano specyfikację v2</p></li><li><small>Ty · 19:26</small><p><strong>Rozstrzygnięcia v1</strong><br>Zachowujemy 10 ostatnich rewizji. Ustalenie uwzględnione w v2.</p></li><li><small>Claude · 19:20</small><p><strong>Przegląd v1</strong><br>Niejasność: brak zasad retencji wersji. Założenie: wszystkie wersje zostają. Wpływ: nieograniczony rozrost danych. Pytanie: ile wersji zachowujemy?</p></li><li><small>Wektor · 19:10</small><p>Stan: Pomysł → Do przygotowania</p></li><li><small>panel · 19:05</small><p>Dodano powiązanie z rozmową</p></li></ol><label><h3>Dodaj komentarz</h3><textarea rows="2" placeholder="Ustalenia i rozmowa o zadaniu…"></textarea></label><p style="margin-top:8px"><button>Dodaj komentarz</button></p></article></section>
+  </section>
+  <aside class="aside"><h3>Tytuł</h3><input aria-label="Tytuł" value="Specyfikacja jako część zadania"><h3>Krótka notatka</h3><textarea aria-label="Krótka notatka">Pełna treść w polu specyfikacji. Komentarze służą rozmowie o zadaniu.</textarea><h3>Stan</h3><select aria-label="Stan"><option>Do przygotowania</option><option>Gotowe do realizacji</option></select><h3>Blokada</h3><p class="muted">Brak blokady</p><h3>Powiązania</h3><p class="link">↗ Rozmowa Wektora</p><p class="muted" style="margin-top:7px">Brak taska Cezara i PR-a.</p><button style="margin-top:10px">Dodaj PR</button><h3>Specyfikacja</h3><p>v2 · Codex</p><p class="muted">Zachowujemy 10 ostatnich rewizji. Pełna treść dostępna Wektorowi.</p></aside>
+ </div>
+ <footer class="footer"><small>Tytuł, notatka i specyfikacja zapisują się przyciskiem „Zapisz”.</small><button>Anuluj</button><button class="primary">Zapisz</button><span class="mock-label">MAKIETA · bez zapisu</span></footer>
+</main>
+<script>
+document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===button.dataset.tab))}));
+document.querySelector('#edit').addEventListener('click',event=>{const editor=document.querySelector('.editor');const editing=editor.style.display==='block';editor.style.display=editing?'none':'block';document.querySelector('#preview').style.display=editing?'block':'none';event.target.textContent=editing?'Edytuj Markdown':'Podgląd';if(!editing)editor.focus()});
+</script>
+</html>
