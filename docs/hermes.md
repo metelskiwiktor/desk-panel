@@ -143,6 +143,8 @@ Szczegóły: [automaty.md](automaty.md#żeton-i-okno-raportu).
 `tools/list`, `tools/call`). Narzędzia są wąskimi adapterami do widoków dla agenta z [czat.md](czat.md) — ten sam tekst, ten sam
 zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 
+Nowy lub zmieniony schemat narzędzia MCP Wektor widzi dopiero po `just hermes RESTART`, bo Hermes czyta listę narzędzi raz przy połączeniu, a `just update` restartuje tylko panel; restart wymaga zgody użytkownika i nie może przypaść w trakcie tury ani runu automatu (przed restartem sprawdź `running` w `GET /api/chats`, brak oczekujących runów i brak startu automatu w najbliższych 10 minutach).
+
 | Narzędzie | Odpowiada |
 | --- | --- |
 | `panel_calendar`, `panel_training` | `from`, `to` (RRRR-MM-DD), `opisy` / `kroki` |
