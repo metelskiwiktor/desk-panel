@@ -71,6 +71,13 @@ mówi „brak uwag”. Błąd, timeout, pusty/niekompletny raport nie spełnia d
 pokazuje go i poprawki użytkownikowi. Istotna zmiana celu/zakresu po raporcie wymaga nowej rybki; usunięcie wskazanego
 braku lub korekta redakcyjna nie wymaga automatycznie kolejnego płatnego przebiegu.
 
+Raport zapisuj w zwykłych komentarzach z nagłówkiem `Przegląd rev N — część i/k`: N to rewizja specyfikacji,
+i to numer części od 1, k to liczba części raportu (np. `Przegląd rev 2 — część 1/3`).
+Uwzględnij limit 2000 znaków komentarza razem z nagłówkiem i 4096 bajtów UTF-8 całego JSON-a żądania.
+Dziel po liniach, a linię dłuższą od limitu przetnij w środku. Złączenie części po usunięciu nagłówków musi dać
+dokładnie pierwotny raport; nie przycinaj ani nie dopisuj separatorów w jego treści. Rozstrzygnięcia zapisuj
+analogicznie w komentarzu odnoszącym się do tej samej rewizji. To reguła przygotowania, nie kod dzielenia raportu w aplikacji.
+
 Uruchom lokalnie z katalogu repo: `just rybka .ai/spec.md` (ogólnie `just rybka SPEC`).
 Implementacja: [scripts/rybka.mjs](../../scripts/rybka.mjs); nie uruchamiaj jej w runie wykonawcy Cezara.
 Plik SPEC zawiera wyłącznie specyfikację. Skrypt tworzy świeżą sesję opencode na przypiętym modelu
