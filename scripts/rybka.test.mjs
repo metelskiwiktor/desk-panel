@@ -77,7 +77,8 @@ it('uses one fresh, tool-free pinned model turn and preserves each run in separa
   expect(config.small_model).toBe(config.model);
   expect(Object.values(config.permission).every(v => v === 'deny')).toBe(true);
   expect(config.mcp.host.enabled).toBe(false);
-  expect(Object.values(config.agent)[0]).toMatchObject({ steps: 1, model: config.model });
+  expect(Object.values(config.agent)[0].model).toBe(config.model);
+  expect(Object.values(config.agent)[0]).not.toHaveProperty('steps');
   expect(Object.values(config.agent)[0].prompt).toContain('<h1>Makieta</h1>');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   expect(f.configs[0]).toBeUndefined();
@@ -101,7 +102,10 @@ it.each([
 ])('does not mistake %s output for a successful report', async (kind, reason) => {
   const f = setup(); const done = runRybka(f.options);
   // Authentic live failure: the provider ended normally after reasoning, with zero visible output tokens.
-  if (kind === 'empty') event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', tokens: { output: 0, reasoning: 231 } } });
+  if (kind === 'empty') {
+    event(f.child, { type: 'reasoning', part: { type: 'reasoning', text: 'Private reasoning is not a final report.' } });
+    event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', tokens: { output: 0, reasoning: 231 } } });
+  }
   if (kind === 'partial') report(f.child, 'Niejasność: jedno pole');
   if (kind === 'provider') event(f.child, { type: 'error', error: { message: 'provider failed' } });
   if (kind === 'tool') event(f.child, { type: 'tool_use', part: { tool: 'read' } });
@@ -148,4 +152,19 @@ it('stderr chatter and unfinished JSON cannot keep a stalled model alive', async
   f.child.stdout.write('{"type":');
   await vi.advanceTimersByTimeAsync(21);
   expect(await done).toMatchObject({ reason: 'idle-timeout', code: 124 });
+});
+
+it('shows cumulative tokens including cache and warns near one million without inventing current-step usage', async () => {
+  vi.useFakeTimers(); const f = setup();
+  const done = runRybka({ ...f.options, progressMs: 15 });
+  await vi.advanceTimersByTimeAsync(16);
+  expect(f.printed.some(line => line.includes('tokeny=n/d'))).toBe(true);
+  event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'tool-calls', tokens: { total: 450_000, input: 50_000, cache: { read: 400_000 } } } });
+  event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'tool-calls', tokens: { total: 400_000, input: 50_000, cache: { read: 350_000 } } } });
+  expect(f.printed.some(line => line.includes('tokeny=850000 (cache=750000; zakończone kroki)'))).toBe(true);
+  expect(f.printed.filter(line => line.includes('UWAGA'))).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(16);
+  expect(f.printed.filter(line => line.includes('UWAGA'))).toHaveLength(1);
+  report(f.child); f.child.emit('close', 0);
+  expect((await done).metrics.totalTokens).toBe(850_016);
 });

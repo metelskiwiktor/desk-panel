@@ -61,7 +61,9 @@ function configuration(host, agent, materials) {
   const permission = { ...Object.fromEntries(Object.keys(host.permission ?? {}).map(key => [key, 'deny'])), '*': 'deny' };
   return { model: MODEL, small_model: MODEL, permission,
     mcp: Object.fromEntries(Object.keys(host.mcp ?? {}).map(key => [key, { enabled: false }])),
-    agent: { [agent]: { mode: 'primary', description: 'Przegląd samodzielnej specyfikacji', model: MODEL, steps: 1,
+    // steps:1 injects OpenCode's MAX_STEPS_PROMPT as an assistant prefill on the very first request.
+    // With all tools denied there is no exploration loop to cap; the wall/idle watchdogs still apply.
+    agent: { [agent]: { mode: 'primary', description: 'Przegląd samodzielnej specyfikacji', model: MODEL,
       permission, prompt: ROLE + '\n\n' + materials.map(m => `Materiał: ${m.path}\n${m.text}`).join('\n\n---\n\n') } } };
 }
 
@@ -79,7 +81,8 @@ function configuredEnv(env, agent, materials, cwd, exec = execFileSync) {
   const actualAgent = effective.agent?.[agent];
   if (Object.values(effective.mcp ?? {}).some(m => m.enabled !== false)
     || effective.model !== MODEL || effective.small_model !== MODEL
-    || !actualAgent || actualAgent.model !== MODEL
+    || !actualAgent || actualAgent.model !== MODEL || actualAgent.steps !== undefined
+    || actualAgent.prompt !== config.agent[agent].prompt
     || JSON.stringify(effective.permission) !== JSON.stringify(config.permission)
     || JSON.stringify(actualAgent.permission) !== JSON.stringify(config.permission)) throw Error('Nie potwierdzono ograniczeń konfiguracji.');
   return childEnv;
@@ -123,7 +126,17 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
   return new Promise(resolveResult => {
     const events = [];
     let buffer = '', ending, settled = false, child, wallTimer, idleTimer, progressTimer, forceTimer;
-    let firstEventMs = null, firstTextMs = null, lastTool = 'brak';
+    let firstEventMs = null, firstTextMs = null, lastTool = 'brak', usageWarning = false;
+    const usageLabel = metrics => `tokeny=${metrics.totalTokens ?? 'n/d'} (cache=${metrics.cacheReadTokens ?? 'n/d'}; zakończone kroki)`;
+    const progress = () => {
+      if (settled) return;
+      const metrics = metricsFromEvents(events);
+      log(`Rybka: zdarzenia=${events.length}; ostatnie narzędzie=${lastTool}; ${usageLabel(metrics)}; pozostało=${Math.max(0, Math.ceil((wallMs - (now() - started)) / 1000))} s`);
+      if (!usageWarning && metrics.totalTokens >= 800_000) {
+        usageWarning = true;
+        log(`Rybka: UWAGA — zużycie zbliża się do miliona: ${metrics.totalTokens} tokenów łącznie z cache.`);
+      }
+    };
     const finish = code => {
       if (settled) return;
       settled = true;
@@ -140,7 +153,7 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
       writeFileSync(join(dir, 'metrics.json'), JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
       if (ok) writeFileSync(reportPath, report + '\n', { mode: 0o600 });
       else if (report) writeFileSync(join(dir, 'partial-report.md'), report + '\n', { mode: 0o600 });
-      log(`Rybka: ${REASONS[reason]}. Zdarzenia: ${events.length}; czas: ${Math.round(record.durationMs / 1000)} s.`);
+      log(`Rybka: ${REASONS[reason]}. Zdarzenia: ${events.length}; ${usageLabel(metrics)}; czas: ${Math.round(record.durationMs / 1000)} s.`);
       log(`Rybka: ${ok ? reportPath : dir}`);
       resolveResult({ ok, code: ok ? 0 : ['timeout', 'idle-timeout'].includes(reason) ? 124 : 1, reason, dir, reportPath: ok ? reportPath : null, metrics: record });
     };
@@ -164,6 +177,7 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
       firstEventMs ??= now() - started;
       if (event.type === 'text') firstTextMs ??= now() - started;
       resetIdle();
+      if (event.type === 'step_finish') progress();
       if (event.type === 'error') stop('provider-error');
       if (event.type === 'tool_use') { lastTool = event.part?.tool ?? 'nieznane'; stop('unexpected-tool'); }
     };
@@ -185,7 +199,7 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
     process.once('SIGINT', cancel); process.once('SIGTERM', cancel);
     wallTimer = setTimeout(() => stop('timeout'), Math.max(1, wallMs - (now() - started)));
     resetIdle();
-    progressTimer = setInterval(() => log(`Rybka: zdarzenia=${events.length}; ostatnie narzędzie=${lastTool}; pozostało=${Math.max(0, Math.ceil((wallMs - (now() - started)) / 1000))} s`), progressMs);
+    progressTimer = setInterval(progress, progressMs);
     log(`Rybka: model ${MODEL}; limit 10 min, bez zdarzeń 4 min; postęp co 15 s.`);
   });
 }

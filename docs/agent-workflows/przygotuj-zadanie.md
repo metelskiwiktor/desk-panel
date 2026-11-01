@@ -85,6 +85,8 @@ przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywoła
 Materiały referencyjne trafiają do promptu roli; model nie dostaje żadnych narzędzi, w tym dalszego odczytu,
 wyszukiwania, zapisu, powłoki ani delegacji. Wszystkie odziedziczone MCP są wyłączone. To ograniczenia wejścia
 i narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.
+Nie ustawiamy `agent.steps: 1`: OpenCode już w pierwszym kroku dokleja wtedy wiadomość asystenta o wyczerpaniu
+limitu kroków. Brak narzędzi ogranicza eksplorację, a czas kontrolują watchdogi; recenzja ma otrzymać zwykły prompt.
 
 Konfiguracje OpenCode są scalane: puste `mcp: {}` nie wyłącza serwerów hosta. Skrypt odczytuje rozwiązaną
 konfigurację do pamięci, bez jej drukowania, wyłącza każdy MCP i potwierdza uprawnienia oraz model przed startem.
@@ -95,6 +97,9 @@ Zasady: [konfiguracja OpenCode](https://opencode.ai/docs/config/),
 Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdarzenia to 4 minuty od startu modelu
 lub ostatniego zdarzenia. Bajty stderr i niepełne/niepoprawne linie JSON nie resetują limitu ciszy.
 Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie (zwykle „brak”, bo są wyłączone) i pozostały czas.
+Pokazuje też sumę tokenów zakończonych kroków, łącznie z cache (cache dodatkowo osobno), i ostrzega od 800 000.
+Licznik aktualizuje się również od razu po `step_finish`. Przed pierwszym takim zdarzeniem jest „n/d”:
+JSONL nie podaje przyrostowego zużycia podczas trwającego kroku, więc licznik nie obejmuje go na bieżąco.
 Kończy się jawnym powodem: timeout, zawieszenie bez zdarzeń, błąd dostawcy/procesu/konfiguracji, niedozwolone
 narzędzie albo brak/niekompletność raportu. Błąd daje niezerowy kod wyjścia; skrypt kończy tylko własne drzewo procesu.
 
