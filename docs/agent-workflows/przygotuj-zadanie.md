@@ -77,16 +77,19 @@ Plik SPEC zawiera wyłącznie specyfikację. Skrypt tworzy świeżą sesję open
 `openrouter/deepseek/deepseek-v4.1-flash-1017`, bez historii i flag continue/session/fork.
 Specyfikacja jest jedyną wiadomością użytkownika; rola recenzenta jest osobnym promptem agenta.
 
-Aby recenzent nie błądził po repo, skrypt odczytuje materiały **raz przed startem modelu**: SPEC, AGENTS.md
+Aby recenzent nie błądził po repo, skrypt sprawdza materiały **przed startem modelu**: SPEC, AGENTS.md
 oraz jawne ścieżki plików w sekcji ZAŁĄCZNIKI (najlepiej każda ścieżka w backtickach). Przyjmuje tylko tekstowe
 pliki wewnątrz repo, bez poświadczeń i dowiązań prowadzących poza repo. Limit to 12 różnych plików, licząc SPEC
-i AGENTS.md, oraz 200 000 znaków łącznie. Powtórzone ścieżki nie zwiększają liczby odczytów. Brak pliku,
+i AGENTS.md, oraz 200 000 znaków łącznie. Powtórzone ścieżki nie zwiększają liczby plików. Brak pliku,
 przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywołaniem modelu.
-Materiały referencyjne trafiają do promptu roli; model nie dostaje żadnych narzędzi, w tym dalszego odczytu,
-wyszukiwania, zapisu, powłoki ani delegacji. Wszystkie odziedziczone MCP są wyłączone. To ograniczenia wejścia
+Do promptu roli trafia lista dozwolonych plików, bez wklejania całej ich treści. Model czyta AGENTS.md i istotne
+załączniki wyłącznie narzędziem `read`: uprawnienia dopuszczają tylko te dokładne ścieżki, pozostałe są odrzucane.
+Ma najwyżej 12 wywołań odczytu (ponowne odczyty i odmowy też się liczą); wykrycie przekroczenia przerywa próbę
+i wyklucza skuteczny raport. Nie ma wyszukiwania, zapisu, powłoki ani delegacji. MCP są wyłączone. To ograniczenia wejścia
 i narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.
-Nie ustawiamy `agent.steps: 1`: OpenCode już w pierwszym kroku dokleja wtedy wiadomość asystenta o wyczerpaniu
-limitu kroków. Brak narzędzi ogranicza eksplorację, a czas kontrolują watchdogi; recenzja ma otrzymać zwykły prompt.
+Nie ustawiamy `agent.steps`: OpenCode po dojściu do tej granicy dokleja wiadomość asystenta o wyczerpaniu kroków
+(przy wartości 1 już w pierwszym kroku), co może zastąpić recenzję podsumowaniem nieukończonej pracy.
+Eksplorację ograniczają jawne ścieżki i licznik odczytów, a czas kontrolują watchdogi. Raport zawiera do 8 najważniejszych uwag.
 
 Konfiguracje OpenCode są scalane: puste `mcp: {}` nie wyłącza serwerów hosta. Skrypt odczytuje rozwiązaną
 konfigurację do pamięci, bez jej drukowania, wyłącza każdy MCP i potwierdza uprawnienia oraz model przed startem.
@@ -98,20 +101,21 @@ Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdar
 lub ostatniego zdarzenia. Bajty stderr i niepełne/niepoprawne linie JSON nie resetują limitu ciszy.
 CLI emituje zamknięte bloki, nie ich przyrosty: udany pilotaż potrzebował 218 s na ostatni krok,
 a większy przegląd przekroczył dawny limit 4 min bez zdarzeń. Cisza JSONL nie dowodzi bezczynności modelu.
-Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie (zwykle „brak”, bo są wyłączone) i pozostały czas.
+Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie i pozostały czas.
 Pokazuje też sumę tokenów zakończonych kroków, łącznie z cache (cache dodatkowo osobno), i ostrzega od 800 000.
 Licznik aktualizuje się również od razu po `step_finish`. Przed pierwszym takim zdarzeniem jest „n/d”:
 JSONL nie podaje przyrostowego zużycia podczas trwającego kroku, więc licznik nie obejmuje go na bieżąco.
 Kończy się jawnym powodem: timeout, zawieszenie bez zdarzeń, błąd dostawcy/procesu/konfiguracji, niedozwolone
-narzędzie albo brak/niekompletność raportu. Błąd daje niezerowy kod wyjścia; skrypt kończy tylko własne drzewo procesu.
+narzędzie, przekroczenie limitu odczytów albo brak/niekompletność raportu. Błąd daje niezerowy kod wyjścia; skrypt kończy tylko własne drzewo procesu.
 
 Każda próba ma osobny katalog `.ai/rybka-runs/<czas-id>/` poza Gitem: `spec.md`, `events.jsonl`, `stderr.log`,
 `metrics.json` oraz przy sukcesie `report.md` (przy błędzie ewentualnie `partial-report.md`). Stare próby pozostają
 bez zmian. Metryki sumują tokeny/koszt zakończonych kroków i pokazują czas do pierwszego zdarzenia oraz tekstu;
 nie nazywają tych czasów TTFT — dokładnego czasu pierwszego tokenu JSONL nie udostępnia.
 
-Skuteczny raport wymaga poprawnego zakończenia tury i procesu, braku błędów oraz tekstu zawierającego pola
-Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie albo jawne „brak uwag”. Kontrola skryptu nie zastępuje
+Skuteczny raport wymaga poprawnego zakończenia tury i procesu, braku błędów oraz tekstu zawierającego w każdej uwadze
+pola Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie z dwukropkiem i treścią albo jawne „brak uwag”.
+Samo wymienienie nazw pól ani komunikat o wyczerpaniu kroków nie jest raportem. Kontrola skryptu nie zastępuje
 oceny kompletności przez słonia i omówienia uwag z użytkownikiem. Sam JSONL, fragment odpowiedzi, timeout lub
 kod 0 bez zakończonej tury nie spełniają definicji gotowości. Nie zmieniaj z tego powodu zadania na `gotowe`.
 

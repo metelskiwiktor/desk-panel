@@ -42,7 +42,6 @@ it('reads only the spec, AGENTS and explicit attachments once, including prose a
   const result = reviewMaterials('spec.md', cwd);
   expect(result.reads).toBe(3);
   expect(result.materials.map(m => m.path)).toEqual(['AGENTS.md', 'docs/mock.html']);
-  expect(result.materials[1].text).toContain('Makieta');
 });
 
 it('refuses escaped paths, credentials, links outside the repo, and excessive input before spawning', async () => {
@@ -62,7 +61,7 @@ it('refuses escaped paths, credentials, links outside the repo, and excessive in
   expect(() => reviewMaterials('spec.md', cwd)).toThrow(/200000/);
 });
 
-it('uses one fresh, tool-free pinned model turn and preserves each run in separate private files', async () => {
+it('uses a fresh pinned review with only explicit file reads and preserves separate private files', async () => {
   const f = setup(); const done = runRybka(f.options);
   report(f.child); f.child.emit('close', 0); const result = await done;
   expect(result.ok).toBe(true);
@@ -75,11 +74,16 @@ it('uses one fresh, tool-free pinned model turn and preserves each run in separa
   const config = JSON.parse(opts.env.OPENCODE_CONFIG_CONTENT);
   expect(config.model).toBe('openrouter/deepseek/deepseek-v4.1-flash-1017');
   expect(config.small_model).toBe(config.model);
-  expect(Object.values(config.permission).every(v => v === 'deny')).toBe(true);
+  expect(Object.entries(config.permission).filter(([k]) => k !== 'read').every(([, v]) => v === 'deny')).toBe(true);
+  expect(config.permission.read['*']).toBe('deny');
+  expect(config.permission.read[join(f.cwd, 'AGENTS.md')]).toBe('allow');
+  expect(config.permission.read[join(f.cwd, 'docs/mock.html')]).toBe('allow');
+  expect(config.permission.read[join(f.cwd, 'spec.md')]).toBeUndefined();
   expect(config.mcp.host.enabled).toBe(false);
   expect(Object.values(config.agent)[0].model).toBe(config.model);
   expect(Object.values(config.agent)[0]).not.toHaveProperty('steps');
-  expect(Object.values(config.agent)[0].prompt).toContain('<h1>Makieta</h1>');
+  expect(Object.values(config.agent)[0].prompt).toContain(join(f.cwd, 'docs/mock.html'));
+  expect(Object.values(config.agent)[0].prompt).not.toContain('<h1>Makieta</h1>');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   expect(f.configs[0]).toBeUndefined();
   expect(readFileSync(result.reportPath, 'utf8')).toBe('brak uwag\n');
@@ -98,7 +102,7 @@ it('fails closed before a model call if resolved MCP or permissions remain enabl
 });
 
 it.each([
-  ['empty', 'no-report'], ['partial', 'incomplete-report'], ['provider', 'provider-error'], ['exit', 'process-error'], ['tool', 'unexpected-tool'],
+  ['empty', 'no-report'], ['partial', 'incomplete-report'], ['max-steps', 'incomplete-report'], ['provider', 'provider-error'], ['exit', 'process-error'], ['tool', 'unexpected-tool'],
 ])('does not mistake %s output for a successful report', async (kind, reason) => {
   const f = setup(); const done = runRybka(f.options);
   // Authentic live failure: the provider ended normally after reasoning, with zero visible output tokens.
@@ -107,8 +111,9 @@ it.each([
     event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', tokens: { output: 0, reasoning: 231 } } });
   }
   if (kind === 'partial') report(f.child, 'Niejasność: jedno pole');
+  if (kind === 'max-steps') report(f.child, 'I reached the maximum number of steps. I did not finish the review. Required fields:\n- Niejasność\n- Niezapisane założenie\n- Wpływ na wykonanie\n- Pytanie');
   if (kind === 'provider') event(f.child, { type: 'error', error: { message: 'provider failed' } });
-  if (kind === 'tool') event(f.child, { type: 'tool_use', part: { tool: 'read' } });
+  if (kind === 'tool') event(f.child, { type: 'tool_use', part: { tool: 'bash' } });
   if (kind === 'exit') f.child.stderr.write('private diagnostic');
   f.child.emit('close', kind === 'exit' ? 3 : 0);
   const result = await done;
@@ -167,4 +172,11 @@ it('shows cumulative tokens including cache and warns near one million without i
   expect(f.printed.filter(line => line.includes('UWAGA'))).toHaveLength(1);
   report(f.child); f.child.emit('close', 0);
   expect((await done).metrics.totalTokens).toBe(850_016);
+});
+
+it('allows bounded read calls and stops after the thirteenth, without accepting a report', async () => {
+  const f = setup(); const done = runRybka(f.options);
+  for (let i = 0; i < 12; i++) event(f.child, { type: 'tool_use', part: { tool: 'read' } });
+  event(f.child, { type: 'tool_use', part: { tool: 'read' } });
+  expect(await done).toMatchObject({ ok: false, reason: 'read-limit', metrics: { modelReads: 13 } });
 });
