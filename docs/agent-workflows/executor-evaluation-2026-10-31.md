@@ -1,5 +1,7 @@
 # Wykonawcy OpenCode — pomiar przed i po (31.10.2026)
 
+Kontynuacja z briefami bez listy pułapek i z prywatną akceptacją: [ukryte testy wykonawcy](executor-hidden-acceptance-2026-11-01.md). Osobno: [kalibracja recenzentów](reviewer-evaluation-2026-11-01.md).
+
 Implementował wyłącznie OpenCode z modelem `openrouter/deepseek/deepseek-v4.1-flash-1017`; review wykonywał agy `gemini-3.8-flash-high` na zapisanym pliku diff. Orkiestrator przygotowywał próby, uruchamiał weryfikację i zbierał wyniki. Poprawki z prób nie weszły do produktu: odtwarzały istniejące już zmiany historyczne, a worktree były usuwane po ocenie.
 
 ## Metoda i zakres wniosku
