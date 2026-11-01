@@ -177,3 +177,14 @@ bieżącego użytkownika. Oddzielny katalog i ograniczone środowisko nie są pi
 nie powstrzymają złośliwego kodu przed dostępem do plików, sieci lub produkcji. `--ignore-scripts`
 wyłącza skrypty instalacyjne, ale nie stanowi izolacji uruchamianego kodu. Podgląd nie jest dostępem
 z telefonu ani mechanizmem wdrażania.
+
+### Pomiar stabilności 2026-11-01
+
+Trzy pełne przebiegi: domyślnie 0/3 (56,55 / 60,08 / 58,23 s), 4 workery 3/3 (75,36 / 77,14 / 76,13 s),
+8 workerów 2/3 (54,63 / 54,08 / 53,57 s), domyślne workery z timeoutem testów git 3/3 (53,40 / 57,75 / 56,25 s).
+Wybrano ostatni wariant: bez limitu workerów w konfiguracji; tylko dziewięć testów git w executor-commit ma 30 s,
+bo tworzą repo/worktree i uruchamiają wiele procesów git. Pozostałe timeouty nie zmieniają się.
+Wszystkie wejścia używają scripts/check.mjs: just check, verify Cezara oraz just update.
+Pełne wyjście trafia do ignorowanego .ai/check.log, raport Vitest do .ai/check-tests.json,
+a lista nieudanych testów do .ai/check-failures.json. Konsola pokazuje tylko statusy kontroli i nazwy nieudanych
+testów z pierwszą linią błędu, żeby limit wyjścia Cezara nie ukrywał przyczyny.

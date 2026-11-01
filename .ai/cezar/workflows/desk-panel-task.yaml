@@ -107,6 +107,18 @@ nodes:
       - [ ] `.ai/executor-summary.md` and `.ai/commit-message.txt` written; no commit/push/PR/dispatch by you
       CEZ:DONE
 
+  - id: implementation-scope
+    type: check
+    command: node scripts/executor-scope.mjs --save
+
+  - id: fix-scope
+    type: check
+    command: node scripts/executor-scope.mjs --check
+
+  - id: scope-failed
+    type: end
+    status: failed
+
   - id: verify
     name: Verify (just check + pinned-base diff)
     type: check
@@ -143,6 +155,9 @@ nodes:
       (the brief shape and forbidden areas), the area document named in `AGENTS.md`, and the full failing tests/fixtures
       plus the modules they cover.
 
+      Scope is checked deterministically against .ai/implementation-scope.json after this turn.
+      Only originally changed paths and failed tests directly covering them are allowed.
+      Full verification details: .ai/check.log; failures: .ai/check-failures.json.
       Fix the cause; do not weaken or delete tests. Scope is the original task: change only what it needs, with no
       refactor around it and no widening. Forbidden unless the original task explicitly asks for it: Wektor's memory and
       instructions (`PANEL_GUIDES`, `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy
@@ -334,7 +349,11 @@ edges:
   - from: prepare.fail
     to: prepare-failed
   - from: implement.done
+    to: implementation-scope
+  - from: implementation-scope.pass
     to: verify
+  - from: implementation-scope.fail
+    to: scope-failed
   - from: verify.pass
     to: changed
   - from: verify.fail
@@ -344,7 +363,11 @@ edges:
   - from: verify-retry.exhausted
     to: verify-failed
   - from: fix.done
+    to: fix-scope
+  - from: fix-scope.pass
     to: verify
+  - from: fix-scope.fail
+    to: scope-failed
   - from: changed.true
     to: review
   - from: changed.false

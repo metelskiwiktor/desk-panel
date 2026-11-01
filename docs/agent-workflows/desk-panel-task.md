@@ -80,3 +80,19 @@ is the only one gated on it.
 5. **`pr` + `screenshots-comment` + `review-comment`**: opens the PR ready for review, attaches all before/after screenshots in `.ai/screenshots/` (`scripts/pr-screenshots.mjs`), and posts the pre-PR review summary on the PR.
 
 Permission allow in `scripts/executor-run.mjs` is autonomy, not a sandbox: the writing steps can reach this user's files, network and credentials, with `question` and `task` denied. The review's `allowedTools` pin is a read-only guard, not an OS sandbox either. Cezar's check nodes (prepare, verify, commit) are the only steps that write git state.
+
+## Deterministic fix scope and verify output
+
+After implement, the implementation-scope check records its changed paths and tree in .ai/implementation-scope.json.
+A separate temporary Git index captures tracked/untracked work without changing the real index; the saved tree works
+whether Cezar autosaved or left changes uncommitted. After every fix, fix-scope compares against that original tree.
+Only originally changed paths are allowed, plus tests reported failed by verify that share a module basename or
+have a direct relative import of an originally changed module (relationship read from the pre-fix tree).
+Accepted test exceptions persist across fix rounds. A missing snapshot/report, changed pinned base or out-of-scope
+change fails the gate and ends the run before final commit/PR; Cezar's own autosave checkpoints may already exist.
+This is a deterministic workflow guard, not an OS sandbox against an agent tampering with the guard itself.
+
+Verify uses the shared scripts/check.mjs. It saves full logs/results in ignored .ai/check.log and .ai/check-tests.json;
+stdout contains statuses and each failed test's name and first error line only. Fix reads .ai/check-failures.json and
+the full log as needed. Cezar's run API for pilot 75b83a41 contained output truncated, so merely appending a summary
+to a verbose log would not ensure the dispatcher receives the cause. No Cezar checkout change is needed.

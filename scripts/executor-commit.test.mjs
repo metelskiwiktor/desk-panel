@@ -8,6 +8,9 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { BASE_FILE, COMMIT_MESSAGE_FILE, DIFF_FILE, FALLBACK_SUBJECT, captureDiff, commitSubject, commitWork, readBase, saveDiff } from './executor-commit.mjs';
 
+// These tests spawn git in temporary repos/worktrees; parallel just check slows process and disk operations.
+const GIT_TEST_TIMEOUT = 30_000;
+import { saveScope, checkScope } from './executor-scope.mjs';
 const roots = [];
 const quiet = () => undefined;
 
@@ -22,6 +25,7 @@ function repo(branch = 'main') {
   mkdirSync(join(root, '.ai', 'cezar', 'workflows'), { recursive: true });
   writeFileSync(join(root, '.gitignore'), '.ai/**\n!.ai/cezar/\n!.ai/cezar/workflows/\n!.ai/cezar/workflows/**\noutput/\nnode_modules/\n');
   writeFileSync(join(root, 'app.ts'), 'export const a = 1;\n');
+  writeFileSync(join(root, 'app.test.ts'), "import './app';\n");
   writeFileSync(join(root, '.ai', 'cezar', 'workflows', 'desk-panel-task.yaml'), 'version: 2\n');
   git(root, 'add', '-A');
   git(root, '-c', 'user.name=test', '-c', 'user.email=test@local', 'commit', '-q', '-m', 'base');
@@ -45,7 +49,7 @@ function linkedRepo() {
 afterEach(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
   roots.length = 0;
-});
+}, GIT_TEST_TIMEOUT);
 
 it('captures untracked files against the pinned base, excluding ignored artifacts', () => {
   const root = repo();
@@ -61,7 +65,7 @@ it('captures untracked files against the pinned base, excluding ignored artifact
   expect(patch).not.toContain('output/shot.png');
   expect(patch).not.toContain('artifact');
   expect(readBase(root).sha).toHaveLength(40);
-});
+}, GIT_TEST_TIMEOUT);
 
 it('includes a tracked .ai workflow change in the reviewed diff and the commit', () => {
   const root = repo();
@@ -76,7 +80,7 @@ it('includes a tracked .ai workflow change in the reviewed diff and the commit',
   commitWork(root, quiet);
   expect(git(root, 'show', '--name-only', '--format=', 'HEAD')).toContain('.ai/cezar/workflows/desk-panel-task.yaml');
   expect(git(root, 'status', '--porcelain')).toBe('');
-});
+}, GIT_TEST_TIMEOUT);
 
 it('commits exactly the approved diff with the executor subject and leaves the tree clean', () => {
   const root = repo();
@@ -88,7 +92,7 @@ it('commits exactly the approved diff with the executor subject and leaves the t
   expect(git(root, 'log', '-1', '--format=%s')).toBe('fix(app): keep the tile title readable');
   expect(git(root, 'status', '--porcelain')).toBe('');
   expect(git(root, 'log', '-1', '--format=%B')).not.toMatch(/Co-Authored-By|Generated with/);
-});
+}, GIT_TEST_TIMEOUT);
 
 it('collapses Cezar autosave commits into one conventional commit on the pinned base', () => {
   const root = linkedRepo();
@@ -104,7 +108,7 @@ it('collapses Cezar autosave commits into one conventional commit on the pinned 
   expect(git(root, 'rev-list', '--count', `${base}..HEAD`)).toBe('1');
   expect(git(root, 'log', '-1', '--format=%s')).toBe('feat(app): change the value');
   expect(git(root, 'status', '--porcelain')).toBe('');
-});
+}, GIT_TEST_TIMEOUT);
 
 it('is a no-op when the exact reviewed tree is already the final conventional commit', () => {
   const root = linkedRepo();
@@ -118,7 +122,7 @@ it('is a no-op when the exact reviewed tree is already the final conventional co
   expect(second.changed).toBe(false);
   expect(second.sha).toBe(first.sha);
   expect(git(root, 'rev-parse', 'HEAD')).toBe(first.sha);
-});
+}, GIT_TEST_TIMEOUT);
 
 it('refuses to duplicate or rewrite checkpoint commits on main instead of rewriting its history', () => {
   const root = repo();
@@ -132,7 +136,7 @@ it('refuses to duplicate or rewrite checkpoint commits on main instead of rewrit
   expect(() => commitWork(root, quiet)).toThrow(/must not rewrite/);
   expect(git(root, 'rev-parse', 'HEAD')).toBe(before);
   expect(git(root, 'rev-list', '--count', `${base}..HEAD`)).toBe('1');
-});
+}, GIT_TEST_TIMEOUT);
 
 it('refuses to commit when the worktree moved on after verify', () => {
   const root = repo();
@@ -140,7 +144,21 @@ it('refuses to commit when the worktree moved on after verify', () => {
   saveDiff(root, quiet);
   writeFileSync(join(root, 'app.ts'), 'export const a = 3;\n');
   expect(() => commitWork(root, quiet)).toThrow(/changed after verify\/review/);
-});
+  saveScope(root);
+  writeFileSync(join(root, '.ai/check-failures.json'), JSON.stringify({ failures: [] }));
+  writeFileSync(join(root, 'app.ts'), 'export const a = 4;\n');
+  git(root, 'add', '-A');
+  git(root, '-c', 'user.name=test', '-c', 'user.email=test@local', 'commit', '-q', '-m', 'cezar autosave (turn end)');
+  expect(() => checkScope(root)).not.toThrow();
+  writeFileSync(join(root, '.ai/check-failures.json'), JSON.stringify({ failures: [{path:'app.test.ts'}] }));
+  writeFileSync(join(root, 'app.test.ts'), "import './app'; // repaired test\n");
+  expect(() => checkScope(root)).not.toThrow();
+  const head = git(root, 'rev-parse', 'HEAD');
+  writeFileSync(join(root, 'outside.ts'), 'unrelated');
+  expect(() => checkScope(root)).toThrow(/outside\.ts/);
+  expect(git(root, 'rev-parse', 'HEAD')).toBe(head);
+
+}, GIT_TEST_TIMEOUT);
 
 it('refuses without a pinned base or an approved diff', () => {
   const root = repo();
@@ -149,7 +167,7 @@ it('refuses without a pinned base or an approved diff', () => {
   const other = repo();
   writeFileSync(join(other, 'app.ts'), 'export const a = 2;\n');
   expect(() => commitWork(other, quiet)).toThrow(/verify step must capture the diff/);
-});
+}, GIT_TEST_TIMEOUT);
 
 it('refuses an empty diff instead of committing nothing', () => {
   const root = repo();
@@ -162,6 +180,6 @@ it('keeps only a conventional English subject and never an attribution line', ()
   expect(commitSubject('feat(chat): show the status chip\n')).toBe('feat(chat): show the status chip');
   expect(commitSubject('  `perf(calendar): trim the payload`  ')).toBe('perf(calendar): trim the payload');
   expect(commitSubject('Co-Authored-By: Someone <x@example.com>\nfeat: x')).toBe(FALLBACK_SUBJECT);
-  expect(commitSubject('coś zmienione')).toBe(FALLBACK_SUBJECT);
+  expect(commitSubject('coĹ› zmienione')).toBe(FALLBACK_SUBJECT);
   expect(commitSubject('')).toBe(FALLBACK_SUBJECT);
 });

@@ -23,7 +23,7 @@ describe('desk-panel-task workflow', () => {
     expect(models).toContain('openrouter/deepseek/deepseek-v4.1-flash-1017');
     expect(new Set(models)).toEqual(new Set(['openrouter/deepseek/deepseek-v4.1-flash-1017', 'gemini-3.8-flash-high']));
     for (const id of ['implement', 'fix', 'address']) {
-      const block = yaml.slice(yaml.indexOf(`- id: ${id}`), yaml.indexOf('\n  - id:', yaml.indexOf(`- id: ${id}`) + 1));
+      const block = yaml.slice(yaml.indexOf(`- id: ${id}\n`), yaml.indexOf('\n  - id:', yaml.indexOf(`- id: ${id}\n`) + 1));
       expect(block).toContain('type: agent');
       expect(block).toContain('runner: opencode');
     }
@@ -71,6 +71,10 @@ describe('desk-panel-task workflow', () => {
   it('verifies with just check and the pinned-base diff', () => {
     const verify = yaml.slice(yaml.indexOf('- id: verify\n'), yaml.indexOf('- id: verify-retry'));
     expect(verify).toContain('just check');
+    expect(yaml).toContain('- from: fix.done\n    to: fix-scope');
+    expect(yaml).toContain('- from: fix-scope.fail\n    to: scope-failed');
+    expect(yaml).toContain('- from: fix-scope.pass\n    to: verify');
+    expect(yaml).toContain('node scripts/executor-scope.mjs --save');
     expect(verify).toContain('node scripts/executor-commit.mjs --diff');
     expect(verify).not.toContain('|| true');
   });

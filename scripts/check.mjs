@@ -1,44 +1,51 @@
-// `just check` and the verify step of `just update`: tests, types, dead code and the frontend build side by side.
-//   node scripts/check.mjs [--out DIR]   --out builds into DIR instead of dist
+// Shared verification for just check, the executor workflow and just update.
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { resolve, relative } from 'node:path';
 
-/** Runs a command with its output held back, so parallel ones do not interleave; resolves to whether it passed. */
-function quiet(label, command) {
-  const started = Date.now();
+function run(label, command) {
+  const start = Date.now();
   return new Promise(done => {
     const child = spawn(command, { shell: true, env: { ...process.env, FORCE_COLOR: '1' } });
     let output = '';
-    child.stdout.on('data', chunk => { output += chunk; });
-    child.stderr.on('data', chunk => { output += chunk; });
-    child.on('close', code => {
-      const seconds = ((Date.now() - started) / 1000).toFixed(1);
-      if (code === 0) console.log(`✔ ${label} (${seconds} s)`);
-      else console.log(`\n✖ ${label} (${seconds} s)\n${output.trimEnd()}\n`);
-      done(code === 0);
-    });
+    child.stdout.on('data', b => { output += b; });
+    child.stderr.on('data', b => { output += b; });
+    child.on('error', e => { output += e.message; });
+    child.on('close', code => done({ label, code, output, seconds: ((Date.now()-start)/1000).toFixed(1) }));
   });
 }
 
-/**
- * Tests, typecheck (incremental, cache in node_modules/.cache), dead code and the frontend build into `outDir`, all at
- * once since none waits for another; the caller serves the build only when every one passed.
- */
 export async function verify(outDir = 'dist') {
+  mkdirSync('.ai', { recursive: true });
+  rmSync('.ai/check-tests.json', { force: true });
   const results = await Promise.all([
-    quiet('testy', 'npx vitest run'),
-    quiet('typy', 'npx tsc --noEmit'),
-    // Production mode: code that only tests use counts as dead too.
-    quiet('martwy kod', 'npx knip --production --no-progress --no-config-hints'),
-    quiet('build', `npx vite build --outDir ${outDir} --emptyOutDir`),
+    run('testy', 'npx vitest run --reporter=json --outputFile=.ai/check-tests.json'),
+    run('typy', 'npx tsc --noEmit'), run('martwy kod', 'npx knip --production --no-progress --no-config-hints'),
+    run('build', `npx vite build --outDir ${outDir} --emptyOutDir`),
   ]);
-  return results.every(Boolean);
+  let tests;
+  try { tests = JSON.parse(readFileSync('.ai/check-tests.json', 'utf8')); } catch { /* report failure below */ }
+  const failures = [];
+  const first = text => String(text || '').replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/).find(l => l.trim()) || 'Brak szczegółów błędu';
+  for (const file of tests?.testResults || []) {
+    if (file.status !== 'failed') continue;
+    const path = relative(process.cwd(), file.name).replaceAll('\\', '/');
+    const failed = file.assertionResults.filter(t => t.status === 'failed');
+    if (!failed.length) failures.push({ path, test: '(suite)', error: first(file.message) });
+    for (const t of failed) failures.push({ path, test: t.fullName, error: first(t.failureMessages?.[0]) });
+  }
+  writeFileSync('.ai/check-failures.json', JSON.stringify({ failures }, null, 2));
+  writeFileSync('.ai/check.log', results.map(r => `=== ${r.label} ===\n${r.output}`).join('\n') +
+    (tests ? '\n=== Vitest full results ===\n' + JSON.stringify(tests, null, 2) : ''));
+  for (const r of results) {
+    console.log(`${r.code === 0 ? '✔' : '✖'} ${r.label} (${r.seconds} s)`);
+    if (r.code !== 0 && (r.label !== 'testy' || !failures.length)) console.log(`Error: ${r.label}: ${first(r.output)}`);
+  }
+  for (const f of failures) console.log(`FAIL ${f.path} > ${f.test}\nError: ${f.error}`);
+  if (results.some(r => r.code !== 0)) console.log('Pełny log: .ai/check.log; dane testów: .ai/check-tests.json');
+  return results.every(r => r.code === 0);
 }
-
 if (import.meta.filename === resolve(process.argv[1] ?? '')) {
-  const out = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : 'dist';
-  const started = Date.now();
-  const ok = await verify(out);
-  console.log(ok ? `\n✔ Wszystko przeszło w ${((Date.now() - started) / 1000).toFixed(1)} s.` : '\n✖ Sprawdzenie nie przeszło.');
-  process.exitCode = ok ? 0 : 1;
+  const out = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out')+1] : 'dist';
+  process.exitCode = await verify(out) ? 0 : 1;
 }
