@@ -29,6 +29,7 @@ export function taskContext(list: TodoList, task: TodoTask): { id: string; title
   const text = [
     `Zadanie z listy „${list.name}” (id listy: ${list.id})`,
     `id zadania: ${task.id}`,
+    `Pełna treść przez panel_todos z zadanie=${task.id}.`,
     `Tytuł: ${flat(task.title)}`,
     `Stan: ${TODO_STATUSES[task.status]}`,
     ...(task.blocked ? [`Blokada: ${task.blocked}`] : []),

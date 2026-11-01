@@ -45,11 +45,12 @@ describe('what the agent is told about a pointed task', () => {
     pointed.links = Array.from({ length: 20 }, (_, i) => ({ kind: 'chat', id: `${i}-${'x'.repeat(490)}`, at: 1 }));
     expect(taskContext(list([]), pointed).text.length).toBeLessThanOrEqual(MAX_CONTEXT_TEXT);
     expect(taskContext(list([]), pointed).text).toContain('Ustalenie 4');
+    expect(taskContext(list([]), pointed).text).toContain('Pełna treść przez panel_todos z zadanie=t-00000001.');
   });
   it('has the ids of the task and its list, the state, the note and who added it', () => {
     const open = taskContext(list([]), task(7, { note: 'Dodać limity', by: 'agent' }));
     expect(open).toEqual({ id: 't-00000007', title: 'Zadanie 7', text: [
-      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-00000007', 'Tytuł: Zadanie 7', 'Stan: Pomysł', 'Notatka: Dodać limity', 'Dodał: agent',
+      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-00000007', 'Pełna treść przez panel_todos z zadanie=t-00000007.', 'Tytuł: Zadanie 7', 'Stan: Pomysł', 'Notatka: Dodać limity', 'Dodał: agent',
     ].join('\n') });
     expect(taskContext(list([]), task(8, { done: true, completedAt: 3 })).text).toContain('Stan: Zakończone');
     expect(taskContext(list([]), task(8)).text).not.toContain('Notatka');

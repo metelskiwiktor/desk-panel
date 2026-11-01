@@ -381,7 +381,7 @@ describe('widok dla agenta: zadania', () => {
     expect(await view('?ukonczone=1')).toMatch(/\[x\] t-a0000003  Komunikat o pustej odpowiedzi \(\d{4}-\d{2}-\d{2}, ukończone \d{4}-\d{2}-\d{2} \d{2}:\d{2}\)/);
   });
 
-  it('pokazuje nowe pola, wybiera stan także terminalny, a błędny filtr odrzuca', async () => {
+  it('zachowuje skrót listy, a pojedyncze zadanie czyta w całości także poza filtrami; błędne id i stan odrzuca', async () => {
     const text = await view('?stan=przygotowanie');
     expect(text).toContain('Stan: Do przygotowania (przygotowanie); Blokada: Czekam na ustalenie zakresu');
     expect(text).toContain('Powiązanie: chat scenario-todo-chat — Ustalenia');
@@ -389,11 +389,34 @@ describe('widok dla agenta: zadania', () => {
     expect(text).not.toContain('t-a0000002');
     expect(await view('?stan=zakonczone')).toContain('t-a0000003');
     await expect(view('?stan=unknown')).rejects.toMatchObject({ status: 400 });
-    for (let i = 0; i < 5; i++) await sources.todoAction({ action: 'addComment', task: 't-a0000001', text: `Komentarz ${i}` });
+    const note = 'Pełna notatka. '.repeat(90) + '\nKoniec notatki';
+    await sources.todoAction({ action: 'updateTask', task: 't-a0000001', note });
+    for (let i = 0; i < 6; i++) await sources.todoAction({ action: 'addComment', task: 't-a0000001', text: `Komentarz ${i}\n${'Długi warunek odbioru. '.repeat(70)}\nKoniec ${i}` });
     const comments = await view('?stan=przygotowanie');
-    expect(comments).not.toContain('Komentarz 1');
-    expect(comments).toContain('Komentarz 2');
-    expect(comments).toContain('Komentarz 4');
+    expect(comments).not.toContain('Komentarz 2');
+    expect(comments).toContain('Komentarz 3');
+    expect(comments).toContain('Komentarz 5');
+    expect(comments).not.toContain('Koniec notatki');
+    const full = await view('?zadanie=t-a0000001&list=l-5e6f7a8b&stan=zakonczone');
+    expect(full).toContain(note);
+    expect(full).toContain('Stan: Do przygotowania (przygotowanie); Blokada: Czekam na ustalenie zakresu');
+    expect(full).toContain('Powiązanie: chat scenario-todo-chat — Ustalenia');
+    expect(full).not.toContain('t-a0000002');
+    expect(full).not.toContain('Lista „Dom”');
+    const task = (await sources.todos()).data!.lists.flatMap(l => l.tasks).find(t => t.id === 't-a0000001')!;
+    const expected = task.history.filter(h => h.kind === 'comment').map(h => h.text!);
+    expect(expected).toHaveLength(7);
+    expect(full.match(/    Komentarz \(/g)).toHaveLength(7);
+    let position = -1;
+    for (const comment of expected) {
+      expect(full).toContain(comment);
+      const next = full.indexOf(comment);
+      expect(next).toBeGreaterThan(position);
+      position = next;
+    }
+    expect(await view('?zadanie=t-a0000003')).toContain('Stan: Zakończone (zakonczone)');
+    await expect(view('?zadanie=t-00000000')).rejects.toMatchObject({ status: 404, message: 'Nie ma zadania o id t-00000000.' });
+    await expect(view('?zadanie=invalid')).rejects.toMatchObject({ status: 400 });
   });
 
   it('list= wybiera listę po id albo po fragmencie nazwy, a nieznana wymienia istniejące', async () => {

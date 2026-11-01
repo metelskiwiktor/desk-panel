@@ -117,14 +117,20 @@ rozmowy ([czat.md](czat.md)), ale nie zmienia stanu zadania z listy. Samo propon
 W trybie „Wskaż element” kafelek Zadania jest wskazywany jako **lista**, którą pokazuje (rodzaj `todoList`; ten sam id listy w dwóch kafelkach to jeden element
 kontekstu), a pojedynczy wiersz jako **zadanie** (`todo`), bo najbliższy oznaczony element wygrywa. Agent dostaje w bloku `[Kontekst]` id i nazwę listy oraz
 zadania do zrobienia z id (ukończone są tylko policzone; do 1800 znaków, nadmiar z odsyłaczem do `/api/agent/todos?list=…`), a przy zadaniu id zadania i listy,
-stan PL, blokadę, powiązania, ostatnie 3 komentarze, notatkę i autora (`src/todo-context.ts`, całość w limicie znaków). Dzięki temu „dodaj tu zadanie” albo „odhacz to” działa bez ponownego czytania list. Kontekst jest zdjęciem z
+stan PL, blokadę, powiązania, ostatnie 3 komentarze po najwyżej 150 znaków, skrót notatki i autora (`src/todo-context.ts`, całość w limicie znaków). Na początku kontekstu jest odsyłacz: pełna treść przez `panel_todos` z `zadanie=<id t-…>`; pozostaje w kontekście także po przycięciu długiego opisu. Dzięki temu „dodaj tu zadanie” albo „odhacz to” działa bez ponownego czytania list. Kontekst jest zdjęciem z
 chwili wskazania (lista odświeża się co 5 s). Kafelek bez listy wskazuje się jak zwykły kafelek, a chip zadania Cezara nazywa się teraz „Task Cezara”.
 
 ## Agent czatu
 
 Wektor na Hermesie czyta `panel_todos`, adapter widoku `GET /api/agent/todos` (`?list=<id lub fragment nazwy>`, `&ukonczone=1`, `&stan=<id stanu>`).
-Widok pokazuje stan z polską etykietą, blokadę, powiązania i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
-wybiera również terminalne bez `ukonczone=1`. Nieznany stan to 400. Zmienia zadania przez `panel_todo_action`, który wymusza `by: agent`
+Widok list bez parametru `zadanie` pozostaje skrótem: stan z polską etykietą, blokada, powiązania, notatka do 300 znaków i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
+wybiera również terminalne bez `ukonczone=1`. Nieznany stan to 400.
+
+`panel_todos` z `zadanie=<id t-…>` (`GET /api/agent/todos?zadanie=…`) zwraca jedno zadanie z nazwą i id listy, pełną notatką, stanem, blokadą, powiązaniami oraz wszystkimi zapisanymi komentarzami w kolejności historii, bez ucinania. Obejmuje również zadania zakończone; filtry `list`, `stan` i `ukonczone` nie ograniczają wyboru po id (błędny `stan` nadal daje 400). Nieznane id to czytelny błąd 404, niepoprawny format id to 400. „Wszystkie” oznacza komentarze obecne w historii zadania, z istniejącym limitem 200 wpisów; model i zapis pozostają bez zmian.
+
+Przy pracy nad zadaniem z listy Wektor najpierw czyta jego pełną treść przez `zadanie`, nawet gdy dostał skrót wskazania. CEL, DECYZJE i WARUNKI ODBIORU ze specyfikacji w notatce i komentarzach przenosi do promptu executora w całości, dosłownie, bez skracania ani tłumaczenia; ta zasada ma pierwszeństwo przed angielskim formatem briefu. Rekonesans tylko uzupełnia ustalenia. Reguła jest w `PANEL_GUIDES.zadania` oraz `CHAT_SKILLS` (`@Zaimplementuj zadanie`) w `src/chat-contract.ts`.
+
+Zmienia zadania przez `panel_todo_action`, który wymusza `by: agent`
 dla każdej akcji mającej autora (również zgodnościowego `updateTask`). `TODO_FIELDS` jest wyprowadzane z kontraktu, obejmuje nowe akcje.
 Instrukcje żyją w kodzie: `PANEL_GUIDES.zadania` w `src/chat-contract.ts` i preambuła w `server/hermes-chat.ts`. Stan zmienia na prośbę użytkownika;
 ustalenia zapisuje komentarzem, gdy o to prosi; przy propozycji Cezara z zadania podaje `todoId`, a stan i linki zapisuje panel po kliknięciu karty.

@@ -27,6 +27,14 @@ flowchart TD
     J --> K["Cezar executes implementation worktree"]
 ```
 
+### Before recon: full to-do specification
+For a task from a user to-do list, first call `panel_todos` with `zadanie=<t-… id>` and read the full note and every comment.
+The list view and pointed context are summaries. Carry CEL, DECYZJE and WARUNKI ODBIORU from the specification into the
+Executor Prompt verbatim and in full, without shortening or translating; this takes precedence over the English prompt
+rule. Recon only supplements these sections. On 01.11.2026 pilot task `t-1159da35` held its specification in five comments,
+but the list view exposed only the last three comments (part 5/5, the review, and structural observations), losing most
+of the specification. Full task reads are described in [zadania.md](../../zadania.md#agent-czatu).
+
 ### Phase 0: Earlier work
 Before any recon, `panel_cezar` (no arguments) lists finished Cezar tasks. An analysis or earlier implementation of the same
 feature is read (`panel_cezar` with `id`, then `krok`, and its handoff note), and every decision the user made there goes into

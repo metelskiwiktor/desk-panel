@@ -326,6 +326,17 @@ describe('panel MCP for Hermes', () => {
     expect(result.content[0].text).toContain('**Ustalenie**');
     expect(result.content[0].text).not.toContain('t-a0000002');
     expect((await call('panel_todos', { stan: 'invalid' })).isError).toBe(true);
+    const full = await call('panel_todos', { zadanie: 't-a0000001' });
+    expect(full.isError).toBeUndefined();
+    expect(full.content[0].text).toContain('Najpierw ustalmy zakres zmian.');
+    expect(full.content[0].text).toContain('**Ustalenie**');
+    expect(full.content[0].text).not.toContain('t-a0000002');
+    const missing = await call('panel_todos', { zadanie: 't-00000000' });
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).toContain('Nie ma zadania o id t-00000000.');
+    expect((await call('panel_todos', { zadanie: 'invalid' })).isError).toBe(true);
+    const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todos').inputSchema.properties.zadanie).toMatchObject({ type: 'string', pattern: '^t-[0-9a-f]{8}$' });
   });
 
   it('makes and keeps its token outside the repository', async () => {

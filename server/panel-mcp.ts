@@ -8,7 +8,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { cezarActionSchema } from '../src/cezar-contract';
 import { CARD_SHOWN, CEZAR_WORKFLOWS, cezarRunId, cockpitToolDescription } from '../src/cockpit-contract';
-import { todoActionSchema, todoStatusSchema, TODO_STATUSES } from '../src/todo-contract';
+import { todoActionSchema, todoStatusSchema, todoTaskId, TODO_STATUSES } from '../src/todo-contract';
 import { bankShowObject, bankShowQuerySchema, BANK_SHOW_LIMITS, BANK_SHOW_VIEWS } from '../src/bank-show-contract';
 import { bankShow, bankShowSummary, BankShowError, dayIn } from './bank-show';
 import { bankPlanSchema, BANK_PLAN_LIMITS } from '../src/bank-plan-contract';
@@ -267,10 +267,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
   panel_quotas: { description: 'Limity AI użytkownika z resetami w czasie lokalnym.', input: z.object({}).strict(), schema: schema(), run: view('quotas', () => ({})) },
   panel_system: { description: 'CPU i RAM komputera użytkownika.', input: z.object({}).strict(), schema: schema(), run: view('system', () => ({})) },
   panel_todos: {
-    description: 'Listy zadań użytkownika z id list (l-…) i zadań (t-…), stanem, blokadą, powiązaniami i ostatnimi trzema komentarzami.',
-    input: z.object({ list: text(200).optional(), ukonczone: flag, stan: todoStatusSchema.optional() }).strict(),
-    schema: schema({ list: { type: 'string', description: 'Id listy albo fragment nazwy' }, ukonczone: { type: 'boolean', description: 'Pokaż też ukończone' }, stan: { type: 'string', enum: Object.keys(TODO_STATUSES), description: 'Filtr stanu zadania, także zakończonego' } }),
-    run: view('todos', a => ({ list: a.list, ukonczone: a.ukonczone ? '1' : undefined, stan: a.stan })),
+    description: 'Listy zadań użytkownika z id list (l-…) i zadań (t-…), stanem, blokadą, powiązaniami i ostatnimi trzema komentarzami. zadanie=<id t-…> czyta jedno zadanie w całości: pełna notatka i wszystkie komentarze w kolejności, także dla zakończonego zadania; pozostałe filtry go nie ograniczają.',
+    input: z.object({ zadanie: todoTaskId.optional(), list: text(200).optional(), ukonczone: flag, stan: todoStatusSchema.optional() }).strict(),
+    schema: schema({ zadanie: { type: 'string', pattern: '^t-[0-9a-f]{8}$', description: 'Id jednego zadania (t-…): pełna treść bez ucinania, wszystkie komentarze; ignoruje filtry list, stan i ukonczone' }, list: { type: 'string', description: 'Id listy albo fragment nazwy' }, ukonczone: { type: 'boolean', description: 'Pokaż też ukończone' }, stan: { type: 'string', enum: Object.keys(TODO_STATUSES), description: 'Filtr stanu zadania, także zakończonego' } }),
+    run: view('todos', a => ({ zadanie: a.zadanie, list: a.list, ukonczone: a.ukonczone ? '1' : undefined, stan: a.stan })),
   },
   panel_bank: {
     description: 'Konto PKO BP tylko do odczytu: saldo, operacje z zakresu (domyślnie 30 dni, najwyżej 400) z oznaczeniami użytkownika. Numery rachunków i telefonów są zamaskowane.',
