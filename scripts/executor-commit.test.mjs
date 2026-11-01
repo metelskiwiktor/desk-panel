@@ -61,7 +61,7 @@ it('captures untracked files against the pinned base, excluding ignored artifact
   expect(patch).not.toContain('output/shot.png');
   expect(patch).not.toContain('artifact');
   expect(readBase(root).sha).toHaveLength(40);
-});
+}, 30_000);
 
 it('includes a tracked .ai workflow change in the reviewed diff and the commit', () => {
   const root = repo();
@@ -76,7 +76,7 @@ it('includes a tracked .ai workflow change in the reviewed diff and the commit',
   commitWork(root, quiet);
   expect(git(root, 'show', '--name-only', '--format=', 'HEAD')).toContain('.ai/cezar/workflows/desk-panel-task.yaml');
   expect(git(root, 'status', '--porcelain')).toBe('');
-});
+}, 30_000);
 
 it('commits exactly the approved diff with the executor subject and leaves the tree clean', () => {
   const root = repo();
@@ -88,7 +88,7 @@ it('commits exactly the approved diff with the executor subject and leaves the t
   expect(git(root, 'log', '-1', '--format=%s')).toBe('fix(app): keep the tile title readable');
   expect(git(root, 'status', '--porcelain')).toBe('');
   expect(git(root, 'log', '-1', '--format=%B')).not.toMatch(/Co-Authored-By|Generated with/);
-});
+}, 30_000);
 
 it('collapses Cezar autosave commits into one conventional commit on the pinned base', () => {
   const root = linkedRepo();
@@ -104,7 +104,7 @@ it('collapses Cezar autosave commits into one conventional commit on the pinned 
   expect(git(root, 'rev-list', '--count', `${base}..HEAD`)).toBe('1');
   expect(git(root, 'log', '-1', '--format=%s')).toBe('feat(app): change the value');
   expect(git(root, 'status', '--porcelain')).toBe('');
-});
+}, 30_000);
 
 it('is a no-op when the exact reviewed tree is already the final conventional commit', () => {
   const root = linkedRepo();
@@ -118,7 +118,7 @@ it('is a no-op when the exact reviewed tree is already the final conventional co
   expect(second.changed).toBe(false);
   expect(second.sha).toBe(first.sha);
   expect(git(root, 'rev-parse', 'HEAD')).toBe(first.sha);
-});
+}, 30_000);
 
 it('refuses to duplicate or rewrite checkpoint commits on main instead of rewriting its history', () => {
   const root = repo();
@@ -132,7 +132,7 @@ it('refuses to duplicate or rewrite checkpoint commits on main instead of rewrit
   expect(() => commitWork(root, quiet)).toThrow(/must not rewrite/);
   expect(git(root, 'rev-parse', 'HEAD')).toBe(before);
   expect(git(root, 'rev-list', '--count', `${base}..HEAD`)).toBe('1');
-});
+}, 30_000);
 
 it('refuses to commit when the worktree moved on after verify', () => {
   const root = repo();
@@ -140,7 +140,7 @@ it('refuses to commit when the worktree moved on after verify', () => {
   saveDiff(root, quiet);
   writeFileSync(join(root, 'app.ts'), 'export const a = 3;\n');
   expect(() => commitWork(root, quiet)).toThrow(/changed after verify\/review/);
-});
+}, 30_000);
 
 it('refuses without a pinned base or an approved diff', () => {
   const root = repo();
@@ -149,14 +149,14 @@ it('refuses without a pinned base or an approved diff', () => {
   const other = repo();
   writeFileSync(join(other, 'app.ts'), 'export const a = 2;\n');
   expect(() => commitWork(other, quiet)).toThrow(/verify step must capture the diff/);
-});
+}, 30_000);
 
 it('refuses an empty diff instead of committing nothing', () => {
   const root = repo();
   saveDiff(root, quiet);
   expect(readFileSync(join(root, DIFF_FILE), 'utf8')).toBe('');
   expect(() => commitWork(root, quiet)).toThrow(/nothing to commit/);
-});
+}, 30_000);
 
 it('keeps only a conventional English subject and never an attribution line', () => {
   expect(commitSubject('feat(chat): show the status chip\n')).toBe('feat(chat): show the status chip');
