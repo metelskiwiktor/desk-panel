@@ -23,6 +23,47 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | C1 `t-fb294d14` rev 1 | Gemini | 142,293 | 67 837 | brak danych | 2 | 4 | 2 | 0 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 1 | DeepSeek | 174,218 | 170 850 | 0,021466 | 2 | 3 | 3 | 1 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 1 | Gemini | 249,017 | 104 782 | brak danych | 1 | 5 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C1 `t-fb294d14` rev 2 | DeepSeek — próba 1, read-limit | 236,517 | 211 156 | 0,017017 | — | — | — | — | nie wykonywano | — | nie wykonywano |
+| C1 `t-fb294d14` rev 2 | DeepSeek — ponowienie | 401,395 | 110 014 | 0,034144 | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C1 `t-fb294d14` rev 2 | Gemini | 230,839 | 81 183 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C2 `t-7dea9734` rev 2 | DeepSeek | 524,176 | 177 094 | 0,028975 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
+| C2 `t-7dea9734` rev 2 | Gemini | 126,493 | 84 587 | brak danych | 2 | 4 | 2 | 2 | nie wykonywano | — | nie wykonywano |
+
+### C1/C2 — 2026-11-02, rev 2 → rev 3
+
+Użytkownik przyjął klasyfikację drugiej rundy:
+
+- C1 DeepSeek: redakcyjne 1, 2, 3, 5, 6, 8; chybione 4, 7.
+- C1 Gemini: redakcyjne 1, 2, 5, 6, 7, 8; chybione 3, 4.
+- C2 DeepSeek: redakcyjne 2, 3, 5, 7, 8; chybione 1, 4, 6.
+- C2 Gemini: blokujące 3, 4 (obie unikalne); redakcyjne 1, 2, 5, 6; chybione 7, 8.
+
+Pierwsza próba DeepSeek C1 nie dała raportu: model przekroczył 12 odczytów (wykonał 13, w tym ponowne
+odczyty tych samych plików), `reason: read-limit`, `completed: false`, `textLength: 0`, exit 1.
+Metryki tej próby obejmują tylko zakończone kroki. Powód i metryki pokazano użytkownikowi i zapisano
+w komentarzu; nie zmieniono skryptu, limitów ani materiałów. Jedno ponowienie wyłącznie DeepSeek
+zakończyło się skutecznie przy 8 odczytach. Pozostałe trzy raporty rev 2 też zakończyły się skutecznie.
+Nieudana próba nie ma klasyfikacji uwag i nie jest przeglądem spełniającym definicję gotowości.
+
+Rozstrzygnięcia blokad: aktywne `blocked` zatrzymuje przycisk i unieważnia zgodę; dla taska poza
+retencją snapshotu dozwolony jest pojedynczy odczyt istniejącym `cezarRun` przy jawnym podglądzie/POST,
+bez nowego pollera. Użytkownik zatwierdził oba. Redakcja doprecyzowała tekstowy widok C1 (także brak
+spec/historyczna rewizja), granice sekcji, komunikaty, podział C1/C2, zachowany wynik/retryOf,
+typ ostrzeżenia i klasy błędów. Nie dołożono nonce ani nowej funkcji produktu: gwarancja replayu
+dotyczy potwierdzonych zachowanych zleceń, a nie unknown bez taskId. Krotka z retryOf już wskazywała
+potwierdzoną próbę; braki w `panel_todos` należą do wyniku C1. Automatyczny krok rozwijający podgląd
+w scenariuszu był już wymagany, nie potrzebuje osobnej decyzji o składni runnera.
+
+Pełne raporty i rozstrzygnięcia rev 2 zapisano w komentarzach zadań; zgodność wszystkich części
+z oryginałem sprawdzono. Rev 3 zapisano w polu `spec` z autorem `codex`. Użytkownik jawnie zwolnił
+rev 3 z kolejnej rybki pod warunkiem, że zawiera wyłącznie rozstrzygnięcia tej rundy i redakcję;
+warunek spełniono. Oba zadania mają stan `gotowe`, C2 zachowuje blokadę „czeka na C1”. Nie wykonano
+implementacji ani dispatchu Cezara.
+
+Sprostowanie przyczyny problemu z kartą: użytkownik dostarczył analizę `state.db` sesji `987ecbe5`,
+według której pełne `panel_todos` dotarło do Wektora, a treść zgubił model przy długim kontekście.
+To nie było przycinanie przez Hermesa. Źródło i szczegóły są w DECYZJACH C1 rev 3; analizy bazy
+nie powtarzano w tym przygotowaniu. Poniższa diagnostyka regexu dotyczy osobnego runnera rybki.
 
 ### C1/C2 — 2026-11-02, rev 1
 
