@@ -33,7 +33,8 @@ const root = () => document.querySelector('.chat-root') as HTMLElement;
 const openChat = async (user: ReturnType<typeof userEvent.setup>) => {
   await screen.findByRole('region', { name: 'Poczta' });
   await user.click(screen.getByRole('button', { name: 'Otwórz czat z agentem' }));
-  await screen.findByRole('dialog', { name: 'Czat z agentem' });
+  // React.lazy still commits asynchronously after preloading; the full suite may exceed the default 1 s wait.
+  await screen.findByRole('dialog', { name: 'Czat z agentem' }, { timeout: 5_000 });
 };
 const startPointing = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /Wskaż element/ }));
 
