@@ -9,6 +9,26 @@ Panel nie wymaga osobnego klucza typu provisioning czy management key. Wykorzyst
 - Klucz pozostaje wyłącznie na backendzie; nigdy nie jest przesyłany do przeglądarki ani zapisywany w plikach cache czy logach.
 - Bez ustawionego klucza `OPENROUTER_API_KEY` endpoint `/api/openrouter` odpowiada statusem `503`, a kafelek wyświetla czytelną informację po polsku.
 
+## Routing DeepSeek w Cezarze i OpenCode (2026-11-02)
+
+Według ustawień konta zgłoszonych przez użytkownika OpenRouter miał sortowanie po cenie; 2.11.2026 zmieniono je na sortowanie po przepustowości. W pomiarze sprzed tej zmiany domyślny routing modelu `deepseek/deepseek-v4.1-flash-1017` wybrał OpenInference: około 24,4 tokena wyjścia/s, 1,538 s do pierwszego tokenu i 1,770 s całości. Jawne `provider.sort: "throughput"` wybrało Together (0,811 / 0,894 s), a przypięcie szybkich dostawców wybrało Wafer (0,373 / 0,540 s). To pojedyncze krótkie żądania z 754 tokenami wejścia, bez narzędzi i bez trafień cache; przepustowość obejmuje reasoning i jest liczona jako tokeny wyjścia / API `generation_time`.
+
+Run Cezara `dc7fd2c8-576b-4fb4-a83c-d2c9c06494c0` pokazał problem długich odpowiedzi: etap implementacji miał 48 odpowiedzi modelu, 107 wywołań narzędzi i 138 253 tokeny reasoning; przedziały strumienia reasoning zajęły 53,47 z 57,39 minuty. W jednej rundzie 899 tokenów reasoning zajęło około 236 s (około 3,8 tokena/s). Późniejszy etap `address` zakończył się timeoutem 30 min. Historyczny zapis nie zawiera identyfikatorów generacji, więc nie ustalono jego dostawców ani nie dowiedziono, że timeout spowodował konkretny host lub sortowanie po cenie. Źródła lokalne: `.ai/cezar/runs/dc7fd2c8-576b-4fb4-a83c-d2c9c06494c0.ndjson` (implementacja: wiersz 744; timeout: 1386) oraz baza `~/.local/share/opencode/opencode.db`, sesja `ses_e62b22f7dffenuJDEWCh0lhAuv`. Baza zawiera tokeny i znaczniki czasu wiadomości/części; sam NDJSON nie daje wszystkich tych czasów.
+
+OpenCode używany przez Cezara ma teraz w `~/.config/opencode/opencode.jsonc`, pod `provider.openrouter.models["deepseek/deepseek-v4.1-flash-1017"].options.provider`:
+
+```json
+{
+  "data_collection": "deny",
+  "order": ["wafer", "together"],
+  "allow_fallbacks": true
+}
+```
+
+Ta kolejność preferuje Wafer, potem Together; `allow_fallbacks: true` pozwala spróbować pozostałych kwalifikujących się dostawców, gdy obaj są niedostępni. Ustawienia effort i limitu wyjścia pozostawiono bez zmian. Konfiguracja użytkownika pozostaje poza Gitem. Jawna kolejność w żądaniu ma pierwszeństwo przed domyślnym sortowaniem konta; szczegóły opisuje [dokumentacja routingu OpenRouter](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+Pojedynczy pomiar domyślnego routingu konta po zmianie, bez `provider.order` w żądaniu, wybrał Relace: 1,087 s do pierwszego tokenu, 1,150 s całości, koszt 0,0002559 USD (754 tokeny wejścia). Ten pomiar sprawdza routing konta, a nie preferencje OpenCode. Bezpieczne wyniki pomiarów i identyfikatory generacji są lokalnie w `~/.desk-panel/analysis-dc7fd2c8/bench-results.json` oraz `bench-after-routing.json`; nie są częścią repozytorium. Zmiana routingu ma ograniczyć ryzyko wolnych hostów, ale te krótkie próby nie gwarantują czasu wykonania dużego zadania.
+
 ## Dlaczego nie używamy endpointu `/api/v1/activity`?
 
 Endpoint konta `/api/v1/activity` wymaga specjalnego klucza administracyjnego (management/provisioning key) i zwraca błąd `403 Forbidden` przy użyciu standardowego klucza API. Standardowy klucz ma natomiast pełny dostęp do:
