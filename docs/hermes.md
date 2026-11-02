@@ -143,7 +143,11 @@ Szczegóły: [automaty.md](automaty.md#żeton-i-okno-raportu).
 `tools/list`, `tools/call`). Narzędzia są wąskimi adapterami do widoków dla agenta z [czat.md](czat.md) — ten sam tekst, ten sam
 zakres co UI — z argumentami sprawdzanymi schematem przed wykonaniem:
 
-Nowy lub zmieniony schemat narzędzia MCP Wektor widzi dopiero po `just hermes RESTART`, bo Hermes czyta listę narzędzi raz przy połączeniu, a `just update` restartuje tylko panel; restart wymaga zgody użytkownika i nie może przypaść w trakcie tury ani runu automatu (przed restartem sprawdź `running` w `GET /api/chats`, brak oczekujących runów i brak startu automatu w najbliższych 10 minutach).
+Nowy lub zmieniony schemat narzędzia MCP Wektor widzi dopiero po `just hermes RESTART`, bo Hermes czyta listę narzędzi raz przy połączeniu, a `just update` restartuje tylko panel.
+
+Po pushu na `main` agent lokalny (Claude Code, Codex, Antigravity) sam uruchamia `just update`; gdy zmiana dotyczy schematu narzędzi MCP albo konfiguracji Hermesa, po wdrożeniu sam wykonuje też `just hermes RESTART` i `just hermes STATUS`. Nie wymaga to dodatkowej zgody ani ręcznego działania użytkownika. Wektor i executor Cezara nadal nie wdrażają ani nie restartują usług. Instalacja, rejestracja i pierwszy start Hermesa nadal wymagają udziału użytkownika.
+
+Bezpośrednio przed restartem sprawdź `running` w `GET /api/chats`, harmonogram `GET /api/automations` oraz brak oczekujących/trwających runów (`pending`, `execution` i `outbox` w prywatnym `~/.desk-panel/automations.json`; nie wypisuj tokenów ani treści). Restart jest dozwolony wyłącznie bez trwającej tury, runu lub oczekującego zlecenia i bez startu automatu w najbliższych 10 minutach. Jeśli coś trwa albo zbliża się automat, poczekaj na zakończenie i ponownie odczytaj te stany; nie przerywaj tury. Nieudany lub niepełny odczyt nie potwierdza bezpieczeństwa restartu.
 
 | Narzędzie | Odpowiada |
 | --- | --- |
