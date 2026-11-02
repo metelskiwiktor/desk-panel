@@ -3,7 +3,7 @@ import { MAX_CONTEXT_TEXT } from './chat-context';
 import { listContext, taskContext } from './todo-context';
 import type { TodoList, TodoTask } from './todo-contract';
 
-const task = (n: number, extra: Partial<TodoTask> = {}): TodoTask => ({ id: `t-${String(n).padStart(8, '0')}`, title: `Zadanie ${n}`, note: '', done: false, createdAt: 1, completedAt: null, by: 'user', status: extra.done ? 'zakonczone' : 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [], ...extra });
+const task = (n: number, extra: Partial<TodoTask> = {}): TodoTask => ({ id: `t-${String(n).padStart(8, '0')}`, title: `Zadanie ${n}`, note: '', done: false, createdAt: 1, completedAt: null, by: 'user', status: extra.done ? 'zakonczone' : 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [], executor: null, repo: null, mode: null, ...extra });
 const list = (tasks: TodoTask[]): TodoList => ({ id: 'l-1a2b3c4d', name: 'Do poprawy - Chat Agy', createdAt: 1, hideDone: false, showAgent: false, tasks });
 
 describe('what the agent is told about a pointed list', () => {

@@ -4,8 +4,11 @@ A Cezar executor run reads one brief file. Copy this template, fill every sectio
 task-specific detail, and pass it to `node scripts/executor-run.mjs --brief ABS_PATH` or `just executor-run <path>`.
 The `implement` step of `.ai/cezar/workflows/desk-panel-task.yaml` receives the task text in the same shape.
 
-The brief is what the executor works from; the workflow prompt adds the fixed repository rules. A brief that leaves a
-section as `none` is a decision, not an omission: write `none` explicitly.
+A task spec in the headed format ([przygotuj-zadanie.md](przygotuj-zadanie.md)) — `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:`,
+`DECYZJE:`, `WARUNKI ODBIORU:`, `ZAŁĄCZNIKI:` on their own lines — is a **valid brief by itself**. The sections below are
+optional detail that can be added; a brief without them still works. The brief is what the executor works from; the
+workflow prompt adds the fixed repository rules. A brief that leaves a section as `none` is a decision, not an omission:
+write `none` explicitly.
 
 ## Goal
 
@@ -17,17 +20,30 @@ knowledge lives") that describes the area you touch, and the user request or til
 - Branch/worktree and the pinned base: `scripts/executor-prepare.mjs` records it in `.ai/executor-base.json`; the brief
   names the base commit only when it matters.
 - What exists today and what the run must not change about it.
-- For UI work: scenario file, page, `--open` target, device/scale, and the "before" problem state.
+- For UI work: scenario file, page, `--open` target, device/scale, and the "before" problem state. When the spec carries
+  `TYP ZMIANY` (`Type: UI`) and `ZRZUTY` (Scenario, Page, Open, Device, Scale, Before), use those values instead of the
+  constants in the example command in the workflow prompt; the spec wins.
+  If `Type: UI` is present but `Scenario`, `Page`, `Open`, `Device`, `Scale` or `Before` is missing/empty (or
+  `Scenario`/`ZRZUTY` is `none`), stop before editing or capturing screenshots. Report "Incomplete UI screenshot
+  parameters" and list the missing/invalid fields; do not guess or use example defaults.
 
-## Allowed files
+## Allowed files (optional)
 
-The exact paths the run may create or change, grouped by area, e.g.:
+An explicit list of the exact paths the run may create or change, grouped by area, e.g.:
 
 - `src/<module>.tsx`, `src/<module>.test.tsx`
 - `server/<module>.ts`, `server/<module>.test.ts`
 - `scenarios/<scenario>.json`, `docs/<area>.md` (the area document the change updates)
 
-Anything outside this list is out of scope. A run that needs another file stops and says so instead of widening.
+Only a list that explicitly means this restricts paths. Without it the run does recon in the areas named by `CEL:` and
+`ZAKRES:` and may change the modules, tests and docs those areas need; it still stops instead of widening beyond them.
+`ZAŁĄCZNIKI` are references (paths or content to read), never an allow-list, and the new spec template does not contain a
+separate allow-list section. A brief that has one still limits the paths as before.
+
+The `fix` and `address` steps stay bound deterministically by the saved scope: `scripts/executor-scope.mjs --save` after
+`implement` stores the whole diff (tests, docs and scenarios included), and `--check` rejects paths outside it. A brief
+without a file list does not free those steps from the gate, and the script does not judge the goal's meaning — the
+reviewer does.
 
 ## Forbidden areas
 

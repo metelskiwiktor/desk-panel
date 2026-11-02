@@ -4,6 +4,7 @@ import path from 'node:path';
 import { SourceError, type PanelSources } from './sources';
 import type { TrainingStep } from '../src/training-contract';
 import { TODO_STATUSES, todoStatusSchema, todoTaskId } from '../src/todo-contract';
+import { getTodoDispatch } from '../src/todo-dispatch';
 
 /**
  * The panel's data as short plain text for the chat agent: local time instead of epoch milliseconds, only the fields a
@@ -295,6 +296,14 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
           ...t.links.map(l => `    Powiązanie: ${l.kind} ${l.id}${l.title ? ` — ${l.title}` : ''}`),
         ];
         if (full) {
+          // Readiness of the CURRENT revision, never of the historical one shown with wersja=N: the fields and the spec
+          // are the task's today, and the code displays `missing` instead of parsing the text.
+          const dispatch = getTodoDispatch(t);
+          const value = (v: string | null) => v ?? 'brak';
+          lines.push(`    Wykonanie: executor=${value(t.executor)}, repo=${value(t.repo)}, mode=${value(t.mode)}`);
+          lines.push(dispatch.missing.length
+            ? `    Gotowość bieżącej rewizji (v${dispatch.specRevision}): niegotowe, brakuje ${dispatch.missing.length}: ${dispatch.missing.join('; ')}.`
+            : `    Gotowość bieżącej rewizji (v${dispatch.specRevision}): gotowe — projekt ${dispatch.project}, workflow ${dispatch.workflow}, rewizja ${dispatch.specRevision}.`);
           const shown = revision ?? t.specRevisions.find(r => r.revision === t.specRevision);
           const spec = shown?.spec ?? t.spec;
           if (spec) {
