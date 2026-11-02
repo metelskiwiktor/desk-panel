@@ -91,6 +91,10 @@ mówi „brak uwag”. Błąd, timeout, pusty/niekompletny raport nie spełnia d
 pokazuje go i poprawki użytkownikowi. Istotna zmiana celu/zakresu po raporcie wymaga nowej rybki; usunięcie wskazanego
 braku lub korekta redakcyjna nie wymaga automatycznie kolejnego płatnego przebiegu.
 
+Na uwagi rybki o skrajnych przypadkach słoń odpowiada najpierw uproszczeniem zakresu albo zapisem „poza zakresem, akceptowane ryzyko”;
+nową regułę do specyfikacji dodaje tylko przy realnym problemie (pytanie z definicji gotowości: „jaki realny problem z ostatnich tygodni to rozwiązuje?”)
+(2026-11-02: zadanie C2 w rewizji 3 urosło do łańcuchów retryOf, replayu po restarcie i klasyfikacji unknown/failed dla jednego użytkownika z jednym przyciskiem).
+
 Raporty zapisuj w zwykłych komentarzach z nagłówkiem `Przegląd rev N — DeepSeek — część i/k` oraz
 `Przegląd rev N — Gemini — część i/k`: N to rewizja specyfikacji, i to numer części od 1, k to liczba części
 danego raportu (np. `Przegląd rev 2 — DeepSeek — część 1/3`).
@@ -101,65 +105,18 @@ analogicznie w komentarzu odnoszącym się do tej samej rewizji. Po analizie uwa
 redakcyjne, chybione, unikalne blokujące) i dopisuje wiersze do rejestru w [rybka-evaluation.md](rybka-evaluation.md).
 To reguła przygotowania, nie kod dzielenia raportu w aplikacji.
 
-Domyślnie uruchom lokalnie z id zadania: `just rybka <id zadania>` (np. `just rybka t-00c6c30f`).
-Skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`.
-Pełna treść obejmuje wszystkie linie i sekcje aż do komentarzy lub końca odpowiedzi; test porównuje całość,
-również końcowe załączniki, dla odpowiedzi z komentarzami i bez nich (LF/CRLF).
-Pusty stan („Brak specyfikacji”) przerywa wykonanie czytelnym błędem. Eksport do pliku (`just rybka .ai/spec.md`)
-pozostaje tylko alternatywą, gdy zadanie nie ma jeszcze wpisu w panelu.
-
-Domyślnie wołane są obie rybki równolegle: `just rybka SPEC` (`--runner both`). Opcjonalnie można wybrać jednego recenzenta:
-`--runner opencode` (DeepSeek) lub `--runner agy` (Gemini 3.8 Flash high).
-Implementacja: [scripts/rybka.mjs](../../scripts/rybka.mjs); nie uruchamiaj jej w runie wykonawcy Cezara.
-Oba przebiegi startują w świeżych sesjach bez historii:
-- **DeepSeek** (`opencode`): model `openrouter/deepseek/deepseek-v4.1-flash-1017`. Specyfikacja jest jedyną wiadomością użytkownika,
-  a model czyta AGENTS.md i załączniki narzędziem `read` (do 12 wywołań).
-- **Gemini** (`agy`): model `gemini-3.8-flash-high` przez lokalne `agy`, bez narzędzi i bez flagi `--dangerously-skip-permissions`.
-  Materiały referencyjne i specyfikacja są wklejane bezpośrednio do pojedynczego promptu.
-
-Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model rybki.
-Aby recenzenci nie błądzili po repo, skrypt sprawdza materiały **przed startem modeli**: specyfikację, AGENTS.md
-oraz jawne ścieżki plików w sekcji ZAŁĄCZNIKI (najlepiej każda ścieżka w backtickach). Przyjmuje tylko tekstowe
-pliki wewnątrz repo, bez poświadczeń i dowiązań prowadzących poza repo. Limit to 12 różnych plików, licząc specyfikację
-i AGENTS.md, oraz 200 000 znaków łącznie. Powtórzone ścieżki nie zwiększają liczby plików. Brak pliku,
-przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywołaniem modelu.
-W OpenCode do promptu roli trafia lista dozwolonych plików, a model czyta AGENTS.md i istotne
-załączniki wyłącznie narzędziem `read`: uprawnienia dopuszczają tylko te dokładne ścieżki, pozostałe są odrzucane.
-W agy treść tych samych sprawdzonych materiałów jest wklejana do wiadomości użytkownika, a model nie ma narzędzi.
-Ma najwyżej 12 wywołań odczytu (ponowne odczyty i odmowy też się liczą); wykrycie przekroczenia przerywa próbę
-i wyklucza skuteczny raport. Nie ma wyszukiwania, zapisu, powłoki ani delegacji. MCP są wyłączone. To ograniczenia wejścia
-i narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.
-Nie ustawiamy `agent.steps`: OpenCode po dojściu do tej granicy dokleja wiadomość asystenta o wyczerpaniu kroków
-(przy wartości 1 już w pierwszym kroku), co może zastąpić recenzję podsumowaniem nieukończonej pracy.
-Eksplorację ograniczają jawne ścieżki i licznik odczytów, a czas kontrolują watchdogi. Raport zawiera do 8 najważniejszych uwag.
-
-Konfiguracje OpenCode są scalane: puste `mcp: {}` nie wyłącza serwerów hosta. Skrypt odczytuje rozwiązaną
-konfigurację do pamięci, bez jej drukowania, wyłącza każdy MCP i potwierdza uprawnienia oraz model przed startem.
-Odczyt konfiguracji ma limit 15 s na każde z dwóch wywołań; nie otwieramy plików uwierzytelnienia.
-Zasady: [konfiguracja OpenCode](https://opencode.ai/docs/config/),
-[uprawnienia](https://opencode.ai/docs/permissions/), [agenci](https://opencode.ai/docs/agents/).
-
-Limit całej próby to 10 minut (razem z konfiguracją), a limit bez nowego zdarzenia to 8 minut od startu modelu
-lub ostatniego zdarzenia. Bajty stderr i niepełne/niepoprawne linie JSON nie resetują limitu ciszy.
-CLI emituje zamknięte bloki, nie ich przyrosty: udany pilotaż potrzebował 218 s na ostatni krok,
-a większy przegląd przekroczył dawny limit 4 min bez zdarzeń. Cisza JSONL nie dowodzi bezczynności modelu.
-Co 15 s skrypt pokazuje liczbę zdarzeń, ostatnie narzędzie i pozostały czas.
-Pokazuje też sumę tokenów zakończonych kroków, łącznie z cache (cache dodatkowo osobno), i ostrzega od 800 000.
-Licznik aktualizuje się również od razu po `step_finish`. Przed pierwszym takim zdarzeniem jest „n/d”:
-JSONL nie podaje przyrostowego zużycia podczas trwającego kroku, więc licznik nie obejmuje go na bieżąco.
-Kończy się jawnym powodem: timeout, zawieszenie bez zdarzeń, błąd dostawcy/procesu/konfiguracji, niedozwolone
-narzędzie, przekroczenie limitu odczytów albo brak/niekompletność raportu. Błąd daje niezerowy kod wyjścia; skrypt kończy tylko własne drzewo procesu.
-
-Każda próba ma osobny katalog `.ai/rybka-runs/<czas-id>/` poza Gitem: `spec.md`, `events.jsonl`, `stderr.log`,
-`metrics.json` oraz przy sukcesie `report.md` (przy błędzie ewentualnie `partial-report.md`). Stare próby pozostają
-bez zmian. Metryki sumują tokeny/koszt zakończonych kroków i pokazują czas do pierwszego zdarzenia oraz tekstu;
-nie nazywają tych czasów TTFT — dokładnego czasu pierwszego tokenu JSONL nie udostępnia.
+Domyślnie uruchom lokalnie z id zadania (lub ścieżki pliku): `just rybka <id zadania>` (np. `just rybka t-00c6c30f`).
+Domyślnie wołane są obie rybki równolegle: `--runner both` (DeepSeek przez OpenCode oraz Gemini przez agy).
+Opcjonalnie można wybrać jednego recenzenta: `--runner opencode` lub `--runner agy`.
+Skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`; pusty stan („Brak specyfikacji”) przerywa wykonanie czytelnym błędem.
 
 Skuteczny raport wymaga poprawnego zakończenia tury i procesu, braku błędów oraz tekstu zawierającego w każdej uwadze
-pola Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie z dwukropkiem i treścią albo jawne „brak uwag”.
-Samo wymienienie nazw pól ani komunikat o wyczerpaniu kroków nie jest raportem. Kontrola skryptu nie zastępuje
-oceny kompletności przez słonia i omówienia uwag z użytkownikiem. Sam JSONL, fragment odpowiedzi, timeout lub
-kod 0 bez zakończonej tury nie spełniają definicji gotowości. Nie zmieniaj z tego powodu zadania na `gotowe`.
+pola: **Niejasność, Niezapisane założenie, Wpływ na wykonanie, Pytanie** (lub jawne „brak uwag”).
+Samo wymienienie nazw pól ani fragment odpowiedzi nie jest raportem. Błąd procesu, timeout, zawieszenie
+ani kod 0 bez zakończonej tury nie spełniają definicji gotowości — w takim wypadku nie zmieniaj zadania na `gotowe`.
+
+Szczegóły techniczne runnera (konfiguracja modeli i OpenCode, limity i watchdogi, postęp co 15 s, metryki, katalogi prób w `.ai/rybka-runs/`, JSONL)
+opisuje [rybka.md](rybka.md).
 
 ## Przykład statyczny: brak wskazanej listy
 
@@ -210,15 +167,15 @@ Lokalnie domyślnie adres i Origin to `http://127.0.0.1:5174`; nie zakładaj por
    `updateTask` ze `spec`/`specRevision` zastępuje dawny wieloetapowy podział specyfikacji na komentarze; limit
    specyfikacji wynosi 50 000 jednostek UTF-16, a limit ciała JSON to 512 KiB. Reguła dzielenia na części
    w komentarzach (do 2000 znaków) dotyczy wyłącznie raportów przeglądu rybki opisanych w sekcji wyżej.
-4. Wykonaj sekwencję poniżej; każda zmiana ma `by: agent` (lub `wektor`).
+4. Wykonaj sekwencję poniżej; każda zmiana podaje faktycznego autora według tabeli autorów z [docs/zadania.md](../zadania.md#model): lokalny słoń podaje `by: "codex"` albo `by: "claude"`.
 
 | Krok | Żądanie i wymagane pola |
 | --- | --- |
-| Utworzenie (nowe) | POST /api/todos/action: `{action:"addTask", list, title, note, by:"agent"}`; zachowaj zwrócone `task.id` |
-| Specyfikacja | POST /api/todos/action: `{action:"updateTask", task, spec, specRevision, by:"agent"}` |
+| Utworzenie (nowe) | POST /api/todos/action: `{action:"addTask", list, title, note, by:"codex"}` (lub `"claude"`); zachowaj zwrócone `task.id` |
+| Specyfikacja | POST /api/todos/action: `{action:"updateTask", task, spec, specRevision, by:"codex"}` (lub `"claude"`) |
 | Kontrola zapisu | GET /api/todos lub GET /api/agent/todos?zadanie=<id>: sprawdź obecność i pełną treść specyfikacji oraz rewizję |
-| Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"agent"}` dopiero po kontroli zapisu |
-| Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"agent"}` (jeśli dotyczy) |
+| Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"codex"}` (lub `"claude"`) dopiero po kontroli zapisu |
+| Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"codex"}` (lub `"claude"`, jeśli dotyczy) |
 | Potwierdzenie | Końcowy GET /api/todos: stan, specyfikacja i komentarze |
 
 Przy istniejącym zadaniu zachowaj jego id, pozostaw szkic w `przygotowanie` i zapisz nową rewizję przez `updateTask`
