@@ -62,7 +62,8 @@ Ponowiony Gemini zakończył się skutecznie: 180,541 s, 66 468 tokenów, exit 0
 na tej samej C2a rev 5 co DeepSeek; raporty zapisano bez ucinania w komentarzach i sprawdzono
 odtworzenie wszystkich części. Nie powtarzano skutecznego DeepSeek i nie zmieniano runnera.
 
-Klasyfikacja słonia przekazana użytkownikowi do ewentualnej korekty (bez przypisywania jej zatwierdzenia):
+Użytkownik zatwierdził poniższą klasyfikację i domknięcie C2a rev 5 bez rozbudowy zakresu
+(2026-11-02, odpowiedź na raporty):
 - DeepSeek rev 5: redakcyjne 1, 4, 5, 6, 7; chybione 2, 3, 8; brak blokujących.
 - Gemini rev 5: redakcyjne 1, 2, 3, 4, 5, 8; chybione 6, 7; brak blokujących.
 
