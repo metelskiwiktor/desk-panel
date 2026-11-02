@@ -96,6 +96,30 @@ describe('getTodoDispatch: gramatyka sekcji', () => {
     expect(getTodoDispatch(task({ spec: closedTilde })).missing).toEqual(['Brak wymaganej sekcji CEL:']);
   });
 
+  it.each(['```lang`bad', '````lang`bad'])('backtick w info string nie otwiera bloku: %s', opener => {
+    const spec = [opener, READY_SPEC].join('\n');
+    const result = getTodoDispatch(task({ spec }));
+    expect(result.missing).toEqual([]);
+    expect(result.workflow).toBe('desk-panel-task');
+    expect(result.prompt).toBe(['Przygotowane zadanie Desk Panel', 'Tytuł: Zadanie', 'Zadanie: t-00000001', 'Rewizja specyfikacji: 0', '', spec].join('\n'));
+  });
+
+  it.each(['```', '~~~'])('zamykacz %s dopuszcza spacje i taby, ale nie NBSP', fence => {
+    const inCode = [fence, 'kod', `${fence}\u00a0`, READY_SPEC].join('\n');
+    expect(getTodoDispatch(task({ spec: inCode }))).toMatchObject({
+      missing: [
+        'Brak wymaganej sekcji CEL:',
+        'Brak wymaganej sekcji ZAKRES:',
+        'Brak wymaganej sekcji POZA ZAKRESEM:',
+        'Brak wymaganej sekcji WARUNKI ODBIORU:',
+      ],
+      prompt: null,
+      workflow: null,
+    });
+    const afterCode = [fence, 'kod', `${fence} \t`, READY_SPEC].join('\n');
+    expect(getTodoDispatch(task({ spec: afterCode })).missing).toEqual([]);
+  });
+
   it('nagłówek to cała linia od kolumny 0; # albo tekst w tej samej linii nie jest sekcją', () => {
     const spec = ['# CEL:', 'ZAKRES: to nie nagłówek', 'CEL: to też nie', 'ZAKRES:', 'x', 'POZA ZAKRESEM:', 'y', 'WARUNKI ODBIORU:', 'z'].join('\n');
     expect(getTodoDispatch(task({ spec }))).toMatchObject({ missing: ['Brak wymaganej sekcji CEL:'] });

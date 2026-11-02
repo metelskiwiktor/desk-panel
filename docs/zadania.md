@@ -76,7 +76,8 @@ specyfikację z niepustymi sekcjami `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:` i `WARUN
 pusty spec, brakujące/puste/powtórzone wymagane sekcje. Nagłówek sekcji to cała linia od kolumny 0, wielkimi literami,
 z dwukropkiem (końcowe spacje/taby, BOM i CRLF tolerowane, kolejność dowolna); treść kończy następna etykieta z listy
 `CEL, ZAKRES, POZA ZAKRESEM, DECYZJE, WARUNKI ODBIORU, WYKONAWCA, REPO, TRYB, ZAŁĄCZNIKI, TYP ZMIANY, ZRZUTY`, a etykiety
-w blokach kodu są pomijane. Stare `WYKONAWCA`/`REPO`/`TRYB` nie ustawiają pól. Gotowy prompt to `Przygotowane zadanie
+w blokach kodu są pomijane. Zgodnie z CommonMark backtick w opisie otwieracza backtickowego nie otwiera bloku;
+po zamykaczu dozwolone są tylko spacje i taby, nie NBSP. Stare `WYKONAWCA`/`REPO`/`TRYB` nie ustawiają pól. Gotowy prompt to `Przygotowane zadanie
 Desk Panel`, `Tytuł: <title>`, `Zadanie: <id>`, `Rewizja specyfikacji: <N>`, pusta linia i specyfikacja dosłownie; `analiza`
 daje workflow `analysis`, `implementacja` — `desk-panel-task`. Pełny widok agenta (`?zadanie=`) pokazuje przed linią
 specyfikacji `Wykonanie: executor=…, repo=…, mode=…` (brak jako `brak`) oraz gotowość bieżącej rewizji: listę braków albo

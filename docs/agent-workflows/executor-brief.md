@@ -23,6 +23,9 @@ knowledge lives") that describes the area you touch, and the user request or til
 - For UI work: scenario file, page, `--open` target, device/scale, and the "before" problem state. When the spec carries
   `TYP ZMIANY` (`Type: UI`) and `ZRZUTY` (Scenario, Page, Open, Device, Scale, Before), use those values instead of the
   constants in the example command in the workflow prompt; the spec wins.
+  If `Type: UI` is present but `Scenario`, `Page`, `Open`, `Device`, `Scale` or `Before` is missing/empty (or
+  `Scenario`/`ZRZUTY` is `none`), stop before editing or capturing screenshots. Report "Incomplete UI screenshot
+  parameters" and list the missing/invalid fields; do not guess or use example defaults.
 
 ## Allowed files (optional)
 

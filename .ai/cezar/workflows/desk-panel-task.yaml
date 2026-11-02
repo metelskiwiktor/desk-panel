@@ -39,6 +39,9 @@ nodes:
       recon in the areas named by `CEL:` and `ZAKRES:`, change the modules, tests and docs those areas need, and stop
       instead of widening beyond them. For UI work use `Device`, `Scale` and the other `ZRZUTY` values from the spec
       instead of the constants in the example commands below.
+      If `Type: UI` is present but any `ZRZUTY` value (`Scenario`, `Page`, `Open`, `Device`, `Scale`, `Before`) is missing
+      or empty, or `Scenario`/`ZRZUTY` is `none`, stop before editing or capturing screenshots. Report "Incomplete UI
+      screenshot parameters" and list the missing/invalid fields; do not guess or use example defaults.
 
       CRITICAL EXECUTION & EFFICIENCY RULES:
       - Work strictly inside your isolated git worktree (`pwd`). Never touch the parent checkout or another worktree.
@@ -169,6 +172,9 @@ nodes:
       such a list restricts paths) and `ZAŁĄCZNIKI` are references, not an allow-list. For UI use the `Device`, `Scale` and
       other `ZRZUTY` values from the spec instead of the constants in the example command. This gate still binds you even
       when the brief had no file list.
+      If `Type: UI` is present but any `ZRZUTY` value (`Scenario`, `Page`, `Open`, `Device`, `Scale`, `Before`) is missing
+      or empty, or `Scenario`/`ZRZUTY` is `none`, stop before editing or capturing screenshots. Report "Incomplete UI
+      screenshot parameters" and list the missing/invalid fields; do not guess or use example defaults.
       Full verification details: .ai/check.log; failures: .ai/check-failures.json.
       Fix the cause; do not weaken or delete tests. Scope is the original task: change only what it needs, with no
       refactor around it and no widening. Forbidden unless the original task explicitly asks for it: Wektor's memory and
@@ -280,6 +286,9 @@ nodes:
       such a list restricts paths) and `ZAŁĄCZNIKI` are references, not an allow-list. For UI use the `Device`, `Scale` and
       other `ZRZUTY` values from the spec instead of the constants in the example command. The address scope gate still
       binds you even when the brief had no file list.
+      If `Type: UI` is present but any `ZRZUTY` value (`Scenario`, `Page`, `Open`, `Device`, `Scale`, `Before`) is missing
+      or empty, or `Scenario`/`ZRZUTY` is `none`, stop before editing or capturing screenshots. Report "Incomplete UI
+      screenshot parameters" and list the missing/invalid fields; do not guess or use example defaults.
       Forbidden unless the original task explicitly asks for it: Wektor's memory and instructions (`PANEL_GUIDES`,
       `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy configuration, credentials/secrets
       and provider/model selection. Never print credentials.

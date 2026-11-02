@@ -100,8 +100,9 @@ Przed zapisem `gotowe` sprawdź:
       bez placeholderów; etykiety stoją na osobnych liniach. Pola zadania `executor`, `repo` i `mode` są ustawione
       jednoznacznie, a załączniki dostępne (albo `ZAŁĄCZNIKI: brak`). Dla UI istnieją `TYP ZMIANY` z `Type: UI` oraz
       `ZRZUTY` z konkretnymi parametrami; dla non-UI brak tych sekcji znaczy non-UI/none.
-- [ ] Panel pokazuje gotowość bez braków (pełny widok `?zadanie=`: `Gotowość bieżącej rewizji (vN): gotowe`), a przy
-      brakach lista wskazuje dokładnie brakujące pole albo sekcję.
+- [ ] Przed ustawieniem `gotowe` pełny widok `?zadanie=` zgłasza co najwyżej jeden brak: dotyczący stanu zadania.
+      Każdy inny brak (blokada, pole albo sekcja) zatrzymuje przygotowanie. Po zapisie stanu `gotowe` ponowny odczyt
+      musi pokazać `Gotowość bieżącej rewizji (vN): gotowe` bez żadnych braków.
 - [ ] Długość specyfikacji jest proporcjonalna do zadania, a szczegóły API podano tylko tam, gdzie zadanie je zmienia
       (2026-11-02: specyfikacja na 9 tys. znaków dla 3 plików dała dokument na 470 linii).
 - [ ] Zadanie dla Cezara mieści się w około 30 minutach pracy executora, łącznie z testami i dokumentacją; większe
@@ -217,10 +218,10 @@ Lokalnie domyślnie adres i Origin to `http://127.0.0.1:5174`; nie zakładaj por
 | Utworzenie (nowe) | POST /api/todos/action: `{action:"addTask", list, title, note, by:"codex"}` (lub `"claude"`); zachowaj zwrócone `task.id` |
 | Specyfikacja | POST /api/todos/action: `{action:"updateTask", task, spec, specRevision, by:"codex"}` (lub `"claude"`) |
 | Wykonanie | POST /api/todos/action: `{action:"updateTask", task, executor:"cezar", repo:"desk-panel", mode:"implementacja", by:"codex"}` (lub `"claude"`); pominięte pole zachowuje wartość, `null` czyści |
-| Kontrola zapisu | GET /api/todos lub GET /api/agent/todos?zadanie=<id>: sprawdź pełną treść specyfikacji, rewizję, pola wykonania i `Gotowość bieżącej rewizji` bez braków |
+| Kontrola zapisu | GET /api/agent/todos?zadanie=<id>: sprawdź pełną treść specyfikacji, rewizję i pola wykonania; dopuszczalny jest tylko brak dotyczący stanu, żaden inny |
 | Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"codex"}` (lub `"claude"`) dopiero po kontroli zapisu |
 | Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"codex"}` (lub `"claude"`, jeśli dotyczy) |
-| Potwierdzenie | Końcowy GET /api/todos: stan, specyfikacja i komentarze |
+| Potwierdzenie | Końcowy GET /api/agent/todos?zadanie=<id>: stan `gotowe`, specyfikacja, komentarze i gotowość bieżącej rewizji bez żadnych braków; brak lub błąd odczytu nie jest potwierdzeniem gotowości |
 
 Przy istniejącym zadaniu zachowaj jego id, pozostaw szkic w `przygotowanie` i zapisz nową rewizję przez `updateTask`
 ze zaktualizowaną treścią `spec` oraz aktualnym `specRevision`; nie wykonuj ponownie `addTask`. Osobny brief executora nie

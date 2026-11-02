@@ -33,11 +33,12 @@ function readSections(spec: string): Map<string, string[][]> {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     const match = FENCE.exec(line);
     if (fence) {
-      if (match && match[1][0] === fence.char && match[1].length >= fence.length && match[2].trim() === '') fence = null;
+      if (match && match[1][0] === fence.char && match[1].length >= fence.length && /^[ \t]*$/.test(match[2])) fence = null;
       content?.push(line);
       continue;
     }
-    if (match) {
+    // CommonMark: a backtick fence cannot have a backtick in its info string.
+    if (match && (match[1][0] !== '`' || !match[2].includes('`'))) {
       fence = { char: match[1][0], length: match[1].length };
       content?.push(line);
       continue;
