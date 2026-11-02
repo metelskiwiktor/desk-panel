@@ -29,6 +29,13 @@ describe('desk-panel-task workflow', () => {
     }
   });
 
+  it('allows 60 min for implement while fix and address keep the default timeout', () => {
+    const blockOf = (id) => yaml.slice(yaml.indexOf(`- id: ${id}\n`), yaml.indexOf('\n  - id:', yaml.indexOf(`- id: ${id}\n`) + 1));
+    expect(blockOf('implement')).toContain('timeoutMs: 3600000');
+    expect(blockOf('fix')).not.toContain('timeoutMs:');
+    expect(blockOf('address')).not.toContain('timeoutMs:');
+  });
+
   it('keeps implement, fix and address from committing or pushing', () => {
     expect(yaml).not.toMatch(/git commit -m|git push origin|git add -A|gh pr create/);
     for (const marker of ['.ai/executor-summary.md', '.ai/commit-message.txt', '.ai/screenshots/before.png', 'scripts/scenario.ts', 'read_file']) {

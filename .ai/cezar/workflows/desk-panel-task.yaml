@@ -23,6 +23,7 @@ nodes:
     # dispatch card keeps them with implement's pinned runner and model.
     runner: opencode
     model: openrouter/deepseek/deepseek-v4.1-flash-1017
+    timeoutMs: 3600000
     prompt: |
       {{task}}
 

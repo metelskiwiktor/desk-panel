@@ -10,7 +10,8 @@ Models (`.ai/cezar/workflows/desk-panel-task.yaml`): `implement`, `fix` and `add
 Wektor's model, since 30.10.2026 to keep the Codex subscription free), `review` on `agy` (`gemini-3.8-flash-high`, another model family). OpenCode
 cannot resume a session, so `fix` and `address` run as fresh sessions: each prompt embeds the original task and requires reading
 `.ai/executor-summary.md` and `docs/agent-workflows/executor-brief.md` before editing. `session.continue: implement` stays as metadata so the dispatch
-card keeps `fix` and `address` with `implement`'s pinned runner and model. The local CLI for the writing steps is
+card keeps `fix` and `address` with `implement`'s pinned runner and model. The `implement` step uses a 60-minute wall-clock limit (`timeoutMs: 3600000`)
+while the remaining steps keep the default 30 minutes (requires Cezar with `timeoutMs` support). The local CLI for the writing steps is
 `scripts/executor-run.mjs` (`just executor-run <brief>`); it always uses that one DeepSeek model. A
 step's own runner and model win over the run's, so the dispatch card lists these pinned steps with their own runner and
 model choice for that one task (Cezar's `stepOverrides`, spec `2026-10-28-step-overrides` in the cezar repo; `fix` and
