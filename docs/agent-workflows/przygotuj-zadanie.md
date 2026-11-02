@@ -102,9 +102,11 @@ redakcyjne, chybione, unikalne blokujące) i dopisuje wiersze do rejestru w [ryb
 To reguła przygotowania, nie kod dzielenia raportu w aplikacji.
 
 Domyślnie uruchom lokalnie z id zadania: `just rybka <id zadania>` (np. `just rybka t-00c6c30f`).
-Skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`. Pusty stan („Brak specyfikacji”)
-przerywa wykonanie czytelnym błędem. Eksport do pliku (`just rybka .ai/spec.md`) pozostaje tylko alternatywą, gdy zadanie
-nie ma jeszcze wpisu w panelu.
+Skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`.
+Pełna treść obejmuje wszystkie linie i sekcje aż do komentarzy lub końca odpowiedzi; test porównuje całość,
+również końcowe załączniki, dla odpowiedzi z komentarzami i bez nich (LF/CRLF).
+Pusty stan („Brak specyfikacji”) przerywa wykonanie czytelnym błędem. Eksport do pliku (`just rybka .ai/spec.md`)
+pozostaje tylko alternatywą, gdy zadanie nie ma jeszcze wpisu w panelu.
 
 Domyślnie wołane są obie rybki równolegle: `just rybka SPEC` (`--runner both`). Opcjonalnie można wybrać jednego recenzenta:
 `--runner opencode` (DeepSeek) lub `--runner agy` (Gemini 3.8 Flash high).

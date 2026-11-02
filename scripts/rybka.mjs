@@ -48,7 +48,8 @@ export async function fetchTaskSpec(taskId, { baseUrl = process.env.DESK_PANEL_U
   if (/^\s*Specyfikacja:\s*Brak specyfikacji\s*$/m.test(text)) {
     throw Error(`Zadanie ${taskId} nie ma specyfikacji („Brak specyfikacji”).`);
   }
-  const match = text.match(/^\s*Specyfikacja\s*\((?:v(\d+))[^)]*\):\r?\n([\s\S]*?)(?=\r?\n\s*Komentarz\s*\(|\s*$)/m);
+  // With /m, `$` also matches the end of the first spec line. The final alternative must mean true EOF.
+  const match = text.match(/^\s*Specyfikacja\s*\((?:v(\d+))[^)]*\):\r?\n([\s\S]*?)(?=\r?\n[ \t]+Komentarz[ \t]*\(|(?![\s\S]))/m);
   if (!match) {
     throw Error(`Zadanie ${taskId} nie ma specyfikacji („Brak specyfikacji”).`);
   }

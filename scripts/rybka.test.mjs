@@ -191,15 +191,24 @@ it('allows bounded read calls and stops after the thirteenth, without accepting 
   expect(await done).toMatchObject({ ok: false, reason: 'read-limit', metrics: { modelReads: 13 } });
 });
 
-it('fetches spec and revision by task ID, rejecting empty spec or 404', async () => {
+it('fetches the whole multiline spec and revision by task ID, rejecting empty spec or 404', async () => {
+  const spec = [
+    'CEL:', 'Pełne zadanie po ID.', '',
+    'ZAKRES:', 'Plik testowy.', '',
+    'POZA ZAKRESEM:', 'Zmiany UI.', '',
+    'DECYZJE:', '- Zachować całość.', '',
+    'WARUNKI ODBIORU:', '1. Końcowa część też trafia do rybki.', '',
+    'WYKONAWCA:', 'cezar', '',
+    'REPO:', 'desk-panel', '',
+    'TRYB:', 'implementacja', '',
+    'ZAŁĄCZNIKI:', '`AGENTS.md`',
+  ].join('\n');
   const validTaskView = [
     'Zadanie z listy użytkownika...',
     '  [ ] t-00c6c30f  Zadanie testowe (2026-11-02)',
     '    Stan: przygotowanie (przygotowanie)',
     '    Specyfikacja (v4, agent, 2026-11-02 12:00):',
-    'CEL: Test zadania po ID.',
-    'ZAKRES: Plik testowy.',
-    'ZAŁĄCZNIKI: AGENTS.md',
+    spec,
     '    Komentarz (2026-11-02 12:05, agent): Pierwszy komentarz',
   ].join('\n');
 
@@ -211,8 +220,11 @@ it('fetches spec and revision by task ID, rejecting empty spec or 404', async ()
   const parsed = await fetchTaskSpec('t-00c6c30f', { fetchImpl: fetchSuccess });
   expect(parsed.taskId).toBe('t-00c6c30f');
   expect(parsed.revision).toBe(4);
-  expect(parsed.spec).toContain('CEL: Test zadania po ID.');
-  expect(parsed.spec).not.toContain('Komentarz');
+  expect(parsed.spec).toBe(spec);
+  // End of the view without comments is true EOF, not the first end-of-line; Windows CRLF also works.
+  const noComments = validTaskView.slice(0, validTaskView.indexOf('\n    Komentarz'));
+  const atEof = await fetchTaskSpec('t-00c6c30f', { fetchImpl: async () => ({ ok: true, text: async () => noComments.replaceAll('\n', '\r\n') }) });
+  expect(atEof.spec).toBe(spec.replaceAll('\n', '\r\n'));
 
   const emptyTaskView = [
     'Zadanie z listy użytkownika...',
