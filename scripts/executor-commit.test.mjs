@@ -157,6 +157,45 @@ it('refuses to commit when the worktree moved on after verify', () => {
   writeFileSync(join(root, 'outside.ts'), 'unrelated');
   expect(() => checkScope(root)).toThrow(/outside\.ts/);
   expect(git(root, 'rev-parse', 'HEAD')).toBe(head);
+  rmSync(join(root, 'outside.ts'), { force: true });
+
+  // Transitive imports: failing test renders App, App -> component -> changed module
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'todo-context.ts'), 'export const todoCtx = 1;\n');
+  writeFileSync(join(root, 'src', 'TodoTile.tsx'), "import { todoCtx } from '@/todo-context';\nexport const TodoTile = () => todoCtx;\n");
+  writeFileSync(join(root, 'src', 'App.tsx'), "import { TodoTile } from './TodoTile';\nexport const App = () => TodoTile();\n");
+  writeFileSync(join(root, 'src', 'chat-pointing.test.tsx'), "import { App } from './App';\n");
+  writeFileSync(join(root, 'src', 'unrelated.ts'), 'export const u = 1;\n');
+  writeFileSync(join(root, 'src', 'unrelated.test.tsx'), "import { u } from './unrelated';\n");
+  writeFileSync(join(root, 'src', 'passing.test.tsx'), "import { App } from './App';\n");
+  git(root, 'add', '-A');
+  git(root, '-c', 'user.name=test', '-c', 'user.email=test@local', 'commit', '-q', '-m', 'add App and component hierarchy');
+  writeFileSync(join(root, BASE_FILE), JSON.stringify({ sha: git(root, 'rev-parse', 'HEAD'), branch: 'main' }) + '\n');
+
+  // implement modifies src/todo-context.ts
+  writeFileSync(join(root, 'src', 'todo-context.ts'), 'export const todoCtx = 2;\n');
+  saveScope(root);
+
+  // verify reported failures for chat-pointing.test.tsx and unrelated.test.tsx
+  writeFileSync(join(root, '.ai/check-failures.json'), JSON.stringify({
+    failures: [
+      { path: 'src/chat-pointing.test.tsx' },
+      { path: 'src/unrelated.test.tsx' },
+    ],
+  }));
+
+  // fix modifies chat-pointing.test.tsx (test reaches todo-context transitively through App -> TodoTile) -> allowed
+  writeFileSync(join(root, 'src', 'chat-pointing.test.tsx'), "import { App } from './App'; // fixed test\n");
+  expect(() => checkScope(root)).not.toThrow();
+
+  // fix modifies unrelated.test.tsx (failed in verify, but outside the import chain of changed modules) -> rejected
+  writeFileSync(join(root, 'src', 'unrelated.test.tsx'), "import { u } from './unrelated'; // illegal fix\n");
+  expect(() => checkScope(root)).toThrow(/unrelated\.test\.tsx/);
+  git(root, 'checkout', '--', 'src/unrelated.test.tsx');
+
+  // fix modifies passing.test.tsx (reaches todo-context, but DID NOT fail in verify) -> rejected
+  writeFileSync(join(root, 'src', 'passing.test.tsx'), "import { App } from './App'; // changed without verify failure\n");
+  expect(() => checkScope(root)).toThrow(/passing\.test\.tsx/);
 
 }, GIT_TEST_TIMEOUT);
 

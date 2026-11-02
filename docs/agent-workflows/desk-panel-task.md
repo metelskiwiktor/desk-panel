@@ -89,7 +89,7 @@ A separate temporary Git index captures tracked/untracked work without changing 
 whether Cezar autosaved or left changes uncommitted. After every fix, fix-scope compares against that original tree;
 after address, address-scope runs the same check before returning to verify, with failure routed to scope-failed.
 Only originally changed paths are allowed, plus tests reported failed by verify that share a module basename or
-have a direct relative import of an originally changed module (relationship read from the pre-fix tree).
+reach an originally changed module directly or indirectly through repo imports (relative `./`, `../` and alias `@/` → `src/`, read from the pre-fix tree).
 Accepted test exceptions persist across fix rounds. A missing snapshot/report, changed pinned base or out-of-scope
 change fails the gate and ends the run before final commit/PR; Cezar's own autosave checkpoints may already exist.
 This is a deterministic workflow guard, not an OS sandbox against an agent tampering with the guard itself.
