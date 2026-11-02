@@ -117,3 +117,9 @@ To przykład metody i przyczyny, nie opis bieżącego stanu (naprawiono tego dni
 - Przyczyna: stabilne id nadawano tylko kartom `panel_cezar_propose`, a przy kilku kartach o tej samej nazwie nie da się ich rozróżnić kolejnością. Dla kart banku id pochodzi teraz z treści planu.
 - Dlaczego testy tego nie wykryły: używały sztucznych id w poprawnym formacie (`m1:ok`). Test karty musi używać id, które czat naprawdę wytwarza.
 
+## Weryfikacja uciętych wyników narzędzi a stan Hermesa (2 listopada 2026)
+
+- **Weryfikacja w logach i bazie, a nie przez pytania do Wektora.** Gdy Wektor twierdzi, że wynik narzędzia był ucięty albo czegoś w nim brakuje, weryfikuj stan w `state.db` Hermesa (`%LOCALAPPDATA%\hermes\state.db`, kolumny `content`, długość wyniku i flaga `compacted`) oraz w `agent.log` (`%LOCALAPPDATA%\hermes\logs\agent.log`, zaraportowana liczba znaków wyniku i wejściowa liczba tokenów w wywołaniach API), a nie pytaniami do Wektora. Pytania sugerujące (z przykładami znaczników) prowadzą do zmyśleń w procesie wnioskowania modelu (przypadek sesji `987ecbe5`: model założył, że pytanie jest testem na wykrywanie ucięć i zmyślił znacznik „tool result middle truncated”, mimo że dostarczony mu wynik narzędzia był w 100% pełny i nieprzycięty).
+- **Rzeczywiste znaczniki Hermesa.** Hermes przy wynikach MCP używa znaczników `[MCP RESULT TRUNCATED - …]` (limit `tool_budget.mcp_result_size_chars`, domyślnie 50 000 znaków), a przy kompresji historii zamienia stare wyniki na jednowierszowy opis (`[{tool_name}] (N chars result)`). Nigdy nie wycina środka.
+- **Gubienie treści w długim kontekście.** Przy kontekście zbliżonym do okna modelu (tu 134–148 tys. z 163 tys. tokenów) Wektor gubi treść ze środka długich dokumentów. Zadania wymagające przepisania długiej specyfikacji rób w świeżej rozmowie.
+
