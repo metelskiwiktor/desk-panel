@@ -79,7 +79,8 @@ function configuration(host, agent, materials, cwd) {
 
 function configuredEnv(env, agent, materials, cwd, exec = execFileSync) {
   const childEnv = { ...env, OPENCODE_DISABLE_CLAUDE_CODE: 'true', OPENCODE_DISABLE_EXTERNAL_SKILLS: 'true',
-    OPENCODE_DISABLE_PROJECT_CONFIG: 'true', OPENCODE_DISABLE_AUTOUPDATE: 'true' };
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'true', OPENCODE_DISABLE_AUTOUPDATE: 'true',
+    OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' };
   delete childEnv.OPENCODE_CONFIG_CONTENT;
   const resolved = () => JSON.parse(exec('opencode', ['debug', 'config', '--pure'], {
     cwd, env: childEnv, encoding: 'utf8', windowsHide: true, timeout: 15_000, maxBuffer: 20 * 1024 * 1024,
@@ -112,7 +113,9 @@ function validReport(text) {
 const REASONS = {
   completed: 'raport gotowy — oceń go z użytkownikiem', timeout: 'timeout: przekroczono limit całkowity',
   'idle-timeout': 'zawieszenie bez zdarzeń: przekroczono limit ciszy', 'provider-error': 'błąd dostawcy zgłoszony w zdarzeniu',
-  'process-error': 'błąd procesu opencode (szczegóły w prywatnym stderr)', 'no-report': 'brak raportu lub zakończenia tury',
+  'process-error': 'błąd procesu opencode (szczegóły w prywatnym stderr)',
+  length: 'ucięcie odpowiedzi przez limit długości (stopReason: length)',
+  'no-report': 'brak raportu lub zakończenia tury',
   'incomplete-report': 'niekompletny raport: brakuje wymaganych pól', 'unexpected-tool': 'niedozwolone wywołanie narzędzia',
   'read-limit': 'przekroczono limit 12 odczytów modelu',
   'configuration-error': 'błąd konfiguracji: nie uruchomiono modelu', cancelled: 'przerwano na żądanie',
@@ -162,6 +165,7 @@ export async function runRybka({ specPath, cwd = process.cwd(), env = process.en
       const metrics = metricsFromEvents(events);
       const report = events.filter(e => e.type === 'text').map(e => e.part?.text ?? '').join('\n').trim();
       const reason = ending ?? (metrics.errors ? 'provider-error' : code !== 0 ? 'process-error'
+        : metrics.stopReason === 'length' ? 'length'
         : !metrics.completed || !report ? 'no-report' : !validReport(report) ? 'incomplete-report' : 'completed');
       const ok = reason === 'completed';
       const record = { reason, ok, model: MODEL, startedAt: new Date(started).toISOString(), durationMs: now() - started,

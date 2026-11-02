@@ -84,6 +84,7 @@ it('uses a fresh pinned review with only explicit file reads and preserves separ
   expect(Object.values(config.agent)[0]).not.toHaveProperty('steps');
   expect(Object.values(config.agent)[0].prompt).toContain(join(f.cwd, 'docs/mock.html'));
   expect(Object.values(config.agent)[0].prompt).not.toContain('<h1>Makieta</h1>');
+  expect(opts.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe('64000');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   expect(f.configs[0]).toBeUndefined();
   expect(readFileSync(result.reportPath, 'utf8')).toBe('brak uwag\n');
@@ -102,7 +103,7 @@ it('fails closed before a model call if resolved MCP or permissions remain enabl
 });
 
 it.each([
-  ['empty', 'no-report'], ['partial', 'incomplete-report'], ['max-steps', 'incomplete-report'], ['provider', 'provider-error'], ['exit', 'process-error'], ['tool', 'unexpected-tool'],
+  ['empty', 'no-report'], ['partial', 'incomplete-report'], ['max-steps', 'incomplete-report'], ['length', 'length'], ['provider', 'provider-error'], ['exit', 'process-error'], ['tool', 'unexpected-tool'],
 ])('does not mistake %s output for a successful report', async (kind, reason) => {
   const f = setup(); const done = runRybka(f.options);
   // Authentic live failure: the provider ended normally after reasoning, with zero visible output tokens.
@@ -112,6 +113,10 @@ it.each([
   }
   if (kind === 'partial') report(f.child, 'Niejasność: jedno pole');
   if (kind === 'max-steps') report(f.child, 'I reached the maximum number of steps. I did not finish the review. Required fields:\n- Niejasność\n- Niezapisane założenie\n- Wpływ na wykonanie\n- Pytanie');
+  if (kind === 'length') {
+    event(f.child, { type: 'text', part: { text: 'Niejasność: ucięty raport przez limit tokenów wyjścia...' } });
+    event(f.child, { type: 'step_finish', part: { type: 'step-finish', reason: 'length', tokens: { output: 64000 } } });
+  }
   if (kind === 'provider') event(f.child, { type: 'error', error: { message: 'provider failed' } });
   if (kind === 'tool') event(f.child, { type: 'tool_use', part: { tool: 'bash' } });
   if (kind === 'exit') f.child.stderr.write('private diagnostic');
