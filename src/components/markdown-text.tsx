@@ -11,7 +11,7 @@ import {
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 import { type FC, memo, useMemo, useRef } from "react";
-import type { TextMessagePartProps } from "@assistant-ui/react";
+import { TextMessagePartProvider, type SmoothOptions, type TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/tooltip-icon-button";
@@ -21,6 +21,13 @@ import { cn } from "@/lib/utils";
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
   components?: Parameters<typeof memoizeMarkdownComponents>[0];
   componentsByLanguage?: MarkdownTextPrimitiveProps["componentsByLanguage"];
+  className?: string;
+  smooth?: boolean | SmoothOptions;
+  /**
+   * External links open in a new tab. Off by default, so the chat keeps the browser's own link behaviour; the task
+   * dialog turns it on for its own Markdown only (B1).
+   */
+  externalLinks?: boolean;
 };
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
@@ -39,29 +46,54 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
   return ref.current;
 };
 
+/** The same link styles as the chat, with the new-tab pair the task dialog needs. */
+const externalLinkComponents = memoizeMarkdownComponents({
+  a: ({ className, ...props }) => (
+    <a
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "tw:aui-md-a tw:text-primary tw:hover:text-primary/80 tw:underline tw:underline-offset-2",
+        className,
+      )}
+      {...props}
+    />
+  ),
+});
+
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({
+  text,
   components,
   componentsByLanguage,
+  className,
+  smooth,
+  externalLinks,
 }) => {
   const stableComponents = useShallowStable(components);
   const stableComponentsByLanguage = useShallowStable(componentsByLanguage);
   const markdownComponents = useMemo(() => {
-    if (!stableComponents) return defaultComponents;
+    const base = externalLinks ? { ...defaultComponents, ...externalLinkComponents } : defaultComponents;
+    if (!stableComponents) return base;
     return {
-      ...defaultComponents,
+      ...base,
       ...memoizeMarkdownComponents(stableComponents),
     };
-  }, [stableComponents]);
+  }, [stableComponents, externalLinks]);
 
-  return (
+  const primitive = (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
-      className="tw:aui-md"
+      className={cn("tw:aui-md", className)}
       components={markdownComponents}
       componentsByLanguage={stableComponentsByLanguage}
+      smooth={smooth}
       defer
     />
   );
+
+  if (text === undefined) return primitive;
+
+  return <TextMessagePartProvider text={text}>{primitive}</TextMessagePartProvider>;
 };
 
 export const MarkdownText = memo(MarkdownTextImpl);

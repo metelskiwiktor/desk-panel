@@ -237,6 +237,7 @@ describe('the Zadania tile', () => {
     const dialog = screen.getByRole('dialog');
     await user.type(screen.getByRole('textbox', { name: 'Tytuł' }), '!');
     expect(within(dialog).getByRole('button', { name: 'Ustalenia' })).toBeTruthy();
+    await user.click(within(dialog).getByRole('tab', { name: /Historia/ }));
     expect(within(dialog).getByText('Najpierw ustalmy zakres zmian.')).toBeTruthy();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Stan' }), 'realizacja');
     await waitFor(() => expect((screen.getByRole('combobox', { name: 'Stan' }) as HTMLSelectElement).value).toBe('realizacja'));
@@ -322,6 +323,7 @@ describe('the Zadania tile', () => {
     const tile = tileOf('todo#1');
     await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
     await user.type(screen.getByRole('textbox', { name: 'Notatka' }), 'Wpisane w trakcie');
+    await user.click(screen.getByRole('tab', { name: /Historia/ }));
     await user.type(screen.getByRole('textbox', { name: 'Dodaj komentarz' }), 'Szkic komentarza');
     // Meanwhile somebody else ticks this task and the list hides what is done: its row leaves the tile.
     const post = (body: object) => fetcher('/api/todos/action', { method: 'POST', body: JSON.stringify(body) });
@@ -492,5 +494,107 @@ describe('changes made elsewhere', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
     expect(await within(tile).findByText('Dodane przez agenta')).toBeTruthy();
     expect(titles(tile)).toHaveLength(4);
+  });
+});
+
+describe('the task dialog spec view', () => {
+  it('shows the current spec as read-only Markdown with author and time, and switches to the history tab', async () => {
+    const user = userEvent.setup();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })], 'todo-spec');
+    const tile = tileOf('todo#1');
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    // Spec tab is active by default; the spec header shows the author and time.
+    expect(within(dialog).getByRole('tab', { name: 'Specyfikacja' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(dialog.querySelector('.todo-spec-meta')!).getByText(/Codex/)).toBeTruthy();
+    expect(within(dialog).getByText(/Specyfikacja B1/)).toBeTruthy();
+    // The history tab counts all entries and shows them.
+    const historyTab = within(dialog).getByRole('tab', { name: /Historia · 4/ });
+    await user.click(historyTab);
+    expect(historyTab.getAttribute('aria-selected')).toBe('true');
+    expect(within(dialog).getByText('Najpierw ustalmy zakres zmian.')).toBeTruthy();
+    expect(within(dialog).getByText('Specyfikacja: v2')).toBeTruthy();
+    // Back to the spec tab.
+    const specTab = within(dialog).getByRole('tab', { name: 'Specyfikacja' });
+    await user.click(specTab);
+    expect(specTab.getAttribute('aria-selected')).toBe('true');
+    expect(within(dialog).getByText(/Specyfikacja B1/)).toBeTruthy();
+  });
+
+  it('shows "Brak specyfikacji" for both empty states, with real metadata when a revision exists', async () => {
+    const user = userEvent.setup();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })], 'todo-spec');
+    const tile = tileOf('todo#1');
+    // specRevision=0 and spec="" (task t-a0000002)
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Odpowiedź bez sformułowania „nie mam dostępu”' }));
+    let dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    expect(within(dialog.querySelector('.todo-dlg-paper')!).getByText('Brak specyfikacji')).toBeTruthy();
+    expect(within(dialog).queryByText(/Codex/)).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Anuluj' }));
+    // specRevision=1 and spec="" (task t-a0000004)
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Puste specyfikacje' }));
+    dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    expect(within(dialog.querySelector('.todo-dlg-paper')!).getByText('Brak specyfikacji')).toBeTruthy();
+    expect(within(dialog.querySelector('.todo-spec-meta')!).getByText(/Codex/)).toBeTruthy(); // metadata of the existing revision
+    expect(within(dialog.querySelector('.todo-spec-revision')!).getByText(/v1 · Codex/)).toBeTruthy();
+  });
+
+  it('keeps title, note, comment, reason and PR drafts across tab switches and polling', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })], 'todo-spec');
+    const tile = tileOf('todo#1');
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Tytuł' }), '!');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Notatka' }), ' szkic');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Powód blokady' }), 'Nowy powód');
+    await user.type(within(dialog).getByRole('textbox', { name: 'URL pull requesta' }), 'https://github.com/example/panel/pull/99');
+    await user.click(within(dialog).getByRole('tab', { name: /Historia/ }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Dodaj komentarz' }), 'Szkic komentarza');
+    await user.click(within(dialog).getByRole('tab', { name: 'Specyfikacja' }));
+    await user.click(within(dialog).getByRole('tab', { name: /Historia/ }));
+    expect((within(dialog).getByRole('textbox', { name: 'Tytuł' }) as HTMLInputElement).value).toBe('Agent nie wie, ile ma limitu na dziś!');
+    expect((within(dialog).getByRole('textbox', { name: 'Notatka' }) as HTMLTextAreaElement).value).toBe('Dodać limity AI do widoku dla agenta. szkic');
+    expect((within(dialog).getByRole('textbox', { name: 'Dodaj komentarz' }) as HTMLTextAreaElement).value).toBe('Szkic komentarza');
+    expect((within(dialog).getByRole('textbox', { name: 'Powód blokady' }) as HTMLInputElement).value).toBe('Nowy powód');
+    expect((within(dialog).getByRole('textbox', { name: 'URL pull requesta' }) as HTMLInputElement).value).toBe('https://github.com/example/panel/pull/99');
+    // Polling does not lose them either.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5500); });
+    expect((within(dialog).getByRole('textbox', { name: 'Tytuł' }) as HTMLInputElement).value).toBe('Agent nie wie, ile ma limitu na dziś!');
+    expect((within(dialog).getByRole('textbox', { name: 'Dodaj komentarz' }) as HTMLTextAreaElement).value).toBe('Szkic komentarza');
+  });
+
+  it('saves title and note without spec or specRevision', async () => {
+    const user = userEvent.setup();
+    const { posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: A })], 'todo-spec');
+    const tile = tileOf('todo#1');
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    await user.clear(within(dialog).getByRole('textbox', { name: 'Tytuł' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Tytuł' }), 'Nowy tytuł');
+    await user.clear(within(dialog).getByRole('textbox', { name: 'Notatka' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Notatka' }), ' nowa notatka');
+    await user.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
+    expect(posts()).toHaveLength(1);
+    const payload = posts()[0];
+    expect(payload).toMatchObject({ action: 'updateTask', task: 't-a0000001', title: 'Nowy tytuł', note: ' nowa notatka' });
+    expect(payload).not.toHaveProperty('spec');
+    expect(payload).not.toHaveProperty('specRevision');
+  });
+
+  it('opens external links in a new tab and renders HTML as text without executing it', async () => {
+    const user = userEvent.setup();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: A })], 'todo-spec');
+    const tile = tileOf('todo#1');
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Agent nie wie, ile ma limitu na dziś' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    const link = within(dialog).getByRole('link', { name: /https:\/\/example\.com\/bardzo/ });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.getAttribute('href')).toMatch(/^https:\/\/example\.com/);
+    // The javascript: link is not clickable and the script tag is shown as text.
+    expect(within(dialog).queryByRole('link', { name: 'link' })).toBeNull();
+    expect(within(dialog).getByText(/<script>alert\(1\)<\/script>/)).toBeTruthy();
   });
 });

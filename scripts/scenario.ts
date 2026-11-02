@@ -290,7 +290,7 @@ if (!values.shot) {
                 await page.waitForTimeout(800);
               }
               if (values.open === 'todo-dialog') {
-                await page.locator('.todo-title').first().click();
+                await page.locator('.todo-title').first().dispatchEvent('click');
                 await page.getByRole('dialog', { name: 'Zadanie' }).waitFor();
               }
             } else if (values.open === 'mail') {
@@ -315,10 +315,38 @@ if (!values.shot) {
             await page.screenshot({ path, fullPage: true });
             console.log(path);
             if (values.open === 'todo-dialog') {
-              await page.getByRole('button', { name: 'Zapisz', exact: true }).scrollIntoViewIfNeeded();
+              const overflow = await page.locator('.todo-dlg').evaluate(el => el.scrollWidth > el.clientWidth + 1);
+              if (overflow) throw new Error('Okno zadania ma poziome przepełnienie.');
+              await page.getByRole('tab', { name: /Historia/ }).click();
+              await page.waitForTimeout(300);
               const historyPath = shot(pageName, 'history');
               await page.screenshot({ path: historyPath, fullPage: true });
               console.log(historyPath);
+
+              if (target.primary) {
+                const mobilePage = await browser!.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+                try {
+                  await mobilePage.goto(url);
+                  await mobilePage.evaluate(value => localStorage.setItem('desk-panel.workspace', JSON.stringify({ version: 1, tiles: value })), [{ id: 'todo#1', kind: 'todo', c: 0, r: 0, w: 2, h: 2 }]);
+                  await mobilePage.reload();
+                  await mobilePage.waitForTimeout(800);
+                  await mobilePage.locator('.todo-title').first().dispatchEvent('click');
+                  await mobilePage.getByRole('dialog', { name: 'Zadanie' }).waitFor();
+                  const mobileOverflow = await mobilePage.locator('.todo-dlg').evaluate(el => el.scrollWidth > el.clientWidth + 1);
+                  if (mobileOverflow) throw new Error('Okno zadania na telefonie ma poziome przepełnienie.');
+                  const mobilePath = shot(pageName).replace(target.label, 'phone@390x844');
+                  await mobilePage.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
+                  await mobilePage.screenshot({ path: mobilePath, fullPage: true });
+                  console.log(mobilePath);
+                  await mobilePage.getByRole('tab', { name: /Historia/ }).click();
+                  await mobilePage.waitForTimeout(300);
+                  const mobileHistoryPath = shot(pageName, 'history').replace(target.label, 'phone@390x844');
+                  await mobilePage.screenshot({ path: mobileHistoryPath, fullPage: true });
+                  console.log(mobileHistoryPath);
+                } finally {
+                  await mobilePage.close();
+                }
+              }
             }
             await hidden?.evaluate(node => (node as Element).remove());
           }

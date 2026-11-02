@@ -1,0 +1,187 @@
+{
+  "description": "Scenariusz podglądu specyfikacji zadania (B1) z długim Markdownem, metadanymi rewizji i historią.",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": { "running": 1, "queue": 0, "needs-input": 0, "review": 0 },
+    "tasks": [
+      {
+        "id": "review-1",
+        "title": "Limity dla agenta",
+        "project": "Desk Panel",
+        "status": "review",
+        "startedAt": "now-2h",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/desk-panel/tasks/review-1",
+        "pullRequestUrl": "https://github.com/example/panel/pull/42",
+        "description": "Zadanie w przeglądzie."
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "id": "event-1",
+        "title": "Przegląd tygodnia",
+        "startAt": "now+2h",
+        "endAt": "now+3h",
+        "allDay": false,
+        "description": "Planowanie prac."
+      }
+    ]
+  },
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [],
+    "accounts": [
+      {
+        "email": "owner@gmail.com",
+        "status": "connected",
+        "observedAt": "now",
+        "unread": 0
+      }
+    ],
+    "total": 0
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "at": "now",
+        "cpuPercent": 35,
+        "ramUsedGb": 16.0,
+        "ramTotalGb": 32
+      }
+    ]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          { "window": "5h", "usedPercent": 25, "observedAt": "now", "resetAt": "now+3h", "stale": false, "source": null },
+          { "window": "7d", "usedPercent": 40, "observedAt": "now", "resetAt": "now+4d", "stale": false, "source": null }
+        ],
+        "history": []
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          { "window": "5h", "usedPercent": 10, "observedAt": "now", "resetAt": "now+4h", "stale": false, "source": null },
+          { "window": "7d", "usedPercent": 24, "observedAt": "now", "resetAt": "now+6100m", "stale": false, "source": null }
+        ],
+        "history": []
+      }
+    ]
+  },
+  "todos": {
+    "live": true,
+    "name": "Zadania",
+    "status": "connected",
+    "observedAt": "now",
+    "data": {
+      "lists": [
+        {
+          "id": "l-1a2b3c4d",
+          "name": "Do poprawy - Chat Agy",
+          "createdAt": "now-3d",
+          "tasks": [
+            {
+              "id": "t-a0000001",
+              "status": "przygotowanie",
+              "blocked": null,
+              "links": [
+                { "kind": "chat", "id": "scenario-todo-chat", "title": "Ustalenia", "at": "now-1h" },
+                { "kind": "cezar", "id": "review-1", "at": "now-1h" },
+                { "kind": "pr", "id": "https://github.com/example/panel/pull/42", "title": "Limity dla agenta #42", "at": "now-1h" }
+              ],
+              "history": [
+                { "at": "now-90m", "by": "panel", "kind": "status", "from": "pomysl", "to": "przygotowanie" },
+                { "at": "now-80m", "by": "agent", "kind": "blocked", "text": "Czekam na ustalenie zakresu" },
+                { "at": "now-1h", "by": "user", "kind": "comment", "text": "Najpierw ustalmy zakres zmian." },
+                { "at": "now-45m", "by": "codex", "kind": "spec", "text": "v2" }
+              ],
+              "title": "Agent nie wie, ile ma limitu na dziś",
+              "note": "Dodać limity AI do widoku dla agenta.",
+              "done": false,
+              "createdAt": "now-2h",
+              "completedAt": null,
+              "by": "agent",
+              "spec": "# Specyfikacja B1\n\nTo jest długi opis z nierozerwalnym adresem: https://example.com/bardzo/dlugii/adres/bez/zadnych/przerw/ktory/powinien/zawijac/sie/w/oknie/ale/nie/rozciagac/calego/ukladu?parametr=wartosc&inny=wartosc&jeszcze=inny\n\n```ts\nconst veryLongLine = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';\n```\n\n- Punkt 1\n- Punkt 2\n\n[link](javascript:alert(1))\n\n<script>alert(1)</script>\n",
+              "specRevision": 2,
+              "specRevisions": [
+                {
+                  "revision": 1,
+                  "spec": "# Specyfikacja v1\n\nPierwsza wersja.\n",
+                  "by": "claude",
+                  "at": "now-2d"
+                },
+                {
+                  "revision": 2,
+                  "spec": "# Specyfikacja B1\n\nTo jest długi opis z nierozerwalnym adresem: https://example.com/bardzo/dlugii/adres/bez/zadnych/przerw/ktory/powinien/zawijac/sie/w/oknie/ale/nie/rozciagac/calego/ukladu?parametr=wartosc&inny=wartosc&jeszcze=inny\n\n```ts\nconst veryLongLine = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';\n```\n\n- Punkt 1\n- Punkt 2\n\n[link](javascript:alert(1))\n\n<script>alert(1)</script>\n",
+                  "by": "codex",
+                  "at": "now-1h"
+                }
+              ]
+            },
+            {
+              "id": "t-a0000002",
+              "status": "pomysl",
+              "blocked": null,
+              "links": [],
+              "history": [],
+              "title": "Odpowiedź bez sformułowania „nie mam dostępu”",
+              "note": "",
+              "done": false,
+              "createdAt": "now-1d",
+              "completedAt": null,
+              "by": "user",
+              "spec": "",
+              "specRevision": 0,
+              "specRevisions": []
+            },
+            {
+              "id": "t-a0000004",
+              "status": "pomysl",
+              "blocked": null,
+              "links": [],
+              "history": [],
+              "title": "Puste specyfikacje",
+              "note": "",
+              "done": false,
+              "createdAt": "now-1d",
+              "completedAt": null,
+              "by": "user",
+              "spec": "",
+              "specRevision": 1,
+              "specRevisions": [
+                {
+                  "revision": 1,
+                  "spec": "",
+                  "by": "codex",
+                  "at": "now-1h"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
