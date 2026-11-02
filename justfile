@@ -79,9 +79,9 @@ executor-prepare:
 executor-run brief *args:
     node scripts/executor-run.mjs --brief "{{brief}}" {{args}}
 
-# Review a specification locally in one fresh DeepSeek turn, with bounded materials and progress.
-rybka spec:
-    node scripts/rybka.mjs "{{spec}}"
+# Review a specification locally in fresh sessions (DeepSeek and/or Gemini via agy), with bounded materials and progress.
+rybka spec *args:
+    node scripts/rybka.mjs "{{spec}}" {{args}}
 
 # Bring origin/main in (stops on any conflict with local work), test, build and restart
 # the service with it, uncommitted local changes included. Pass --force to redeploy.

@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
-import { reviewMaterials, runRybka } from './rybka.mjs';
+import {
+  reviewMaterials, runRybka, fetchTaskSpec, isTaskId, parseRybkaArgs,
+  validReport, formatReportHeader, AGY_MODEL, MODEL,
+} from './rybka.mjs';
 
 const dirs = [];
 afterEach(() => { vi.useRealTimers(); for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); dirs.length = 0; });
@@ -19,9 +22,9 @@ function fixture(attachments = 'docs/mock.html') {
 }
 function setup(overrides = {}) {
   const cwd = fixture(); const child = new EventEmitter(); child.pid = 4242;
-  child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
   const calls = [], printed = [], configs = [];
-  const options = { specPath: 'spec.md', cwd, log: line => printed.push(line),
+  const options = { specPath: 'spec.md', runner: 'opencode', cwd, log: line => printed.push(line),
     env: { SECRET_TOKEN: 'do-not-print', OPENCODE_CONFIG_CONTENT: 'host-inline' },
     execImpl: (command, args, opts) => {
       configs.push(opts.env.OPENCODE_CONFIG_CONTENT);
@@ -87,7 +90,9 @@ it('uses a fresh pinned review with only explicit file reads and preserves separ
   expect(opts.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe('64000');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   expect(f.configs[0]).toBeUndefined();
-  expect(readFileSync(result.reportPath, 'utf8')).toBe('brak uwag\n');
+  expect(readFileSync(result.reportPath, 'utf8')).toContain('brak uwag');
+  expect(readFileSync(result.reportPath, 'utf8')).toContain('# Przegląd specyfikacji: spec.md');
+  expect(readFileSync(result.reportPath, 'utf8')).toContain('- Model: openrouter/deepseek/deepseek-v4.1-flash-1017');
   expect(result.metrics).toMatchObject({ eventCount: 2, fileReads: 3, firstTokenMs: null, totalTokens: 16 });
   expect(f.printed.join('\n')).not.toContain('do-not-print');
   const second = setup(); second.options.cwd = f.cwd;
@@ -184,4 +189,267 @@ it('allows bounded read calls and stops after the thirteenth, without accepting 
   for (let i = 0; i < 12; i++) event(f.child, { type: 'tool_use', part: { tool: 'read' } });
   event(f.child, { type: 'tool_use', part: { tool: 'read' } });
   expect(await done).toMatchObject({ ok: false, reason: 'read-limit', metrics: { modelReads: 13 } });
+});
+
+it('fetches spec and revision by task ID, rejecting empty spec or 404', async () => {
+  const validTaskView = [
+    'Zadanie z listy użytkownika...',
+    '  [ ] t-00c6c30f  Zadanie testowe (2026-11-02)',
+    '    Stan: przygotowanie (przygotowanie)',
+    '    Specyfikacja (v4, agent, 2026-11-02 12:00):',
+    'CEL: Test zadania po ID.',
+    'ZAKRES: Plik testowy.',
+    'ZAŁĄCZNIKI: AGENTS.md',
+    '    Komentarz (2026-11-02 12:05, agent): Pierwszy komentarz',
+  ].join('\n');
+
+  const fetchSuccess = vi.fn().mockResolvedValue({
+    ok: true,
+    text: async () => validTaskView,
+  });
+
+  const parsed = await fetchTaskSpec('t-00c6c30f', { fetchImpl: fetchSuccess });
+  expect(parsed.taskId).toBe('t-00c6c30f');
+  expect(parsed.revision).toBe(4);
+  expect(parsed.spec).toContain('CEL: Test zadania po ID.');
+  expect(parsed.spec).not.toContain('Komentarz');
+
+  const emptyTaskView = [
+    'Zadanie z listy użytkownika...',
+    '  [ ] t-00c6c30f  Zadanie bez specyfikacji',
+    '    Specyfikacja: Brak specyfikacji',
+  ].join('\n');
+
+  const fetchEmpty = vi.fn().mockResolvedValue({
+    ok: true,
+    text: async () => emptyTaskView,
+  });
+
+  await expect(fetchTaskSpec('t-00c6c30f', { fetchImpl: fetchEmpty })).rejects.toThrow(
+    /Zadanie t-00c6c30f nie ma specyfikacji \(„Brak specyfikacji”\)/
+  );
+
+  const fetch404 = vi.fn().mockResolvedValue({
+    ok: false,
+    status: 404,
+    statusText: 'Not Found',
+    text: async () => 'Nie ma zadania',
+  });
+
+  await expect(fetchTaskSpec('t-00c6c30f', { fetchImpl: fetch404 })).rejects.toThrow(
+    /Błąd pobierania zadania t-00c6c30f \(404\)/
+  );
+});
+
+it('parses CLI arguments for task ID or file path and runner selection with both as default', () => {
+  expect(isTaskId('t-00c6c30f')).toBe(true);
+  expect(isTaskId('spec.md')).toBe(false);
+
+  expect(parseRybkaArgs(['t-00c6c30f'])).toEqual({ specPath: 't-00c6c30f', runner: 'both' });
+  expect(parseRybkaArgs(['spec.md', '--runner', 'agy'])).toEqual({ specPath: 'spec.md', runner: 'agy' });
+  expect(parseRybkaArgs(['spec.md', '--runner=opencode'])).toEqual({ specPath: 'spec.md', runner: 'opencode' });
+  expect(parseRybkaArgs(['--help'])).toEqual({ help: true });
+
+  expect(() => parseRybkaArgs([])).toThrow(/Wymagany argument SPEC/);
+  expect(() => parseRybkaArgs(['spec.md', '--runner', 'invalid'])).toThrow(/Nieprawidłowy runner: invalid/);
+  expect(() => parseRybkaArgs(['spec.md', 'extra.md'])).toThrow(/Zbyt wiele argumentów/);
+});
+
+it('runs agy runner without tool permissions, with inlined materials, stream-json protocol and header', async () => {
+  const cwd = fixture();
+  const child = new EventEmitter();
+  child.pid = 5050;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+
+  let capturedStdin = '';
+  child.stdin.on('data', chunk => { capturedStdin += chunk.toString(); });
+
+  const calls = [];
+  const printed = [];
+  const options = {
+    specPath: 'spec.md',
+    runner: 'agy',
+    cwd,
+    log: line => printed.push(line),
+    spawnImpl: (...args) => { calls.push(args); return child; },
+    killTree: () => child.emit('close', null),
+  };
+
+  const done = runRybka(options);
+
+  expect(calls).toHaveLength(1);
+  const [bin, args] = calls[0];
+  expect(bin).toMatch(/agy(\.exe)?$/);
+  expect(args).toContain('--model');
+  expect(args).toContain(AGY_MODEL);
+  expect(args).toContain('--output-format');
+  expect(args).toContain('stream-json');
+  expect(args).toContain('--input-format');
+  expect(args).not.toContain('--dangerously-skip-permissions');
+
+  expect(capturedStdin).toContain('Recenzujesz specyfikację');
+  expect(capturedStdin).toContain('--- Plik referencyjny: AGENTS.md ---');
+  expect(capturedStdin).toContain('--- Plik referencyjny: docs/mock.html ---');
+  expect(capturedStdin).toContain('<h1>Makieta</h1>');
+  expect(capturedStdin).toContain('Specyfikacja do recenzji:');
+
+  // Stream agy frames
+  child.stdout.write(JSON.stringify({ event: 'init', init: { model: AGY_MODEL } }) + '\n');
+  child.stdout.write(JSON.stringify({
+    event: 'step_update',
+    step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'brak uwag' }
+  }) + '\n');
+  child.stdout.write(JSON.stringify({
+    event: 'result',
+    result: {
+      status: 'SUCCESS',
+      response: 'brak uwag\n',
+      usage: { input_tokens: 1500, output_tokens: 25, total_tokens: 1525 }
+    }
+  }) + '\n');
+  child.emit('close', 0);
+
+  const result = await done;
+  expect(result.ok).toBe(true);
+  expect(result.metrics.model).toBe(AGY_MODEL);
+  expect(result.metrics.totalTokens).toBe(1525);
+  expect(result.metrics.costUsd).toBeNull();
+
+  const reportContent = readFileSync(result.reportPath, 'utf8');
+  expect(reportContent).toContain('# Przegląd specyfikacji: spec.md');
+  expect(reportContent).toContain('- Zadanie: plik');
+  expect(reportContent).toContain('- Rewizja: brak');
+  expect(reportContent).toContain(`- Model: ${AGY_MODEL}`);
+  expect(reportContent).toContain('brak uwag');
+});
+
+it('runs both runners in parallel, each creating its own directory under .ai/rybka-runs/', async () => {
+  const cwd = fixture();
+  const children = [];
+  const calls = [];
+
+  const spawnImpl = (...args) => {
+    calls.push(args);
+    const child = new EventEmitter();
+    child.pid = 6000 + calls.length;
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = new PassThrough();
+    children.push(child);
+    return child;
+  };
+
+  const done = runRybka({
+    specPath: 'spec.md',
+    runner: 'both',
+    cwd,
+    log: () => {},
+    spawnImpl,
+    killTree: child => child.emit('close', null),
+    execImpl: (cmd, args, opts) => opts.env.OPENCODE_CONFIG_CONTENT ?? JSON.stringify({ permission: { read: { '*': 'ask' } }, mcp: {} }),
+  });
+
+  // Both should have been spawned
+  expect(calls).toHaveLength(2);
+  const [opencodeCall, agyCall] = calls;
+  expect(opencodeCall[0]).toBe('opencode');
+  expect(agyCall[0]).toMatch(/agy(\.exe)?$/);
+
+  const [opencodeChild, agyChild] = children;
+
+  // Emit report on OpenCode
+  report(opencodeChild, 'brak uwag');
+  opencodeChild.emit('close', 0);
+
+  // Emit report on agy
+  agyChild.stdout.write(JSON.stringify({
+    event: 'result',
+    result: { status: 'SUCCESS', response: 'brak uwag\n', usage: { total_tokens: 200 } }
+  }) + '\n');
+  agyChild.emit('close', 0);
+
+  const result = await done;
+  expect(result.ok).toBe(true);
+  expect(result.results).toHaveLength(2);
+  const [opencodeRes, agyRes] = result.results;
+
+  expect(opencodeRes.ok).toBe(true);
+  expect(agyRes.ok).toBe(true);
+  expect(opencodeRes.dir).not.toBe(agyRes.dir);
+  expect(opencodeRes.dir).toContain('-opencode-');
+  expect(agyRes.dir).toContain('-agy-');
+  expect(existsSync(opencodeRes.reportPath)).toBe(true);
+  expect(existsSync(agyRes.reportPath)).toBe(true);
+});
+
+it('handles task ID in runRybka, writing task ID and revision in report headers', async () => {
+  const cwd = fixture();
+  const child = new EventEmitter();
+  child.pid = 7070;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+
+  const mockTaskView = [
+    'Zadanie...',
+    '    Specyfikacja (v2, agent, 2026-11-02 11:00):',
+    'CEL: Zadanie z nagłówkiem rev.',
+    'ZAŁĄCZNIKI: AGENTS.md',
+  ].join('\n');
+
+  const fetchImpl = vi.fn().mockResolvedValue({
+    ok: true,
+    text: async () => mockTaskView,
+  });
+
+  const done = runRybka({
+    specPath: 't-00c6c30f',
+    runner: 'opencode',
+    cwd,
+    log: () => {},
+    fetchImpl,
+    spawnImpl: () => child,
+    execImpl: (cmd, args, opts) => opts.env.OPENCODE_CONFIG_CONTENT ?? JSON.stringify({ permission: { read: { '*': 'ask' } }, mcp: {} }),
+  });
+
+  setImmediate(() => {
+    report(child, 'brak uwag');
+    child.emit('close', 0);
+  });
+
+  const result = await done;
+  expect(result.ok).toBe(true);
+  const saved = readFileSync(result.reportPath, 'utf8');
+  expect(saved).toContain('# Przegląd specyfikacji: t-00c6c30f');
+  expect(saved).toContain('- Zadanie: t-00c6c30f');
+  expect(saved).toContain('- Rewizja: v2');
+  expect(saved).toContain(`- Model: ${MODEL}`);
+  expect(saved).toContain('brak uwag');
+});
+
+it('validReport accepts reports with headers and rejects incomplete reports', () => {
+  const header = formatReportHeader({
+    taskId: 't-00c6c30f',
+    revision: 3,
+    model: 'gemini-3.8-flash-high',
+  });
+
+  expect(validReport(header + '\nbrak uwag')).toBe(true);
+
+  const issueReport = [
+    header,
+    'Niejasność: brak opisu błędu',
+    'Niezapisane założenie: zakładamy status 400',
+    'Wpływ na wykonanie: niejednoznaczna implementacja',
+    'Pytanie: czy 400 czy 422?',
+  ].join('\n');
+  expect(validReport(issueReport)).toBe(true);
+
+  const incompleteReport = [
+    header,
+    'Niejasność: tylko jedno pole',
+  ].join('\n');
+  expect(validReport(incompleteReport)).toBe(false);
 });

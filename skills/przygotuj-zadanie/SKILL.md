@@ -14,7 +14,7 @@ Otwórz [dokument procesu](../../docs/agent-workflows/przygotuj-zadanie.md): zaw
 definicję gotowości, konfigurację rybki, przykład i sekwencję zapisu. Nie kopiuj szablonu do skilla.
 
 1. Przeczytaj pełną treść istniejącego zadania, ustal cel, granice i decyzje użytkownika, potem pokaż specyfikację.
-2. Przeprowadź przegląd rybki według dokumentu; pokaż raport i poprawki użytkownikowi, rozstrzygnij uwagi.
+2. Przeprowadź przegląd rybek według dokumentu (domyślnie obie rybki po id zadania: just rybka <id-zadania>); pokaż raporty i poprawki użytkownikowi, sklasyfikuj uwagi w rybka-evaluation.md, rozstrzygnij uwagi.
 3. Sprawdź definicję gotowości i zapisz kompletną specyfikację na wskazanej liście; zakończ komentarzem o brakach
    struktury zadania albo ich braku.
 

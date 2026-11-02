@@ -63,8 +63,8 @@ Przed zapisem `gotowe` sprawdź:
       (2026-11-02: pełne rewizje i edycja w UI rozrosły się ponad potrzebę, a zadanie B2 odłożono); decyzje użytkownika mają datę `YYYY-MM-DD`, treść i źródło.
 - [ ] Każdy numerowany warunek odbioru ma sprawdzalny wynik i metodę; sprawdzenie, które przechodzi niezależnie od wyniku,
       nie jest warunkiem odbioru (2026-11-01: walidator rybki zaakceptował samą listę nazw pól); wymagania nie pominięto przez „jeśli dostępne”.
-- [ ] Istnieje skuteczny raport rybki dla tej rewizji, która zostaje oznaczona jako gotowa
-      (2026-11-01: w pilotażu 1 rybka czytała v1, a zlecona była v2), pokazany użytkownikowi wraz z poprawkami.
+- [ ] Istnieją skuteczne raporty obu rybek (lub wybranego runnera) dla tej rewizji, która zostaje oznaczona jako gotowa
+      (2026-11-01: w pilotażu 1 rybka czytała v1, a zlecona była v2), pokazane użytkownikowi wraz z poprawkami.
 - [ ] Rozstrzygnięto wszystkie uwagi wpływające na zakres, zachowanie lub odbiór; pytania o zakres/oczekiwania mają
       odpowiedzi użytkownika, a brakującej decyzji nie dopowiedziano. Sugestie redakcyjne nie blokują gotowości.
 
@@ -78,26 +78,39 @@ mówi „brak uwag”. Błąd, timeout, pusty/niekompletny raport nie spełnia d
 pokazuje go i poprawki użytkownikowi. Istotna zmiana celu/zakresu po raporcie wymaga nowej rybki; usunięcie wskazanego
 braku lub korekta redakcyjna nie wymaga automatycznie kolejnego płatnego przebiegu.
 
-Raport zapisuj w zwykłych komentarzach z nagłówkiem `Przegląd rev N — część i/k`: N to rewizja specyfikacji,
-i to numer części od 1, k to liczba części raportu (np. `Przegląd rev 2 — część 1/3`).
+Raporty zapisuj w zwykłych komentarzach z nagłówkiem `Przegląd rev N — DeepSeek — część i/k` oraz
+`Przegląd rev N — Gemini — część i/k`: N to rewizja specyfikacji, i to numer części od 1, k to liczba części
+danego raportu (np. `Przegląd rev 2 — DeepSeek — część 1/3`).
 Uwzględnij limit 2000 znaków komentarza razem z nagłówkiem i 4096 bajtów UTF-8 całego JSON-a żądania.
 Dziel po liniach, a linię dłuższą od limitu przetnij w środku. Złączenie części po usunięciu nagłówków musi dać
 dokładnie pierwotny raport; nie przycinaj ani nie dopisuj separatorów w jego treści. Rozstrzygnięcia zapisuj
-analogicznie w komentarzu odnoszącym się do tej samej rewizji. To reguła przygotowania, nie kod dzielenia raportu w aplikacji.
+analogicznie w komentarzu odnoszącym się do tej samej rewizji. Po analizie uwag słoń klasyfikuje je (blokujące,
+redakcyjne, chybione, unikalne blokujące) i dopisuje wiersze do rejestru w [rybka-evaluation.md](rybka-evaluation.md).
+To reguła przygotowania, nie kod dzielenia raportu w aplikacji.
 
-Uruchom lokalnie z katalogu repo: `just rybka .ai/spec.md` (ogólnie `just rybka SPEC`).
+Domyślnie uruchom lokalnie z id zadania: `just rybka <id zadania>` (np. `just rybka t-00c6c30f`).
+Skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`. Pusty stan („Brak specyfikacji”)
+przerywa wykonanie czytelnym błędem. Eksport do pliku (`just rybka .ai/spec.md`) pozostaje tylko alternatywą, gdy zadanie
+nie ma jeszcze wpisu w panelu.
+
+Domyślnie wołane są obie rybki równolegle: `just rybka SPEC` (`--runner both`). Opcjonalnie można wybrać jednego recenzenta:
+`--runner opencode` (DeepSeek) lub `--runner agy` (Gemini 3.8 Flash high).
 Implementacja: [scripts/rybka.mjs](../../scripts/rybka.mjs); nie uruchamiaj jej w runie wykonawcy Cezara.
-Plik SPEC zawiera wyłącznie specyfikację. Skrypt tworzy świeżą sesję opencode na przypiętym modelu
-`openrouter/deepseek/deepseek-v4.1-flash-1017`, bez historii i flag continue/session/fork.
-Specyfikacja jest jedyną wiadomością użytkownika; rola recenzenta jest osobnym promptem agenta.
+Oba przebiegi startują w świeżych sesjach bez historii:
+- **DeepSeek** (`opencode`): model `openrouter/deepseek/deepseek-v4.1-flash-1017`. Specyfikacja jest jedyną wiadomością użytkownika,
+  a model czyta AGENTS.md i załączniki narzędziem `read` (do 12 wywołań).
+- **Gemini** (`agy`): model `gemini-3.8-flash-high` przez lokalne `agy`, bez narzędzi i bez flagi `--dangerously-skip-permissions`.
+  Materiały referencyjne i specyfikacja są wklejane bezpośrednio do pojedynczego promptu.
 
-Aby recenzent nie błądził po repo, skrypt sprawdza materiały **przed startem modelu**: SPEC, AGENTS.md
+Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model rybki.
+Aby recenzenci nie błądzili po repo, skrypt sprawdza materiały **przed startem modeli**: specyfikację, AGENTS.md
 oraz jawne ścieżki plików w sekcji ZAŁĄCZNIKI (najlepiej każda ścieżka w backtickach). Przyjmuje tylko tekstowe
-pliki wewnątrz repo, bez poświadczeń i dowiązań prowadzących poza repo. Limit to 12 różnych plików, licząc SPEC
+pliki wewnątrz repo, bez poświadczeń i dowiązań prowadzących poza repo. Limit to 12 różnych plików, licząc specyfikację
 i AGENTS.md, oraz 200 000 znaków łącznie. Powtórzone ścieżki nie zwiększają liczby plików. Brak pliku,
 przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywołaniem modelu.
-Do promptu roli trafia lista dozwolonych plików, bez wklejania całej ich treści. Model czyta AGENTS.md i istotne
+W OpenCode do promptu roli trafia lista dozwolonych plików, a model czyta AGENTS.md i istotne
 załączniki wyłącznie narzędziem `read`: uprawnienia dopuszczają tylko te dokładne ścieżki, pozostałe są odrzucane.
+W agy treść tych samych sprawdzonych materiałów jest wklejana do wiadomości użytkownika, a model nie ma narzędzi.
 Ma najwyżej 12 wywołań odczytu (ponowne odczyty i odmowy też się liczą); wykrycie przekroczenia przerywa próbę
 i wyklucza skuteczny raport. Nie ma wyszukiwania, zapisu, powłoki ani delegacji. MCP są wyłączone. To ograniczenia wejścia
 i narzędzi, **nie sandbox OS**: proces nadal działa z prawami użytkownika.

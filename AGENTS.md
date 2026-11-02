@@ -16,7 +16,7 @@ below names for the area you touch.
 | Tests and verification | docs/testowanie.md, `just check` | agents |
 | Agent skills, e.g. how we give Wektor new abilities and judge his answers | skills/<name>/SKILL.md, e.g. skills/wektor-capabilities/SKILL.md; task preparation: [docs/agent-workflows/przygotuj-zadanie.md](docs/agent-workflows/przygotuj-zadanie.md); .claude/skills (Claude Code) and .agents/skills (Codex) are local links to skills/, made by `just setup` | any agent: Claude Code and Codex load them as skills |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md, docs/agent-workflows/executor-brief.md, scripts/executor-prepare.mjs, scripts/executor-run.mjs, scripts/executor-commit.mjs; results: docs/agent-workflows/executor-evaluation-2026-10-31.md | Cezar |
-| Executor and reviewer measurements | docs/agent-workflows/executor-hidden-acceptance-2026-11-01.md, docs/agent-workflows/reviewer-evaluation-2026-11-01.md | people, agents choosing briefs and review models |
+| Executor and reviewer measurements | docs/agent-workflows/executor-hidden-acceptance-2026-11-01.md, docs/agent-workflows/reviewer-evaluation-2026-11-01.md, docs/agent-workflows/rybka-evaluation.md | people, agents choosing briefs and review models |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
 | How the user wants every agent to work (commits, words) | "Working with the user" below | every agent; Cezar's executor keeps its workflow's branch and review |
 | What only concerns working with Claude Code | Claude Code memory, outside the repo; never project facts, never a rule other agents need | Claude Code sessions |
@@ -70,7 +70,7 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   4 min without output, raw JSONL and metrics in `~/.desk-panel/executor-runs`). It is told not to commit, push or dispatch;
   its tool permissions are autonomy, not a filesystem sandbox. Cezar's own check nodes commit the approved diff
   (docs/agent-workflows/desk-panel-task.md).
-- `just rybka SPEC`: local specification review with bounded materials, progress and private logs; see
+- `just rybka SPEC [--runner opencode|agy|both]`: local specification review (task id `t-…` or file path) with bounded materials, progress and private logs; see
   [docs/agent-workflows/przygotuj-zadanie.md](docs/agent-workflows/przygotuj-zadanie.md). Never dispatches Cezar or marks a to-do ready.
 - `just check`: tests, typecheck, dead code (knip, production mode) and frontend build in parallel. Run before publishing;
   `just test-fast` runs only the tests touched by uncommitted changes. Tests guard invariants, not commits: change the
