@@ -86,7 +86,7 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
     task.history.push({ ...entry, at: now() });
     task.history = task.history.slice(-TODO_LIMITS.history);
   };
-  const setStatus = (task: TodoTask, status: TodoTask['status'], by: 'user' | 'agent' | 'panel') => {
+  const setStatus = (task: TodoTask, status: TodoTask['status'], by: TodoTask['by']) => {
     if (task.status === status) return;
     history(task, { kind: 'status', from: task.status, to: status, by });
     const wasDone = task.done;
@@ -126,17 +126,41 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
       case 'addTask': {
         const list = listOf(action.list);
         room(list);
-        const task: TodoTask = { id: id('t'), title: action.title, note: action.note ?? '', done: false, createdAt: now(), completedAt: null, by: action.by ?? 'user', status: 'pomysl', blocked: null, links: [], history: [] };
+        const task: TodoTask = { id: id('t'), title: action.title, note: action.note ?? '', done: false, createdAt: now(), completedAt: null, by: action.by ?? 'user', status: 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [] };
         list.tasks.push(task);
         return { ok: true, list: { id: list.id, name: list.name }, task: { id: task.id } };
       }
       case 'updateTask': {
         const { list, task } = taskOf(action.task);
+        // Validate the spec revision before touching title or note: a conflict must leave all three fields untouched.
+        let newSpec: string | undefined;
+        let newRevision: number | undefined;
+        if (action.spec !== undefined && action.specRevision !== undefined) {
+          const current = task.spec ?? '';
+          const currentRevision = task.specRevision ?? 0;
+          // Identical content succeeds without a new revision, whatever the expected number (safe retry).
+          if (action.spec !== current) {
+            if (action.specRevision !== currentRevision) {
+              throw new TodoError(409, `Konflikt specyfikacji: oczekiwana rewizja ${action.specRevision}, aktualna ${currentRevision}.`);
+            }
+            newSpec = action.spec;
+            newRevision = currentRevision + 1;
+          }
+        }
         if (action.title !== undefined) task.title = action.title;
         if (action.note !== undefined) task.note = action.note;
         if (action.done === true) setStatus(task, 'zakonczone', action.by ?? 'user');
         if (action.done === false && task.done) {
           setStatus(task, todoOpenStatus(task), action.by ?? 'user');
+        }
+        if (newSpec !== undefined && newRevision !== undefined) {
+          task.spec = newSpec;
+          task.specRevision = newRevision;
+          const revisions = task.specRevisions ?? [];
+          revisions.push({ revision: newRevision, spec: newSpec, by: action.by ?? 'user', at: now() });
+          // Numbers keep growing past retention; only the last 10 full texts stay.
+          task.specRevisions = revisions.slice(-TODO_LIMITS.specRevisions);
+          history(task, { kind: 'spec', text: `v${newRevision}`, by: action.by ?? 'user' });
         }
         return { ok: true, list: { id: list.id, name: list.name }, task: { id: task.id } };
       }

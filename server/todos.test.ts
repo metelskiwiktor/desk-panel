@@ -22,22 +22,22 @@ describe('listy zadań: sklep', () => {
     const store = createTodoStore({ now: () => 123 });
     const list = (await store.apply({ action: 'createList', name: 'L' })).list!.id;
     const task = (await store.apply({ action: 'addTask', list, title: 'Praca' })).task!.id;
-    await store.apply({ action: 'setStatus', task, status: 'gotowe', by: 'agent' });
+    await store.apply({ action: 'setStatus', task, status: 'gotowe', by: 'wektor' });
     await store.apply({ action: 'setBlocked', task, reason: 'Czekamy', by: 'user' });
     expect((await data(store))[0].tasks[0]).toMatchObject({ status: 'gotowe', done: false, completedAt: null, blocked: 'Czekamy' });
     await store.apply({ action: 'setStatus', task, status: 'porzucone' });
     expect((await data(store))[0].tasks[0]).toMatchObject({ status: 'porzucone', done: true, completedAt: 123 });
     await store.apply({ action: 'updateTask', task, done: true });
     expect((await data(store))[0].tasks[0].status).toBe('zakonczone');
-    await store.apply({ action: 'updateTask', task, done: false, by: 'agent' });
+    await store.apply({ action: 'updateTask', task, done: false, by: 'wektor' });
     const open = (await data(store))[0].tasks[0];
     expect(open).toMatchObject({ status: 'gotowe', done: false, completedAt: null, blocked: 'Czekamy' });
     expect(open.history).toEqual([
-      { at: 123, kind: 'status', from: 'pomysl', to: 'gotowe', by: 'agent' },
+      { at: 123, kind: 'status', from: 'pomysl', to: 'gotowe', by: 'wektor' },
       { at: 123, kind: 'blocked', text: 'Czekamy', by: 'user' },
       { at: 123, kind: 'status', from: 'gotowe', to: 'porzucone', by: 'user' },
       { at: 123, kind: 'status', from: 'porzucone', to: 'zakonczone', by: 'user' },
-      { at: 123, kind: 'status', from: 'zakonczone', to: 'gotowe', by: 'agent' },
+      { at: 123, kind: 'status', from: 'zakonczone', to: 'gotowe', by: 'wektor' },
     ]);
     await store.apply({ action: 'setBlocked', task, reason: null });
     await store.apply({ action: 'setBlocked', task, reason: null });
@@ -48,7 +48,7 @@ describe('listy zadań: sklep', () => {
     const store = createTodoStore();
     const list = (await store.apply({ action: 'createList', name: 'L' })).list!.id;
     const task = (await store.apply({ action: 'addTask', list, title: 'Praca' })).task!.id;
-    const link = { action: 'link' as const, task, kind: 'pr' as const, id: 'https://github.com/owner/repo/pull/1', title: 'PR', by: 'agent' as const };
+    const link = { action: 'link' as const, task, kind: 'pr' as const, id: 'https://github.com/owner/repo/pull/1', title: 'PR', by: 'wektor' as const };
     await store.apply(link);
     await store.apply(link);
     expect((await data(store))[0].tasks[0].history).toHaveLength(1);
@@ -59,11 +59,11 @@ describe('listy zadań: sklep', () => {
     await store.apply({ action: 'unlink', task, kind: link.kind, id: link.id });
     await store.apply({ action: 'unlink', task, kind: link.kind, id: link.id });
     expect((await data(store))[0].tasks[0].history.at(-1)).toMatchObject({ kind: 'link', text: `- pr ${link.id}` });
-    for (let i = 0; i <= TODO_LIMITS.history; i++) await store.apply({ action: 'addComment', task, text: `**Ustalenie ${i}**`, by: 'agent' });
+    for (let i = 0; i <= TODO_LIMITS.history; i++) await store.apply({ action: 'addComment', task, text: `**Ustalenie ${i}**`, by: 'wektor' });
     const final = (await data(store))[0].tasks[0];
     expect(final.links).toHaveLength(19);
     expect(final.history).toHaveLength(TODO_LIMITS.history);
-    expect(final.history[0]).toMatchObject({ kind: 'comment', text: '**Ustalenie 1**', by: 'agent' });
+    expect(final.history[0]).toMatchObject({ kind: 'comment', text: '**Ustalenie 1**', by: 'wektor' });
     expect(final.history.at(-1)?.text).toBe('**Ustalenie 200**');
   });
 
@@ -111,12 +111,12 @@ describe('listy zadań: sklep', () => {
     const store = createTodoStore({ now: () => at++ });
     const { list } = await store.apply({ action: 'createList', name: 'Dom' });
     const a = await store.apply({ action: 'addTask', list: list!.id, title: 'Żarówki' });
-    const b = await store.apply({ action: 'addTask', list: list!.id, title: 'Rachunki', note: 'do piątku', by: 'agent' });
+    const b = await store.apply({ action: 'addTask', list: list!.id, title: 'Rachunki', note: 'do piątku', by: 'wektor' });
     expect(a.task!.id).toMatch(TASK);
     const [only] = await data(store);
     expect(only.tasks.map(t => t.title)).toEqual(['Żarówki', 'Rachunki']);
     expect(only.tasks[0]).toMatchObject({ note: '', done: false, completedAt: null, by: 'user' });
-    expect(only.tasks[1]).toMatchObject({ id: b.task!.id, note: 'do piątku', by: 'agent' });
+    expect(only.tasks[1]).toMatchObject({ id: b.task!.id, note: 'do piątku', by: 'wektor' });
     expect(only.tasks[1].createdAt).toBeGreaterThan(only.tasks[0].createdAt);
   });
 
@@ -183,6 +183,102 @@ describe('listy zadań: sklep', () => {
     expect((await data(createTodoStore({ file: path.join(dir, 'old.json') })))[0]).toMatchObject({ name: 'Stara', hideDone: false, showAgent: false });
   });
 
+  it('macierz zapisu specyfikacji: pierwszy pusty zapis to no-op, zgodny numer tworzy wersję, identyczna treść to sukces bez nowej wersji, niezgodny daje 409, wyczyszczenie tworzy pustą wersję, retencja trzyma 10 ostatnich', async () => {
+    let at = 10_000;
+    const store = createTodoStore({ now: () => at++ });
+    const { list } = await store.apply({ action: 'createList', name: 'L' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Zadanie' });
+    const id = task!.id;
+
+    // 1. Początkowo brak rewizji
+    let current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('');
+    expect(current.specRevision).toBe(0);
+    expect(current.specRevisions).toEqual([]);
+
+    // 2. Pierwszy pusty zapis nie tworzy wersji (no-op)
+    await store.apply({ action: 'updateTask', task: id, spec: '', specRevision: 0 });
+    current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('');
+    expect(current.specRevision).toBe(0);
+    expect(current.specRevisions).toEqual([]);
+
+    // 3. Treść różna i numer zgodny (0) -> tworzy wersję v1
+    await store.apply({ action: 'updateTask', task: id, spec: 'Spec v1', specRevision: 0, by: 'user' });
+    current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('Spec v1');
+    expect(current.specRevision).toBe(1);
+    expect(current.specRevisions).toHaveLength(1);
+    expect(current.specRevisions[0]).toMatchObject({ revision: 1, spec: 'Spec v1', by: 'user' });
+    expect(current.history.at(-1)).toMatchObject({ kind: 'spec', text: 'v1', by: 'user' });
+
+    // 4. Identyczna treść z dowolnym oczekiwanym numerem -> sukces bez nowej rewizji (bezpieczne ponowienie)
+    for (const rev of [0, 1, 99]) {
+      await store.apply({ action: 'updateTask', task: id, spec: 'Spec v1', specRevision: rev });
+      current = (await data(store))[0].tasks[0];
+      expect(current.specRevision).toBe(1);
+      expect(current.specRevisions).toHaveLength(1);
+    }
+
+    // 5. Treść różna i niezgodny numer -> 409 i brak zmian
+    await expect(store.apply({ action: 'updateTask', task: id, spec: 'Spec v2', specRevision: 0 })).rejects.toMatchObject({ status: 409 });
+    await expect(store.apply({ action: 'updateTask', task: id, spec: 'Spec v2', specRevision: 2 })).rejects.toMatchObject({ status: 409 });
+    current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('Spec v1');
+    expect(current.specRevision).toBe(1);
+
+    // 6. Treść różna i zgodny numer (1) -> tworzy v2
+    await store.apply({ action: 'updateTask', task: id, spec: 'Spec v2', specRevision: 1, by: 'wektor' });
+    current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('Spec v2');
+    expect(current.specRevision).toBe(2);
+    expect(current.specRevisions).toHaveLength(2);
+
+    // 7. Wyczyszczenie niepustej specyfikacji tworzy pustą rewizję v3; następny zapis bazuje na 3
+    await store.apply({ action: 'updateTask', task: id, spec: '', specRevision: 2 });
+    current = (await data(store))[0].tasks[0];
+    expect(current.spec).toBe('');
+    expect(current.specRevision).toBe(3);
+    expect(current.specRevisions).toHaveLength(3);
+    expect(current.specRevisions.at(-1)).toMatchObject({ revision: 3, spec: '' });
+
+    // 8. Kolejny zapis oczekuje 3 i tworzy v4
+    await store.apply({ action: 'updateTask', task: id, spec: 'Spec v4', specRevision: 3 });
+    current = (await data(store))[0].tasks[0];
+    expect(current.specRevision).toBe(4);
+
+    // 9. Zapisy aż do 12: numery rosną, po 12 zapisach zostają v3–v12 (10 ostatnich), v1 i v2 wypadają z retencji
+    for (let r = 4; r < 12; r++) {
+      await store.apply({ action: 'updateTask', task: id, spec: `Spec v${r + 1}`, specRevision: r });
+    }
+    current = (await data(store))[0].tasks[0];
+    expect(current.specRevision).toBe(12);
+    expect(current.specRevisions).toHaveLength(10);
+    expect(current.specRevisions.map(r => r.revision)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  });
+
+  it('updateTask jest atomowy: błąd 409 na spec nie zapisuje jednocześnie przesłanego tytułu ani notatki', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'L' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Oryginalny tytuł', note: 'Oryginalna notatka' });
+    await store.apply({ action: 'updateTask', task: task!.id, spec: 'Spec v1', specRevision: 0 });
+
+    await expect(store.apply({
+      action: 'updateTask',
+      task: task!.id,
+      title: 'Zmieniony tytuł',
+      note: 'Zmieniona notatka',
+      spec: 'Nowa specyfikacja',
+      specRevision: 999,
+    })).rejects.toMatchObject({ status: 409 });
+
+    const current = (await data(store))[0].tasks[0];
+    expect(current.title).toBe('Oryginalny tytuł');
+    expect(current.note).toBe('Oryginalna notatka');
+    expect(current.spec).toBe('Spec v1');
+    expect(current.specRevision).toBe(1);
+  });
+
   it('odmowa nic nie zmienia: nieznana lista i zadanie to 404 z powodem, zajęta nazwa przy zmianie nazwy to 409', async () => {
     const store = createTodoStore();
     const a = (await store.apply({ action: 'createList', name: 'A' })).list!.id;
@@ -212,7 +308,7 @@ describe('listy zadań: plik', () => {
   it('zapisuje całość atomowo (bez pliku tymczasowego) i po restarcie odczytuje to samo', async () => {
     const store = createTodoStore({ file: file() });
     const list = (await store.apply({ action: 'createList', name: 'Zapisana' })).list!.id;
-    await store.apply({ action: 'addTask', list, title: 'Przetrwa restart', by: 'agent' });
+    await store.apply({ action: 'addTask', list, title: 'Przetrwa restart', by: 'wektor' });
     await store.drain();
     expect(await readdir(path.join(dir, 'sub'))).toEqual(['todos.json']);
     const raw = JSON.parse(await readFile(file(), 'utf8'));
@@ -220,14 +316,14 @@ describe('listy zadań: plik', () => {
     const restarted = createTodoStore({ file: file() });
     const source = await restarted.read();
     expect(todoSourceSchema.safeParse(source).success).toBe(true);
-    expect(source.data!.lists[0].tasks[0]).toMatchObject({ title: 'Przetrwa restart', by: 'agent' });
+    expect(source.data!.lists[0].tasks[0]).toMatchObject({ title: 'Przetrwa restart', by: 'wektor' });
     expect(source.message).toBeUndefined();
   });
 
   it('wiele zmian naraz nie gubi żadnej: wszystkie są w kolejności i w pliku', async () => {
     const store = createTodoStore({ file: file() });
     const list = (await store.apply({ action: 'createList', name: 'Równolegle' })).list!.id;
-    await Promise.all(Array.from({ length: 25 }, (_, i) => store.apply({ action: 'addTask', list, title: `zadanie ${i}`, by: i % 2 ? 'agent' : 'user' })));
+    await Promise.all(Array.from({ length: 25 }, (_, i) => store.apply({ action: 'addTask', list, title: `zadanie ${i}`, by: i % 2 ? 'wektor' : 'user' })));
     const titles = (await data(store))[0].tasks.map(t => t.title);
     expect(titles).toEqual(Array.from({ length: 25 }, (_, i) => `zadanie ${i}`));
     expect(JSON.parse(await readFile(file(), 'utf8')).lists[0].tasks).toHaveLength(25);
@@ -258,6 +354,95 @@ describe('listy zadań: plik', () => {
     expect(source).toMatchObject({ status: 'connected', data: { lists: [] } });
     expect(source.message).toBeUndefined();
   });
+
+  it('specyfikacja 50 000 jednostek UTF-16 z polskimi znakami, emoji i nowymi liniami zapisuje się bez zmian i przeżywa restart', async () => {
+    const file = path.join(dir, 'spec-50k.json');
+    const store = createTodoStore({ file });
+    const { list } = await store.apply({ action: 'createList', name: 'L' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Duża specyfikacja' });
+    const segment = 'Zażółć gęślą jaźń 🚀\n';
+    const text = segment.repeat(Math.ceil(50_000 / segment.length)).slice(0, 50_000);
+    expect(text.length).toBe(50_000);
+
+    await store.apply({ action: 'updateTask', task: task!.id, spec: text, specRevision: 0 });
+    await store.drain();
+
+    const restarted = createTodoStore({ file });
+    const source = await restarted.read();
+    const saved = source.data!.lists[0].tasks[0];
+    expect(saved.spec).toBe(text);
+    expect(saved.specRevision).toBe(1);
+    expect(saved.specRevisions).toHaveLength(1);
+    expect(saved.specRevisions[0].spec).toBe(text);
+  });
+
+  it('błąd zapisu pliku przy updateTask ze specyfikacją wycofuje całą zmianę z pamięci (atomowość plikowa)', async () => {
+    const file = path.join(dir, 'atom.json');
+    const store = createTodoStore({ file });
+    const { list } = await store.apply({ action: 'createList', name: 'L' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'T', note: 'N' });
+    await store.apply({ action: 'updateTask', task: task!.id, spec: 'v1', specRevision: 0 });
+    await store.drain();
+
+    // Blokujemy zapis (zastępujemy plik katalogiem, więc rename temp -> file rzuci błąd)
+    await rm(file);
+    await mkdir(file);
+
+    await expect(store.apply({ action: 'updateTask', task: task!.id, title: 'Nowy', note: 'Nowa', spec: 'v2', specRevision: 1 })).rejects.toBeDefined();
+    const current = (await data(store))[0].tasks[0];
+    expect(current.title).toBe('T');
+    expect(current.note).toBe('N');
+    expect(current.spec).toBe('v1');
+    expect(current.specRevision).toBe(1);
+  });
+
+  it('plik v1 i v2 bez specyfikacji wczytuje się bez utraty danych (z aliasem autora agent -> wektor) i bez tworzenia rewizji', async () => {
+    const file1 = path.join(dir, 'legacy-v1.json');
+    await writeFile(file1, JSON.stringify({
+      version: 1,
+      lists: [{
+        id: 'l-11111111', name: 'Stara V1', createdAt: 100, hideDone: false, showAgent: false,
+        tasks: [{ id: 't-11111111', title: 'Zadanie V1', note: 'Notatka V1', done: false, createdAt: 100, completedAt: null, by: 'agent' }]
+      }]
+    }), 'utf8');
+    const store1 = createTodoStore({ file: file1 });
+    const s1 = await store1.read();
+    expect(s1.data!.lists[0].tasks[0]).toMatchObject({
+      title: 'Zadanie V1', note: 'Notatka V1', by: 'wektor', spec: '', specRevision: 0, specRevisions: []
+    });
+
+    const file2 = path.join(dir, 'legacy-v2.json');
+    await writeFile(file2, JSON.stringify({
+      version: 2,
+      lists: [{
+        id: 'l-22222222', name: 'Stara V2', createdAt: 200, hideDone: true, showAgent: true,
+        tasks: [{ id: 't-22222222', title: 'Zadanie V2', note: 'Notatka V2', done: true, createdAt: 200, completedAt: 250, by: 'user', status: 'zakonczone', blocked: null, links: [], history: [] }]
+      }]
+    }), 'utf8');
+    const store2 = createTodoStore({ file: file2 });
+    const s2 = await store2.read();
+    expect(s2.data!.lists[0].tasks[0]).toMatchObject({
+      title: 'Zadanie V2', note: 'Notatka V2', spec: '', specRevision: 0, specRevisions: []
+    });
+  });
+
+  it('retencja historii (200 wpisów) nie usuwa zapisanych pełnych rewizji specyfikacji', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'Retencja' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Task' });
+    await store.apply({ action: 'updateTask', task: task!.id, spec: 'Pełna treść specyfikacji', specRevision: 0 });
+
+    for (let i = 0; i <= TODO_LIMITS.history + 10; i++) {
+      await store.apply({ action: 'addComment', task: task!.id, text: `Komentarz ${i}` });
+    }
+
+    const current = (await data(store))[0].tasks[0];
+    expect(current.history).toHaveLength(TODO_LIMITS.history);
+    expect(current.spec).toBe('Pełna treść specyfikacji');
+    expect(current.specRevision).toBe(1);
+    expect(current.specRevisions).toHaveLength(1);
+    expect(current.specRevisions[0].spec).toBe('Pełna treść specyfikacji');
+  });
 });
 
 describe('akcje: schemat', () => {
@@ -270,6 +455,9 @@ describe('akcje: schemat', () => {
     ['zbyt długi tytuł', { action: 'addTask', list: 'l-aaaaaaaa', title: 'x'.repeat(TODO_LIMITS.title + 1) }],
     ['zła wartość by', { action: 'addTask', list: 'l-aaaaaaaa', title: 'x', by: 'ktoś' }],
     ['updateTask bez zmiany', { action: 'updateTask', task: 't-aaaaaaaa' }],
+    ['updateTask ze spec bez specRevision', { action: 'updateTask', task: 't-aaaaaaaa', spec: 'x' }],
+    ['updateTask ze specRevision bez spec', { action: 'updateTask', task: 't-aaaaaaaa', specRevision: 1 }],
+    ['zbyt długa specyfikacja (>50k)', { action: 'updateTask', task: 't-aaaaaaaa', spec: 'x'.repeat(TODO_LIMITS.spec + 1), specRevision: 0 }],
     ['nieznany stan', { action: 'setStatus', task: 't-aaaaaaaa', status: 'done' }],
     ['długa blokada', { action: 'setBlocked', task: 't-aaaaaaaa', reason: 'x'.repeat(301) }],
     ['długi komentarz', { action: 'addComment', task: 't-aaaaaaaa', text: 'x'.repeat(2001) }],
@@ -278,6 +466,14 @@ describe('akcje: schemat', () => {
   ])('odrzuca %s', (_, body) => { expect(todoActionSchema.safeParse(body).success).toBe(false); });
   it('przycina spacje z nazw i tytułów', () => {
     expect(todoActionSchema.parse({ action: 'createList', name: '  Dom  ' })).toEqual({ action: 'createList', name: 'Dom' });
+  });
+
+  it('specyfikacja 50 000 jednostek UTF-16 z polskimi znakami i emoji przechodzi schemat', () => {
+    const segment = 'Zażółć gęślą jaźń 🚀\n';
+    const text = segment.repeat(Math.ceil(50_000 / segment.length)).slice(0, 50_000);
+    expect(text.length).toBe(50_000);
+    const parsed = todoActionSchema.safeParse({ action: 'updateTask', task: 't-aaaaaaaa', spec: text, specRevision: 0 });
+    expect(parsed.success).toBe(true);
   });
 });
 
@@ -336,7 +532,7 @@ describe('trasa /api/todos (scenariusz standardowy)', () => {
     expect(ok).toBe(true);
     expect(task.id).toMatch(TASK);
     const mine = (await get()).data!.lists[1].tasks.find(t => t.id === task.id);
-    expect(mine).toMatchObject({ title: 'Zadzwonić do hydraulika', by: 'agent', done: false });
+    expect(mine).toMatchObject({ title: 'Zadzwonić do hydraulika', by: 'wektor', done: false });
     expect((await post({ action: 'updateTask', task: task.id, done: true })).status).toBe(200);
     expect((await get()).data!.lists[1].tasks.find(t => t.id === task.id)!.done).toBe(true);
   });
@@ -361,6 +557,40 @@ describe('trasa /api/todos (scenariusz standardowy)', () => {
     await writeFile(path.join(dir, 'scenario.json'), JSON.stringify({ ...scenario, todos: { $error: 502 } }), 'utf8');
     await expect(sources.todos()).rejects.toMatchObject({ status: 502 });
   });
+
+  it('limit ciała wynosi 512 KiB dla updateTask ze spec i 4096 B dla reszty, zły Origin to 403, a dane nie ulegają zmianie', async () => {
+    const { post, get } = await start();
+    const task = (await get()).data!.lists[0].tasks[0].id;
+
+    // updateTask ze specyfikacją do 512 KiB przechodzi
+    const bigSpec = 'Zażółć gęślą jaźń 🚀\n'.repeat(2000);
+    const okRes = await post({ action: 'updateTask', task, spec: bigSpec, specRevision: 0 });
+    expect(okRes.status).toBe(200);
+
+    // updateTask ze spec przekraczający 512 KiB daje 413
+    const tooBigBody = JSON.stringify({ action: 'updateTask', task, spec: 'x'.repeat(50_000), specRevision: 0, padding: 'x'.repeat(500_000) });
+    expect(Buffer.byteLength(tooBigBody, 'utf8')).toBeGreaterThan(512 * 1024);
+    expect((await post(tooBigBody)).status).toBe(413);
+
+    // Inna akcja (np. addComment) powyżej 4096 B daje 413
+    const oversizedComment = JSON.stringify({ action: 'addComment', task, text: 'x'.repeat(4100) });
+    expect((await post(oversizedComment)).status).toBe(413);
+
+    // updateTask bez specyfikacji powyżej 4096 B daje 413
+    const oversizedUpdate = JSON.stringify({ action: 'updateTask', task, note: 'x'.repeat(100), padding: 'x'.repeat(4000) });
+    expect((await post(oversizedUpdate)).status).toBe(413);
+
+    // Zły Origin lub brak Origin zwraca 403 i nie zmienia danych
+    const evilRes = await post({ action: 'updateTask', task, spec: 'Evil', specRevision: 1 }, 'http://evil.example');
+    expect(evilRes.status).toBe(403);
+    const noOriginRes = await post({ action: 'updateTask', task, spec: 'NoOrigin', specRevision: 1 }, null);
+    expect(noOriginRes.status).toBe(403);
+
+    // Sprawdzenie, że stan zadania nie zmienił się pod wpływem 403/413
+    const current = (await get()).data!.lists[0].tasks[0];
+    expect(current.spec).toBe(bigSpec);
+    expect(current.specRevision).toBe(1);
+  });
 });
 
 describe('widok dla agenta: zadania', () => {
@@ -371,7 +601,7 @@ describe('widok dla agenta: zadania', () => {
     const text = await view();
     expect(text.split('\n')[0]).toContain('nie zadania Cezara');
     expect(text).toContain('Lista „Do poprawy - Chat Agy” (id=l-1a2b3c4d): do zrobienia 2, ukończonych 1');
-    expect(text).toMatch(/\[ \] t-a0000001  Agent nie wie, ile ma limitu na dziś \(dodał agent, \d{4}-\d{2}-\d{2}\) — Dodać limity AI/);
+    expect(text).toMatch(/\[ \] t-a0000001  Agent nie wie, ile ma limitu na dziś \(dodał wektor, \d{4}-\d{2}-\d{2}\) — Dodać limity AI/);
     expect(text).toContain('Lista „Dom” (id=l-5e6f7a8b): do zrobienia 1, ukończonych 0');
     expect(text).not.toContain('t-a0000003');
     expect(text).not.toMatch(/\d{12,}/);
@@ -434,5 +664,35 @@ describe('widok dla agenta: zadania', () => {
     expect(await agentViews(empty).todos(new URL('http://x/api/agent/todos'), Date.now())).toContain('Brak list. Utwórz listę akcją createList.');
     const broken = { todos: async () => ({ live: true, name: 'Zadania', status: 'unavailable', observedAt: null, message: 'Plik nie do odczytu', data: null }) } as never;
     expect(await agentViews(broken).todos(new URL('http://x/api/agent/todos'), Date.now())).toContain('brak danych (status: unavailable, Plik nie do odczytu)');
+  });
+
+  it('odczyt wersji: wersja=N zwraca zachowaną rewizję, a wersja usunięta z retencji (np. v2 po 12 zapisach) daje 404', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'Wersje' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Wielowariantowe' });
+    const id = task!.id;
+    for (let i = 0; i < 12; i++) {
+      await store.apply({ action: 'updateTask', task: id, spec: `Treść rewizji ${i + 1}`, specRevision: i });
+    }
+    const dynamicSources = {
+      todos: async () => store.read(),
+    } as unknown as Parameters<typeof agentViews>[0];
+    const dynView = (query: string) => agentViews(dynamicSources).todos(new URL(`http://x/api/agent/todos${query}`), Date.now());
+
+    // v12 (aktualna domyślna) jest w pełnym odczycie bez wersja=
+    const current = await dynView(`?zadanie=${id}`);
+    expect(current).toContain('Specyfikacja (v12');
+    expect(current).toContain('Treść rewizji 12');
+
+    // v3 (najstarsza w 10-elementowej retencji) jest dostępna przez wersja=3
+    const v3 = await dynView(`?zadanie=${id}&wersja=3`);
+    expect(v3).toContain('Specyfikacja (v3');
+    expect(v3).toContain('Treść rewizji 3');
+
+    // v2 wypadła z retencji -> 404
+    await expect(dynView(`?zadanie=${id}&wersja=2`)).rejects.toMatchObject({
+      status: 404,
+      message: 'wersja 2 niedostępna; przechowujemy 10 ostatnich.',
+    });
   });
 });

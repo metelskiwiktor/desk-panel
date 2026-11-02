@@ -12,6 +12,8 @@ import type { TodosState } from './useTodos';
  * what changed; Esc and "Anuluj" drop the edit, and a tap on the dimmed panel closes it only while nothing was typed.
  * Delete asks twice. Enter in the title and Ctrl+Enter in the note save.
  */
+/** Old `agent` stays an alias for `wektor`, so its label is "Wektor" too. */
+const AUTHOR_LABELS: Record<string, string> = { user: 'Ty', wektor: 'Wektor', agent: 'Wektor', claude: 'Claude', codex: 'Codex', panel: 'panel' };
 export function TodoDialog({ list, task, act, close, snapshot, error }: { snapshot?: CezarSnapshot | null; error?: string; list: TodoList; task: TodoTask; act: TodosState['act']; close: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [note, setNote] = useState(task.note);
@@ -100,8 +102,8 @@ export function TodoDialog({ list, task, act, close, snapshot, error }: { snapsh
         <section className="todo-dlg-section" aria-label="Historia">
           <h3>Historia</h3>
           {task.history.length ? <ol className="todo-history">{task.history.map((entry, index) => <li key={index}>
-            <small>{{ user: 'Ty', agent: 'Wektor', panel: 'panel' }[entry.by]} · <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}</time></small>
-            <p>{entry.kind === 'comment' ? entry.text : entry.kind === 'status' ? `Stan: ${entry.from ? TODO_STATUSES[entry.from] : '—'} → ${entry.to ? TODO_STATUSES[entry.to] : '—'}` : entry.kind === 'blocked' ? entry.text ? `Blokada: ${entry.text}` : 'Zdjęto blokadę' : `Powiązanie: ${entry.text?.replace(/^\+ /, 'Dodano ').replace(/^- /, 'Usunięto ')}`}</p>
+            <small>{AUTHOR_LABELS[entry.by] ?? entry.by} · <time dateTime={new Date(entry.at).toISOString()}>{new Date(entry.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}</time></small>
+            <p>{entry.kind === 'comment' ? entry.text : entry.kind === 'status' ? `Stan: ${entry.from ? TODO_STATUSES[entry.from] : '—'} → ${entry.to ? TODO_STATUSES[entry.to] : '—'}` : entry.kind === 'blocked' ? entry.text ? `Blokada: ${entry.text}` : 'Zdjęto blokadę' : entry.kind === 'spec' ? `Specyfikacja: ${entry.text ?? ''}` : `Powiązanie: ${entry.text?.replace(/^\+ /, 'Dodano ').replace(/^- /, 'Usunięto ')}`}</p>
           </li>)}</ol> : <p className="todo-dlg-muted">Brak historii.</p>}
           <label className="todo-dlg-label" htmlFor={`${id}-comment`}>Dodaj komentarz</label>
           <textarea id={`${id}-comment`} className="todo-dlg-note todo-comment" value={comment} maxLength={TODO_LIMITS.comment} onChange={e => setComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addComment(); } }} />

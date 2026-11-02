@@ -169,33 +169,26 @@ Lokalnie domyślnie adres i Origin to `http://127.0.0.1:5174`; nie zakładaj por
 
 1. `GET /api/todos`: wybierz jednoznacznie listę wskazaną przez użytkownika. Przy kilku pasujących listach lub
    braku wskazanej listy pytaj, bez cichego wyboru i tworzenia listy.
-2. Tytuł ma nazywać rezultat; krótka notatka streszcza cel i wskazuje wersję pełnej specyfikacji w komentarzach.
-3. Podziel pełną specyfikację po akapitach/liniach, zachowując tekst i kolejność. Pierwszy komentarz zaczyna
-   `spec: <autor>` (np. `spec: Codex`, gdy autorem jest Codex); każda część ma `Specyfikacja vN — i/N`.
-   Sprawdź **oba** limity: 2000 znaków z nagłówkiem oraz 4096 bajtów UTF-8 całego JSON-a żądania
-   (`Buffer.byteLength(json, 'utf8')` lub `[Text.Encoding]::UTF8.GetByteCount($json)`).
-4. Sprawdź miejsce w historii: najwyżej 200 wpisów, licząc nowe komentarze, zmiany statusu i komentarz o strukturze.
-   Jeśli zapis wypchnąłby historię, zatrzymaj się i zapytaj; nie usuwaj jej.
-5. Wykonaj sekwencję poniżej; każda zmiana ma `by: agent`.
+2. Tytuł ma nazywać rezultat; krótka notatka streszcza cel i wskazuje aktualną wersję pełnej specyfikacji.
+3. Pełną specyfikację Markdown zapisuj w dedykowanym polu `spec` przez akcję `updateTask` z `specRevision`
+   (numer bazowy szkicu: 0 przy braku wcześniejszej wersji, w kolejnych numer aktualnej rewizji). Zapis przez
+   `updateTask` ze `spec`/`specRevision` zastępuje dawny wieloetapowy podział specyfikacji na komentarze; limit
+   specyfikacji wynosi 50 000 jednostek UTF-16, a limit ciała JSON to 512 KiB. Reguła dzielenia na części
+   w komentarzach (do 2000 znaków) dotyczy wyłącznie raportów przeglądu rybki opisanych w sekcji wyżej.
+4. Wykonaj sekwencję poniżej; każda zmiana ma `by: agent` (lub `wektor`).
 
 | Krok | Żądanie i wymagane pola |
 | --- | --- |
-| Utworzenie | POST /api/todos/action: `{action:"addTask", list, title, note, by:"agent"}`; zachowaj zwrócone `task.id` |
-| Specyfikacja | Kolejne POST: `{action:"addComment", task, text, by:"agent"}` dla każdej części |
-| Kontrola kompletu | GET /api/todos: sprawdź obecność i pełną treść wszystkich części w kolejności |
-| Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"agent"}` dopiero po kontroli kompletu |
-| Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"agent"}` |
-| Potwierdzenie | Końcowy GET /api/todos: stan i wszystkie komentarze |
+| Utworzenie (nowe) | POST /api/todos/action: `{action:"addTask", list, title, note, by:"agent"}`; zachowaj zwrócone `task.id` |
+| Specyfikacja | POST /api/todos/action: `{action:"updateTask", task, spec, specRevision, by:"agent"}` |
+| Kontrola zapisu | GET /api/todos lub GET /api/agent/todos?zadanie=<id>: sprawdź obecność i pełną treść specyfikacji oraz rewizję |
+| Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"agent"}` dopiero po kontroli zapisu |
+| Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"agent"}` (jeśli dotyczy) |
+| Potwierdzenie | Końcowy GET /api/todos: stan, specyfikacja i komentarze |
 
-Przy istniejącym zadaniu zachowaj jego id, pozostaw szkic w `przygotowanie` i dopisz pełną nową wersję; nie wykonuj
-ponownie `addTask`. Notatkę z numerem aktualnej wersji zmienia `updateTask` z `by: agent`.
+Przy istniejącym zadaniu zachowaj jego id, pozostaw szkic w `przygotowanie` i zapisz nową rewizję przez `updateTask`
+ze zaktualizowaną treścią `spec` oraz aktualnym `specRevision`; nie wykonuj ponownie `addTask`.
 
-**Błąd częściowy przerywa sekwencję**, bez ustawiania `gotowe`. Przed wznowieniem odczytaj `GET /api/todos`, id zadania
-i już zapisane części; wznów od brakującej części, bez powtarzania `addTask`. Jeśli id się nie zachowało, odszukaj
-zadanie na wskazanej liście; nie twórz duplikatu. Przy błędzie po ustawieniu `gotowe` odczytaj stan i dokończ brakujący
-krok, nie traktuj sekwencji jako zakończonej.
-
-Nowa rewizja to pełny komplet oznaczony nową wersją, z własnym `spec: <autor>` w pierwszej części; stare komentarze
-pozostają bez zmian. Końcowy komentarz opisuje **braki struktury zadania** ujawnione przy przygotowaniu (np. brak
-osobnego pola na wersjonowaną specyfikację) albo `Struktura: brak`; to obserwacja, nie rozszerzenie prac o API/UI.
-Zapisana specyfikacja trafia do wykonawcy w późniejszym zleceniu — samo przygotowanie i status `gotowe` go nie uruchamiają.
+**Błąd częściowy przerywa sekwencję**, bez ustawiania `gotowe`. W razie konfliktu 409 odczytaj `GET /api/todos`, id zadania
+i aktualną rewizję specyfikacji. Zapisana specyfikacja trafia do wykonawcy w późniejszym zleceniu — samo przygotowanie i status
+`gotowe` go nie uruchamiają.

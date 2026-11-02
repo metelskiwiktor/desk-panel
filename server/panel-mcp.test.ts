@@ -296,10 +296,10 @@ describe('panel MCP for Hermes', () => {
     expect(due.content[0].text).toContain('addTask przyjmuje tylko pola: list, title, note, by. Tych pól nie ma: due.');
     expect(due.content[0].text).toContain('Zadania nie mają terminu ani przypomnienia');
     const update = await call('panel_todo_action', { action: { action: 'updateTask', list: 'l-5de7602c', task: 't-a73c8431', title: 'x' } });
-    expect(update.content[0].text).toContain('updateTask przyjmuje tylko pola: task, title, note, done, by. Tych pól nie ma: list.');
+    expect(update.content[0].text).toContain('updateTask przyjmuje tylko pola: task, title, note, done, by, spec, specRevision. Tych pól nie ma: list.');
     expect((await call('panel_todo_action', { action: { action: 'remind' } })).content[0].text).toContain('Nieznana akcja "remind". Akcje: createList');
     const listed = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/list' })).json() as any;
-    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todo_action').description).toContain('updateTask {task, title, note, done, by}');
+    expect(listed.result.tools.find((t: { name: string }) => t.name === 'panel_todo_action').description).toContain('updateTask {task, title, note, done, by, spec, specRevision}');
   });
 
   it('makes the to-do changes the chat agent may make', async () => {
@@ -319,7 +319,7 @@ describe('panel MCP for Hermes', () => {
     }
     const source = await (await fetch(`${base}/api/todos`)).json();
     const todo = source.data.lists[0].tasks[0];
-    expect(todo.history.slice(-4).map((h: { by: string }) => h.by)).toEqual(['agent', 'agent', 'agent', 'agent']);
+    expect(todo.history.slice(-4).map((h: { by: string }) => h.by)).toEqual(['wektor', 'wektor', 'wektor', 'wektor']);
     const result = await call('panel_todos', { stan: 'gotowe' });
     expect(result.content[0].text).toContain('Gotowe do realizacji');
     expect(result.content[0].text).toContain('Blokada: Czekamy');

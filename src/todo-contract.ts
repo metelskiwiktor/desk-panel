@@ -1,18 +1,27 @@
 import { z } from 'zod';
 
 /** To-do lists of the user: the panel's own data (not a provider's), kept by the server and changed by small actions. */
-export const TODO_LIMITS = { lists: 50, tasksPerList: 500, name: 80, title: 200, note: 2000, blocked: 300, links: 20, history: 200, comment: 2000 } as const;
+export const TODO_LIMITS = { lists: 50, tasksPerList: 500, name: 80, title: 200, note: 2000, blocked: 300, links: 20, history: 200, comment: 2000, spec: 50000, specRevisions: 10 } as const;
 export const TODO_STATUSES = {
   pomysl: 'Pomysł', przygotowanie: 'Do przygotowania', gotowe: 'Gotowe do realizacji', realizacja: 'W realizacji',
   sprawdzenie: 'Do sprawdzenia', zakonczone: 'Zakończone', porzucone: 'Porzucone',
 } as const;
 export const todoStatusSchema = z.enum(Object.keys(TODO_STATUSES) as [keyof typeof TODO_STATUSES, ...(keyof typeof TODO_STATUSES)[]]);
-const actor = z.enum(['user', 'agent', 'panel']);
+/** Old `agent` stays an alias for `wektor`: the same author on write and read, including old task and history data. */
+export const todoActor = z.enum(['user', 'agent', 'panel', 'wektor', 'claude', 'codex']).transform(a => a === 'agent' ? 'wektor' : a);
+const actor = todoActor;
 const linkKind = z.enum(['chat', 'cezar', 'pr']);
 const linkId = z.string().trim().min(1).max(500);
 const validLink = (link: { kind: string; id: string }) => link.kind !== 'pr' || /^https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.{1,2}\/)[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(link.id);
 const linkSchema = z.object({ kind: linkKind, id: linkId, title: z.string().trim().min(1).max(200).optional(), at: z.number().finite() }).refine(validLink, 'Invalid GitHub pull request URL');
-const historySchema = z.object({ at: z.number().finite(), by: actor, kind: z.enum(['status', 'comment', 'link', 'blocked']), text: z.string().max(2000).optional(), from: todoStatusSchema.optional(), to: todoStatusSchema.optional() });
+const historySchema = z.object({ at: z.number().finite(), by: actor, kind: z.enum(['status', 'comment', 'link', 'blocked', 'spec']), text: z.string().max(2000).optional(), from: todoStatusSchema.optional(), to: todoStatusSchema.optional() });
+/** One kept full revision: the whole Markdown, its number, its author and the server's time. */
+const specRevisionSchema = z.object({
+  revision: z.number().int().positive(),
+  spec: z.string().max(TODO_LIMITS.spec),
+  by: actor,
+  at: z.number().finite(),
+});
 export const todoIsDone = (status: keyof typeof TODO_STATUSES) => status === 'zakonczone' || status === 'porzucone';
 
 export const todoListId = z.string().regex(/^l-[0-9a-f]{8}$/);
@@ -27,11 +36,17 @@ export const todoTaskSchema = z.object({
   /** When it was ticked; null while it is open. */
   completedAt: z.number().finite().nullable(),
   /** Who added it, so what the agent put on a list can be told from what the user did. */
-  by: z.enum(['user', 'agent']),
+  by: actor,
   status: todoStatusSchema.optional(),
   blocked: z.string().max(TODO_LIMITS.blocked).nullable().default(null),
   links: z.array(linkSchema).max(TODO_LIMITS.links).default([]).refine(links => new Set(links.map(l => `${l.kind}:${l.id}`)).size === links.length, 'Duplicate link'),
   history: z.array(historySchema).max(TODO_LIMITS.history).default([]),
+  /** The current full Markdown specification; empty when there is none. */
+  spec: z.string().max(TODO_LIMITS.spec).default(''),
+  /** The current revision number; 0 means no revision exists yet. */
+  specRevision: z.number().int().nonnegative().default(0),
+  /** The last 10 full revisions, oldest first; numbers keep growing past retention. */
+  specRevisions: z.array(specRevisionSchema).max(TODO_LIMITS.specRevisions).default([]),
 }).transform(task => {
   const status = task.status ?? (task.done ? 'zakonczone' : 'pomysl');
   return { ...task, status, done: todoIsDone(status), completedAt: todoIsDone(status) ? task.completedAt : null };
@@ -62,7 +77,8 @@ export type TodoSource = z.infer<typeof todoSourceSchema>;
 
 /**
  * Every change is one small action, so the screen and the agent can both write without overwriting each other.
- * `by` on `addTask` says who adds the task; the screen leaves it out (the user), the agent says `agent`.
+ * `by` on `addTask` says who adds the task; the screen leaves it out (the user), the agent says `wektor`
+ * (`agent` is kept as its alias). `updateTask` also carries the versioned Markdown spec and its base revision.
  */
 export const todoActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('createList'), name }).strict(),
@@ -70,9 +86,10 @@ export const todoActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('setListOptions'), list: todoListId, hideDone: z.boolean().optional(), showAgent: z.boolean().optional() }).strict()
     .refine(a => a.hideDone !== undefined || a.showAgent !== undefined, { message: 'Nothing to change' }),
   z.object({ action: z.literal('deleteList'), list: todoListId }).strict(),
-  z.object({ action: z.literal('addTask'), list: todoListId, title, note: note.optional(), by: z.enum(['user', 'agent']).optional() }).strict(),
-  z.object({ action: z.literal('updateTask'), task: todoTaskId, title: title.optional(), note: note.optional(), done: z.boolean().optional(), by: actor.optional() }).strict()
-    .refine(a => a.title !== undefined || a.note !== undefined || a.done !== undefined, { message: 'Nothing to change' }),
+  z.object({ action: z.literal('addTask'), list: todoListId, title, note: note.optional(), by: actor.optional() }).strict(),
+  z.object({ action: z.literal('updateTask'), task: todoTaskId, title: title.optional(), note: note.optional(), done: z.boolean().optional(), by: actor.optional(), spec: z.string().max(TODO_LIMITS.spec).optional(), specRevision: z.number().int().nonnegative().optional() }).strict()
+    .refine(a => a.title !== undefined || a.note !== undefined || a.done !== undefined || a.spec !== undefined, { message: 'Nothing to change' })
+    .refine(a => (a.spec === undefined) === (a.specRevision === undefined), { message: 'Spec and specRevision must be provided together' }),
   z.object({ action: z.literal('moveTask'), task: todoTaskId, list: todoListId }).strict(),
   z.object({ action: z.literal('deleteTask'), task: todoTaskId }).strict(),
   z.object({ action: z.literal('clearDone'), list: todoListId }).strict(),

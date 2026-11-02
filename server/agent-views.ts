@@ -276,24 +276,50 @@ export function agentViews(sources: PanelSources): Record<string, AgentView> {
       const withDone = url.searchParams.get('ukonczone') === '1';
       const state = url.searchParams.get('stan');
       if (state !== null && !todoStatusSchema.safeParse(state).success) throw new AgentViewError(400, 'Nieznany stan zadania.');
-      const header = wantedTask !== null ? `Zadanie z listy użytkownika (nie task Cezara), pełna notatka i wszystkie komentarze; stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}).` : `Listy zadań użytkownika (zadania do zrobienia, nie zadania Cezara), stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). ${state ? `Filtr stanu: ${state}.` : withDone ? 'Ukończone są pokazane.' : 'Ukończone są tylko policzone; ukonczone=1 je pokazuje.'}`;
+      const wantedVersion = url.searchParams.get('wersja');
+      if (wantedVersion !== null) {
+        if (wantedTask === null) throw new AgentViewError(400, 'wersja wymaga zadanie.');
+        if (!/^[1-9][0-9]*$/.test(wantedVersion)) throw new AgentViewError(400, 'wersja to dodatnia liczba całkowita.');
+      }
+      const version = wantedVersion !== null ? Number(wantedVersion) : null;
+      const header = wantedTask !== null ? `Zadanie z listy użytkownika (nie task Cezara), pełna notatka i wszystkie komentarze${version !== null ? `, wybrana wersja specyfikacji: ${version}` : ''}; stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}).` : `Listy zadań użytkownika (zadania do zrobienia, nie zadania Cezara), stan z ${source.observedAt ? stamp(source.observedAt, zone) : 'nieznany'} (${zone}). ${state ? `Filtr stanu: ${state}.` : withDone ? 'Ukończone są pokazane.' : 'Ukończone są tylko policzone; ukonczone=1 je pokazuje.'}`;
       const none = unavailable('Zadania', source.status, !!source.data, source.message);
       if (none) return `${header}\n${none}`;
       const wanted = url.searchParams.get('list')?.trim().toLowerCase();
       const lists = source.data!.lists.filter(l => wantedTask !== null || !wanted || l.id === wanted || l.name.toLowerCase().includes(wanted));
-      const task = (t: (typeof lists)[number]['tasks'][number], full = false) => {
-        const meta = [t.by === 'agent' ? 'dodał agent' : null, dateOf(t.createdAt, zone), t.done && t.completedAt ? `ukończone ${stamp(t.completedAt, zone)}` : null].filter(Boolean).join(', ');
-        return [`  [${t.done ? 'x' : ' '}] ${t.id}  ${full ? t.title : clip(t.title, 200)} (${meta})${t.note ? ` — ${full ? t.note : clip(t.note, 300)}` : ''}`,
+      const task = (t: (typeof lists)[number]['tasks'][number], full = false, revision?: (typeof t.specRevisions)[number]) => {
+        const author = t.by === 'wektor' ? 'dodał wektor' : t.by === 'claude' ? 'dodał Claude' : t.by === 'codex' ? 'dodał Codex' : null;
+        const meta = [author, dateOf(t.createdAt, zone), t.done && t.completedAt ? `ukończone ${stamp(t.completedAt, zone)}` : null].filter(Boolean).join(', ');
+        const lines = [`  [${t.done ? 'x' : ' '}] ${t.id}  ${full ? t.title : clip(t.title, 200)} (${meta})${t.note ? ` — ${full ? t.note : clip(t.note, 300)}` : ''}`,
           `    Stan: ${TODO_STATUSES[t.status]} (${t.status})${t.blocked ? `; Blokada: ${t.blocked}` : ''}`,
           ...t.links.map(l => `    Powiązanie: ${l.kind} ${l.id}${l.title ? ` — ${l.title}` : ''}`),
-          ...(full ? t.history.filter(h => h.kind === 'comment') : t.history.filter(h => h.kind === 'comment').slice(-3)).map(h => `    Komentarz (${stamp(h.at, zone)}, ${h.by}): ${h.text}`),
-        ].join('\n');
+        ];
+        if (full) {
+          const shown = revision ?? t.specRevisions.find(r => r.revision === t.specRevision);
+          const spec = shown?.spec ?? t.spec;
+          if (spec) {
+            lines.push(`    Specyfikacja (v${shown?.revision ?? t.specRevision}, ${shown?.by ?? t.by}, ${stamp(shown?.at ?? t.createdAt, zone)}):`);
+            lines.push(spec);
+          } else {
+            lines.push('    Specyfikacja: Brak specyfikacji');
+          }
+        } else {
+          // A shortcut: availability and the revision number only, never the full revision.
+          lines.push(`    Specyfikacja: ${t.specRevision ? `v${t.specRevision}` : 'brak'}`);
+        }
+        lines.push(...(full ? t.history.filter(h => h.kind === 'comment') : t.history.filter(h => h.kind === 'comment').slice(-3)).map(h => `    Komentarz (${stamp(h.at, zone)}, ${h.by}): ${h.text}`));
+        return lines.join('\n');
       };
       if (wantedTask !== null) {
         const list = lists.find(l => l.tasks.some(t => t.id === wantedTask));
         const found = list?.tasks.find(t => t.id === wantedTask);
         if (!list || !found) throw new AgentViewError(404, `Nie ma zadania o id ${wantedTask}.`);
-        return [header, `Lista „${list.name}” (id=${list.id}):`, task(found, true)].join('\n');
+        let revision: (typeof found.specRevisions)[number] | undefined;
+        if (version !== null) {
+          revision = found.specRevisions.find(r => r.revision === version);
+          if (!revision) throw new AgentViewError(404, `wersja ${version} niedostępna; przechowujemy 10 ostatnich.`);
+        }
+        return [header, `Lista "${list.name}" (id=${list.id}):`, task(found, true, revision)].join('\n');
       }
       if (!lists.length) return `${header}\n${wanted ? `Nie ma listy „${clip(wanted, 60)}”.` : 'Brak list. Utwórz listę akcją createList.'}${source.data!.lists.length ? ` Są: ${source.data!.lists.map(l => `„${l.name}” (${l.id})`).join(', ')}.` : ''}`;
       return [header, ...lists.flatMap(list => {

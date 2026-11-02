@@ -3,7 +3,7 @@ import { MAX_CONTEXT_TEXT } from './chat-context';
 import { listContext, taskContext } from './todo-context';
 import type { TodoList, TodoTask } from './todo-contract';
 
-const task = (n: number, extra: Partial<TodoTask> = {}): TodoTask => ({ id: `t-${String(n).padStart(8, '0')}`, title: `Zadanie ${n}`, note: '', done: false, createdAt: 1, completedAt: null, by: 'user', status: extra.done ? 'zakonczone' : 'pomysl', blocked: null, links: [], history: [], ...extra });
+const task = (n: number, extra: Partial<TodoTask> = {}): TodoTask => ({ id: `t-${String(n).padStart(8, '0')}`, title: `Zadanie ${n}`, note: '', done: false, createdAt: 1, completedAt: null, by: 'user', status: extra.done ? 'zakonczone' : 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [], ...extra });
 const list = (tasks: TodoTask[]): TodoList => ({ id: 'l-1a2b3c4d', name: 'Do poprawy - Chat Agy', createdAt: 1, hideDone: false, showAgent: false, tasks });
 
 describe('what the agent is told about a pointed list', () => {
@@ -33,7 +33,7 @@ describe('what the agent is told about a pointed task', () => {
   it('includes workflow data and only the last three comments within the context budget', () => {
     const pointed = task(1, { status: 'sprawdzenie', blocked: 'Czekamy na opinię',
       links: [{ kind: 'cezar', id: 'desk-panel/run', title: 'Zmiana', at: 1 }],
-      history: Array.from({ length: 5 }, (_, i) => ({ at: i, by: 'agent', kind: 'comment', text: `Ustalenie ${i}` })),
+      history: Array.from({ length: 5 }, (_, i) => ({ at: i, by: 'wektor', kind: 'comment', text: `Ustalenie ${i}` })),
     });
     const c = taskContext(list([]), pointed);
     expect(c.text).toContain('Stan: Do sprawdzenia');
@@ -48,9 +48,9 @@ describe('what the agent is told about a pointed task', () => {
     expect(taskContext(list([]), pointed).text).toContain('Pełna treść przez panel_todos z zadanie=t-00000001.');
   });
   it('has the ids of the task and its list, the state, the note and who added it', () => {
-    const open = taskContext(list([]), task(7, { note: 'Dodać limity', by: 'agent' }));
+    const open = taskContext(list([]), task(7, { note: 'Dodać limity', by: 'wektor' }));
     expect(open).toEqual({ id: 't-00000007', title: 'Zadanie 7', text: [
-      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-00000007', 'Pełna treść przez panel_todos z zadanie=t-00000007.', 'Tytuł: Zadanie 7', 'Stan: Pomysł', 'Notatka: Dodać limity', 'Dodał: agent',
+      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-00000007', 'Pełna treść przez panel_todos z zadanie=t-00000007.', 'Specyfikacja: brak.', 'Tytuł: Zadanie 7', 'Stan: Pomysł', 'Notatka: Dodać limity', 'Dodał: Wektor',
     ].join('\n') });
     expect(taskContext(list([]), task(8, { done: true, completedAt: 3 })).text).toContain('Stan: Zakończone');
     expect(taskContext(list([]), task(8)).text).not.toContain('Notatka');

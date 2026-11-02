@@ -267,10 +267,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
   panel_quotas: { description: 'Limity AI użytkownika z resetami w czasie lokalnym.', input: z.object({}).strict(), schema: schema(), run: view('quotas', () => ({})) },
   panel_system: { description: 'CPU i RAM komputera użytkownika.', input: z.object({}).strict(), schema: schema(), run: view('system', () => ({})) },
   panel_todos: {
-    description: 'Listy zadań użytkownika z id list (l-…) i zadań (t-…), stanem, blokadą, powiązaniami i ostatnimi trzema komentarzami. zadanie=<id t-…> czyta jedno zadanie w całości: pełna notatka i wszystkie komentarze w kolejności, także dla zakończonego zadania; pozostałe filtry go nie ograniczają.',
-    input: z.object({ zadanie: todoTaskId.optional(), list: text(200).optional(), ukonczone: flag, stan: todoStatusSchema.optional() }).strict(),
-    schema: schema({ zadanie: { type: 'string', pattern: '^t-[0-9a-f]{8}$', description: 'Id jednego zadania (t-…): pełna treść bez ucinania, wszystkie komentarze; ignoruje filtry list, stan i ukonczone' }, list: { type: 'string', description: 'Id listy albo fragment nazwy' }, ukonczone: { type: 'boolean', description: 'Pokaż też ukończone' }, stan: { type: 'string', enum: Object.keys(TODO_STATUSES), description: 'Filtr stanu zadania, także zakończonego' } }),
-    run: view('todos', a => ({ zadanie: a.zadanie, list: a.list, ukonczone: a.ukonczone ? '1' : undefined, stan: a.stan })),
+    description: 'Listy zadań użytkownika z id list (l-…) i zadań (t-…), stanem, blokadą, powiązaniami i ostatnimi trzema komentarzami. zadanie=<id t-…> czyta jedno zadanie w całości: pełna notatka, wszystkie komentarze w kolejności i pełna aktualna specyfikacja z metadanymi, także dla zakończonego zadania; pozostałe filtry go nie ograniczają. wersja=N przy zadanie= wybiera zachowaną rewizję specyfikacji (10 ostatnich).',
+    input: z.object({ zadanie: todoTaskId.optional(), wersja: z.number().int().positive().optional(), list: text(200).optional(), ukonczone: flag, stan: todoStatusSchema.optional() }).strict(),
+    schema: schema({ zadanie: { type: 'string', pattern: '^t-[0-9a-f]{8}$', description: 'Id jednego zadania (t-…): pełna treść bez ucinania, wszystkie komentarze i specyfikacja; ignoruje filtry list, stan i ukonczone' }, wersja: { type: 'integer', minimum: 1, description: 'Numer zachowanej rewizji specyfikacji przy zadanie= (1–10 ostatnich); nieistniejąca daje 404' }, list: { type: 'string', description: 'Id listy albo fragment nazwy' }, ukonczone: { type: 'boolean', description: 'Pokaż też ukończone' }, stan: { type: 'string', enum: Object.keys(TODO_STATUSES), description: 'Filtr stanu zadania, także zakończonego' } }),
+    run: view('todos', a => ({ zadanie: a.zadanie, wersja: a.wersja === undefined ? undefined : String(a.wersja), list: a.list, ukonczone: a.ukonczone ? '1' : undefined, stan: a.stan })),
   },
   panel_bank: {
     description: 'Konto PKO BP tylko do odczytu: saldo, operacje z zakresu (domyślnie 30 dni, najwyżej 400) z oznaczeniami użytkownika. Numery rachunków i telefonów są zamaskowane.',
@@ -302,12 +302,12 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     },
   },
   panel_todo_action: {
-    description: `Zmiana list zadań użytkownika. Akcje i jedyne pola, jakie przyjmują: ${Object.entries(TODO_FIELDS).map(([action, fields]) => `${action} {${fields.join(', ')}}`).join('; ')}. list to id l-…, task to id t-…; autor zmian zawsze agent (panel wymusza by). Stany: ${Object.entries(TODO_STATUSES).map(([id, label]) => `${id}=${label}`).join(', ')}. kind powiązania: chat, cezar, pr (pełny URL https://github.com/owner/repo/pull/n). reason: tekst blokady do 300 znaków albo null; komentarz text do 2000 znaków. ${NO_DUE} Usuwaj tylko na wyraźną prośbę.`,
+    description: `Zmiana list zadań użytkownika. Akcje i jedyne pola, jakie przyjmują: ${Object.entries(TODO_FIELDS).map(([action, fields]) => `${action} {${fields.join(', ')}}`).join('; ')}. list to id l-…, task to id t-…; autor zmian zawsze wektor (panel wymusza by). updateTask ze spec podaje też specRevision (numer bazowy szkicu). Stany: ${Object.entries(TODO_STATUSES).map(([id, label]) => `${id}=${label}`).join(', ')}. kind powiązania: chat, cezar, pr (pełny URL https://github.com/owner/repo/pull/n). reason: tekst blokady do 300 znaków albo null; komentarz text do 2000 znaków. ${NO_DUE} Usuwaj tylko na wyraźną prośbę.`,
     input: z.object({ action: z.record(z.string(), z.unknown()) }).strict(),
-    schema: schema({ action: { type: 'object', description: 'Np. {"action":"addTask","list":"l-…","title":"…","by":"agent"} albo {"action":"updateTask","task":"t-…","note":"…"}' } }, ['action']),
+    schema: schema({ action: { type: 'object', description: 'Np. {"action":"addTask","list":"l-…","title":"…","by":"agent"} albo {"action":"updateTask","task":"t-…","note":"…"} albo {"action":"updateTask","task":"t-…","spec":"…","specRevision":2}' } }, ['action']),
     async run(args, { sources }) {
       const fields = TODO_FIELDS[args.action?.action];
-      const parsed = todoActionSchema.safeParse(fields?.includes('by') ? { ...args.action, by: 'agent' } : args.action);
+      const parsed = todoActionSchema.safeParse(fields?.includes('by') ? { ...args.action, by: 'wektor' } : args.action);
       if (!parsed.success) throw new AgentViewError(400, todoActionError(args.action, parsed.error.issues));
       return JSON.stringify(await sources.todoAction(parsed.data));
     },

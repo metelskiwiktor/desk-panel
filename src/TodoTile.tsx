@@ -15,6 +15,8 @@ export const todoConfigOf = (config: TileConfig | undefined): TodoConfig => ({
   list: typeof config?.list === 'string' ? config.list : undefined,
 });
 const NEW_LIST = '__new__';
+/** The tile's agent mark covers every agent author; the panel itself is not one. Old `agent` stays an alias for `wektor`. */
+const isAgentAuthor = (by: string) => by === 'wektor' || by === 'claude' || by === 'codex' || by === 'agent';
 
 function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: TodoTask; notes: boolean; hot: boolean; act: TodosState['act']; edit: (opener: HTMLElement) => void }) {
   const toggle = () => void act({ action: 'updateTask', task: task.id, done: !task.done }, data => ({
@@ -30,7 +32,7 @@ function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: 
     {task.status !== 'pomysl' && !task.done && <span className={`todo-status ${task.status}`} aria-label={TODO_STATUSES[task.status]} title={TODO_STATUSES[task.status]}><span>{TODO_STATUSES[task.status]}</span></span>}
     {task.status === 'porzucone' && <span className="todo-abandoned" title="Porzucone" aria-label="Porzucone">–</span>}
     {task.blocked && <span className="todo-blocked" role="img" aria-label={`Blokada: ${task.blocked}`} title={`Blokada: ${task.blocked}`}><LockKeyhole size={15} aria-hidden="true" /></span>}
-    {list.showAgent && task.by === 'agent' && <span className="todo-by" role="img" aria-label="Dodał agent czatu" title="Dodał agent czatu"><Sparkles size={14} aria-hidden="true" /></span>}
+    {list.showAgent && isAgentAuthor(task.by) && <span className="todo-by" role="img" aria-label="Dodał agent czatu" title="Dodał agent czatu"><Sparkles size={14} aria-hidden="true" /></span>}
   </li>;
 }
 

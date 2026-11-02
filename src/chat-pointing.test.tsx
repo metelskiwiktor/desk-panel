@@ -272,7 +272,7 @@ describe('pointing at to-do lists and tasks', () => {
     expect(chip.classList.contains('todo')).toBe(true);
     expect(within(chip).getByText('Zadanie')).toBeTruthy();
     expect(chip.getAttribute('title')).toBe([
-      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-a0000002', 'Pełna treść przez panel_todos z zadanie=t-a0000002.', 'Tytuł: Odpowiedź bez sformułowania „nie mam dostępu”',
+      'Zadanie z listy „Do poprawy - Chat Agy” (id listy: l-1a2b3c4d)', 'id zadania: t-a0000002', 'Pełna treść przez panel_todos z zadanie=t-a0000002.', 'Specyfikacja: brak.', 'Tytuł: Odpowiedź bez sformułowania „nie mam dostępu”',
       'Stan: Pomysł', 'Dodał: użytkownik',
     ].join('\n'));
     expect(chips()).toHaveLength(1); // not the list as well

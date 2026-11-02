@@ -50,7 +50,11 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 
 - **Lista**: `id` (`l-` i 8 znaków szesnastkowych), `name` (do 80 znaków, unikalna bez względu na wielkość liter), `createdAt`, `hideDone` i `showAgent` (oba domyślnie `false`; stary plik bez tych pól się wczytuje), `tasks`.
 - **Zadanie**: `id` (`t-…`), `title` (do 200), `note` (do 2000, domyślnie pusta), `done`, `createdAt`, `completedAt` (null, dopóki otwarte),
-  `by` (`user` albo `agent`: kto dodał). Zadania leżą w kolejności dodania; pokazywanie otwartych przed ukończonymi to sprawa widoku.
+  `by` (`user`, `wektor`, `claude`, `codex`, `panel`; dawne `agent` jest aliasem `wektor` przy zapisie i odczycie). Zadania leżą w kolejności dodania; pokazywanie otwartych przed ukończonymi to sprawa widoku. Wskaźnik ✦ („Pokaż, co dodał agent”) obejmuje autorów `wektor`, `claude`, `codex` oraz `agent`, nie obejmuje `panel`.
+- **Specyfikacja i rewizje**:
+  - `spec`: pełna specyfikacja Markdown (do 50 000 jednostek UTF-16, bez cichego przycinania; pusta treść oznacza brak specyfikacji).
+  - `specRevision`: bieżący numer rewizji (0 tylko przy braku jakiejkolwiek rewizji).
+  - `specRevisions`: tablica do 10 ostatnich pełnych rewizji `{revision, spec, by, at}`, najstarsze wypadają po retencji, a numery rosną dalej i nie są ponownie używane. Zapis nowej rewizji dodaje do historii zadania krótki wpis `{kind: 'spec', text: 'vN', by, at}`; utrata wpisu z historii (limit 200) nie usuwa zachowanych rewizji.
 - **Stan** `status`: `pomysl` (Pomysł), `przygotowanie` (Do przygotowania), `gotowe` (Gotowe do realizacji), `realizacja` (W realizacji),
   `sprawdzenie` (Do sprawdzenia), `zakonczone` (Zakończone), `porzucone` (Porzucone). Etykiety są w jednej tabeli `TODO_STATUSES`
   w kontrakcie. Stan jest niezależny od Cezara i PR-a; zakończenie taska Cezara nie kończy zadania z listy. Nowe zadanie ma `pomysl`.
@@ -88,8 +92,8 @@ Odpowiedź to `{ "ok": true, ... }` z identyfikatorami tego, co powstało lub si
 | `renameList` | `list`, `name` | zmiana nazwy (`409`, gdy nazwę ma inna lista) |
 | `setListOptions` | `list`, `hideDone?`, `showAgent?` | ustawienia listy dla ekranu (co najmniej jedno pole; agent nie dostaje tej akcji w instrukcji) |
 | `deleteList` | `list` | usuwa listę z zadaniami (`removed` to liczba zadań) |
-| `addTask` | `list`, `title`, `note?`, `by?` | dodaje zadanie na koniec; `by` domyślnie `user`, agent podaje `agent` |
-| `updateTask` | `task`, `title?`, `note?`, `done?`, `by?` | zmienia podane pola; zgodność done ze stanem jak wyżej |
+| `addTask` | `list`, `title`, `note?`, `by?` | dodaje zadanie na koniec; `by` domyślnie `user`, agent podaje `wektor` (`agent` jest aliasem) |
+| `updateTask` | `task`, `title?`, `note?`, `done?`, `by?`, `spec?`, `specRevision?` | zmienia podane pola; zgodność done ze stanem jak wyżej; `spec` i `specRevision` podawane razem według macierzy poniżej |
 | `setStatus` | `task`, `status`, `by?` | zmienia stan i dopisuje historię |
 | `setBlocked` | `task`, `reason` (tekst lub null), `by?` | ustawia/usuwa blokadę i dopisuje historię |
 | `addComment` | `task`, `text`, `by?` | dopisuje komentarz Markdown do historii |
@@ -99,9 +103,16 @@ Odpowiedź to `{ "ok": true, ... }` z identyfikatorami tego, co powstało lub si
 | `deleteTask` | `task` | usuwa zadanie |
 | `clearDone` | `list` | usuwa ukończone z listy (`removed`) |
 
-Błędy: `400` (zła akcja lub pola), `404` (nie ma takiej listy lub zadania), `409` (limit albo zajęta nazwa), `413` (ciało większe niż 4 KB).
-Nowe akcje zwracają `{ok:true, list:{id,name}, task:{id}}`. `by` zmian domyślnie `user`; `panel` oznacza automatykę panelu,
-`agent` wywołania Wektora. Puste komentarze i powody blokady są odrzucane; do usunięcia blokady służy null.
+Błędy: `400` (zła akcja lub pola), `404` (nie ma takiej listy lub zadania), `409` (limit, zajęta nazwa lub konflikt specyfikacji), `413` (ciało większe niż 512 KiB dla `updateTask` ze `spec`, ponad 4096 B dla innych akcji).
+Nowe akcje zwracają `{ok:true, list:{id,name}, task:{id}}`. Autor `by`: `user` (domyślnie, w UI etykieta „Ty”), `wektor` (wywołania Wektora i wymuszone w `panel_todo_action`, etykieta „Wektor”), `claude` („Claude”), `codex` („Codex”) lub `panel` (automatyka panelu). Stare `agent` jest aliasem `wektor` przy zapisie i odczycie. Puste komentarze i powody blokady są odrzucane; do usunięcia blokady służy null.
+
+**Macierz zapisu specyfikacji w `updateTask`:**
+Gdy akcja podaje `spec` i `specRevision` (oczekiwany bazowy numer rewizji szkicu, 0 przy braku jakiejkolwiek rewizji):
+1. **Identyczna treść** ze specyfikacją aktualną zadania → sukces bez tworzenia nowej rewizji, niezależnie od podanego `specRevision` (bezpieczne ponowienie).
+2. **Treść różna i `specRevision` równy aktualnemu** → zapisuje treść i tworzy nową rewizję `vN` (`v1` dla pierwszego niepustego zapisu, w kolejnych aktualny + 1) z autorem i czasem serwera, dopisując krótki wpis `{kind: 'spec', text: 'vN'}` do historii.
+3. **Treść różna i `specRevision` różny od aktualnego** → odrzucenie błędem `409` (konflikt edycji) bez modyfikacji jakichkolwiek danych zadania.
+
+Pierwszy pusty zapis (`spec: ""` przy braku rewizji) to no-op (nie tworzy wersji, numer pozostaje 0). Wyczyszczenie istniejącej specyfikacji tworzy pustą wersję `vN`; kolejny zapis bazuje na `N`. Zapis `updateTask` jest atomowy: błąd `409` lub błąd zapisu pliku nie zapisuje żadnego pola przesłanego w tej samej akcji (ani `title`, ani `note`). Limit specyfikacji to 50 000 jednostek UTF-16 bez cichego przycinania; ciało żądania `updateTask` ze `spec` dopuszcza do 512 KiB, a nagłówek `Origin` równy adresowi panelu jest bezwzględnie wymagany (brak lub obcy Origin daje `403` bez zmiany danych).
 
 Jedyna automatyka: po udanym utworzeniu taska Cezara z karty dispatch z `todoId` (`server/cockpit.ts`) panel dopina link `cezar`
 (id, tytuł) i `chat` (id rozmowy), następnie ustawia `realizacja`, wszystko z `by: panel`. Gdy ten task dostanie PR, panel dopina
@@ -123,18 +134,17 @@ chwili wskazania (lista odświeża się co 5 s). Kafelek bez listy wskazuje się
 ## Agent czatu
 
 Wektor na Hermesie czyta `panel_todos`, adapter widoku `GET /api/agent/todos` (`?list=<id lub fragment nazwy>`, `&ukonczone=1`, `&stan=<id stanu>`).
-Widok list bez parametru `zadanie` pozostaje skrótem: stan z polską etykietą, blokada, powiązania, notatka do 300 znaków i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
+Widok list bez parametru `zadanie` pozostaje skrótem: stan z polską etykietą, blokada, powiązania, skrót specyfikacji (`Specyfikacja: vN` lub `Specyfikacja: brak`), notatka do 300 znaków i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
 wybiera również terminalne bez `ukonczone=1`. Nieznany stan to 400.
 
-`panel_todos` z `zadanie=<id t-…>` (`GET /api/agent/todos?zadanie=…`) zwraca jedno zadanie z nazwą i id listy, pełną notatką, stanem, blokadą, powiązaniami oraz wszystkimi zapisanymi komentarzami w kolejności historii, bez ucinania. Obejmuje również zadania zakończone; filtry `list`, `stan` i `ukonczone` nie ograniczają wyboru po id (błędny `stan` nadal daje 400). Nieznane id to czytelny błąd 404, niepoprawny format id to 400. „Wszystkie” oznacza komentarze obecne w historii zadania, z istniejącym limitem 200 wpisów; model i zapis pozostają bez zmian.
+`panel_todos` z `zadanie=<id t-…>` (`GET /api/agent/todos?zadanie=…`) zwraca jedno zadanie z nazwą i id listy, pełną notatką, stanem, blokadą, powiązaniami, pełną aktualną specyfikacją Markdown z metadanymi rewizji (`Specyfikacja (vN, autor, data):`, przy braku specyfikacji: `Specyfikacja: Brak specyfikacji`) oraz wszystkimi zapisanymi komentarzami w kolejności historii, bez ucinania. Obejmuje również zadania zakończone; filtry `list`, `stan` i `ukonczone` nie ograniczają wyboru po id (błędny `stan` nadal daje 400). Opcjonalny parametr `wersja=N` pozwala wybrać zachowaną historyczną rewizję specyfikacji (10 ostatnich); żądanie nieistniejącej lub usuniętej z retencji wersji daje czytelny błąd 404 (`wersja N niedostępna; przechowujemy 10 ostatnich.`). Nieznane id to błąd 404, niepoprawny format id to 400. „Wszystkie” oznacza komentarze obecne w historii zadania, z istniejącym limitem 200 wpisów; model i zapis pozostają bez zmian.
 
-Przy pracy nad zadaniem z listy Wektor najpierw czyta jego pełną treść przez `zadanie`, nawet gdy dostał skrót wskazania. CEL, DECYZJE i WARUNKI ODBIORU ze specyfikacji w notatce i komentarzach przenosi do promptu executora w całości, dosłownie, bez skracania ani tłumaczenia; ta zasada ma pierwszeństwo przed angielskim formatem briefu. Rekonesans tylko uzupełnia ustalenia. Reguła jest w `PANEL_GUIDES.zadania` oraz `CHAT_SKILLS` (`@Zaimplementuj zadanie`) w `src/chat-contract.ts`.
+Przy pracy nad zadaniem z listy Wektor najpierw czyta jego pełną treść przez `zadanie=`, nawet gdy dostał skrót wskazania. CEL, ZAKRES, DECYZJE i WARUNKI ODBIORU ze specyfikacji w notatce, polu specyfikacji i komentarzach przenosi do promptu executora w całości, dosłownie, bez skracania ani tłumaczenia; ta zasada ma pierwszeństwo przed angielskim formatem briefu. Własnych poleceń od użytkownika nie zamienia w kryteria, a lista plików obejmuje wszystkie moduły, przez które przechodzi zmiana (kontrakt, adaptery, widoki, testy). Rekonesans tylko uzupełnia ustalenia. Reguła jest w `PANEL_GUIDES.zadania` oraz `CHAT_SKILLS` (`@Zaimplementuj zadanie`) w `src/chat-contract.ts`.
 
-Zmienia zadania przez `panel_todo_action`, który wymusza `by: agent`
-dla każdej akcji mającej autora (również zgodnościowego `updateTask`). `TODO_FIELDS` jest wyprowadzane z kontraktu, obejmuje nowe akcje.
+Zmienia zadania przez `panel_todo_action`, który wymusza `by: wektor` dla każdej akcji mającej autora (stare `agent` jest aliasem `wektor`). `TODO_FIELDS` jest wyprowadzane z kontraktu, obejmuje nowe akcje.
 Instrukcje żyją w kodzie: `PANEL_GUIDES.zadania` w `src/chat-contract.ts` i preambuła w `server/hermes-chat.ts`. Stan zmienia na prośbę użytkownika;
-ustalenia zapisuje komentarzem, gdy o to prosi; przy propozycji Cezara z zadania podaje `todoId`, a stan i linki zapisuje panel po kliknięciu karty.
-Zasady z instrukcji: samo „zadanie” to zadanie z listy; przy `addTask` zawsze `"by":"agent"`; bez wskazanej listy używa jedynej, tej o pasującej
+ustalenia zapisuje komentarzem lub specyfikacją (`updateTask` ze `spec`/`specRevision`), gdy o to prosi; przy propozycji Cezara z zadania podaje `todoId`, a stan i linki zapisuje panel po kliknięciu karty.
+Zasady z instrukcji: samo „zadanie” to zadanie z listy; przy `addTask` zawsze `"by":"agent"` (lub `"wektor"`); bez wskazanej listy używa jedynej, tej o pasującej
 nazwie, a gdy niepewny, pyta; gdy list nie ma, tworzy „Zadania”; usuwa (`deleteTask`, `clearDone`, `deleteList`) tylko na wyraźną prośbę i
 mówi, co zmienił. Szczegóły czatu: [docs/czat.md](czat.md).
 

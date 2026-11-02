@@ -12,7 +12,7 @@ import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
 import type { Cockpit } from './cockpit';
 import { handleMcpRoute } from './panel-mcp';
-import { todoActionSchema } from '../src/todo-contract';
+import { todoActionSchema, type TodoAction } from '../src/todo-contract';
 import { TodoError } from './todos';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { bankShowQuerySchema } from '../src/bank-show-contract';
@@ -34,6 +34,24 @@ async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, maxBytes 
   req.setEncoding('utf8'); // a Polish letter split between two chunks must not break
   for await (const chunk of req) { body += chunk; if (body.length > maxBytes) throw new SourceError(413); }
   const parsed = schema.safeParse(JSON.parse(body || 'null'));
+  if (!parsed.success) throw new SourceError(400);
+  return parsed.data;
+}
+/**
+ * A to-do action: 512 KiB only for updateTask carrying a spec, 4 KB for every other action and for updateTask without one.
+ * The Origin check happens in the route before this, as for all actions.
+ */
+async function readTodoAction(req: IncomingMessage): Promise<TodoAction> {
+  let body = '';
+  req.setEncoding('utf8');
+  for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body, 'utf8') > 512 * 1024) throw new SourceError(413); }
+  let value: unknown;
+  try { value = JSON.parse(body || 'null'); } catch { throw new SourceError(400); }
+  const action = value && typeof value === 'object' ? (value as { action?: unknown }).action : undefined;
+  const hasSpec = value && typeof value === 'object' && 'spec' in value;
+  // Size comes before field validation: an oversized action is refused for its size, not its fields.
+  if (!(action === 'updateTask' && hasSpec) && Buffer.byteLength(body, 'utf8') > 4096) throw new SourceError(413);
+  const parsed = todoActionSchema.safeParse(value);
   if (!parsed.success) throw new SourceError(400);
   return parsed.data;
 }
@@ -103,7 +121,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           await sources.cezarAction(id, action);
           res.end(JSON.stringify({ ok: true }));
         } else if (url.pathname === '/api/todos/action') {
-          res.end(JSON.stringify(await sources.todoAction(await readJson(req, todoActionSchema))));
+          res.end(JSON.stringify(await sources.todoAction(await readTodoAction(req))));
         } else if (url.pathname === '/api/automations/action') {
           // The Automaty view's buttons: pause, resume, cancel, run now and the notebook, local only.
           if (!sources.automationAction) throw new SourceError(503);

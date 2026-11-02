@@ -7,6 +7,8 @@ import { TODO_STATUSES, type TodoList, type TodoTask } from './todo-contract';
  */
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 const flat = (text: string) => text.replace(/\s+/g, ' ').trim();
+/** Old `agent` is an alias for `wektor`: the same label on old and new task data. */
+const authorLabel = (by: string) => by === 'user' ? 'użytkownik' : by === 'panel' ? 'panel' : by === 'claude' ? 'Claude' : by === 'codex' ? 'Codex' : 'Wektor';
 
 export function listContext(list: TodoList): { id: string; title: string; text: string } {
   const open = list.tasks.filter(t => !t.done), done = list.tasks.length - open.length;
@@ -30,13 +32,14 @@ export function taskContext(list: TodoList, task: TodoTask): { id: string; title
     `Zadanie z listy „${list.name}” (id listy: ${list.id})`,
     `id zadania: ${task.id}`,
     `Pełna treść przez panel_todos z zadanie=${task.id}.`,
+    `Specyfikacja: ${task.specRevision ? `v${task.specRevision}` : 'brak'}.`,
     `Tytuł: ${flat(task.title)}`,
     `Stan: ${TODO_STATUSES[task.status]}`,
     ...(task.blocked ? [`Blokada: ${task.blocked}`] : []),
     ...(task.links.length ? [`Powiązania (${task.links.length}): ${clip(task.links.map(l => `${l.kind} ${l.id}${l.title ? ` — ${flat(l.title)}` : ''}`).join('; '), 300)}`] : []),
-    ...task.history.filter(h => h.kind === 'comment').slice(-3).map(h => `Komentarz (${h.by}): ${clip(h.text ?? '', 150)}`),
+    ...task.history.filter(h => h.kind === 'comment').slice(-3).map(h => `Komentarz (${authorLabel(h.by)}): ${clip(h.text ?? '', 150)}`),
     ...(task.note ? [`Notatka: ${clip(task.note, 200)}`] : []),
-    `Dodał: ${task.by === 'agent' ? 'agent' : 'użytkownik'}`,
+    `Dodał: ${authorLabel(task.by)}`,
   ].join('\n');
   return { id: task.id, title: flat(task.title), text: clip(text, MAX_CONTEXT_TEXT) };
 }
