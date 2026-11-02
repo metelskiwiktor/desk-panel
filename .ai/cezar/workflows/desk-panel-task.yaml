@@ -33,6 +33,13 @@ nodes:
       Read `docs/agent-workflows/executor-brief.md` for the brief shape this run follows. The task text above is the goal;
       the rules below are the execution contract.
 
+      The task text may itself be a headed spec (`CEL:`, `ZAKRES:`, `POZA ZAKRESEM:`, `DECYZJE:`, `WARUNKI ODBIORU:`,
+      `ZAŁĄCZNIKI:` on their own lines); that format is a valid brief. An explicit "Allowed files" list is optional and
+      only such a list restricts paths; `ZAŁĄCZNIKI` are references, never an allow-list. Without an explicit list, do
+      recon in the areas named by `CEL:` and `ZAKRES:`, change the modules, tests and docs those areas need, and stop
+      instead of widening beyond them. For UI work use `Device`, `Scale` and the other `ZRZUTY` values from the spec
+      instead of the constants in the example commands below.
+
       CRITICAL EXECUTION & EFFICIENCY RULES:
       - Work strictly inside your isolated git worktree (`pwd`). Never touch the parent checkout or another worktree.
       - When calling `read_file`, `view_file`, `edit_file`, or `write_file`, ALWAYS pass full absolute paths inside your current worktree (never relative paths, and never a path in the parent checkout).
@@ -158,6 +165,10 @@ nodes:
 
       Scope is checked deterministically against .ai/implementation-scope.json after this turn.
       Only originally changed paths and failed tests directly covering them are allowed.
+      The original task may be a headed spec, which is a valid brief; an explicit "Allowed files" list is optional (only
+      such a list restricts paths) and `ZAŁĄCZNIKI` are references, not an allow-list. For UI use the `Device`, `Scale` and
+      other `ZRZUTY` values from the spec instead of the constants in the example command. This gate still binds you even
+      when the brief had no file list.
       Full verification details: .ai/check.log; failures: .ai/check-failures.json.
       Fix the cause; do not weaken or delete tests. Scope is the original task: change only what it needs, with no
       refactor around it and no widening. Forbidden unless the original task explicitly asks for it: Wektor's memory and
@@ -265,6 +276,10 @@ nodes:
       in `AGENTS.md`, and the full affected tests/fixtures plus the modules they cover.
 
       Fix every P0, P1, and P2 finding above, with no widening of the original task and no refactor around it.
+      The original task may be a headed spec, which is a valid brief; an explicit "Allowed files" list is optional (only
+      such a list restricts paths) and `ZAŁĄCZNIKI` are references, not an allow-list. For UI use the `Device`, `Scale` and
+      other `ZRZUTY` values from the spec instead of the constants in the example command. The address scope gate still
+      binds you even when the brief had no file list.
       Forbidden unless the original task explicitly asks for it: Wektor's memory and instructions (`PANEL_GUIDES`,
       `CHAT_SKILLS`, `COCKPIT_TOOLS`, the preamble), the Cezar checkout, service/deploy configuration, credentials/secrets
       and provider/model selection. Never print credentials.

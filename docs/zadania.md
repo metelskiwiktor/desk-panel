@@ -41,6 +41,12 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 - **Lista**: `id` (`l-` i 8 znaków szesnastkowych), `name` (do 80 znaków, unikalna bez względu na wielkość liter), `createdAt`, `hideDone` i `showAgent` (oba domyślnie `false`; stary plik bez tych pól się wczytuje), `tasks`.
 - **Zadanie**: `id` (`t-…`), `title` (do 200), `note` (do 2000, domyślnie pusta), `done`, `createdAt`, `completedAt` (null, dopóki otwarte),
   `by` (`user`, `wektor`, `claude`, `codex`, `panel`; dawne `agent` jest aliasem `wektor` przy zapisie i odczycie). Zadania leżą w kolejności dodania; pokazywanie otwartych przed ukończonymi to sprawa widoku. Wskaźnik ✦ („Pokaż, co dodał agent”) obejmuje autorów `wektor`, `claude`, `codex` oraz `agent`, nie obejmuje `panel`.
+- **Wykonanie** `executor`, `repo`, `mode`: opcjonalne pola wybierane przy przygotowaniu zadania, niezależne od treści
+  Markdownu. `executor`: `cezar`, `lokalnie` albo `rozmowa`; `repo`: wyłącznie `desk-panel`; `mode`: `analiza` albo
+  `implementacja`. Wartość `null` znaczy „nie wybrano”; stare zadania czytają się jako `null`/`null`/`null` bez przepisywania
+  pliku, a `addTask` ich nie przyjmuje i tworzy `null`. Zmienia je tylko `updateTask`: pominięte pole zachowuje wartość,
+  `null` je czyści, a nieznana wartość odrzuca całą akcję. Jak tytuł i notatka nie dodają wpisu do historii. Z tych pól i
+  specyfikacji panel liczy gotowość (niżej).
 - **Specyfikacja i rewizje**:
   - `spec`: pełna specyfikacja Markdown (do 50 000 jednostek UTF-16, bez cichego przycinania; pusta treść oznacza brak specyfikacji).
   - `specRevision`: bieżący numer rewizji (0 tylko przy braku jakiejkolwiek rewizji).
@@ -60,6 +66,22 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
   i powiązania dopisuje historię; ponowienie tej samej wartości, istniejącego linku lub usunięcia nieistniejącego linku nic nie dopisuje.
 - Limity: 50 list, 500 zadań na liście. Ukończone zostają, dopóki ich nie wyczyścisz (`clearDone`).
 - Źródło `GET /api/todos` ma kształt jak inne źródła (`live`, `name: "Zadania"`, `status`, `observedAt`, `data: { lists }`, opcjonalnie `message`).
+
+## Gotowość i prompt bez modelu
+
+`src/todo-dispatch.ts` (`getTodoDispatch`) składa z zadania pełny prompt executora bez udziału modelu i niczego nie zapisuje.
+Zadanie jest gotowe, gdy ma stan `gotowe`, brak blokady, `executor=cezar`, `repo=desk-panel`, `mode` oraz niepustą
+specyfikację z niepustymi sekcjami `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:` i `WARUNKI ODBIORU:`. Przy brakach wynik ma
+`prompt: null` i `workflow: null` oraz polskie komunikaty w kolejności: stan, blokada z powodem, executor, repo, mode,
+pusty spec, brakujące/puste/powtórzone wymagane sekcje. Nagłówek sekcji to cała linia od kolumny 0, wielkimi literami,
+z dwukropkiem (końcowe spacje/taby, BOM i CRLF tolerowane, kolejność dowolna); treść kończy następna etykieta z listy
+`CEL, ZAKRES, POZA ZAKRESEM, DECYZJE, WARUNKI ODBIORU, WYKONAWCA, REPO, TRYB, ZAŁĄCZNIKI, TYP ZMIANY, ZRZUTY`, a etykiety
+w blokach kodu są pomijane. Stare `WYKONAWCA`/`REPO`/`TRYB` nie ustawiają pól. Gotowy prompt to `Przygotowane zadanie
+Desk Panel`, `Tytuł: <title>`, `Zadanie: <id>`, `Rewizja specyfikacji: <N>`, pusta linia i specyfikacja dosłownie; `analiza`
+daje workflow `analysis`, `implementacja` — `desk-panel-task`. Pełny widok agenta (`?zadanie=`) pokazuje przed linią
+specyfikacji `Wykonanie: executor=…, repo=…, mode=…` (brak jako `brak`) oraz gotowość bieżącej rewizji: listę braków albo
+docelowy projekt, workflow i rewizję. Przy `wersja=N` wybrana jest historyczna treść, a gotowość nadal dotyczy bieżącej
+rewizji.
 
 ## Zapis i dostęp
 
@@ -83,7 +105,7 @@ Odpowiedź to `{ "ok": true, ... }` z identyfikatorami tego, co powstało lub si
 | `setListOptions` | `list`, `hideDone?`, `showAgent?` | ustawienia listy dla ekranu (co najmniej jedno pole; agent nie dostaje tej akcji w instrukcji) |
 | `deleteList` | `list` | usuwa listę z zadaniami (`removed` to liczba zadań) |
 | `addTask` | `list`, `title`, `note?`, `by?` | dodaje zadanie na koniec; `by` domyślnie `user`, agent podaje `wektor` (`agent` jest aliasem) |
-| `updateTask` | `task`, `title?`, `note?`, `done?`, `by?`, `spec?`, `specRevision?` | zmienia podane pola; zgodność done ze stanem jak wyżej; `spec` i `specRevision` podawane razem według macierzy poniżej |
+| `updateTask` | `task`, `title?`, `note?`, `done?`, `by?`, `spec?`, `specRevision?`, `executor?`, `repo?`, `mode?` | zmienia podane pola; zgodność done ze stanem jak wyżej; `spec` i `specRevision` podawane razem według macierzy poniżej; `executor`/`repo`/`mode` to metadane wykonania (`null` czyści, pominięcie zachowuje, bez historii) |
 | `setStatus` | `task`, `status`, `by?` | zmienia stan i dopisuje historię |
 | `setBlocked` | `task`, `reason` (tekst lub null), `by?` | ustawia/usuwa blokadę i dopisuje historię |
 | `addComment` | `task`, `text`, `by?` | dopisuje komentarz Markdown do historii |
@@ -127,7 +149,7 @@ Wektor na Hermesie czyta `panel_todos`, adapter widoku `GET /api/agent/todos` (`
 Widok list bez parametru `zadanie` pozostaje skrótem: stan z polską etykietą, blokada, powiązania, skrót specyfikacji (`Specyfikacja: vN` lub `Specyfikacja: brak`), notatka do 300 znaków i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
 wybiera również terminalne bez `ukonczone=1`. Nieznany stan to 400.
 
-`panel_todos` z `zadanie=<id t-…>` (`GET /api/agent/todos?zadanie=…`) zwraca jedno zadanie z nazwą i id listy, pełną notatką, stanem, blokadą, powiązaniami, pełną aktualną specyfikacją Markdown z metadanymi rewizji (`Specyfikacja (vN, autor, data):`, przy braku specyfikacji: `Specyfikacja: Brak specyfikacji`) oraz wszystkimi zapisanymi komentarzami w kolejności historii, bez ucinania. Obejmuje również zadania zakończone; filtry `list`, `stan` i `ukonczone` nie ograniczają wyboru po id (błędny `stan` nadal daje 400). Opcjonalny parametr `wersja=N` pozwala wybrać zachowaną historyczną rewizję specyfikacji (10 ostatnich); żądanie nieistniejącej lub usuniętej z retencji wersji daje czytelny błąd 404 (`wersja N niedostępna; przechowujemy 10 ostatnich.`). Nieznane id to błąd 404, niepoprawny format id to 400. „Wszystkie” oznacza komentarze obecne w historii zadania, z istniejącym limitem 200 wpisów; model i zapis pozostają bez zmian.
+`panel_todos` z `zadanie=<id t-…>` (`GET /api/agent/todos?zadanie=…`) zwraca jedno zadanie z nazwą i id listy, pełną notatką, stanem, blokadą, powiązaniami, metadanymi wykonania i gotowością (`Wykonanie:` oraz `Gotowość bieżącej rewizji:`, przed specyfikacją), pełną aktualną specyfikacją Markdown z metadanymi rewizji (`Specyfikacja (vN, autor, data):`, przy braku specyfikacji: `Specyfikacja: Brak specyfikacji`) oraz wszystkimi zapisanymi komentarzami w kolejności historii, bez ucinania. Obejmuje również zadania zakończone; filtry `list`, `stan` i `ukonczone` nie ograniczają wyboru po id (błędny `stan` nadal daje 400). Opcjonalny parametr `wersja=N` pozwala wybrać zachowaną historyczną rewizję specyfikacji (10 ostatnich); żądanie nieistniejącej lub usuniętej z retencji wersji daje czytelny błąd 404 (`wersja N niedostępna; przechowujemy 10 ostatnich.`). Nieznane id to błąd 404, niepoprawny format id to 400. „Wszystkie” oznacza komentarze obecne w historii zadania, z istniejącym limitem 200 wpisów; model i zapis pozostają bez zmian.
 
 Przy pracy nad zadaniem z listy Wektor najpierw czyta jego pełną treść przez `zadanie=`, nawet gdy dostał skrót wskazania. CEL, ZAKRES, DECYZJE i WARUNKI ODBIORU ze specyfikacji w notatce, polu specyfikacji i komentarzach przenosi do promptu executora w całości, dosłownie, bez skracania ani tłumaczenia; ta zasada ma pierwszeństwo przed angielskim formatem briefu. Własnych poleceń od użytkownika nie zamienia w kryteria, a lista plików obejmuje wszystkie moduły, przez które przechodzi zmiana (kontrakt, adaptery, widoki, testy). Rekonesans tylko uzupełnia ustalenia. Reguła jest w `PANEL_GUIDES.zadania` oraz `CHAT_SKILLS` (`@Zaimplementuj zadanie`) w `src/chat-contract.ts`.
 

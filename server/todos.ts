@@ -126,7 +126,7 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
       case 'addTask': {
         const list = listOf(action.list);
         room(list);
-        const task: TodoTask = { id: id('t'), title: action.title, note: action.note ?? '', done: false, createdAt: now(), completedAt: null, by: action.by ?? 'user', status: 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [] };
+        const task: TodoTask = { id: id('t'), title: action.title, note: action.note ?? '', done: false, createdAt: now(), completedAt: null, by: action.by ?? 'user', status: 'pomysl', blocked: null, links: [], history: [], spec: '', specRevision: 0, specRevisions: [], executor: null, repo: null, mode: null };
         list.tasks.push(task);
         return { ok: true, list: { id: list.id, name: list.name }, task: { id: task.id } };
       }
@@ -149,6 +149,10 @@ export function createTodoStore(options: TodoStoreOptions = {}): TodoStore {
         }
         if (action.title !== undefined) task.title = action.title;
         if (action.note !== undefined) task.note = action.note;
+        // Execution metadata is a field of the task, not part of the spec: no history entry, like title and note.
+        if (action.executor !== undefined) task.executor = action.executor;
+        if (action.repo !== undefined) task.repo = action.repo;
+        if (action.mode !== undefined) task.mode = action.mode;
         if (action.done === true) setStatus(task, 'zakonczone', action.by ?? 'user');
         if (action.done === false && task.done) {
           setStatus(task, todoOpenStatus(task), action.by ?? 'user');

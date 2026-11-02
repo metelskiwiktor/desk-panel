@@ -7,8 +7,9 @@ implementacja, dispatch Cezara, zmiany API/UI oraz menu `@` Wektora są poza tym
 
 Istniejące zadanie czytaj w całości: `panel_todos` z `zadanie=<id t-…>` albo
 `GET /api/agent/todos?zadanie=…`; skrót wskazania/listy może zgubić początek specyfikacji
-([zadania.md](../zadania.md#agent-czatu)). Specyfikacja opisuje potrzebę i odbiór; współistnieje z późniejszym
-[briefem wykonawcy](executor-brief.md), nie zastępuje jego formatu ani workflow.
+([zadania.md](../zadania.md#agent-czatu)). Specyfikacja opisuje potrzebę i odbiór; jej nagłówkowany format
+(`CEL:`, `ZAKRES:`, …) jest poprawnym briefem executora. [executor-brief.md](executor-brief.md) opisuje dodatkowe,
+opcjonalne szczegóły (Allowed files, Read-first, Stop on) i nie jest osobnym obowiązkowym dokumentem.
 
 ## Kiedy ten proces
 
@@ -18,14 +19,15 @@ Nie każde zadanie na liście wymaga pełnego procesu słonia i złotej rybki. U
 | --- | --- | --- |
 | Osobiste | brak (wystarczy tytuł i notatka) | zbędna |
 | Decyzja | krótka notatka w zadaniu lub komentarz | zbędna |
-| Programistyczne lokalnie | zalecana (szablon 9 sekcji) | opcjonalna |
+| Programistyczne lokalnie | zalecana (szablon 6 sekcji) | opcjonalna |
 | Programistyczne dla Cezara | obowiązkowa (pełna specyfikacja) | obowiązkowa |
 
 **Zasada:** rybka jest obowiązkowa, gdy wykonawca nie zna rozmowy (Cezar). W pozostałych przypadkach jest opcjonalna albo zbędna. Osobiste zadania nie używają tego procesu.
 
 ## Szablon i znaczenie pól
 
-Skopiuj blok i zastąp objaśnienia treścią; zachowaj wszystkie dziewięć sekcji.
+Skopiuj blok i zastąp objaśnienia treścią; zachowaj sześć sekcji treści. Każda etykieta stoi na osobnej linii, od kolumny 0,
+wielkimi literami i z dwukropkiem (panel czyta tylko taki nagłówek).
 
 ```markdown
 CEL:
@@ -44,30 +46,62 @@ DECYZJE:
 WARUNKI ODBIORU:
 1. [sprawdzalny wynik] — [metoda weryfikacji]
 
-WYKONAWCA:
-[jedna wartość: cezar / lokalnie / rozmowa]
-
-REPO:
-[konkretne repozytorium i lokalizacja dostępna wykonawcy; inne repo to jawna osobna praca]
-
-TRYB:
-[analiza / implementacja]
-
 ZAŁĄCZNIKI:
 [ścieżki względem repo lub dostępna treść; przy braku: brak]
 ```
 
-`cezar` wskazuje wykonawcę w workflow Cezara, `lokalnie` pracę w checkoucie, `rozmowa` wykonanie w rozmowie;
-wybierz jedną wartość, ale nie uruchamiaj wykonania podczas przygotowania. `analiza` zamawia ustalenia,
-`implementacja` zmiany. Nie zakładaj dostępu do sąsiedniego repo ani prywatnego pliku jako jedynego załącznika.
-Dopóki nie ma mechanizmu załączników, makieta trafia do executora tylko jako plik śledzony w Gicie; `.ai/` jest ignorowany.
+Wykonawcę, repozytorium i tryb wybierasz w **polach zadania**, nie w Markdownie: `executor` (`cezar`, `lokalnie` albo
+`rozmowa`), `repo` (`desk-panel`) i `mode` (`analiza` albo `implementacja`). Ustawia je `updateTask`; pominięte pole
+zachowuje wartość, `null` je czyści, a brak wartości to `null`. Stare sekcje `WYKONAWCA:`/`REPO:`/`TRYB:` w specyfikacji
+są tylko granicami treści i nie ustawiają pól; nie dopisuj ich do nowych specyfikacji. Panel liczy z tych pól i sekcji
+gotowość (`src/todo-dispatch.ts`, [zadania.md](../zadania.md#gotowość-i-prompt-bez-modelu)) i pokazuje ją w pełnym
+widoku agenta. `analiza` zamawia ustalenia, `implementacja` zmiany. Nie zakładaj dostępu do sąsiedniego repo ani
+prywatnego pliku jako jedynego załącznika. Dopóki nie ma mechanizmu załączników, makieta trafia do executora tylko jako
+plik śledzony w Gicie; `.ai/` jest ignorowany.
+
+### Zmiany UI
+
+Dla zadania zmieniającego widoczny interfejs dodaj dwie sekcje; obie są wymagane przy przygotowaniu, bo executor nie ma
+zgadywać parametrów zrzutów. `TYP ZMIANY` mówi, że to UI, a `ZRZUTY` podaje wartości wprost do CLI (`scripts/scenario.ts`):
+
+```markdown
+TYP ZMIANY:
+Type: UI
+
+ZRZUTY:
+Scenario: standard
+Page: pulpit
+Open: tile:todo
+Device: medialove-14
+Scale: primary
+Before: kafelek bez nowego wiersza gotowości
+```
+
+Odpowiada to komendzie `npx tsx scripts/scenario.ts standard --shot --pages pulpit --device medialove-14 --scale primary
+--open tile:todo --file .ai/screenshots/after.png`. Executor używa parametrów z tej sekcji (scenario, page, open, device,
+scale, before), a nie stałych z przykładowej komendy. `Type: UI` bez parametrów zrzutów zatrzymuje executora zamiast
+zgadywania. Dla zadania bez zmian UI obie sekcje są opcjonalne; ich brak znaczy non-UI/none:
+
+```markdown
+TYP ZMIANY:
+Type: non-UI
+
+ZRZUTY:
+none
+```
+
+Panel nie interpretuje tych sekcji: służą modelowi i executorowi.
 
 ## Definicja gotowości
 
 Przed zapisem `gotowe` sprawdź:
 
-- [ ] Dziewięć sekcji wypełniono bez placeholderów; wykonawca, repo i tryb są jednoznaczne, załączniki dostępne
-      (albo `ZAŁĄCZNIKI: brak`).
+- [ ] Sześć sekcji treści (`CEL`, `ZAKRES`, `POZA ZAKRESEM`, `DECYZJE`, `WARUNKI ODBIORU`, `ZAŁĄCZNIKI`) wypełniono
+      bez placeholderów; etykiety stoją na osobnych liniach. Pola zadania `executor`, `repo` i `mode` są ustawione
+      jednoznacznie, a załączniki dostępne (albo `ZAŁĄCZNIKI: brak`). Dla UI istnieją `TYP ZMIANY` z `Type: UI` oraz
+      `ZRZUTY` z konkretnymi parametrami; dla non-UI brak tych sekcji znaczy non-UI/none.
+- [ ] Panel pokazuje gotowość bez braków (pełny widok `?zadanie=`: `Gotowość bieżącej rewizji (vN): gotowe`), a przy
+      brakach lista wskazuje dokładnie brakujące pole albo sekcję.
 - [ ] Długość specyfikacji jest proporcjonalna do zadania, a szczegóły API podano tylko tam, gdzie zadanie je zmienia
       (2026-11-02: specyfikacja na 9 tys. znaków dla 3 plików dała dokument na 470 linii).
 - [ ] Zadanie dla Cezara mieści się w około 30 minutach pracy executora, łącznie z testami i dokumentacją; większe
@@ -123,18 +157,27 @@ opisuje [rybka.md](rybka.md).
 W panelu są listy „Dom”, „Praca” i „Do poprawy”; poniższy szkic celowo nie wskazuje docelowej listy:
 
 ```markdown
-CEL: Na liście zadań ma pojawić się „Zamów kawę” z notatką „Skończyły się ziarna”.
-ZAKRES: Jedno zadanie na liście; bez zmian API/UI.
-POZA ZAKRESEM: Inne listy, tworzenie list, zamawianie kawy.
+CEL:
+Na liście zadań ma pojawić się „Zamów kawę” z notatką „Skończyły się ziarna”.
+
+ZAKRES:
+Jedno zadanie na liście; bez zmian API/UI.
+
+POZA ZAKRESEM:
+Inne listy, tworzenie list, zamawianie kawy.
+
 DECYZJE:
 - 2026-11-01 — zadanie dodaje agent z by: agent — źródło: użytkownik.
+
 WARUNKI ODBIORU:
 1. „Zamów kawę” istnieje na wskazanej liście z notatką „Skończyły się ziarna” — GET /api/todos.
-WYKONAWCA: rozmowa
-REPO: przyklad-repo, C:\projekty\przyklad-repo (dostępne wykonawcy).
-TRYB: implementacja
-ZAŁĄCZNIKI: brak
+
+ZAŁĄCZNIKI:
+brak
 ```
+
+Pola zadania dla tego szkicu: `executor=rozmowa`, `repo=desk-panel`, `mode=implementacja` (ustawiane `updateTask`, nie
+w Markdownie).
 
 Oczekiwane pytania rybki: „Na którą listę ma trafić zadanie: Dom, Praca czy Do poprawy?” i „Czy wybór listy jest
 decyzją użytkownika?”. Niejasność: brak listy; niezapisane założenie: dowolna lista wystarczy; wpływ: nie da się
@@ -173,13 +216,16 @@ Lokalnie domyślnie adres i Origin to `http://127.0.0.1:5174`; nie zakładaj por
 | --- | --- |
 | Utworzenie (nowe) | POST /api/todos/action: `{action:"addTask", list, title, note, by:"codex"}` (lub `"claude"`); zachowaj zwrócone `task.id` |
 | Specyfikacja | POST /api/todos/action: `{action:"updateTask", task, spec, specRevision, by:"codex"}` (lub `"claude"`) |
-| Kontrola zapisu | GET /api/todos lub GET /api/agent/todos?zadanie=<id>: sprawdź obecność i pełną treść specyfikacji oraz rewizję |
+| Wykonanie | POST /api/todos/action: `{action:"updateTask", task, executor:"cezar", repo:"desk-panel", mode:"implementacja", by:"codex"}` (lub `"claude"`); pominięte pole zachowuje wartość, `null` czyści |
+| Kontrola zapisu | GET /api/todos lub GET /api/agent/todos?zadanie=<id>: sprawdź pełną treść specyfikacji, rewizję, pola wykonania i `Gotowość bieżącej rewizji` bez braków |
 | Gotowość | POST: `{action:"setStatus", task, status:"gotowe", by:"codex"}` (lub `"claude"`) dopiero po kontroli zapisu |
 | Struktura | Osobny POST: `{action:"addComment", task, text:"Struktura: …", by:"codex"}` (lub `"claude"`, jeśli dotyczy) |
 | Potwierdzenie | Końcowy GET /api/todos: stan, specyfikacja i komentarze |
 
 Przy istniejącym zadaniu zachowaj jego id, pozostaw szkic w `przygotowanie` i zapisz nową rewizję przez `updateTask`
-ze zaktualizowaną treścią `spec` oraz aktualnym `specRevision`; nie wykonuj ponownie `addTask`.
+ze zaktualizowaną treścią `spec` oraz aktualnym `specRevision`; nie wykonuj ponownie `addTask`. Osobny brief executora nie
+jest obowiązkowy: nagłówkowana specyfikacja jest briefem, a dodatkowe sekcje z [executor-brief.md](executor-brief.md)
+(`Allowed files`, `Read-first`, `Stop on`) są opcjonalne i służą doprecyzowaniu.
 
 **Błąd częściowy przerywa sekwencję**, bez ustawiania `gotowe`. W razie konfliktu 409 odczytaj `GET /api/todos`, id zadania
 i aktualną rewizję specyfikacji. Zapisana specyfikacja trafia do wykonawcy w późniejszym zleceniu — samo przygotowanie i status

@@ -7,6 +7,11 @@ export const TODO_STATUSES = {
   sprawdzenie: 'Do sprawdzenia', zakonczone: 'Zakończone', porzucone: 'Porzucone',
 } as const;
 export const todoStatusSchema = z.enum(Object.keys(TODO_STATUSES) as [keyof typeof TODO_STATUSES, ...(keyof typeof TODO_STATUSES)[]]);
+/** Who is meant to execute a ready task and how; `null` means it was never chosen (old tasks read as null). */
+export const TODO_EXECUTORS = { cezar: 'Cezar', lokalnie: 'Lokalnie', rozmowa: 'Rozmowa' } as const;
+export const TODO_MODES = { analiza: 'Analiza', implementacja: 'Implementacja' } as const;export const todoExecutorSchema = z.enum(Object.keys(TODO_EXECUTORS) as [keyof typeof TODO_EXECUTORS, ...(keyof typeof TODO_EXECUTORS)[]]);
+export const todoRepoSchema = z.literal('desk-panel');
+export const todoModeSchema = z.enum(Object.keys(TODO_MODES) as [keyof typeof TODO_MODES, ...(keyof typeof TODO_MODES)[]]);
 /** Old `agent` stays an alias for `wektor`: the same author on write and read, including old task and history data. */
 export const todoActor = z.enum(['user', 'agent', 'panel', 'wektor', 'claude', 'codex']).transform(a => a === 'agent' ? 'wektor' : a);
 const actor = todoActor;
@@ -47,6 +52,10 @@ export const todoTaskSchema = z.object({
   specRevision: z.number().int().nonnegative().default(0),
   /** The last 10 full revisions, oldest first; numbers keep growing past retention. */
   specRevisions: z.array(specRevisionSchema).max(TODO_LIMITS.specRevisions).default([]),
+  /** Execution metadata for a ready task, chosen in the fields (never read from the Markdown). */
+  executor: todoExecutorSchema.nullable().default(null),
+  repo: todoRepoSchema.nullable().default(null),
+  mode: todoModeSchema.nullable().default(null),
 }).transform(task => {
   const status = task.status ?? (task.done ? 'zakonczone' : 'pomysl');
   return { ...task, status, done: todoIsDone(status), completedAt: todoIsDone(status) ? task.completedAt : null };
@@ -87,8 +96,8 @@ export const todoActionSchema = z.discriminatedUnion('action', [
     .refine(a => a.hideDone !== undefined || a.showAgent !== undefined, { message: 'Nothing to change' }),
   z.object({ action: z.literal('deleteList'), list: todoListId }).strict(),
   z.object({ action: z.literal('addTask'), list: todoListId, title, note: note.optional(), by: actor.optional() }).strict(),
-  z.object({ action: z.literal('updateTask'), task: todoTaskId, title: title.optional(), note: note.optional(), done: z.boolean().optional(), by: actor.optional(), spec: z.string().max(TODO_LIMITS.spec).optional(), specRevision: z.number().int().nonnegative().optional() }).strict()
-    .refine(a => a.title !== undefined || a.note !== undefined || a.done !== undefined || a.spec !== undefined, { message: 'Nothing to change' })
+  z.object({ action: z.literal('updateTask'), task: todoTaskId, title: title.optional(), note: note.optional(), done: z.boolean().optional(), by: actor.optional(), spec: z.string().max(TODO_LIMITS.spec).optional(), specRevision: z.number().int().nonnegative().optional(), executor: todoExecutorSchema.nullable().optional(), repo: todoRepoSchema.nullable().optional(), mode: todoModeSchema.nullable().optional() }).strict()
+    .refine(a => a.title !== undefined || a.note !== undefined || a.done !== undefined || a.spec !== undefined || a.executor !== undefined || a.repo !== undefined || a.mode !== undefined, { message: 'Nothing to change' })
     .refine(a => (a.spec === undefined) === (a.specRevision === undefined), { message: 'Spec and specRevision must be provided together' }),
   z.object({ action: z.literal('moveTask'), task: todoTaskId, list: todoListId }).strict(),
   z.object({ action: z.literal('deleteTask'), task: todoTaskId }).strict(),

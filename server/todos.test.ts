@@ -74,7 +74,7 @@ describe('listy zadań: sklep', () => {
     await writeFile(file, original);
     const store = createTodoStore({ file });
     const tasks = (await data(store))[0].tasks;
-    expect(tasks[0]).toMatchObject({ status: 'pomysl', blocked: null, links: [], history: [] });
+    expect(tasks[0]).toMatchObject({ status: 'pomysl', blocked: null, links: [], history: [], executor: null, repo: null, mode: null });
     expect(tasks[1]).toMatchObject({ status: 'zakonczone', done: true, completedAt: 10 });
     expect(await readFile(file, 'utf8')).toBe(original);
     expect(await readdir(dir)).toEqual(['v1.json']);
@@ -134,6 +134,33 @@ describe('listy zadań: sklep', () => {
     expect((await data(store))[0].tasks[0].completedAt).toBe(completedAt); // ticking again changes nothing
     await store.apply({ action: 'updateTask', task: task!.id, done: false, title: 'Nowy tytuł' });
     expect((await data(store))[0].tasks[0]).toMatchObject({ done: false, completedAt: null, title: 'Nowy tytuł', note: 'notatka' });
+  });
+
+  it('metadane wykonania: ustawienie i wyczyszczenie samych pól przeżywa restart, bez historii; zły enum i konflikt spec odrzucają całą akcję', async () => {
+    const file = path.join(dir, 'meta.json');
+    let at = 100;
+    const store = createTodoStore({ file, now: () => at++ });
+    const { list } = await store.apply({ action: 'createList', name: 'Meta' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Zadanie' });
+    const id = task!.id;
+    expect((await data(store))[0].tasks[0]).toMatchObject({ executor: null, repo: null, mode: null });
+    await store.apply({ action: 'updateTask', task: id, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
+    const set = (await data(store))[0].tasks[0];
+    expect(set).toMatchObject({ executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
+    expect(set.history).toEqual([]);
+    expect(JSON.parse(await readFile(file, 'utf8')).lists[0].tasks[0]).toMatchObject({ executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
+    await store.apply({ action: 'updateTask', task: id, executor: null });
+    const restarted = (await data(createTodoStore({ file })))[0].tasks[0];
+    expect(restarted).toMatchObject({ executor: null, repo: 'desk-panel', mode: 'implementacja' });
+    expect(restarted.history).toEqual([]);
+    // A spec conflict rejects the whole action, metadata included.
+    await store.apply({ action: 'updateTask', task: id, spec: 'v1', specRevision: 0 });
+    await expect(store.apply({ action: 'updateTask', task: id, spec: 'v2', specRevision: 0, mode: 'analiza' })).rejects.toMatchObject({ status: 409 });
+    expect((await data(store))[0].tasks[0]).toMatchObject({ spec: 'v1', specRevision: 1, mode: 'implementacja' });
+    // An unknown enum is refused by the schema before anything is touched.
+    const before = (await data(store))[0].tasks[0];
+    await expect(store.apply({ action: 'updateTask', task: id, executor: 'agent' } as never)).rejects.toMatchObject({ status: 400 });
+    expect((await data(store))[0].tasks[0]).toEqual(before);
   });
 
   it('przenosi zadanie między listami, a pełna lista docelowa odmawia bez żadnej zmiany', async () => {
@@ -457,6 +484,9 @@ describe('akcje: schemat', () => {
     ['updateTask bez zmiany', { action: 'updateTask', task: 't-aaaaaaaa' }],
     ['updateTask ze spec bez specRevision', { action: 'updateTask', task: 't-aaaaaaaa', spec: 'x' }],
     ['updateTask ze specRevision bez spec', { action: 'updateTask', task: 't-aaaaaaaa', specRevision: 1 }],
+    ['zły executor', { action: 'updateTask', task: 't-aaaaaaaa', executor: 'agent' }],
+    ['złe repo', { action: 'updateTask', task: 't-aaaaaaaa', repo: 'cezar' }],
+    ['zły tryb', { action: 'updateTask', task: 't-aaaaaaaa', mode: 'wdrożenie' }],
     ['zbyt długa specyfikacja (>50k)', { action: 'updateTask', task: 't-aaaaaaaa', spec: 'x'.repeat(TODO_LIMITS.spec + 1), specRevision: 0 }],
     ['nieznany stan', { action: 'setStatus', task: 't-aaaaaaaa', status: 'done' }],
     ['długa blokada', { action: 'setBlocked', task: 't-aaaaaaaa', reason: 'x'.repeat(301) }],
@@ -464,6 +494,12 @@ describe('akcje: schemat', () => {
     ['pusty komentarz', { action: 'addComment', task: 't-aaaaaaaa', text: ' ' }],
     ...['http://github.com/o/r/pull/1', 'https://evil.com/o/r/pull/1', 'https://github.com/o/r/issues/1', 'https://github.com/o/r/pull/1?x=1', 'https://github.com/o/r/pull/0', 'https://github.com/o/../pull/1', 'https://github.com/o/./pull/1', 'https://github.com/invalid_owner/r/pull/1'].map<[string, unknown]>(id => ['zły PR', { action: 'link', task: 't-aaaaaaaa', kind: 'pr', id }]),
   ])('odrzuca %s', (_, body) => { expect(todoActionSchema.safeParse(body).success).toBe(false); });
+  it('same metadane wykonania wystarczą, by updateTask miał co zmienić', () => {
+    expect(todoActionSchema.safeParse({ action: 'updateTask', task: 't-aaaaaaaa', executor: 'cezar' }).success).toBe(true);
+    expect(todoActionSchema.safeParse({ action: 'updateTask', task: 't-aaaaaaaa', repo: 'desk-panel' }).success).toBe(true);
+    expect(todoActionSchema.safeParse({ action: 'updateTask', task: 't-aaaaaaaa', mode: null }).success).toBe(true);
+  });
+
   it('przycina spacje z nazw i tytułów', () => {
     expect(todoActionSchema.parse({ action: 'createList', name: '  Dom  ' })).toEqual({ action: 'createList', name: 'Dom' });
   });
@@ -694,5 +730,55 @@ describe('widok dla agenta: zadania', () => {
       status: 404,
       message: 'wersja 2 niedostępna; przechowujemy 10 ostatnich.',
     });
+  });
+
+  it('pełny widok pokazuje przed specyfikacją metadane wykonania i gotowość, bez kopii promptu', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'Gotowe' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Gotowe zadanie' });
+    const id = task!.id;
+    const spec = ['CEL:', 'Zbudować.', '', 'ZAKRES:', 'x', '', 'POZA ZAKRESEM:', 'y', '', 'WARUNKI ODBIORU:', '1. Test.'].join('\n');
+    await store.apply({ action: 'updateTask', task: id, spec, specRevision: 0, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
+    await store.apply({ action: 'setStatus', task: id, status: 'gotowe' });
+    await store.apply({ action: 'addComment', task: id, text: 'Komentarz po specyfikacji.' });
+    const sources = { todos: async () => store.read() } as unknown as Parameters<typeof agentViews>[0];
+    const text = await agentViews(sources).todos(new URL(`http://x/api/agent/todos?zadanie=${id}`), Date.now());
+    expect(text).toContain('Wykonanie: executor=cezar, repo=desk-panel, mode=implementacja');
+    expect(text).toContain('Gotowość bieżącej rewizji (v1): gotowe — projekt desk-panel, workflow desk-panel-task, rewizja 1.');
+    expect(text).toContain('Specyfikacja (v1');
+    expect(text.indexOf('Wykonanie:')).toBeLessThan(text.indexOf('Specyfikacja (v1'));
+    expect(text).not.toContain('Przygotowane zadanie Desk Panel');
+    expect(text.indexOf(spec)).toBeLessThan(text.indexOf('Komentarz po specyfikacji.'));
+    expect(text.slice(text.indexOf(spec) + spec.length)).not.toContain('Gotowość');
+  });
+
+  it('brakujące pola pokazuje jako „brak”, a listę braków także przed „Brak specyfikacji”', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'Puste' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Puste zadanie' });
+    const sources = { todos: async () => store.read() } as unknown as Parameters<typeof agentViews>[0];
+    const text = await agentViews(sources).todos(new URL(`http://x/api/agent/todos?zadanie=${task!.id}`), Date.now());
+    expect(text).toContain('Wykonanie: executor=brak, repo=brak, mode=brak');
+    expect(text).toContain('Gotowość bieżącej rewizji (v0): niegotowe, brakuje 9:');
+    expect(text).toContain('Brak wymaganej sekcji CEL:');
+    expect(text).toContain('Specyfikacja: Brak specyfikacji');
+    expect(text.indexOf('Gotowość bieżącej rewizji')).toBeLessThan(text.indexOf('Specyfikacja: Brak specyfikacji'));
+  });
+
+  it('przy wersja=N gotowość dotyczy bieżącej rewizji, a pokazana jest wybrana historyczna', async () => {
+    const store = createTodoStore();
+    const { list } = await store.apply({ action: 'createList', name: 'Historia' });
+    const { task } = await store.apply({ action: 'addTask', list: list!.id, title: 'Historyczne' });
+    const id = task!.id;
+    const v1 = ['CEL:', 'Stary cel.', '', 'ZAKRES:', 'x', '', 'POZA ZAKRESEM:', 'y'].join('\n');
+    const v2 = ['CEL:', 'Nowy cel.', '', 'ZAKRES:', 'x', '', 'POZA ZAKRESEM:', 'y', '', 'WARUNKI ODBIORU:', '1. Test.'].join('\n');
+    await store.apply({ action: 'updateTask', task: id, spec: v1, specRevision: 0 });
+    await store.apply({ action: 'updateTask', task: id, spec: v2, specRevision: 1, executor: 'cezar', repo: 'desk-panel', mode: 'analiza' });
+    await store.apply({ action: 'setStatus', task: id, status: 'gotowe' });
+    const sources = { todos: async () => store.read() } as unknown as Parameters<typeof agentViews>[0];
+    const text = await agentViews(sources).todos(new URL(`http://x/api/agent/todos?zadanie=${id}&wersja=1`), Date.now());
+    expect(text).toContain('Specyfikacja (v1');
+    expect(text).toContain('Stary cel.');
+    expect(text).toContain('Gotowość bieżącej rewizji (v2): gotowe — projekt desk-panel, workflow analysis, rewizja 2.');
   });
 });
