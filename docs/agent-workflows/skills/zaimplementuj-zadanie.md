@@ -69,6 +69,10 @@ widget and the cockpit to share one GitHub client; the PR shipped a widget whose
    - The prompt's `User asks` section quotes each thing the user asked for and says where it went (`→ criterion n`,
      `→ plan: separate work in <repository>`, `→ not done: <why>`); `panel_recon_report` refuses an ask without `→`.
      The fifth retry got everything else right and silently dropped the tile's new name the user had asked for.
+   - Separate product requests from work commands: a request about product behaviour or outcome becomes an acceptance
+     criterion, while a command telling how Wektor or the agent should work (read first, search callers, run targeted tests)
+     is guidance for Notes for executor, not an acceptance criterion. (02.11.2026: pilot card A had criteria 1–3 copied directly
+     from working commands instead of product outcomes.)
    - Budget: about 15 tool calls for Phases 0–1, since every call sends the whole conversation again (a recon of 46
      sequential calls read 2.77M input tokens, 28.10.2026). Hermes ends a turn after 40 model calls (`agent.max_turns`),
      and at 20 appends an "iteration budget checkpoint" notice to a tool result: the recon goes out by the 20th call, or at

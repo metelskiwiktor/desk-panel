@@ -55,9 +55,16 @@ Przed zapisem `gotowe` sprawdź:
 
 - [ ] Dziewięć sekcji wypełniono bez placeholderów; wykonawca, repo i tryb są jednoznaczne, załączniki dostępne
       (albo `ZAŁĄCZNIKI: brak`).
-- [ ] CEL i granice są określone, decyzje użytkownika mają datę `YYYY-MM-DD`, treść i źródło.
-- [ ] Każdy numerowany warunek odbioru ma sprawdzalny wynik i metodę; wymagania nie pominięto przez „jeśli dostępne”.
-- [ ] Istnieje skuteczny raport rybki, pokazany użytkownikowi wraz z poprawkami.
+- [ ] Długość specyfikacji jest proporcjonalna do zadania, a szczegóły API podano tylko tam, gdzie zadanie je zmienia
+      (2026-11-02: specyfikacja na 9 tys. znaków dla 3 plików dała dokument na 470 linii).
+- [ ] Zadanie dla Cezara mieści się w około 30 minutach pracy executora, łącznie z testami i dokumentacją; większe
+      dzielimy na osobne zadania (2026-11-02: zadanie A potrzebowało dwóch runów i oba pominęły testy i dokumentację).
+- [ ] CEL i granice są określone; przy każdej decyzji słoń pyta: „jaki realny problem z ostatnich tygodni to rozwiązuje?”
+      (2026-11-02: pełne rewizje i edycja w UI rozrosły się ponad potrzebę, a zadanie B2 odłożono); decyzje użytkownika mają datę `YYYY-MM-DD`, treść i źródło.
+- [ ] Każdy numerowany warunek odbioru ma sprawdzalny wynik i metodę; sprawdzenie, które przechodzi niezależnie od wyniku,
+      nie jest warunkiem odbioru (2026-11-01: walidator rybki zaakceptował samą listę nazw pól); wymagania nie pominięto przez „jeśli dostępne”.
+- [ ] Istnieje skuteczny raport rybki dla tej rewizji, która zostaje oznaczona jako gotowa
+      (2026-11-01: w pilotażu 1 rybka czytała v1, a zlecona była v2), pokazany użytkownikowi wraz z poprawkami.
 - [ ] Rozstrzygnięto wszystkie uwagi wpływające na zakres, zachowanie lub odbiór; pytania o zakres/oczekiwania mają
       odpowiedzi użytkownika, a brakującej decyzji nie dopowiedziano. Sugestie redakcyjne nie blokują gotowości.
 
