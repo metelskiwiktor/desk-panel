@@ -19,13 +19,13 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 
 | Zadanie i rewizja | Rybka | Czas [s] | Tokeny | Koszt [USD] | Uwagi blokujące | Redakcyjne | Chybione | Unikalne blokujące | Potknięcie executora o niezgłoszone | Runy do PR-a | Dokończone lokalnie |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- |
-| C1 `t-fb294d14` rev 1 | DeepSeek | 394,388 | 90 953 | 0,034133 | 3 | 4 | 1 | 1 | nie wykonywano | — | nie wykonywano |
-| C1 `t-fb294d14` rev 1 | Gemini | 142,293 | 67 837 | brak danych | 2 | 4 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C1 `t-fb294d14` rev 1 | DeepSeek | 394,388 | 90 953 | 0,034133 | 3 | 4 | 1 | 1 | tak: niestabilne testy weryfikacji, szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| C1 `t-fb294d14` rev 1 | Gemini | 142,293 | 67 837 | brak danych | 2 | 4 | 2 | 0 | tak: niestabilne testy weryfikacji, szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
 | C2 `t-7dea9734` rev 1 | DeepSeek | 174,218 | 170 850 | 0,021466 | 2 | 3 | 3 | 1 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 1 | Gemini | 249,017 | 104 782 | brak danych | 1 | 5 | 2 | 0 | nie wykonywano | — | nie wykonywano |
-| C1 `t-fb294d14` rev 2 | DeepSeek — próba 1, read-limit | 236,517 | 211 156 | 0,017017 | — | — | — | — | nie wykonywano | — | nie wykonywano |
-| C1 `t-fb294d14` rev 2 | DeepSeek — ponowienie | 401,395 | 110 014 | 0,034144 | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
-| C1 `t-fb294d14` rev 2 | Gemini | 230,839 | 81 183 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C1 `t-fb294d14` rev 2 | DeepSeek — próba 1, read-limit | 236,517 | 211 156 | 0,017017 | — | — | — | — | tak: niestabilne testy weryfikacji, szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| C1 `t-fb294d14` rev 2 | DeepSeek — ponowienie | 401,395 | 110 014 | 0,034144 | 0 | 6 | 2 | 0 | tak: niestabilne testy weryfikacji, szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| C1 `t-fb294d14` rev 2 | Gemini | 230,839 | 81 183 | brak danych | 0 | 6 | 2 | 0 | tak: niestabilne testy weryfikacji, szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
 | C2 `t-7dea9734` rev 2 | DeepSeek | 524,176 | 177 094 | 0,028975 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 2 | Gemini | 126,493 | 84 587 | brak danych | 2 | 4 | 2 | 2 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 4 | DeepSeek — idle-timeout | 587,171 | 55 906 | 0,003680 | — | — | — | — | nie wykonywano | — | nie wykonywano |
@@ -33,6 +33,14 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | C2a `t-7dea9734` rev 5 | DeepSeek | 284,313 | 108 804 | 0,026364 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
 | C2a `t-7dea9734` rev 5 | Gemini — timeout procesu | 600,204 | 61 465 | brak danych | — | — | — | — | nie wykonywano | — | nie wykonywano |
 | C2a `t-7dea9734` rev 5 | Gemini — ponowienie | 180,541 | 66 468 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+
+### C1 — wynik executora i niezależny przegląd PR #43, 2026-11-02
+
+Jedna próba Cezara `fbf6bca3-2e74-4274-a81b-83537d1c8456` doprowadziła do [PR #43](https://github.com/metelskiwiktor/desk-panel/pull/43), head `b4534910d1e59be2a7980034d861e0c860768545`, baza `d86d3686c449cd670e654c25004f148a58f14ab7`. Realizowano spec rev 3, zatwierdzoną bez kolejnej rybki po rozstrzygnięciach rev 2; wynik jest wspólny dla pięciu wierszy historycznych przeglądów C1, nie oznacza pięciu runów. Implementacja: 12 min 55 s; całość: 28 min 3 s; pierwsza zakończona edycja po 58 s od startu implement. Jedna runda `fix`, zero `address`; review agy zakończyło się `approve` z uwagą P3 o formatowaniu. Nie dokończono kodu lokalnie i nie scalono PR-a.
+
+Executor potknął się o problemy niewskazane przez rybki: pierwsze automatyczne verify odrzuciło niestabilny test `src/appointment-card.test.tsx`; podczas ponowień pojawiały się również błędy Windows `EPERM: rename` w niezmienianych testach automatów/podglądu. To potknięcia środowiska/weryfikacji, nie nowo odkryte decyzje specyfikacji. `fix` diagnozował je bez zmiany plików źródłowych; drugie automatyczne verify przeszło. Run uruchamiał też pełne testy w implementacji i fix mimo zakazu w promptach (w implementacji dwa `just check` oraz `vitest --no-file-parallelism`); zaliczenie końcowej bramki nie dowodzi przestrzegania całego procesu. Źródło: `.ai/cezar/runs/fbf6bca3-2e74-4274-a81b-83537d1c8456.ndjson`, m.in. wiersze 758, 782, 800, 861, 1041, 1073, 1102, 1252 i 1313. Artefakty runu są prywatne, poza publikowanym diffem.
+
+Niezależny przegląd dokładnego headu PR-a: testy celowane pięciu plików przeszły (122/122), ale parser fenced code nie spełnia w pełni gramatyki Markdownu: akceptuje backtick w info string otwieracza oraz NBSP po zamykaczu. Próby bez zmiany źródeł odtworzyły odpowiednio fałszywe braki i fałszywą gotowość. Reguły były już jawne w spec rev 3 (bloki według Markdownu), więc to błędy implementacji/testów, nie nowe niezgłoszone niejasności. Reguła zatrzymania `Type: UI` bez parametrów zrzutów jest w dokumencie przygotowania, ale brakuje jej w instrukcjach bezpośrednio czytanych przez executora. Nowa checklista i krok „Kontrola zapisu” wymagają też gotowości bez braków przed ustawieniem `gotowe`, choć funkcja wymaga już tego stanu; kolejność przygotowania wymaga korekty. Poprawki pozostawiono do wykonania przed scaleniem; ten przegląd nie naprawiał PR-a. Checki GitHuba dla tego headu zakończyły się błędami testów na Ubuntu i Windows (run Actions `41532023293`), mimo poprawnych typów/knip/build. Nie utożsamiać ich z udanym lokalnym verify Cezara.
 
 ### C2 — uproszczenie rev 4 i podział C2a/C2b, 2026-11-02
 
