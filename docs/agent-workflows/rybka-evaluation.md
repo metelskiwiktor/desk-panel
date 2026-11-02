@@ -28,6 +28,60 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | C1 `t-fb294d14` rev 2 | Gemini | 230,839 | 81 183 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 2 | DeepSeek | 524,176 | 177 094 | 0,028975 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 2 | Gemini | 126,493 | 84 587 | brak danych | 2 | 4 | 2 | 2 | nie wykonywano | — | nie wykonywano |
+| C2 `t-7dea9734` rev 4 | DeepSeek — idle-timeout | 587,171 | 55 906 | 0,003680 | — | — | — | — | nie wykonywano | — | nie wykonywano |
+| C2 `t-7dea9734` rev 4 | Gemini | 262,530 | 89 693 | brak danych | 2 | 5 | 1 | — | nie wykonywano | — | nie wykonywano |
+| C2a `t-7dea9734` rev 5 | DeepSeek | 284,313 | 108 804 | 0,026364 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
+| C2a `t-7dea9734` rev 5 | Gemini — timeout procesu | 600,204 | 61 465 | brak danych | — | — | — | — | nie wykonywano | — | nie wykonywano |
+| C2a `t-7dea9734` rev 5 | Gemini — ponowienie | 180,541 | 66 468 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+
+### C2 — uproszczenie rev 4 i podział C2a/C2b, 2026-11-02
+
+Użytkownik uznał rev 3 za zbyt dużą. Rev 4 usunęła retryOf/łańcuchy, replay równoległy i po restarcie,
+API unknown/failed, odczyt tasków spoza snapshotu i drugi scenariusz. Przyjęto ryzyko ponownego
+zlecenia po utracie wyniku lub zniknięciu taska ze snapshotu; nowe reguły wymagają realnego problemu.
+
+DeepSeek rev 4 nie dał raportu: 8 minut bez zdarzeń, idle-timeout po 587,171 s całej próby,
+12 odczytów, brak tekstu. Tokeny/koszt obejmują zakończone kroki, nie niedokończony krok.
+Powód i metryki pokazano użytkownikowi, bez zmiany skryptu/limitów; rewizja została zastąpiona.
+Gemini rev 4 dał skuteczny raport zapisany w komentarzach. Klasyfikacja słonia: blokujące 1 i 8
+(dane rejestru dla UI, rozmiar), redakcyjne 3–7, chybiona 2 (istnieje sources.cezar()).
+Unikalności nie oceniano wobec braku raportu drugiej rybki.
+
+Użytkownik zatwierdził podział: C2a zachowuje id t-7dea9734 i blokadę „czeka na C1”; C2b t-ed9a64c6
+jest lokalne, z trzema sekcjami spec, bez rybek/Cezara, po scaleniu C2a. Dla UI dodano minimalną
+projekcję rejestru w istniejącym GET /api/todos, bez nowego endpointu podglądu/pollera i bez zapisu
+w danych zadania. Rejestr pozostaje zarządzany przez istniejący Cockpit. C2a rev 5 ma obie rybki
+na tej rewizji; przeniesienie skilla do C2b usuwa tę pracę z executora Cezara.
+
+Pierwszy Gemini rev 5 zwrócił result SUCCESS po ok. 137 s (61 465 tokenów), lecz proces CLI nie
+wyszedł. Runner zakończył próbę timeoutem po 600,204 s, exit 1. completed:true w metrykach oznacza
+wynik modelu, nie zakończenie procesu; próba nie spełnia gotowości. Pokazano powód/metryki,
+zapisano komentarz; bez zmian runnera/limitów. Ponowiono tylko Gemini na tej samej rev 5.
+Koszt Gemini nie jest dostępny i nie jest zerem. Skuteczny DeepSeek rev 5 zapisano w komentarzach.
+Ponowiony Gemini zakończył się skutecznie: 180,541 s, 66 468 tokenów, exit 0. Ma skuteczny raport
+na tej samej C2a rev 5 co DeepSeek; raporty zapisano bez ucinania w komentarzach i sprawdzono
+odtworzenie wszystkich części. Nie powtarzano skutecznego DeepSeek i nie zmieniano runnera.
+
+Klasyfikacja słonia przekazana użytkownikowi do ewentualnej korekty (bez przypisywania jej zatwierdzenia):
+- DeepSeek rev 5: redakcyjne 1, 4, 5, 6, 7; chybione 2, 3, 8; brak blokujących.
+- Gemini rev 5: redakcyjne 1, 2, 3, 4, 5, 8; chybione 6, 7; brak blokujących.
+
+Szczegóły etykiet, formatowania API/komentarza i prezentacji pozostają wykonawcy w granicach
+spec. Enumy i normalizacja pochodzą z C1; executor nie jest runnerem. Rejestr zachowuje wszystkie
+zlecenia do mapowania PR, projekcja wybiera ostatnie dla klucza. Każdy istniejący stan inny niż
+failed/cancelled blokuje; brak taska jest traktowany jak niepowodzenie, zgodnie z uproszczeniem.
+Istniejące Zapisz może zamknąć okno — nie dołożono przebudowy szkiców. Wymóg rozszerzenia mapowania
+PR już jest w zakresie; nie jest obietnicą, że stary kod obsłuży nowy rejestr automatycznie.
+Zrzuty przed/po dotyczą zmiany kodu; --open todo-dialog już istnieje, telefon to jawny viewport
+Playwright. Te odpowiedzi nie rozszerzają zachowania ani nie wymagają nowej rewizji specyfikacji.
+Nie przywrócono replayu, retryOf, klas błędów, transakcji ani odczytu poza snapshotem.
+Nie ma nowych decyzji o zakresie/zachowaniu ani blokad; nie uzależniono gotowości od potwierdzenia
+samej klasyfikacji redakcyjnych/chybionych pytań. Spec rev 5 pozostaje dokładnie tą przeczytaną przez
+obie skuteczne rybki. C2a ma gotowe z blokadą „czeka na C1”; C2b gotowe z blokadą do scalenia C2a.
+
+C2b ma krótką spec w polu spec (rev 1, autor codex) i wykonawcę lokalnie w notatce/spec, ponieważ
+pole executor dopiero dostarczy C1. Bez rybek/Cezara, blokada do scalenia C2a. Nie wykonano
+implementacji, wdrożenia, restartu ani dispatchu.
 
 ### C1/C2 — 2026-11-02, rev 2 → rev 3
 
