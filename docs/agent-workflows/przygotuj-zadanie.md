@@ -10,6 +10,19 @@ Istniejące zadanie czytaj w całości: `panel_todos` z `zadanie=<id t-…>` alb
 ([zadania.md](../zadania.md#agent-czatu)). Specyfikacja opisuje potrzebę i odbiór; współistnieje z późniejszym
 [briefem wykonawcy](executor-brief.md), nie zastępuje jego formatu ani workflow.
 
+## Kiedy ten proces
+
+Nie każde zadanie na liście wymaga pełnego procesu słonia i złotej rybki. Używaj go proporcjonalnie do typu zadania:
+
+| Typ zadania | Specyfikacja | Rybka |
+| --- | --- | --- |
+| Osobiste | brak (wystarczy tytuł i notatka) | zbędna |
+| Decyzja | krótka notatka w zadaniu lub komentarz | zbędna |
+| Programistyczne lokalnie | zalecana (szablon 9 sekcji) | opcjonalna |
+| Programistyczne dla Cezara | obowiązkowa (pełna specyfikacja) | obowiązkowa |
+
+**Zasada:** rybka jest obowiązkowa, gdy wykonawca nie zna rozmowy (Cezar). W pozostałych przypadkach jest opcjonalna albo zbędna. Osobiste zadania nie używają tego procesu.
+
 ## Szablon i znaczenie pól
 
 Skopiuj blok i zastąp objaśnienia treścią; zachowaj wszystkie dziewięć sekcji.

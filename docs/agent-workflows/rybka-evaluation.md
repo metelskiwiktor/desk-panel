@@ -12,8 +12,10 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 - **Uwagi chybione**: uwagi nieprawdziwe, sprzeczne z jawnymi załącznikami / AGENTS.md, lub wymyślające wymagania poza zakresem zadania.
 - **Unikalne blokujące**: uwagi blokujące zgłoszone wyłącznie przez tego jednego recenzenta (niezauważone przez drugiego w tej samej rewizji specyfikacji).
 - **Potknięcie executora o niezgłoszone**: problem napotkany przez executora Cezara podczas implementacji lub weryfikacji, którego żaden z recenzentów nie zidentyfikował w specyfikacji (kolumna wypełniana po zakończeniu runu Cezara).
+- **Runy do PR-a**: liczba prób / runów Cezara potrzebnych do pomyślnego utworzenia PR-a (wypełniane po zakończeniu realizacji).
+- **Dokończone lokalnie**: czy zadanie (lub jego część, np. brakujące testy / poprawki) musiało zostać dokończone lokalnie w checkoucie przez agenta lub człowieka po runie Cezara (`tak` / `nie` ze wskazaniem przyczyny).
 
 ## Rejestr przebiegów
 
-| Zadanie i rewizja | Rybka | Czas [s] | Tokeny | Koszt [USD] | Uwagi blokujące | Redakcyjne | Chybione | Unikalne blokujące | Potknięcie executora o niezgłoszone |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Zadanie i rewizja | Rybka | Czas [s] | Tokeny | Koszt [USD] | Uwagi blokujące | Redakcyjne | Chybione | Unikalne blokujące | Potknięcie executora o niezgłoszone | Runy do PR-a | Dokończone lokalnie |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | --- |
