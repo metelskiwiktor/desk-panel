@@ -10,6 +10,28 @@ import { killProcessTree, metricsFromEvents, MODEL, parseEventLine } from './exe
 export const AGY_MODEL = 'gemini-3.8-flash-high';
 export { MODEL };
 
+/** Markers keep boundary whitespace inside the comment when the API trims its outer whitespace. */
+export function splitReportComments(report) {
+  const parts = [];
+  let chunk = '';
+  const wrap = (text, index, total) => `Przegląd rybki — część ${String(index).padStart(6, '0')}/${String(total).padStart(6, '0')}\n<!-- rybka:start -->\n${text}\n<!-- rybka:end -->`;
+  const fits = text => {
+    const body = { action: 'addComment', task: 't-00000000', by: 'codex', text: wrap(text, 999999, 999999) };
+    return body.text.length <= 2000 && Buffer.byteLength(JSON.stringify(body), 'utf8') <= 4096;
+  };
+  for (const char of report) {
+    if (!fits(chunk + char)) { parts.push(chunk); chunk = ''; }
+    chunk += char;
+  }
+  if (chunk) parts.push(chunk);
+  return parts.map((text, i) => wrap(text, i + 1, parts.length));
+}
+
+function saveReport(reportPath, text) {
+  writeFileSync(reportPath, text, { mode: 0o600 });
+  writeFileSync(join(resolve(reportPath, '..'), 'report-comments.json'), JSON.stringify(splitReportComments(text), null, 2) + '\n', { mode: 0o600 });
+}
+
 const WALL_MS = 10 * 60_000;
 // JSON CLI emits a reasoning/text block only when it ends (pilot 1 needed 218 s for a block).
 // Leave room for a longer single-block review; the independent 10-minute wall limit remains.
@@ -265,7 +287,7 @@ async function runRybkaOne({ runner = 'opencode', specPath, spec, taskId = null,
           eventCount: events.length, lastEventAt: events.at(-1)?.timestamp ?? null, lastTool, fileReads: reads, modelReads,
           firstEventMs, firstTextMs, firstTokenMs: null, exitCode: code, ...metrics };
         writeFileSync(join(dir, 'metrics.json'), JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
-        if (ok) writeFileSync(reportPath, header + '\n' + report + '\n', { mode: 0o600 });
+        if (ok) saveReport(reportPath, header + '\n' + report + '\n');
         else if (report) writeFileSync(join(dir, 'partial-report.md'), header + '\n' + report + '\n', { mode: 0o600 });
         log(`Rybka (${runner}): ${REASONS[reason]}. Zdarzenia: ${events.length}; ${usageLabel(metrics)}; czas: ${Math.round(record.durationMs / 1000)} s.`);
         log(`Rybka (${runner}): ${ok ? reportPath : dir}`);
@@ -372,7 +394,7 @@ async function runRybkaOne({ runner = 'opencode', specPath, spec, taskId = null,
         eventCount: events.length, lastEventAt: null, lastTool: 'brak', fileReads: reads, modelReads: 0,
         firstEventMs, firstTextMs, firstTokenMs: null, exitCode: code, ...metrics };
       writeFileSync(join(dir, 'metrics.json'), JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
-      if (ok) writeFileSync(reportPath, header + '\n' + report + '\n', { mode: 0o600 });
+      if (ok) saveReport(reportPath, header + '\n' + report + '\n');
       else if (report) writeFileSync(join(dir, 'partial-report.md'), header + '\n' + report + '\n', { mode: 0o600 });
       log(`Rybka (${runner}): ${REASONS[reason]}. Zdarzenia: ${events.length}; ${usageLabel(metrics)}; czas: ${Math.round(record.durationMs / 1000)} s.`);
       log(`Rybka (${runner}): ${ok ? reportPath : dir}`);

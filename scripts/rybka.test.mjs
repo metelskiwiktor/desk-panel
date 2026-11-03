@@ -7,10 +7,22 @@ import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   reviewMaterials, runRybka, fetchTaskSpec, isTaskId, parseRybkaArgs,
-  validReport, formatReportHeader, AGY_MODEL, MODEL,
+  validReport, formatReportHeader, splitReportComments, AGY_MODEL, MODEL,
 } from './rybka.mjs';
 
 const dirs = [];
+it('preserves report whitespace through API trimming and respects UTF-16 and JSON byte limits', () => {
+  const report = ' \n\t' + ('ą😀"\\\n   '.repeat(1800)) + '\r\n\t ';
+  const parts = splitReportComments(report);
+  expect(parts.length).toBeGreaterThan(2);
+  const saved = parts.map(text => text.trim());
+  for (const text of saved) {
+    expect(text.length).toBeLessThanOrEqual(2000);
+    expect(Buffer.byteLength(JSON.stringify({ action: 'addComment', task: 't-12345678', by: 'codex', text }))).toBeLessThanOrEqual(4096);
+  }
+  const restored = saved.map(text => text.slice(text.indexOf('<!-- rybka:start -->\n') + '<!-- rybka:start -->\n'.length, text.lastIndexOf('\n<!-- rybka:end -->'))).join('');
+  expect(restored).toBe(report);
+});
 afterEach(() => { vi.useRealTimers(); for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); dirs.length = 0; });
 function fixture(attachments = 'docs/mock.html') {
   const dir = mkdtempSync(join(tmpdir(), 'dp-rybka-')); dirs.push(dir);
@@ -95,6 +107,7 @@ it('uses a fresh pinned review with only explicit file reads and preserves separ
   expect(readFileSync(result.reportPath, 'utf8')).toContain('brak uwag');
   expect(readFileSync(result.reportPath, 'utf8')).toContain('# Przegląd specyfikacji: spec.md');
   expect(readFileSync(result.reportPath, 'utf8')).toContain('- Model: openrouter/deepseek/deepseek-v4.1-flash-1017');
+  expect(JSON.parse(readFileSync(join(result.dir, 'report-comments.json'), 'utf8'))).toEqual(splitReportComments(readFileSync(result.reportPath, 'utf8')));
   expect(result.metrics).toMatchObject({ eventCount: 2, fileReads: 3, firstTokenMs: null, totalTokens: 16 });
   expect(f.printed.join('\n')).not.toContain('do-not-print');
   const second = setup(); second.options.cwd = f.cwd;

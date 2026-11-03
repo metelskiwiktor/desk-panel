@@ -20,6 +20,7 @@ just rybka SPEC [--runner opencode|agy|both]
 - `--runner agy`: uruchamia tylko recenzenta Gemini.
 
 Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model rybki.
+Przy sukcesie runner zapisuje też `report-comments.json`: gotowe teksty komentarzy (limity 2000 znaków i 4096 bajtów JSON z `by: codex`), których jawne markery chronią wszystkie białe znaki raportu przed `trim` API; przy zapisie i porównywaniu zachowaj markery, a po odczycie sklej treści między nimi — runner sam nie publikuje komentarzy.
 
 ## Modele i sesje
 
