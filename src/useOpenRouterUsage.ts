@@ -19,7 +19,8 @@ export type OpenRouterUsageState =
 
 /**
  * The last answer, kept across mounts: a switch of desktop remounts the tile, which showed "loading" until the next
- * answer came. Now it shows the last one at once and refreshes it; a failed refresh keeps it on screen.
+ * answer came. Now it shows the last one at once and refreshes it; a failed refresh clears it and shows the error,
+ * rather than presenting stale numbers as a fresh reading.
  */
 let last: (OpenRouterUsage & { status: 'connected' }) | null = null;
 /** @internal Tests start without the cached reading. */
@@ -47,7 +48,8 @@ export function useOpenRouterUsage(): OpenRouterUsageState {
               ? 'Błąd połączenia z OpenRouter'
               : `Błąd OpenRouter (${response.status})`;
           if (!stopped) {
-            setState(last ?? { status: 'error', httpStatus: response.status, message: msg });
+            last = null;
+            setState({ status: 'error', httpStatus: response.status, message: msg });
           }
           return;
         }
@@ -58,7 +60,8 @@ export function useOpenRouterUsage(): OpenRouterUsageState {
         }
       } catch {
         if (!stopped) {
-          setState(last ?? {
+          last = null;
+          setState({
             status: 'error',
             httpStatus: null,
             message: 'Błąd połączenia z serwerem',

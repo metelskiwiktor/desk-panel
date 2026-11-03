@@ -1,42 +1,55 @@
-# OpenRouter: kafelek zużycia per model i budżetu
+# OpenRouter: koszty klucza, saldo konta i adnotacja limitu
 
-Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pustym miejscu pulpitu ikona monet) pokazuje wydatki na API OpenRouter: słupkowy dzienny wykres skumulowany per model z ostatnich 30 dni, koszt po najechaniu lub fokusie na segment lub cały dzień, oraz łączne wydatki w oknie, wydatki od początku konta i pozostały budżet w USD.
+Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pustym miejscu pulpitu ikona monet) pokazuje pięć oficjalnych wartości z API OpenRouter: koszt bieżącego klucza **dziś**, w **tym tygodniu**, w **tym miesiącu** i **łącznie** oraz **saldo całego konta**. Cztery liczniki kosztu dotyczą klucza, saldo konta — całego konta; kafelek oznacza oba zakresy osobno. Limit klucza jest jedną adnotacją: „bez limitu” albo „limit X, zostało Y”. Nie ma wykresu per model, historii dziennej ani resetu limitu.
 
 ## Klucz API i współdzielenie z Hermesem
-
-Planowane zastąpienie lokalnego źródła (zadanie `t-0fc77df7`, jeszcze niewdrożone): 2026-11-03 użytkownik ostatecznie
-wybrał oficjalne liczniki **obecnego klucza**: dziś, tydzień, miesiąc, łącznie i limit, przez `GET /api/v1/key`.
-Wycofał wariant Analytics/management key oraz wykres historyczny per model. Nie konfigurujemy nowego sekretu ani DPAPI.
-Opis dalszej części dokumentu dotyczy nadal działającej starej implementacji opartej na logu; zastąpi ją przygotowane zadanie.
-
-### Dowód kontraktu bez kwot — 2026-11-03
-
-Jedno autoryzowane `GET /api/v1/key` istniejącym kluczem zwróciło HTTP 200 i obiekt `{data: object}`:
-`usage_daily`, `usage_weekly`, `usage_monthly`, `usage`: number; `limit`, `limit_remaining`: null;
-`limit_reset`: string; `is_management_key`: boolean. Nie zapisano wartości, etykiety klucza ani surowego JSON-a.
-To odpowiada [kontraktowi bieżącego klucza](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key).
-Null oznacza brak limitu, nie zero ani saldo konta. Liczniki dotyczą tego klucza; nie są historią konta ani podziałem modeli.
-
-### Sprawdzenie uprawnień i środowiska — 2026-11-03
-
-[Management keys](https://openrouter.ai/docs/guides/overview/auth/management-api-keys) mogą zarządzać kluczami;
-wariant read-only ma odczyt bez zapisów. Zmianę limitu opisuje [PATCH klucza](https://openrouter.ai/docs/api/api-reference/api-keys/update-an-api-key).
-Nie wykonywano tworzenia/usuwania kluczy ani zmiany limitów. `analytics/meta` zwykłym kluczem dało 403;
-`analytics/query` nie wykonano, ponieważ użytkownik następnie wybrał liczniki zwykłego klucza. Zakaz `/api/v1/activity` pozostaje.
-
-Hermes ma osobny `envFile` w `servy/hermes.json` (`hermes.env`), panel w `servy/services.json` (`panel.env`);
-`servy/Control-Service.ps1` ładuje całą zawartość wskazanego pliku do środowiska procesu. Hermes dodatkowo ładuje własny `.env`.
-`server/agent-chat.ts:agyLauncher` przekazuje pełne środowisko panelu do agy. Obie usługi działają jako ten sam użytkownik
-Windows (sprawdzono konfigurację usług); ich narzędzia nie mają izolacji systemowej. Dlatego management key w `panel.env`
-byłby też dostępny agy, a [DPAPI CurrentUser](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
-nie izoluje procesów tego użytkownika. Użytkownik zaakceptował ten limit wariantu read-only + DPAPI poza env, po czym
-zrezygnował z nowego klucza całkowicie. Ścisła izolacja wymagałaby oddzielnej tożsamości czytnika i procesów agentów;
-nie zmieniano kont usług ani konfiguracji sekretów.
 
 Panel nie wymaga osobnego klucza typu provisioning czy management key. Wykorzystuje **ten sam pojedynczy klucz OpenRouter**, którego używa już Hermes Agent:
 - Zmienna: `OPENROUTER_API_KEY` w pliku `%USERPROFILE%\.desk-panel\panel.env`.
 - Klucz pozostaje wyłącznie na backendzie; nigdy nie jest przesyłany do przeglądarki ani zapisywany w plikach cache czy logach.
 - Bez ustawionego klucza `OPENROUTER_API_KEY` endpoint `/api/openrouter` odpowiada statusem `503`, a kafelek wyświetla czytelną informację po polsku.
+
+## Dwie trasy i mapowanie pól
+
+`server/openrouter.ts` czyta obie trasy tym samym kluczem:
+
+| Trasa | Pola odpowiedzi | Wartość w `OpenRouterUsage` |
+| --- | --- | --- |
+| `GET https://openrouter.ai/api/v1/key` | `data.usage_daily` | `dailyUsd` |
+| | `data.usage_weekly` | `weeklyUsd` |
+| | `data.usage_monthly` | `monthlyUsd` |
+| | `data.usage` | `allTimeUsd` |
+| | `data.limit` | `limitUsd` (`null` = brak limitu) |
+| | `data.limit_remaining` | `limitRemainingUsd` |
+| `GET https://openrouter.ai/api/v1/credits` | `data.total_credits - data.total_usage` | `balanceUsd` |
+
+Liczniki `/key` są przenoszone 1:1, bez sumowania i bez liczenia własnych okresów. `balanceUsd` to różnica z `/credits`; `usage` klucza nie jest do niej dodawane ani odejmowane. `total_credits` i `total_usage` muszą być skończonymi, nieujemnymi liczbami — brak pola, `null` albo string to błąd formatu, nigdy zero. `balanceUsd` może być ujemne. `limitUsd` musi być skończoną nieujemną liczbą albo `null`; `limitRemainingUsd` skończoną liczbą albo `null`. Brakujące liczniki nie są zamieniane na `0`. Precyzję zachowuje backend; `formatUsd` w kafelku służy tylko do prezentacji.
+
+## Odczyt: równolegle, całościowo, z pamięciowym cache
+
+- **Równoległość**: przy braku trafienia w cache oba żądania startują równocześnie; żadne nie czeka na wynik drugiego. Każde ma własny timeout 10 s.
+- **Całość albo błąd**: sukces wymaga obu poprawnych odpowiedzi. Błąd HTTP, sieci, timeoutu lub walidacji któregokolwiek żądania kończy cały odczyt błędem — bez częściowego payloadu i bez zapisu częściowego sukcesu w cache.
+- **Statusy**: brak klucza oraz `401`/`403` z którejkolwiek trasy to `503`; pozostałe błędy to `502`.
+- **Cache**: klient backendu trzyma w pamięci wyłącznie kompletny udany payload przez 60 s, z pierwotnym `observedAt` (epoch ms). Trafienie zwraca go bez obu żądań i bez zmiany `observedAt`. Po 60 s odczyt jest odświeżany. Nie ma cache błędów, dodatkowego pollera, retry ani deduplikacji równoległych odczytów.
+- **UI**: hook po błędzie czyści ostatni odczyt i pokazuje błąd również po wcześniejszym sukcesie, zamiast przedstawiać stare dane jako nowy poprawny odczyt.
+
+Endpoint `GET /api/openrouter` i typ `OpenRouterUsage` (`src/openrouter-contract.ts`) pozostają bez zmian nazwy; zmienił się tylko zestaw pól: `dailyUsd`, `weeklyUsd`, `monthlyUsd`, `allTimeUsd`, `balanceUsd`, `limitUsd`, `limitRemainingUsd`, `observedAt`.
+
+## Dowód kontraktu bez kwot — 2026-11-03
+
+Jedno autoryzowane `GET /api/v1/key` istniejącym kluczem zwróciło HTTP 200 i obiekt `{data: object}`:
+`usage_daily`, `usage_weekly`, `usage_monthly`, `usage`: number; `limit`, `limit_remaining`: null;
+`limit_reset`: string; `is_management_key`: boolean. Następnie jedno `GET /api/v1/credits` tym samym kluczem zwróciło
+HTTP 200 i `{data: object}` z `total_credits`: number i `total_usage`: number. Nie zapisano wartości, etykiety klucza ani
+surowego JSON-a; to dowód z przygotowania zadania, niezależny od testów implementacji. Null limitu oznacza brak limitu,
+nie zero ani saldo konta. Liczniki `/key` dotyczą tego klucza, a saldo `/credits` — całego konta.
+
+## Dlaczego nie używamy endpointu `/api/v1/activity`?
+
+Endpoint konta `/api/v1/activity` wymaga specjalnego klucza administracyjnego (management/provisioning key) i zwraca błąd `403 Forbidden` przy użyciu standardowego klucza API. Standardowy klucz ma natomiast pełny dostęp do:
+- `GET https://openrouter.ai/api/v1/key` — odczyt parametrów klucza: liczniki kosztu i limity,
+- `GET https://openrouter.ai/api/v1/credits` — odczyt stanu doładowań: `total_credits` i `total_usage`,
+- `GET https://openrouter.ai/api/v1/generation?id=<id>` — odczyt szczegółów konkretnego wywołania (nieużywany przez kafelek).
 
 ## Routing DeepSeek w Cezarze i OpenCode (2026-11-02)
 
@@ -58,45 +71,9 @@ Ta kolejność preferuje Wafer, potem Together; `allow_fallbacks: true` pozwala 
 
 Pojedynczy pomiar domyślnego routingu konta po zmianie, bez `provider.order` w żądaniu, wybrał Relace: 1,087 s do pierwszego tokenu, 1,150 s całości, koszt 0,0002559 USD (754 tokeny wejścia). Ten pomiar sprawdza routing konta, a nie preferencje OpenCode. Bezpieczne wyniki pomiarów i identyfikatory generacji są lokalnie w `~/.desk-panel/analysis-dc7fd2c8/bench-results.json` oraz `bench-after-routing.json`; nie są częścią repozytorium. Zmiana routingu ma ograniczyć ryzyko wolnych hostów, ale te krótkie próby nie gwarantują czasu wykonania dużego zadania.
 
-## Dlaczego nie używamy endpointu `/api/v1/activity`?
-
-Endpoint konta `/api/v1/activity` wymaga specjalnego klucza administracyjnego (management/provisioning key) i zwraca błąd `403 Forbidden` przy użyciu standardowego klucza API. Standardowy klucz ma natomiast pełny dostęp do:
-- `GET https://openrouter.ai/api/v1/key` — odczyt parametrów klucza: łączny `usage`, limity i `limit_remaining`,
-- `GET https://openrouter.ai/api/v1/credits` — odczyt stanu doładowań: `total_credits` i `total_usage`,
-- `GET https://openrouter.ai/api/v1/generation?id=<id>` — odczyt szczegółów konkretnego wywołania: koszt (`total_cost`), model i data (`created_at`).
-
-## Odczyt logu Hermesa i śledzenie wywołań
-
-Dzienny rozkład kosztów na poszczególne modele powstaje na podstawie identyfikatorów wywołań (`id=gen-...`), które Hermes Agent rejestruje w swoim pliku dziennika:
-- **Ścieżka logu**: domyślnie `%LOCALAPPDATA%\hermes\logs\agent.log` (na Windows) lub `~/.hermes/logs/agent.log`. Można ją nadpisać zmienną środowiskową `HERMES_LOG_PATH`.
-- **Wzorzec parsowanej linii**:
-  ```text
-  2026-10-28 16:55:41,139 INFO [session-id] agent.conversation_loop: API call #1: model=deepseek/deepseek-v4.1-flash-1017 provider=openrouter in=17514 out=68 total=17582 latency=2.5s cache=2048/17514 (12%) id=gen-1793202940-I2y6V33UXxPavx5wGt6H upstream=InferenceNet
-  ```
-  Serwer filtruje wyłącznie zakończone wywołania, w których `provider=openrouter` i występuje identyfikator `id=gen-...`. Inni dostawcy (`provider=anthropic`, `provider=openai`) są ignorowani.
-- **Offset w pliku**: serwer pamięta pozycję w bajtach (`logOffset`) do ostatniego znaku nowej linii. Kolejne odpytanie czyta wyłącznie nowo dopisane linie i nigdy nie przetwarza tego samego wywołania powtórnie. Rotacja lub skrócenie pliku są wykrywane automatycznie (reset offsetu bez błędów).
-- **Stare wywołania**: generacje, które miały miejsce przed rozpoczęciem logowania lub z usuniętych plików logu, nie mogą być zrekonstruowane per-model (są jednak wliczone w globalny `allTimeUsd` z endpointu `/api/v1/key`).
-
-## Lokalny cache i rozwiązywanie kosztu generacji
-
-Rozwiązanie kosztu każdej nowej generacji następuje poprzez odpytanie OpenRoutera (`GET /api/v1/generation?id=...`):
-- **Lokalizacja cache**: `~/.desk-panel/openrouter-cache.json` (w katalogu stanu panelu).
-- **Zapis**: zapis następuje atomowo (zapis do pliku tymczasowego `.tmp` i przemianowanie).
-- **Brak powtórnych zapytań**: raz zapisany koszt generacji jest trwale pamiętany w cache; serwer nigdy nie pyta OpenRoutera o ten sam identyfikator generacji po raz drugi.
-- **Backfill z limitem**: w jednym odczycie serwer rozwiązuje maksymalnie kilkadziesiąt oczekujących generacji (`cache.pending`), dzięki czemu nawet przy zimnym starcie lub długiej historii endpoint nie blokuje się i odpowiada natychmiast, a historia uzupełnia się sukcesywnie.
-- **Odpowiedź od razu**: endpoint odpowiada tym, co już wie (wykres z cache, ostatnie sumy). Koszty nowych generacji dociąga w tle, partia po partii, dopóki dostaje odpowiedzi; sumy starsze niż minuta odświeża też w tle. Wcześniej każdy odczyt czekał na 25 zapytań, około 6 s, przy każdym przejściu między pulpitami. Stan cache jest w pamięci serwera i zapisywany po każdej zmianie. Kafelek pamięta ostatni odczyt, więc po ponownym zamontowaniu pokazuje go od razu i odświeża w tle.
-- **Odporność na błędy**: nieudane zapytanie o generację (np. chwilowy błąd sieci lub 429) przesuwa identyfikator na koniec kolejki `pending` z licznikiem prób, więc generacje, które ciągle zawodzą, nie zajmują całej partii przy każdym odczycie. Po odpowiedzi 404 (OpenRouter nie zna już generacji) albo po 5 nieudanych próbach identyfikator trafia do `failed` i nie jest już odpytywany; jego koszt nie wchodzi do wykresu (sumy z `/api/v1/key` go zawierają).
-- **Dzień generacji**: data z początku linii logu, czyli lokalny czas Hermesa; linia bez daty dostaje lokalny dzień odczytu, tak jak wykres liczy dni.
-
-## Budżet i sumy
-
-- **W oknie**: suma kosztów generacji z ostatnich 30 dni zarejestrowanych w lokalnym cache.
-- **Łącznie**: all-time spend zwrócony bezpośrednio z endpointu `/api/v1/key` (`data.usage`).
-- **Budżet**: jeśli klucz ma zdefiniowany limit, pokazywana jest wartość `limit_remaining`. W przeciwnym razie obliczana jest różnica dostępnych środków z endpointu `/api/v1/credits`: `total_credits - total_usage`.
-
 ## Scenariusze i zrzuty
 
-`scenarios/standard.json` posiada sekcję `openrouterUsage` z kilkoma modelami na przestrzeni 30 dni. Kafelek w scenariuszu testowym otwiera się komendą:
+`scenarios/standard.json` posiada sekcję `openrouterUsage` z pięcioma wartościami i adnotacją limitu. Kafelek w scenariuszu testowym otwiera się komendą:
 ```powershell
-npx tsx .ai/scenario.ts standard --shot --pages pulpit --device medialove-14 --scale primary --open tile:openrouter --file .ai/screenshots/after.png
+npx tsx scripts/scenario.ts standard --shot --pages pulpit --device medialove-14 --scale primary --open tile:openrouter --file .ai/screenshots/after.png
 ```
