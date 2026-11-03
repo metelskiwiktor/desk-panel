@@ -83,11 +83,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const gitHubClient = createGitHubClient({
     repos: githubRepos.length > 0 ? githubRepos : undefined,
   });
-  const openRouterClient = createOpenRouterClient({
-    apiKey: env.OPENROUTER_API_KEY,
-    logPath: env.HERMES_LOG_PATH,
-    cacheFile: join(dir, 'openrouter-cache.json'),
-  });
+  const openRouterClient = createOpenRouterClient({ apiKey: env.OPENROUTER_API_KEY });
   let pending: ReturnType<typeof readCezar> | undefined;
   let cache: Awaited<ReturnType<typeof readCezar>> | undefined;
   let fetchedAt = 0;
