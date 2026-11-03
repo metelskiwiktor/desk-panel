@@ -76,7 +76,10 @@ export function TodoDialog({ list, task, act, close, snapshot, dispatches, error
   // Running or finished waits in the register; a failed task or one gone from the snapshot may be dispatched again.
   const blockedByRegister = !!recorded && (!snapshot ? true : !!cezarTask && cezarTask.status !== 'failed');
   const openPreview = () => {
-    setPreview({ dispatch: getTodoDispatch(task), expected: todoDispatchExpected(task) });
+    const dispatch = getTodoDispatch(task);
+    // With gaps there is no new prompt: keep the last one visible until readiness returns.
+    if (!dispatch.prompt) return;
+    setPreview({ dispatch, expected: todoDispatchExpected(task) });
     setPreviewOpen(true);
     setDispatchFailure('');
   };
@@ -182,9 +185,8 @@ export function TodoDialog({ list, task, act, close, snapshot, dispatches, error
                 Ostatnie zlecenie: <a href={safeUrl(recorded.url)} target="_blank" rel="noreferrer">{recorded.taskId}</a>
                 {blockedByRegister ? ' — w toku albo zakończone; ponowienie zablokowane.' : ' — task nieudany albo nieobecny w odczycie; można zlecić ponownie.'}
               </p>}
-              {ready.missing.length > 0
-                ? <ul className="todo-dispatch-missing" aria-label="Braki gotowości">{ready.missing.map((item, index) => <li key={index}>{item}</li>)}</ul>
-                : <>
+              {ready.missing.length > 0 && <ul className="todo-dispatch-missing" aria-label="Braki gotowości">{ready.missing.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+              {(ready.missing.length === 0 || previewOpen) && <>
                     {previewOpen && preview
                       ? <div className="todo-dispatch-preview-wrap">
                           <p className="todo-dlg-muted">{preview.dispatch.workflow} · rewizja v{preview.dispatch.specRevision}</p>
@@ -192,7 +194,7 @@ export function TodoDialog({ list, task, act, close, snapshot, dispatches, error
                         </div>
                       : <button type="button" disabled={busy || requesting} onClick={openPreview}>Pokaż podgląd</button>}
                     {previewOpen && stale && <p className="todo-dispatch-warn">Dane zadania zmieniły się od podglądu — odśwież go, zanim zlecisz.</p>}
-                    {previewOpen && stale && <button type="button" disabled={busy || requesting} onClick={openPreview}>Odśwież podgląd</button>}
+                    {previewOpen && (stale || ready.missing.length > 0) && <button type="button" disabled={busy || requesting} onClick={openPreview}>Odśwież podgląd</button>}
                     <button type="button" className="todo-dispatch-send" disabled={!consent || busy || requesting || blockedByRegister} onClick={() => void startDispatch()}>
                       {requesting ? 'Zlecam…' : 'Zleć na Cezarze'}
                     </button>

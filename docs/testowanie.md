@@ -36,6 +36,9 @@ just screenshots wizyty --pages pulpit --open chat-appointment-axis # oś, koliz
 ```
 
 `--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.
+`--open todo-dispatch` zapisuje oba zadania (z brakami i gotowe) na wybranym ekranie oraz na telefonie 390×844
+(dla głównego skalowania). `medialove-14 --scale primary` daje 1280×720 CSS i 390×844; gotowe zadanie musi mieć
+rozwinięty podgląd promptu na obu rozmiarach, inaczej przebieg kończy się błędem. Nie klika przycisku zlecenia.
 Kafelek, który się renderuje, ale którego wybór nie proponuje (brak w `pickable()` w `src/workspace-kinds.ts`, jak `github-pr`
 w PR #36), kończy zrzut błędem; użytkownik nie mógłby go dodać. Rodzaj, którego jeszcze nie ma (zrzut „przed” nowym
 kafelkiem), daje domyślny układ jak dotąd.

@@ -654,6 +654,62 @@ describe('the to-do dialog dispatch section', () => {
     expect((within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it.each(['lokalnie', ''])('keeps the open prompt and refresh available when executor becomes %j', async executor => {
+    const user = userEvent.setup();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Zadanie' }));
+    await user.click(dialog.getByRole('button', { name: 'Pokaż podgląd' }));
+    const prompt = dialog.getByLabelText('Podgląd promptu').textContent;
+    await user.selectOptions(dialog.getByRole('combobox', { name: 'Wykonawca' }), executor);
+    expect((await dialog.findByRole('list', { name: 'Braki gotowości' })).textContent).toMatch(/wykonawc/i);
+    expect(dialog.getByText(/Dane zadania zmieniły się od podglądu/)).toBeTruthy();
+    expect(dialog.getByLabelText('Podgląd promptu').textContent).toBe(prompt);
+    expect((dialog.getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(true);
+    const refresh = dialog.getByRole('button', { name: 'Odśwież podgląd' }) as HTMLButtonElement;
+    expect(refresh.disabled).toBe(false);
+    await user.click(refresh);
+    expect(dialog.getByLabelText('Podgląd promptu').textContent).toBe(prompt);
+    expect(dispatchPosts(fetcher)).toEqual([]);
+  });
+
+  it('keeps consent after an identical polling response', async () => {
+    const user = userEvent.setup();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Zadanie' }));
+    await user.click(dialog.getByRole('button', { name: 'Pokaż podgląd' }));
+    const prompt = dialog.getByLabelText('Podgląd promptu').textContent;
+    const reads = () => fetcher.mock.calls.filter(([url]) => String(url) === '/api/todos').length;
+    const before = reads();
+    // Wait for the hook's real five-second poll, including its response and React update.
+    await waitFor(() => expect(reads()).toBeGreaterThan(before), { timeout: 7000 });
+    expect(dialog.getByLabelText('Podgląd promptu').textContent).toBe(prompt);
+    expect((dialog.getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(dialog.queryByRole('button', { name: 'Odśwież podgląd' })).toBeNull();
+    expect(dispatchPosts(fetcher)).toEqual([]);
+  });
+
+  it('blocks a second click while dispatch is pending', async () => {
+    const user = userEvent.setup();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Zadanie' }));
+    await user.click(dialog.getByRole('button', { name: 'Pokaż podgląd' }));
+    const normalFetch = fetcher.getMockImplementation()!;
+    let release!: (response: Response) => void;
+    fetcher.mockImplementation((url, init) => String(url).endsWith('/cezar-dispatch')
+      ? new Promise<Response>(resolve => { release = resolve; }) : normalFetch(url, init));
+    await user.click(dialog.getByRole('button', { name: 'Zleć na Cezarze' }));
+    const pending = dialog.getByRole('button', { name: 'Zlecam…' }) as HTMLButtonElement;
+    expect(pending.disabled).toBe(true);
+    await user.click(pending);
+    expect(dispatchPosts(fetcher)).toHaveLength(1);
+    await act(async () => release(Response.json({ ok: true, taskId: 'desk-panel/test', url: 'http://127.0.0.1:4321/test' })));
+    expect(await dialog.findByRole('link', { name: 'desk-panel/test' })).toBeTruthy();
+    expect(dispatchPosts(fetcher)).toHaveLength(1);
+  });
+
   it('saves or drops a title draft before dispatching: a changed title needs a fresh preview', async () => {
     const user = userEvent.setup();
     const { fetcher, posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');

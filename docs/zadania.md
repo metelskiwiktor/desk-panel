@@ -88,10 +88,12 @@ rewizji.
 
 Sekcja „Zleć na Cezarze” (w panelu bocznym pod stanem) prowadzi całą ścieżkę bez modelu: selecty `executor`, `repo` i
 `mode` z opcją „brak” (od razu `updateTask`; `null` czyści pole), lista braków i dosłowny prompt z C1
-(`src/todo-dispatch.ts:getTodoDispatch`), workflow i numer rewizji oraz przycisk zlecenia. Przycisk pokazuje się tylko przy
+(`src/todo-dispatch.ts:getTodoDispatch`), workflow i numer rewizji oraz przycisk zlecenia. Przycisk pojawia się przy
 gotowości C1, a aktywny jest dopiero po „Pokaż podgląd”, które rozwija surowy prompt i jest zgodą — kliknięcie nie otwiera
 kolejnego dialogu i niczego nie zleca samo. Podczas żądania przyciski są wyłączone. Zmiana danych (także zapisany szkic
 tytułu) unieważnia zgodę: podgląd zostaje otwarty, pojawia się „Odśwież podgląd”, a identyczny polling go nie unieważnia.
+Utrata gotowości także pozostawia ostatni prompt, obok listy braków i nieaktywnego przycisku zlecenia. „Odśwież podgląd”
+pozostaje dostępne; dopóki są braki, zachowuje ostatni prompt, a po ich usunięciu pokazuje bieżący prompt C1.
 Szkice tytułu i notatki są najpierw zapisywane (albo porzucane przez „Anuluj”); wynik, link do taska i błąd pokazują się w
 tej sekcji. Dotychczasowe akcje, fokus i klawiatura działają bez zmian.
 

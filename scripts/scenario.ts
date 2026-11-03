@@ -321,16 +321,16 @@ if (!values.shot) {
               if (dispatch) {
                 // The first (incomplete) task was just shot; keep it, then show the complete one with its preview open.
                 const incompletePath = shot(pageName, 'incomplete');
-                await page.locator('.todo-dispatch-missing').scrollIntoViewIfNeeded().catch(() => undefined);
+                await page.locator('.todo-dispatch-missing').scrollIntoViewIfNeeded();
                 await page.screenshot({ path: incompletePath, fullPage: true });
                 console.log(incompletePath);
                 await page.getByRole('button', { name: 'Anuluj' }).click();
                 await page.locator('.todo-title').nth(1).dispatchEvent('click');
                 await page.getByRole('dialog', { name: 'Zadanie' }).waitFor();
-                const preview = page.getByRole('button', { name: 'Pokaż podgląd' });
-                if (await preview.count()) { await preview.click(); await page.locator('.todo-dispatch-prompt').waitFor(); }
+                await page.getByRole('button', { name: 'Pokaż podgląd' }).click();
+                await page.getByLabel('Podgląd promptu').waitFor({ state: 'visible' });
                 // The aside scrolls: the preview and the armed button are what this shot must show.
-                await page.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' })).catch(() => undefined);
+                await page.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' }));
                 await page.waitForTimeout(300);
                 await page.screenshot({ path, fullPage: true });
                 console.log(path);
@@ -349,18 +349,25 @@ if (!values.shot) {
                   await mobilePage.evaluate(value => localStorage.setItem('desk-panel.workspace', JSON.stringify({ version: 1, tiles: value })), [{ id: 'todo#1', kind: 'todo', c: 0, r: 0, w: 2, h: 2 }]);
                   await mobilePage.reload();
                   await mobilePage.waitForTimeout(800);
-                  await mobilePage.locator('.todo-title').nth(dispatch ? 1 : 0).dispatchEvent('click');
+                  // With --file the desktop shot is one fixed path: phone views need their own suffixes.
+                  const mobilePath = values.file ? shot(pageName).replace(/\.png$/i, '-phone@390x844.png') : shot(pageName).replace(target.label, 'phone@390x844');
+                  await mobilePage.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
+                  await mobilePage.locator('.todo-title').first().dispatchEvent('click');
                   await mobilePage.getByRole('dialog', { name: 'Zadanie' }).waitFor();
                   if (dispatch) {
-                    const preview = mobilePage.getByRole('button', { name: 'Pokaż podgląd' });
-                    if (await preview.count()) { await preview.click(); await mobilePage.locator('.todo-dispatch-prompt').waitFor(); }
-                    await mobilePage.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' })).catch(() => undefined);
+                    await mobilePage.locator('.todo-dispatch-missing').scrollIntoViewIfNeeded();
+                    const incompletePath = mobilePath.replace(/\.png$/i, '-incomplete.png');
+                    await mobilePage.screenshot({ path: incompletePath, fullPage: true });
+                    console.log(incompletePath);
+                    await mobilePage.getByRole('button', { name: 'Anuluj' }).click();
+                    await mobilePage.locator('.todo-title').nth(1).dispatchEvent('click');
+                    await mobilePage.getByRole('dialog', { name: 'Zadanie' }).waitFor();
+                    await mobilePage.getByRole('button', { name: 'Pokaż podgląd' }).click();
+                    await mobilePage.getByLabel('Podgląd promptu').waitFor({ state: 'visible' });
+                    await mobilePage.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' }));
                   }
                   const mobileOverflow = await mobilePage.locator('.todo-dlg').evaluate(el => el.scrollWidth > el.clientWidth + 1);
                   if (mobileOverflow) throw new Error('Okno zadania na telefonie ma poziome przepełnienie.');
-                  // With --file the desktop shot is one fixed path: the phone view must not overwrite it.
-                  const mobilePath = values.file ? shot(pageName).replace(/\.png$/i, '-phone@390x844.png') : shot(pageName).replace(target.label, 'phone@390x844');
-                  await mobilePage.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
                   await mobilePage.screenshot({ path: mobilePath, fullPage: true });
                   console.log(mobilePath);
                   if (!dispatch) {
