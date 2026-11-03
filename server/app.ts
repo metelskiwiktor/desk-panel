@@ -12,7 +12,8 @@ import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
 import type { Cockpit } from './cockpit';
 import { handleMcpRoute } from './panel-mcp';
-import { todoActionSchema, type TodoAction } from '../src/todo-contract';
+import { todoActionSchema, todoDispatchRequestSchema, type TodoAction } from '../src/todo-contract';
+import { getTodoDispatch, todoDispatchKey, todoDispatchMatches } from '../src/todo-dispatch';
 import { TodoError } from './todos';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { bankShowQuerySchema } from '../src/bank-show-contract';
@@ -101,6 +102,52 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
       return;
     }
+    const todoDispatch = /^\/api\/todos\/(t-[0-9a-f]{8})\/cezar-dispatch$/.exec(url.pathname);
+    if (req.method === 'POST' && todoDispatch) {
+      // UI-only: the to-do dialog sends what it previewed; no agent tool reaches this path.
+      if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        if (!options.cockpit) throw new SourceError(503);
+        const { expected } = await readJson(req, todoDispatchRequestSchema, 16 * 1024);
+        const source = await sources.todos();
+        const task = source.data?.lists.flatMap(list => list.tasks).find(item => item.id === todoDispatch[1]);
+        if (!task) throw new TodoError(404, 'Nie ma takiego zadania.');
+        // The preview is the only consent: nothing new may have happened to the task since the user saw it.
+        if (!todoDispatchMatches(task, expected)) throw new TodoError(409, 'Dane zadania zmieniły się od podglądu — odśwież podgląd i zleć ponownie.');
+        const dispatch = getTodoDispatch(task);
+        if (!dispatch.prompt || !dispatch.workflow) throw new TodoError(409, dispatch.missing.join(' '));
+        // The key is to-do+revision+mode; the register's last entry is checked against Cezar's ordinary snapshot.
+        const key = todoDispatchKey(task.id, task.specRevision, task.mode);
+        const last = options.cockpit.todoDispatches().find(entry => todoDispatchKey(entry.todoId, entry.specRevision, entry.mode) === key);
+        if (last) {
+          const snapshot = await sources.cezar();
+          const known = [...snapshot.tasks, ...snapshot.finished].find(item => item.id === last.taskId);
+          // Still running or finished well: no second dispatch. Failed/cancelled (mapped to FAILED) or gone may retry.
+          if (known && known.status !== 'failed') throw new TodoError(409, `Zadanie ma już zlecenie (task ${last.taskId}): ${last.url}`);
+        }
+        if (!sources.cezarCreateRun) throw new SourceError(503);
+        // The prompt, project and workflow are composed here from C1; the request only carried the preview's state.
+        const created = await sources.cezarCreateRun({ task: dispatch.prompt, title: task.title, project: dispatch.project, workflow: dispatch.workflow, todoId: task.id });
+        options.cockpit.recordTodoDispatch({ todoId: task.id, specRevision: task.specRevision, mode: task.mode!, taskId: created.id, url: created.url, at: Date.now() });
+        const comment = `Zlecono Cezarowi: rewizja v${task.specRevision}, task ${created.id}.${last ? ` Ponowienie po nieudanym tasku ${last.taskId}.` : ''}`;
+        try {
+          await sources.todoAction({ action: 'link', task: task.id, kind: 'cezar', id: created.id, title: task.title, by: 'panel' });
+          await sources.todoAction({ action: 'addComment', task: task.id, text: comment, by: 'panel' });
+          await sources.todoAction({ action: 'setStatus', task: task.id, status: 'realizacja', by: 'panel' });
+        } catch {
+          // The run already started: a link that could not be written must not undo it.
+          console.warn(`todos: nie udało się opisać zlecenia ${created.id} na ${task.id}.`);
+        }
+        res.end(JSON.stringify({ ok: true, taskId: created.id, url: created.url }));
+      } catch (error) {
+        const status = error instanceof TodoError || error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502;
+        const reason = error instanceof TodoError ? error.message : status === 400 ? 'Niepoprawne żądanie zlecenia.' : 'Nie udało się zlecić — sprawdź Cezara.';
+        res.writeHead(status).end(JSON.stringify({ error: reason }));
+      }
+      return;
+    }
     if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle' || url.pathname === '/api/observers/cancel' || url.pathname === '/api/automations/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
@@ -155,6 +202,19 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       return;
     }
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
+    if (url.pathname === '/api/todos') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const source = await sources.todos();
+        // The register projection, not a field of a to-do: the cockpit store stays its only writer.
+        const register = options.cockpit?.todoDispatches() ?? [];
+        res.end(JSON.stringify({ ...source, cezarDispatches: register.length ? register : (source.cezarDispatches ?? []) }));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : 502).end(JSON.stringify({ error: 'Nie udało się pobrać danych źródła.' }));
+      }
+      return;
+    }
     if (url.pathname.startsWith('/api/agent/')) {
       const answer = await serveAgentView(agent, url, Date.now());
       if (answer) {

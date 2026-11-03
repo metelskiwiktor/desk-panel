@@ -4,13 +4,14 @@ import { jsonRoutes } from '../server/sources';
 import type { DashboardData, Source } from './model';
 import { cezarActionSchema } from './cezar-contract';
 import { mailActionSchema } from './mail-contract';
-import { todoActionSchema } from './todo-contract';
+import { todoActionSchema, todoDispatchRequestSchema } from './todo-contract';
+import { getTodoDispatch, todoDispatchMatches } from './todo-dispatch';
 import { warmupEditSchema,warmupProviderSchema,warmupRunInputSchema } from './warmup-contract';
 import { observerCancelSchema } from './observers-contract';
 import { automationUpdateSchema } from './automation-contract';
 
 /** Scenario files in scenarios/ — the only mock data, shared by tests and `npm run scenario`. */
-export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings' | 'inbox' | 'todo-spec';
+export type ScenarioName = 'standard' | 'empty' | 'stale' | 'offline' | 'unavailable' | 'loading' | 'high-ram' | 'quota-missing' | 'mail-many' | 'quota-settings' | 'inbox' | 'todo-spec' | 'todo-dispatch';
 export const scenarioFile = (name: ScenarioName) => join(process.cwd(), 'scenarios', `${name}.json`);
 
 /** What a UI hook holds when the endpoint fails or never answers. */
@@ -70,6 +71,23 @@ export function scenarioFetch(name: ScenarioName): typeof fetch {
       if (init?.method === 'POST' && url.pathname === '/api/todos/action') {
         try { return Response.json(await sources.todoAction(todoActionSchema.parse(JSON.parse(String(init.body))))); }
         catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Nie udało się wykonać akcji.' }, { status: (error as { status?: number }).status ?? 400 }); }
+      }
+      const dispatch = /^\/api\/todos\/(t-[0-9a-f]{8})\/cezar-dispatch$/.exec(url.pathname);
+      if (init?.method === 'POST' && dispatch) {
+        // The same checks as the endpoint, so the dialog tests exercise the real contract without a server.
+        const { expected } = todoDispatchRequestSchema.parse(JSON.parse(String(init.body)));
+        const source = await sources.todos();
+        const task = source.data?.lists.flatMap(list => list.tasks).find(item => item.id === dispatch[1]);
+        if (!task) return Response.json({ error: 'Nie ma takiego zadania.' }, { status: 404 });
+        if (!todoDispatchMatches(task, expected)) return Response.json({ error: 'Dane zadania zmieniły się od podglądu — odśwież podgląd i zleć ponownie.' }, { status: 409 });
+        const ready = getTodoDispatch(task);
+        if (!ready.prompt || !ready.workflow) return Response.json({ error: ready.missing.join(' ') }, { status: 409 });
+        if (!sources.cezarCreateRun) return new Response('', { status: 503 });
+        const created = await sources.cezarCreateRun({ task: ready.prompt, title: task.title, project: ready.project, workflow: ready.workflow, todoId: task.id });
+        await sources.todoAction({ action: 'link', task: task.id, kind: 'cezar', id: created.id, title: task.title, by: 'panel' });
+        await sources.todoAction({ action: 'addComment', task: task.id, text: `Zlecono Cezarowi: rewizja v${task.specRevision}, task ${created.id}.`, by: 'panel' });
+        await sources.todoAction({ action: 'setStatus', task: task.id, status: 'realizacja', by: 'panel' });
+        return Response.json({ ok: true, taskId: created.id, url: created.url });
       }
       const route = routes[url.pathname];
       if (!route || init?.method === 'POST') return new Response('', { status: 404 });

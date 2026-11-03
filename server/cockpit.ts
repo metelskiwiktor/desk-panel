@@ -7,6 +7,7 @@ import {
   watchedTask, type CezarStatus, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { stepOverridesSchema } from '../src/cezar-contract';
+import { todoDispatchRecordSchema, type TodoDispatchRecord } from '../src/todo-contract';
 import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { type AutomationOutcome, automationOutcomeSchema } from '../src/automation-contract';
 import { BankPlanError, planPreview } from './bank-plan';
@@ -34,8 +35,13 @@ const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('applied'), at: z.number(), into: z.string().optional(), created: z.boolean().optional(), moved: z.number().optional(), assigned: z.number().optional(), choice: z.unknown().optional(), preview: z.unknown().optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number(), preview: z.unknown().optional() }),
 ]);
+/** One kept dispatch of a prepared to-do task: the key is to-do+revision+mode, and `at` is when it was started. */
+const todoDispatchSchema = todoDispatchRecordSchema.extend({ at: z.number() });
+export type TodoDispatchRun = z.infer<typeof todoDispatchSchema>;
 const storeSchema = z.object({
   version: z.literal(1),
+  /** Successful dispatches from the to-do dialog, oldest first; the last one per key is what the screen sees. */
+  todoDispatches: z.array(todoDispatchSchema).default([]),
   chats: z.record(z.string(), z.object({
     /** Tasks dispatched from the conversation, oldest first: the last one is watched. */
     runs: z.array(z.string()).default([]),
@@ -116,6 +122,10 @@ export interface Cockpit {
   dispatch(chatId: string, input: CockpitDispatch): Promise<DispatchOutcome>;
   /** Every task the panel dispatched from a conversation, oldest first: what the automation observer follows. */
   dispatched(): DispatchedTask[];
+  /** The register projection for `GET /api/todos`: the last successful dispatch per to-do+revision+mode. */
+  todoDispatches(): TodoDispatchRecord[];
+  /** Keeps a successful dispatch in `cockpit.json`; this store is its only writer. */
+  recordTodoDispatch(record: TodoDispatchRun): void;
   /** Whether an automation turn for this task and state was already sent (or deliberately skipped). */
   automationReported(chatId: string, taskId: string, state: string): boolean;
   /** Keeps the fact in `cockpit.json`, so a restart never sends the same automation turn twice. */
@@ -145,7 +155,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
 }): Cockpit {
   const load = (): Store => {
     try { if (existsSync(file)) return storeSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* a broken file starts over */ }
-    return { version: 1, chats: {} };
+    return { version: 1, todoDispatches: [], chats: {} };
   };
   let store = load();
   const save = () => {
@@ -160,6 +170,8 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   const linkedPrs = new Set<string>();
   /** The to-do a run was dispatched from, kept with the dispatch: it survives a restart and needs no open chat. */
   const todoIdOf = (taskId: string) => {
+    const fromTodo = store.todoDispatches.find(d => d.taskId === taskId);
+    if (fromTodo) return fromTodo.todoId;
     for (const chat of Object.values(store.chats))
       for (const outcome of Object.values(chat.dispatches))
         if (outcome.decision === 'dispatched' && outcome.taskId === taskId && outcome.todoId) return outcome.todoId;
@@ -280,6 +292,21 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
         for (const outcome of Object.values(chat.dispatches))
           if (outcome.decision === 'dispatched') out.push({ chatId, taskId: outcome.taskId, at: outcome.at, ...(outcome.todoId ? { todoId: outcome.todoId } : {}) });
       return out.sort((a, b) => a.at - b.at);
+    },
+
+    todoDispatches() {
+      // A later dispatch of the same key replaces the earlier one; the order stays that of the first entry.
+      const last = new Map<string, TodoDispatchRecord>();
+      for (const dispatch of store.todoDispatches) {
+        const { todoId, specRevision, mode, taskId, url } = dispatch;
+        last.set(`${todoId}|${specRevision}|${mode}`, { todoId, specRevision, mode, taskId, url });
+      }
+      return [...last.values()];
+    },
+
+    recordTodoDispatch(record) {
+      store.todoDispatches.push(record);
+      save();
     },
 
     automationReported(chatId, taskId, state) {

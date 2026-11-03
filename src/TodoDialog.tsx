@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, X } from 'lucide-react';
-import { TODO_LIMITS, TODO_STATUSES, todoActionSchema, type TodoList, type TodoTask } from './todo-contract';
+import { TODO_LIMITS, TODO_STATUSES, TODO_EXECUTORS, TODO_MODES, todoActionSchema, type TodoList, type TodoDispatchRecord, type TodoTask } from './todo-contract';
+import { getTodoDispatch, todoDispatchExpected, todoDispatchKey, todoDispatchMatches, type TodoDispatchExpected } from './todo-dispatch';
 import { taskLabels, safeUrl } from './model';
 import type { CezarSnapshot } from './cezar-contract';
 import { openChatConversation } from './useChatPresentation';
@@ -27,7 +28,7 @@ function historyText(entry: TodoTask['history'][number]) {
   return `Powiązanie: ${entry.text?.replace(/^\+ /, 'Dodano ').replace(/^- /, 'Usunięto ')}`;
 }
 
-export function TodoDialog({ list, task, act, close, snapshot, error }: { snapshot?: CezarSnapshot | null; error?: string; list: TodoList; task: TodoTask; act: TodosState['act']; close: () => void }) {
+export function TodoDialog({ list, task, act, close, snapshot, dispatches, error, dispatchCezar }: { snapshot?: CezarSnapshot | null; dispatches?: TodoDispatchRecord[]; error?: string; list: TodoList; task: TodoTask; act: TodosState['act']; dispatchCezar: TodosState['dispatchCezar']; close: () => void }) {
   const [tab, setTab] = useState<'spec' | 'history'>('spec');
   const [title, setTitle] = useState(task.title);
   const [note, setNote] = useState(task.note);
@@ -37,6 +38,12 @@ export function TodoDialog({ list, task, act, close, snapshot, error }: { snapsh
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [removing, setRemoving] = useState(false);
+  // The preview is a snapshot of the task as the user saw it: the server compares the same fields again.
+  const [preview, setPreview] = useState<{ dispatch: ReturnType<typeof getTodoDispatch>; expected: TodoDispatchExpected } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [result, setResult] = useState<{ taskId: string; url: string } | null>(null);
+  const [dispatchFailure, setDispatchFailure] = useState('');
   const send = async (action: Parameters<TodosState['act']>[0], clear?: () => void) => {
     if (busy) return;
     setBusy(true); setFailure('');
@@ -58,6 +65,37 @@ export function TodoDialog({ list, task, act, close, snapshot, error }: { snapsh
   const dirty = next !== task.title || note !== task.note || comment !== '' || reason !== '' || pr !== '';
 
   useEffect(() => { root.current?.querySelector('input')?.focus(); }, []);
+
+  // C1 owns readiness, the missing list and the exact prompt; this screen only shows them.
+  const ready = getTodoDispatch(task);
+  const stale = preview !== null && !todoDispatchMatches(task, preview.expected);
+  const consent = previewOpen && preview !== null && !stale && ready.missing.length === 0;
+  const key = task.mode ? todoDispatchKey(task.id, task.specRevision, task.mode) : null;
+  const recorded = key ? dispatches?.find(entry => todoDispatchKey(entry.todoId, entry.specRevision, entry.mode) === key) : undefined;
+  const cezarTask = recorded ? [...(snapshot?.tasks ?? []), ...(snapshot?.finished ?? [])].find(entry => entry.id === recorded.taskId) : undefined;
+  // Running or finished waits in the register; a failed task or one gone from the snapshot may be dispatched again.
+  const blockedByRegister = !!recorded && (!snapshot ? true : !!cezarTask && cezarTask.status !== 'failed');
+  const openPreview = () => {
+    setPreview({ dispatch: getTodoDispatch(task), expected: todoDispatchExpected(task) });
+    setPreviewOpen(true);
+    setDispatchFailure('');
+  };
+  const startDispatch = async () => {
+    if (!consent || !preview || requesting || blockedByRegister) return;
+    setRequesting(true); setDispatchFailure(''); setResult(null);
+    try {
+      // Drafts go first: the preview used saved data, so a changed title needs a fresh preview.
+      if (next !== task.title || note !== task.note) {
+        const saved = await act({ action: 'updateTask', task: task.id, ...(next !== task.title ? { title: next } : {}), ...(note !== task.note ? { note } : {}) });
+        if (!saved) { setDispatchFailure('Nie udało się zapisać szkicu tytułu lub notatki.'); return; }
+        if (next !== task.title) { setDispatchFailure('Tytuł zapisany — dane zmieniły się od podglądu. Odśwież podgląd.'); return; }
+      }
+      const outcome = await dispatchCezar(task.id, preview.expected);
+      if (outcome.ok) { setResult({ taskId: outcome.taskId, url: outcome.url }); return; }
+      if (outcome.status === 409) setDispatchFailure(outcome.error || 'Nie można teraz zlecić — dane się zmieniły albo zadanie już zlecono.');
+      else setDispatchFailure('Zlecenie mogło nie dojść — sprawdź Cezara.');
+    } finally { setRequesting(false); }
+  };
 
   const save = () => {
     if (!next) return;
@@ -120,6 +158,48 @@ export function TodoDialog({ list, task, act, close, snapshot, error }: { snapsh
               onChange={e => void send({ action: 'setStatus', task: task.id, status: e.target.value as TodoTask['status'] })}>
               {Object.entries(TODO_STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
+            <section className="todo-dlg-section todo-dispatch" aria-label="Zlecenie Cezarowi">
+              <h3>Zleć na Cezarze</h3>
+              <label className="todo-dlg-label" htmlFor={`${id}-executor`}>Wykonawca</label>
+              <select id={`${id}-executor`} className="todo-dlg-title" value={task.executor ?? ''} disabled={busy || requesting}
+                onChange={e => void send({ action: 'updateTask', task: task.id, executor: (e.target.value || null) as TodoTask['executor'] })}>
+                <option value="">— brak —</option>
+                {Object.entries(TODO_EXECUTORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <label className="todo-dlg-label" htmlFor={`${id}-repo`}>Repozytorium</label>
+              <select id={`${id}-repo`} className="todo-dlg-title" value={task.repo ?? ''} disabled={busy || requesting}
+                onChange={e => void send({ action: 'updateTask', task: task.id, repo: (e.target.value || null) as TodoTask['repo'] })}>
+                <option value="">— brak —</option>
+                <option value="desk-panel">desk-panel</option>
+              </select>
+              <label className="todo-dlg-label" htmlFor={`${id}-mode`}>Tryb</label>
+              <select id={`${id}-mode`} className="todo-dlg-title" value={task.mode ?? ''} disabled={busy || requesting}
+                onChange={e => void send({ action: 'updateTask', task: task.id, mode: (e.target.value || null) as TodoTask['mode'] })}>
+                <option value="">— brak —</option>
+                {Object.entries(TODO_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              {recorded && <p className="todo-dispatch-record">
+                Ostatnie zlecenie: <a href={safeUrl(recorded.url)} target="_blank" rel="noreferrer">{recorded.taskId}</a>
+                {blockedByRegister ? ' — w toku albo zakończone; ponowienie zablokowane.' : ' — task nieudany albo nieobecny w odczycie; można zlecić ponownie.'}
+              </p>}
+              {ready.missing.length > 0
+                ? <ul className="todo-dispatch-missing" aria-label="Braki gotowości">{ready.missing.map((item, index) => <li key={index}>{item}</li>)}</ul>
+                : <>
+                    {previewOpen && preview
+                      ? <div className="todo-dispatch-preview-wrap">
+                          <p className="todo-dlg-muted">{preview.dispatch.workflow} · rewizja v{preview.dispatch.specRevision}</p>
+                          <pre className="todo-dispatch-prompt" aria-label="Podgląd promptu">{preview.dispatch.prompt}</pre>
+                        </div>
+                      : <button type="button" disabled={busy || requesting} onClick={openPreview}>Pokaż podgląd</button>}
+                    {previewOpen && stale && <p className="todo-dispatch-warn">Dane zadania zmieniły się od podglądu — odśwież go, zanim zlecisz.</p>}
+                    {previewOpen && stale && <button type="button" disabled={busy || requesting} onClick={openPreview}>Odśwież podgląd</button>}
+                    <button type="button" className="todo-dispatch-send" disabled={!consent || busy || requesting || blockedByRegister} onClick={() => void startDispatch()}>
+                      {requesting ? 'Zlecam…' : 'Zleć na Cezarze'}
+                    </button>
+                  </>}
+              {result && <p className="todo-dispatch-ok" role="status">Zlecono Cezarowi: <a href={safeUrl(result.url)} target="_blank" rel="noreferrer">{result.taskId}</a></p>}
+              {dispatchFailure && <p className="todo-blocked" role="alert">{dispatchFailure}</p>}
+            </section>
             <section className="todo-dlg-section" aria-label="Blokada">
               <h3>Blokada</h3>
               {task.blocked ? <div className="todo-dlg-inline"><p className="todo-blocked">{task.blocked}</p><button type="button" disabled={busy} onClick={() => void send({ action: 'setBlocked', task: task.id, reason: null })}>Zdejmij blokadę</button></div>

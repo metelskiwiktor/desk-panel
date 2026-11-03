@@ -598,3 +598,95 @@ describe('the task dialog spec view', () => {
     expect(within(dialog).getByText(/<script>alert\(1\)<\/script>/)).toBeTruthy();
   });
 });
+
+describe('the to-do dialog dispatch section', () => {
+  const dispatchPosts = (fetcher: ReturnType<typeof vi.fn>) => fetcher.mock.calls
+    .filter(([url, init]) => init?.method === 'POST' && String(url).includes('/cezar-dispatch'))
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as { expected: Record<string, unknown> });
+
+  it('shows the C1 gaps and no dispatch controls for an unready task', async () => {
+    const user = userEvent.setup();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Zadanie z brakami gotowości' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    const missing = within(dialog).getByRole('list', { name: 'Braki gotowości' });
+    expect(missing.textContent).toContain('Wykonawca (executor)');
+    expect(missing.textContent).toContain('POZA ZAKRESEM');
+    expect(within(dialog).queryByRole('button', { name: 'Pokaż podgląd' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Zleć na Cezarze' })).toBeNull();
+    expect((within(dialog).getByRole('combobox', { name: 'Wykonawca' }) as HTMLSelectElement).value).toBe('lokalnie');
+    expect((within(dialog).getByRole('combobox', { name: 'Tryb' }) as HTMLSelectElement).value).toBe('analiza');
+  });
+
+  it('previews the exact C1 prompt, enables the button only then, and dispatches with the preview state', async () => {
+    const user = userEvent.setup();
+    const { fetcher } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    const send = within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    await user.click(within(dialog).getByRole('button', { name: 'Pokaż podgląd' }));
+    const prompt = within(dialog).getByLabelText('Podgląd promptu');
+    expect(prompt.textContent).toContain('Przygotowane zadanie Desk Panel');
+    expect(prompt.textContent).toContain('Zlecić gotowe zadanie bez przepisywania');
+    expect(within(dialog).getByText(/desk-panel-task · rewizja v1/)).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }));
+    const link = await within(dialog).findByRole('link', { name: 'desk-panel/00000000-0000-4000-8000-000000000001' });
+    expect(link.getAttribute('href')).toContain('/p/desk-panel/tasks/');
+    expect(dispatchPosts(fetcher)).toEqual([{ expected: { specRevision: 1, title: 'Gotowe zadanie do zlecenia', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', status: 'gotowe', blocked: null } }]);
+    expect(fetcher.mock.calls.some(([url]) => String(url) === '/api/todos/t-b0000002/cezar-dispatch')).toBe(true);
+  });
+
+  it('a changed preview disables consent and offers „Odśwież podgląd” without closing the prompt', async () => {
+    const user = userEvent.setup();
+    renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    await user.click(within(dialog).getByRole('button', { name: 'Pokaż podgląd' }));
+    expect(within(dialog).getByLabelText('Podgląd promptu')).toBeTruthy();
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Tryb' }), 'analiza');
+    await waitFor(() => expect(within(dialog).getByText(/Dane zadania zmieniły się od podglądu/)).toBeTruthy());
+    expect((within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).getByLabelText('Podgląd promptu')).toBeTruthy(); // the preview stays open
+    await user.click(within(dialog).getByRole('button', { name: 'Odśwież podgląd' }));
+    expect(within(dialog).getByText(/analysis · rewizja v1/)).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('saves or drops a title draft before dispatching: a changed title needs a fresh preview', async () => {
+    const user = userEvent.setup();
+    const { fetcher, posts } = renderTiles([todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' })], 'todo-dispatch');
+    await user.click(await within(tileOf('todo#1')).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    await user.click(within(dialog).getByRole('button', { name: 'Pokaż podgląd' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Tytuł' }), '!');
+    await user.click(within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }));
+    await waitFor(() => expect(within(dialog).getByRole('alert').textContent).toContain('Odśwież podgląd'));
+    expect(posts().at(-1)).toEqual({ action: 'updateTask', task: 't-b0000002', title: 'Gotowe zadanie do zlecenia!' });
+    expect(dispatchPosts(fetcher)).toEqual([]);
+  });
+
+  it('blocks a recorded running task and shows its Cezar link after the ordinary snapshot', async () => {
+    const user = userEvent.setup();
+    const base = scenarioFetch('todo-dispatch');
+    const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const response = await base(input, init);
+      if (url !== '/api/todos') return response;
+      const body = await response.json();
+      return Response.json({ ...body, cezarDispatches: [{ todoId: 't-b0000002', specRevision: 1, mode: 'implementacja', taskId: 'desk-panel/run-1', url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' }] });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    arrange(todo(1, 0, 0, 2, 2, { list: 'l-1a2b3c4d' }));
+    render(<App />);
+    const tile = await waitFor(() => { const found = tileOf('todo#1'); if (!found) throw new Error('no tile'); return found; });
+    await user.click(await within(tile).findByRole('button', { name: 'Edytuj zadanie: Gotowe zadanie do zlecenia' }));
+    const dialog = screen.getByRole('dialog', { name: 'Zadanie' });
+    const link = await within(dialog).findByRole('link', { name: 'desk-panel/run-1' });
+    expect(link.getAttribute('href')).toBe('http://127.0.0.1:4321/p/desk-panel/tasks/run-1');
+    await user.click(within(dialog).getByRole('button', { name: 'Pokaż podgląd' }));
+    expect((within(dialog).getByRole('button', { name: 'Zleć na Cezarze' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).getByText(/ponowienie zablokowane/)).toBeTruthy();
+  });
+});

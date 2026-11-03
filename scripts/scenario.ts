@@ -261,8 +261,8 @@ if (!values.shot) {
                 await page.getByRole('button', { name: 'Zatrzymaj odpowiedź' }).waitFor({ state: 'detached', timeout: 20_000 });
               }
               await page.waitForTimeout(400);
-            } else if ((values.open?.startsWith('tile:') || values.open === 'todo-dialog')) {
-              const tileKind = values.open === 'todo-dialog' ? 'todo' : values.open!.slice('tile:'.length).trim();
+            } else if ((values.open?.startsWith('tile:') || values.open === 'todo-dialog' || values.open === 'todo-dispatch')) {
+              const tileKind = values.open === 'todo-dialog' || values.open === 'todo-dispatch' ? 'todo' : values.open!.slice('tile:'.length).trim();
               const tileId = tileKind === 'todo' ? 'todo#1' : tileKind;
               const rightTop = tileKind === 'mail' ? 'quota:Claude' : 'mail';
               const rightBottom = tileKind === 'cezar' ? 'quota:Codex' : 'cezar';
@@ -289,7 +289,7 @@ if (!values.shot) {
                 await page.reload();
                 await page.waitForTimeout(800);
               }
-              if (values.open === 'todo-dialog') {
+              if (values.open === 'todo-dialog' || values.open === 'todo-dispatch') {
                 await page.locator('.todo-title').first().dispatchEvent('click');
                 await page.getByRole('dialog', { name: 'Zadanie' }).waitFor();
               }
@@ -314,14 +314,33 @@ if (!values.shot) {
             const hidden = values.nav ? null : await page.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
             await page.screenshot({ path, fullPage: true });
             console.log(path);
-            if (values.open === 'todo-dialog') {
+            if (values.open === 'todo-dialog' || values.open === 'todo-dispatch') {
               const overflow = await page.locator('.todo-dlg').evaluate(el => el.scrollWidth > el.clientWidth + 1);
               if (overflow) throw new Error('Okno zadania ma poziome przepełnienie.');
-              await page.getByRole('tab', { name: /Historia/ }).click();
-              await page.waitForTimeout(300);
-              const historyPath = shot(pageName, 'history');
-              await page.screenshot({ path: historyPath, fullPage: true });
-              console.log(historyPath);
+              const dispatch = values.open === 'todo-dispatch';
+              if (dispatch) {
+                // The first (incomplete) task was just shot; keep it, then show the complete one with its preview open.
+                const incompletePath = shot(pageName, 'incomplete');
+                await page.locator('.todo-dispatch-missing').scrollIntoViewIfNeeded().catch(() => undefined);
+                await page.screenshot({ path: incompletePath, fullPage: true });
+                console.log(incompletePath);
+                await page.getByRole('button', { name: 'Anuluj' }).click();
+                await page.locator('.todo-title').nth(1).dispatchEvent('click');
+                await page.getByRole('dialog', { name: 'Zadanie' }).waitFor();
+                const preview = page.getByRole('button', { name: 'Pokaż podgląd' });
+                if (await preview.count()) { await preview.click(); await page.locator('.todo-dispatch-prompt').waitFor(); }
+                // The aside scrolls: the preview and the armed button are what this shot must show.
+                await page.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' })).catch(() => undefined);
+                await page.waitForTimeout(300);
+                await page.screenshot({ path, fullPage: true });
+                console.log(path);
+              } else {
+                await page.getByRole('tab', { name: /Historia/ }).click();
+                await page.waitForTimeout(300);
+                const historyPath = shot(pageName, 'history');
+                await page.screenshot({ path: historyPath, fullPage: true });
+                console.log(historyPath);
+              }
 
               if (target.primary) {
                 const mobilePage = await browser!.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
@@ -330,19 +349,27 @@ if (!values.shot) {
                   await mobilePage.evaluate(value => localStorage.setItem('desk-panel.workspace', JSON.stringify({ version: 1, tiles: value })), [{ id: 'todo#1', kind: 'todo', c: 0, r: 0, w: 2, h: 2 }]);
                   await mobilePage.reload();
                   await mobilePage.waitForTimeout(800);
-                  await mobilePage.locator('.todo-title').first().dispatchEvent('click');
+                  await mobilePage.locator('.todo-title').nth(dispatch ? 1 : 0).dispatchEvent('click');
                   await mobilePage.getByRole('dialog', { name: 'Zadanie' }).waitFor();
+                  if (dispatch) {
+                    const preview = mobilePage.getByRole('button', { name: 'Pokaż podgląd' });
+                    if (await preview.count()) { await preview.click(); await mobilePage.locator('.todo-dispatch-prompt').waitFor(); }
+                    await mobilePage.locator('.todo-dispatch').evaluate(el => el.scrollIntoView({ block: 'start' })).catch(() => undefined);
+                  }
                   const mobileOverflow = await mobilePage.locator('.todo-dlg').evaluate(el => el.scrollWidth > el.clientWidth + 1);
                   if (mobileOverflow) throw new Error('Okno zadania na telefonie ma poziome przepełnienie.');
-                  const mobilePath = shot(pageName).replace(target.label, 'phone@390x844');
+                  // With --file the desktop shot is one fixed path: the phone view must not overwrite it.
+                  const mobilePath = values.file ? shot(pageName).replace(/\.png$/i, '-phone@390x844.png') : shot(pageName).replace(target.label, 'phone@390x844');
                   await mobilePage.addStyleTag({ content: 'nav { visibility: hidden !important; }' });
                   await mobilePage.screenshot({ path: mobilePath, fullPage: true });
                   console.log(mobilePath);
-                  await mobilePage.getByRole('tab', { name: /Historia/ }).click();
-                  await mobilePage.waitForTimeout(300);
-                  const mobileHistoryPath = shot(pageName, 'history').replace(target.label, 'phone@390x844');
-                  await mobilePage.screenshot({ path: mobileHistoryPath, fullPage: true });
-                  console.log(mobileHistoryPath);
+                  if (!dispatch) {
+                    await mobilePage.getByRole('tab', { name: /Historia/ }).click();
+                    await mobilePage.waitForTimeout(300);
+                    const mobileHistoryPath = shot(pageName, 'history').replace(target.label, 'phone@390x844');
+                    await mobilePage.screenshot({ path: mobileHistoryPath, fullPage: true });
+                    console.log(mobileHistoryPath);
+                  }
                 } finally {
                   await mobilePage.close();
                 }

@@ -84,6 +84,40 @@ specyfikacji `Wykonanie: executor=…, repo=…, mode=…` (brak jako `brak`) or
 docelowy projekt, workflow i rewizję. Przy `wersja=N` wybrana jest historyczna treść, a gotowość nadal dotyczy bieżącej
 rewizji.
 
+## Zlecenie na Cezarze z okna zadania
+
+Sekcja „Zleć na Cezarze” (w panelu bocznym pod stanem) prowadzi całą ścieżkę bez modelu: selecty `executor`, `repo` i
+`mode` z opcją „brak” (od razu `updateTask`; `null` czyści pole), lista braków i dosłowny prompt z C1
+(`src/todo-dispatch.ts:getTodoDispatch`), workflow i numer rewizji oraz przycisk zlecenia. Przycisk pokazuje się tylko przy
+gotowości C1, a aktywny jest dopiero po „Pokaż podgląd”, które rozwija surowy prompt i jest zgodą — kliknięcie nie otwiera
+kolejnego dialogu i niczego nie zleca samo. Podczas żądania przyciski są wyłączone. Zmiana danych (także zapisany szkic
+tytułu) unieważnia zgodę: podgląd zostaje otwarty, pojawia się „Odśwież podgląd”, a identyczny polling go nie unieważnia.
+Szkice tytułu i notatki są najpierw zapisywane (albo porzucane przez „Anuluj”); wynik, link do taska i błąd pokazują się w
+tej sekcji. Dotychczasowe akcje, fokus i klawiatura działają bez zmian.
+
+Nowy `POST /api/todos/:id/cezar-dispatch` jest tylko dla interfejsu (nie ma go w MCP) i wymaga `Origin` panelu (`403`).
+Ciało to `{expected:{specRevision,title,executor,repo,mode,status,blocked}}` z podglądu. Serwer ponownie czyta zadanie
+(`404` dla nieznanego), porównuje expected i liczy C1; zmiana albo braki dają `409` bez zlecenia. Prompt, projekt i workflow
+składa wyłącznie C1 na serwerze, a wywołanie idzie przez `sources.cezarCreateRun`; klient nie podaje promptu, modelu ani
+workflow. Pełna specyfikacja do 50 000 jednostek UTF-16 plus nagłówek przechodzi bez przycięcia, a podgląd nie ma osobnego
+GET-a.
+
+Kluczem rejestru jest `todoId+specRevision+mode`. Ostatni wpis klucza jest sprawdzany w zwykłym snapshocie Cezara
+(`sources.cezar()`): task w toku albo zakończony sukcesem blokuje (i pokazuje link), a `POST` odpowiada `409`.
+Failed/cancelled albo brak taska w snapshocie pozwalają ponowić bez nowej rewizji, nadal tylko przy gotowości C1;
+użytkownik sam przywraca stan „gotowe”. Wyłączony przycisk podczas żądania i kontrola taska na serwerze to cała ochrona
+przed ponowieniem — bez replayu i gwarancji exactly-once. Błąd albo timeout mówi „sprawdź Cezara”, bez automatycznego
+ponowienia i bez API `unknown`/`failed`.
+
+Udane zlecenia zapisuje istniejący właściciel magazynu kokpitu w `todoDispatches` w `~/.desk-panel/cockpit.json`
+(`todoId`, `specRevision`, `mode`, `taskId`, `url`, `at`; stary plik bez pola działa, nie ma drugiego writera). `GET
+/api/todos` niesie pochodną listę `cezarDispatches` z ostatnim wpisem każdego klucza (`{todoId,specRevision,mode,taskId,url}`);
+to projekcja rejestru, nie zapis w `todos.json` ani nowe pole zadania. Po sukcesie jeden zwykły komentarz zapisuje numer
+rewizji i id taska (przy ponowieniu także „ponowienie po nieudanym tasku <id>”), panel dopina link `cezar` i ustawia
+`realizacja` (`by: panel`), a PR dołącza później istniejące `linkPrs`/snapshot — także po restarcie i bez otwartego czatu.
+Wszystkie zlecone taski zostają w mapowaniu do zadania dla PR; nie ma fikcyjnej rozmowy ani obserwatora. Cezar i PR nie
+kończą zadania.
+
 ## Zapis i dostęp
 
 Dane leżą w `~/.desk-panel/todos.json` (`{ "version": 2, "lists": [...] }`, poza Gitem), bo korzystają z nich razem komputer, telefon, kiosk i
@@ -128,7 +162,9 @@ Gdy akcja podaje `spec` i `specRevision` (oczekiwany bazowy numer rewizji szkicu
 Pierwszy pusty zapis (`spec: ""` przy braku rewizji) to no-op (nie tworzy wersji, numer pozostaje 0). Wyczyszczenie istniejącej specyfikacji tworzy pustą wersję `vN`; kolejny zapis bazuje na `N`. Zapis `updateTask` jest atomowy: błąd `409` lub błąd zapisu pliku nie zapisuje żadnego pola przesłanego w tej samej akcji (ani `title`, ani `note`). Limit specyfikacji to 50 000 jednostek UTF-16 bez cichego przycinania; ciało żądania `updateTask` ze `spec` dopuszcza do 512 KiB, a nagłówek `Origin` równy adresowi panelu jest bezwzględnie wymagany (brak lub obcy Origin daje `403` bez zmiany danych).
 
 Jedyna automatyka: po udanym utworzeniu taska Cezara z karty dispatch z `todoId` (`server/cockpit.ts`) panel dopina link `cezar`
-(id, tytuł) i `chat` (id rozmowy), następnie ustawia `realizacja`, wszystko z `by: panel`. Gdy ten task dostanie PR, panel dopina
+(id, tytuł) i `chat` (id rozmowy), następnie ustawia `realizacja`, wszystko z `by: panel`. Ta sama ścieżka działa z okna
+zadania (`POST /api/todos/:id/cezar-dispatch`): dopina tylko link `cezar`, zapisuje komentarz rewizji i taska oraz ustawia
+`realizacja`, a zlecenie trafia do `todoDispatches` w `cockpit.json` (bez linku rozmowy). Gdy ten task dostanie PR, panel dopina
 link `pr` (pełny URL, tytuł, jeśli jest pod ręką) z `by: panel`, a stanu nie zmienia. `todoId` jest zapamiętany w zapisie dispatchu
 (`~/.desk-panel/cockpit.json`), więc link działa też po restarcie i przy zamkniętym oknie czatu; PR pochodzi z istniejącego odczytu
 zakończonych zadań Cezara, bez nowego odpytywania. Nieistniejące/usunięte zadanie, błąd zapisu i limit 20 powiązań są tylko logowane

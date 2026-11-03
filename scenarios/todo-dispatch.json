@@ -1,0 +1,142 @@
+{
+  "description": "Scenariusz zlecenia zadania z okna: jedno zadanie z brakami gotowości i jedno gotowe do zlecenia na Cezarze (C2a).",
+  "cezar": {
+    "observedAt": "now",
+    "partial": false,
+    "scheduled": 0,
+    "counts": { "running": 1, "queue": 0, "needs-input": 0, "review": 0 },
+    "tasks": [
+      {
+        "id": "desk-panel/run-1",
+        "title": "Inne zadanie Cezara",
+        "project": "desk-panel",
+        "status": "running",
+        "startedAt": "now-2h",
+        "checkedAt": "now",
+        "sourceUrl": "http://127.0.0.1:4321/p/desk-panel/tasks/run-1",
+        "description": "Zadanie w toku, niezwiązane z listą."
+      }
+    ]
+  },
+  "calendar": {
+    "live": true,
+    "name": "Google Calendar",
+    "calendarId": "owner@gmail.com",
+    "status": "connected",
+    "observedAt": "now",
+    "data": []
+  },
+  "mail": {
+    "live": true,
+    "name": "Gmail",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [],
+    "accounts": [{ "email": "owner@gmail.com", "status": "connected", "observedAt": "now", "unread": 0 }],
+    "total": 0
+  },
+  "system": {
+    "live": true,
+    "name": "Komputer",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [{ "at": "now", "cpuPercent": 35, "ramUsedGb": 16.0, "ramTotalGb": 32 }]
+  },
+  "quotas": {
+    "live": true,
+    "name": "Limity AI",
+    "status": "connected",
+    "observedAt": "now",
+    "data": [
+      {
+        "provider": "Claude",
+        "snapshots": [
+          { "window": "5h", "usedPercent": 25, "observedAt": "now", "resetAt": "now+3h", "stale": false, "source": null },
+          { "window": "7d", "usedPercent": 40, "observedAt": "now", "resetAt": "now+4d", "stale": false, "source": null }
+        ],
+        "history": []
+      },
+      {
+        "provider": "Codex",
+        "snapshots": [
+          { "window": "5h", "usedPercent": 10, "observedAt": "now", "resetAt": "now+4h", "stale": false, "source": null },
+          { "window": "7d", "usedPercent": 24, "observedAt": "now", "resetAt": "now+6100m", "stale": false, "source": null }
+        ],
+        "history": []
+      }
+    ]
+  },
+  "todos": {
+    "live": true,
+    "name": "Zadania",
+    "status": "connected",
+    "observedAt": "now",
+    "data": {
+      "lists": [
+        {
+          "id": "l-1a2b3c4d",
+          "name": "Do zlecenia",
+          "createdAt": "now-3d",
+          "tasks": [
+            {
+              "id": "t-b0000001",
+              "status": "gotowe",
+              "blocked": null,
+              "links": [],
+              "history": [
+                { "at": "now-90m", "by": "panel", "kind": "status", "from": "pomysl", "to": "gotowe" }
+              ],
+              "title": "Zadanie z brakami gotowości",
+              "note": "Wykonawca lokalnie i brak dwóch sekcji.",
+              "done": false,
+              "createdAt": "now-2h",
+              "completedAt": null,
+              "by": "user",
+              "spec": "CEL:\nPokazać braki gotowości przed zleceniem.\n\nZAKRES:\n- Jedna sekcja w oknie zadania.\n",
+              "specRevision": 1,
+              "specRevisions": [
+                {
+                  "revision": 1,
+                  "spec": "CEL:\nPokazać braki gotowości przed zleceniem.\n\nZAKRES:\n- Jedna sekcja w oknie zadania.\n",
+                  "by": "user",
+                  "at": "now-1h"
+                }
+              ],
+              "executor": "lokalnie",
+              "repo": "desk-panel",
+              "mode": "analiza"
+            },
+            {
+              "id": "t-b0000002",
+              "status": "gotowe",
+              "blocked": null,
+              "links": [],
+              "history": [
+                { "at": "now-40m", "by": "user", "kind": "comment", "text": "Spec gotowa do zlecenia." }
+              ],
+              "title": "Gotowe zadanie do zlecenia",
+              "note": "Kompletna specyfikacja, wykonawca Cezar.",
+              "done": false,
+              "createdAt": "now-2h",
+              "completedAt": null,
+              "by": "user",
+              "spec": "CEL:\nZlecić gotowe zadanie bez przepisywania specyfikacji przez model.\n\nZAKRES:\n- Okno zadania pokazuje podgląd promptu.\n- Przycisk zleca zadanie na Cezarze.\n\nPOZA ZAKRESEM:\n- Zmiany w skillu Wektora.\n\nWARUNKI ODBIORU:\n1. Podgląd niczego nie zleca.\n2. Zlecenie zapisuje rewizję i id taska.\n",
+              "specRevision": 1,
+              "specRevisions": [
+                {
+                  "revision": 1,
+                  "spec": "CEL:\nZlecić gotowe zadanie bez przepisywania specyfikacji przez model.\n\nZAKRES:\n- Okno zadania pokazuje podgląd promptu.\n- Przycisk zleca zadanie na Cezarze.\n\nPOZA ZAKRESEM:\n- Zmiany w skillu Wektora.\n\nWARUNKI ODBIORU:\n1. Podgląd niczego nie zleca.\n2. Zlecenie zapisuje rewizję i id taska.\n",
+                  "by": "user",
+                  "at": "now-1h"
+                }
+              ],
+              "executor": "cezar",
+              "repo": "desk-panel",
+              "mode": "implementacja"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

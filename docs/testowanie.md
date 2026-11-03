@@ -26,6 +26,7 @@ npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapyta
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
 just screenshots todo-spec --pages pulpit --open todo-dialog --device medialove-14 --scale all # okno zadania ze specyfikacją oraz historią
+just screenshots todo-dispatch --pages pulpit --open todo-dispatch --device medialove-14 --scale all # braki gotowości, potem kompletne zadanie z rozwiniętym podglądem promptu (C2a)
 just screenshots standard --pages pulpit --open chat-skills     # nowe menu umiejętności Wektora
 just screenshots standard --pages pulpit --open chat-compact    # czat obok pulpitu
 just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin

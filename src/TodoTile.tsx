@@ -46,7 +46,7 @@ function TodoRow({ list, task, notes, hot, act, edit }: { list: TodoList; task: 
 export function TodoTile({ todos, config, setConfig, wide = true, tall = true, snapshot }: {
   snapshot?: CezarSnapshot | null; todos: TodosState; config?: TileConfig; setConfig: (patch: Record<string, string | boolean | undefined>) => void; wide?: boolean; tall?: boolean;
 }) {
-  const { source, error, clearError, act } = todos;
+  const { source, error, clearError, act, dispatchCezar } = todos;
   const lists = source.data?.lists ?? null;
   const { list: wanted } = todoConfigOf(config);
   const list: TodoList | null = lists?.find(l => l.id === wanted) ?? lists?.[0] ?? null;
@@ -161,6 +161,6 @@ export function TodoTile({ todos, config, setConfig, wide = true, tall = true, s
       <p className="p2-empty">Nie ma jeszcze żadnej listy.</p>
       {!naming && <button type="button" className="todo-create" onClick={() => startNaming('new')}><Plus size={16} aria-hidden="true" /> Utwórz listę</button>}
     </div> : <p className="p2-empty">{source.status === 'loading' ? 'Ładowanie zadań…' : source.message || 'Zadania są niedostępne.'}</p>}
-    {list && editTask && <TodoDialog key={editTask.id} list={list} task={editTask} act={act} error={error} snapshot={snapshot} close={closeEditor} />}
+    {list && editTask && <TodoDialog key={editTask.id} list={list} task={editTask} act={act} dispatchCezar={dispatchCezar} dispatches={source.cezarDispatches} error={error} snapshot={snapshot} close={closeEditor} />}
   </section>;
 }
