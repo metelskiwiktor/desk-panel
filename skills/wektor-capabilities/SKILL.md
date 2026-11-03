@@ -23,9 +23,10 @@ Moving between phases: `soft` = a criterion still forming; `expect` = a rule tha
 1. **Discuss behaviour first.** How should Wektor talk, when does he act, what must he never do. Write it down as general rules, not as the answer to the case at hand.
 2. **Deliver in code** (below), with tests. Commit and push to main (user's standing rule), `just update` to deploy.
 3. **MCP schema/config refresh**: after pushing to main, local agents (Claude Code, Codex, Antigravity) deploy with `just update` and, when an MCP tool schema or Hermes configuration changed, restart Hermes with `just hermes RESTART`, then check `just hermes STATUS`, without another user approval. Hermes reads the tool list once on connection; `just update` restarts only the panel. Follow the safety conditions in [docs/hermes.md](../../docs/hermes.md): no active chat turn, no running/pending automation and no automation starting within 10 minutes; wait and recheck instead of interrupting. Wektor and Cezar executors never deploy or restart services.
-4. **Run test conversations yourself** with the harness (see "The evaluation harness" below): `node scripts/wektor-test.mjs <case> --runs 1`. The chats are kept, titled `[test] <case> #n`; never delete them.
-5. **Show the user Wektor's answers verbatim and judge together.** Do NOT loop run -> fix -> rerun on your own. One run per case, present, discuss, then change. Check his factual claims against the data (`curl http://127.0.0.1:5174/api/agent/bank?...`): his specific claims were true so far, but verify.
-6. Improve the skill/tool from what the user says, then back to 3.
+4. **Wait for readiness after restart**: after `just hermes RESTART`, wait until `GET http://127.0.0.1:8642/health` returns HTTP 200 (use the configured Hermes URL if different) before sending any message. Service `Running` alone does not mean the API is ready; wait and recheck without starting a model turn. C2b on 2026-11-03 returned 503 immediately after restart, before the message could be sent.
+5. **Run test conversations yourself** with the harness (see "The evaluation harness" below): `node scripts/wektor-test.mjs <case> --runs 1`. The chats are kept, titled `[test] <case> #n`; never delete them.
+6. **Show the user Wektor's answers verbatim and judge together.** Do NOT loop run -> fix -> rerun on your own. One run per case, present, discuss, then change. Check his factual claims against the data (`curl http://127.0.0.1:5174/api/agent/bank?...`): his specific claims were true so far, but verify.
+7. Improve the skill/tool from what the user says, then back to 3.
 
 ## What to deliver for a new ability
 
