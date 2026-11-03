@@ -1,5 +1,7 @@
 # Testowanie, scenariusze i weryfikacja
 
+Testy tworzące repozytoria Git ustawiają tożsamość committera lokalnie w repo testowym, także dla podpiętych worktree, bez zależności od globalnej konfiguracji maszyny lub CI.
+
 ## Scenariusze i zrzuty ekranu
 
 UI czyta wyłącznie lokalne API (`/api/*`), walidowane schematami z `src/*-contract.ts`.

@@ -22,13 +22,16 @@ function repo(branch = 'main') {
   const root = mkdtempSync(join(tmpdir(), 'dp-commit-'));
   roots.push(root);
   git(root, 'init', '-q', '-b', branch);
+  // commitWork invokes git itself; every commit, including linked worktrees, needs a local identity.
+  git(root, 'config', 'user.name', 'test');
+  git(root, 'config', 'user.email', 'test@local');
   mkdirSync(join(root, '.ai', 'cezar', 'workflows'), { recursive: true });
   writeFileSync(join(root, '.gitignore'), '.ai/**\n!.ai/cezar/\n!.ai/cezar/workflows/\n!.ai/cezar/workflows/**\noutput/\nnode_modules/\n');
   writeFileSync(join(root, 'app.ts'), 'export const a = 1;\n');
   writeFileSync(join(root, 'app.test.ts'), "import './app';\n");
   writeFileSync(join(root, '.ai', 'cezar', 'workflows', 'desk-panel-task.yaml'), 'version: 2\n');
   git(root, 'add', '-A');
-  git(root, '-c', 'user.name=test', '-c', 'user.email=test@local', 'commit', '-q', '-m', 'base');
+  git(root, 'commit', '-q', '-m', 'base');
   mkdirSync(join(root, '.ai'), { recursive: true });
   writeFileSync(join(root, BASE_FILE), JSON.stringify({ sha: git(root, 'rev-parse', 'HEAD'), branch }) + '\n');
   return root;
