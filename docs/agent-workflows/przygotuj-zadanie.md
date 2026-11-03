@@ -111,6 +111,12 @@ Przed zapisem `gotowe` sprawdź:
       (2026-11-02: pełne rewizje i edycja w UI rozrosły się ponad potrzebę, a zadanie B2 odłożono); decyzje użytkownika mają datę `YYYY-MM-DD`, treść i źródło.
 - [ ] Każdy numerowany warunek odbioru ma sprawdzalny wynik i metodę; sprawdzenie, które przechodzi niezależnie od wyniku,
       nie jest warunkiem odbioru (2026-11-01: walidator rybki zaakceptował samą listę nazw pól); wymagania nie pominięto przez „jeśli dostępne”.
+- [ ] Przy nowym sekrecie lub API sprawdzono uprawnienia klucza (w tym tworzenie/usuwanie kluczy, zmianę limitów i wariant
+      read-only), sposób przechowywania oraz dostęp procesów potomnych/terminali agentów. DPAPI wspólnego użytkownika
+      chroni zapis na dysku, ale nie izoluje procesów tego użytkownika. Rybka ma zapytać o te ustalenia, jeśli ich brakuje.
+- [ ] Kontrakt nowego API sprawdzono bezpieczną, autoryzowaną próbą live: data, metoda, status i kształt odpowiedzi
+      (pola, typy, null), bez sekretów i kwot. Mock lub przykład z dokumentacji nie zastępuje tej próby; brak dowodu
+      pozostawia blokadę. Rybka sprawdza również, czy deklarowany dowód odpowiada naprawdę wybranej trasie.
 - [ ] Istnieją skuteczne raporty obu rybek (lub wybranego runnera) dla tej rewizji, która zostaje oznaczona jako gotowa
       (2026-11-01: w pilotażu 1 rybka czytała v1, a zlecona była v2), pokazane użytkownikowi wraz z poprawkami.
 - [ ] Rozstrzygnięto wszystkie uwagi wpływające na zakres, zachowanie lub odbiór; pytania o zakres/oczekiwania mają
@@ -125,6 +131,10 @@ Raport dla każdej uwagi podaje **niejasność, niezapisane założenie, wpływ 
 mówi „brak uwag”. Błąd, timeout, pusty/niekompletny raport nie spełnia definicji gotowości. Słoń ocenia treść raportu,
 pokazuje go i poprawki użytkownikowi. Istotna zmiana celu/zakresu po raporcie wymaga nowej rybki; usunięcie wskazanego
 braku lub korekta redakcyjna nie wymaga automatycznie kolejnego płatnego przebiegu.
+
+2026-11-03, OpenRouter: poprzedni brief zaproponował management key we wspólnym środowisku i kontrakt tylko na podstawie
+dokumentacji. Dopiero użytkownik zatrzymał gotowość i zażądał sprawdzenia uprawnień oraz próby live. Dlatego powyższe
+dwa sprawdzenia są w checkliście i w roli recenzenta w `scripts/rybka.mjs`, a nie wyłącznie w retro.
 
 Na uwagi rybki o skrajnych przypadkach słoń odpowiada najpierw uproszczeniem zakresu albo zapisem „poza zakresem, akceptowane ryzyko”;
 nową regułę do specyfikacji dodaje tylko przy realnym problemie (pytanie z definicji gotowości: „jaki realny problem z ostatnich tygodni to rozwiązuje?”)

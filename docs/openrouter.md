@@ -4,14 +4,34 @@ Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pus
 
 ## Klucz API i współdzielenie z Hermesem
 
-Planowane zastąpienie lokalnego źródła (zadanie `t-0fc77df7`, jeszcze niewdrożone):
-użytkownik 2026-11-03 wybrał dane konta zgodne z dashboardem OpenRouter zamiast rekonstrukcji z logów Hermesa.
-Oficjalny [opis Activity](https://openrouter.ai/docs/guides/features/activity) wskazuje
-`GET /api/v1/analytics/meta` i `POST /api/v1/analytics/query` jako dostęp do tych samych agregatów co Explore;
-[kontrakt query](https://openrouter.ai/docs/api/api-reference/analytics/query-analytics-data) wymaga management key.
-Uzgodniona osobna zmienna backendu to `OPENROUTER_MANAGEMENT_KEY` w `panel.env`, poza Gitem; obecny klucz Hermesa pozostaje bez zmian.
-Test `analytics/meta` obecnym kluczem zwrócił 403. Nie wywoływano `/api/v1/activity`; jego zakaz pozostaje.
-Opis poniżej dotyczy nadal działającej implementacji opartej na logu.
+Planowane zastąpienie lokalnego źródła (zadanie `t-0fc77df7`, jeszcze niewdrożone): 2026-11-03 użytkownik ostatecznie
+wybrał oficjalne liczniki **obecnego klucza**: dziś, tydzień, miesiąc, łącznie i limit, przez `GET /api/v1/key`.
+Wycofał wariant Analytics/management key oraz wykres historyczny per model. Nie konfigurujemy nowego sekretu ani DPAPI.
+Opis dalszej części dokumentu dotyczy nadal działającej starej implementacji opartej na logu; zastąpi ją przygotowane zadanie.
+
+### Dowód kontraktu bez kwot — 2026-11-03
+
+Jedno autoryzowane `GET /api/v1/key` istniejącym kluczem zwróciło HTTP 200 i obiekt `{data: object}`:
+`usage_daily`, `usage_weekly`, `usage_monthly`, `usage`: number; `limit`, `limit_remaining`: null;
+`limit_reset`: string; `is_management_key`: boolean. Nie zapisano wartości, etykiety klucza ani surowego JSON-a.
+To odpowiada [kontraktowi bieżącego klucza](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key).
+Null oznacza brak limitu, nie zero ani saldo konta. Liczniki dotyczą tego klucza; nie są historią konta ani podziałem modeli.
+
+### Sprawdzenie uprawnień i środowiska — 2026-11-03
+
+[Management keys](https://openrouter.ai/docs/guides/overview/auth/management-api-keys) mogą zarządzać kluczami;
+wariant read-only ma odczyt bez zapisów. Zmianę limitu opisuje [PATCH klucza](https://openrouter.ai/docs/api/api-reference/api-keys/update-an-api-key).
+Nie wykonywano tworzenia/usuwania kluczy ani zmiany limitów. `analytics/meta` zwykłym kluczem dało 403;
+`analytics/query` nie wykonano, ponieważ użytkownik następnie wybrał liczniki zwykłego klucza. Zakaz `/api/v1/activity` pozostaje.
+
+Hermes ma osobny `envFile` w `servy/hermes.json` (`hermes.env`), panel w `servy/services.json` (`panel.env`);
+`servy/Control-Service.ps1` ładuje całą zawartość wskazanego pliku do środowiska procesu. Hermes dodatkowo ładuje własny `.env`.
+`server/agent-chat.ts:agyLauncher` przekazuje pełne środowisko panelu do agy. Obie usługi działają jako ten sam użytkownik
+Windows (sprawdzono konfigurację usług); ich narzędzia nie mają izolacji systemowej. Dlatego management key w `panel.env`
+byłby też dostępny agy, a [DPAPI CurrentUser](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
+nie izoluje procesów tego użytkownika. Użytkownik zaakceptował ten limit wariantu read-only + DPAPI poza env, po czym
+zrezygnował z nowego klucza całkowicie. Ścisła izolacja wymagałaby oddzielnej tożsamości czytnika i procesów agentów;
+nie zmieniano kont usług ani konfiguracji sekretów.
 
 Panel nie wymaga osobnego klucza typu provisioning czy management key. Wykorzystuje **ten sam pojedynczy klucz OpenRouter**, którego używa już Hermes Agent:
 - Zmienna: `OPENROUTER_API_KEY` w pliku `%USERPROFILE%\.desk-panel\panel.env`.

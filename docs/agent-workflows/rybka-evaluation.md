@@ -37,6 +37,8 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | OpenRouter `t-0fc77df7` rev 2 | Gemini | 257,361 | 80 106 | brak danych | 3 | 3 | 2 | 1 | nie wykonywano | — | nie wykonywano |
 | OpenRouter `t-0fc77df7` rev 3 | DeepSeek | 68,129 | 67 891 | 0,011283 | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
 | OpenRouter `t-0fc77df7` rev 3 | Gemini | 208,519 | 72 840 | brak danych | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 4 | DeepSeek | 72,269 | 103 021 | 0,013821 | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 4 | Gemini | 207,347 | 72 832 | brak danych | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
 
 ### OpenRouter — oficjalne dane konta, 2026-11-03
 
@@ -86,6 +88,42 @@ Oba skuteczne przeglądy finalnej rev 3 sklasyfikowano i rozstrzygnięto bez kol
 Końcowy odczyt C1 potwierdził `gotowe`, rev 3, workflow `desk-panel-task`, bez braków. Nie wykonano implementacji
 ani dispatchu. Porównanie live z Explore pozostaje jawnym odbiorem po przyszłym PR-ze, z kluczem użytkownika;
 przygotowanie ani testy na atrapach go nie zastępują. `just check` przygotowania przeszedł.
+
+#### Cofnięcie gotowości i uproszczenie po kontroli użytkownika
+
+2026-11-03 użytkownik wstrzymał rev 3 blokadą „Czeka na klucz i weryfikację API”: dotychczasowy kontrakt Analytics
+pochodził tylko z dokumentacji, a propozycja nowego management key nie uwzględniała dziedziczenia środowiska przez agy
+ani braku izolacji DPAPI pomiędzy procesami tego samego konta Windows. Poprzednia klasyfikacja zero pozostałych uwag
+nie jest dowodem bezpieczeństwa ani potwierdzeniem kontraktu live. Gotowość została cofnięta; nie było dispatchu.
+
+Sprawdzono dokumentację: management key ma operacje zarządzania kluczami/limitami, dostępny jest wariant read-only.
+Hermes ma oddzielny envFile, lecz agy dostaje pełne środowisko panelu, a obie usługi działają jako Viktor. Użytkownik
+najpierw zaakceptował ograniczenia read-only + DPAPI poza env, potem świadomie zrezygnował z nowego klucza: wybrał
+oficjalne liczniki obecnego klucza zamiast historii/per-model i Analytics. Nie tworzono magazynu ani polecenia zapisu
+sekretu, nie zmieniano tożsamości usług i nie wykonywano analytics/query.
+
+Dowód live dla nowego zakresu: 2026-11-03, jedno autoryzowane `GET /api/v1/key`, HTTP 200, `{data: object}`;
+`usage_daily`, `usage_weekly`, `usage_monthly`, `usage`: number; `limit`, `limit_remaining`: null;
+`limit_reset`: string; `is_management_key`: boolean. Nie zapisano wartości finansowych, etykiety klucza ani surowej
+odpowiedzi. Rev 4 upraszcza zadanie do tych liczników i limitu; poprzednie raporty nie są przeglądem tego zakresu.
+Uruchomiono nowe obie rybki z dodatkową regułą kontroli uprawnień i dowodu live. Reguła jest w AGENTS.md,
+checkliście przygotowania i wspólnej roli runnera (oba warianty mają asercje w istniejących testach).
+
+DeepSeek rev 4: zero blokujących; redakcyjne 1, 2, 6, 7, chybione 3, 4, 5, 8. Nazwy komunikatów, miejsce opisu resetu
+i aktualizacja starych testów są decyzjami wykonawczymi, nie powodem dokładania pól/stanów produktu. Nullable limity,
+liczbowe liczniki i błędy formatu są już określone. Nie zmieniamy formatowania mikroskopijnych kwot ani pollera hooka,
+nie dokładamy rozmiaru 390×844 do zrzutów zamówionych przy 1280×720. `real-sources.ts` i fixture standard są jawnie
+w zakresie, choć załączniki recenzenta nie zawierają całego repo. AGENTS już zabrania commitowania PNG i ujawniania
+sekretów. Pełny raport i klasyfikację zapisano w zadaniu;
+`.ai/rybka-runs/2026-11-03T11-25-13-005Z-opencode-1d44709b/`.
+
+Gemini rev 4: zero blokujących; redakcyjne 1, 2, 5, 7, chybione 3, 4, 6, 8. Umiejscowienie dopisków i siatki jest
+decyzją wykonawczą; nie dokładamy alarmowych stylów. `last` przy remount i czyszczenie po błędzie nie są sprzeczne.
+Sprawdzono, że `openrouterUsage` jest wyłącznie w `scenarios/standard.json`, nie w `scripts/preview-scenario.json`.
+Pełny raport oraz klasyfikacja są w zadaniu; `.ai/rybka-runs/2026-11-03T11-25-15-766Z-agy-3ff1b198/`.
+Po obu przeglądach dokładnej rev 4, dowodzie live i zapisaniu rozstrzygnięć zdjęto blokadę, ustawiono `gotowe`
+i potwierdzono brak braków C1. Nie ma nowego sekretu; nie wykonano implementacji ani dispatchu. Test runnera 23/23
+oraz pełne `just check` zmian procesu przeszły.
 
 ### C2a — wynik executora i niezależny przegląd PR #44, 2026-11-03
 

@@ -25,6 +25,10 @@ Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model 
 
 Oba przebiegi startują w świeżych sesjach bez historii:
 
+Wspólna rola obu rybek sprawdza także uprawnienia i przechowywanie nowego sekretu oraz dowód próby live nowego API
+(data, status, kształt bez sekretów i kwot). Przy braku tych ustaleń ma zgłosić pytanie, zamiast traktować mock lub
+przykład dokumentacji jako potwierdzony kontrakt; pełna checklista jest w [procesie przygotowania](przygotuj-zadanie.md).
+
 - **DeepSeek** (`opencode`): model `openrouter/deepseek/deepseek-v4.1-flash-1017`. Specyfikacja jest jedyną wiadomością użytkownika,
   a model czyta AGENTS.md i załączniki narzędziem `read` (do 12 wywołań).
 - **Gemini** (`agy`): model `gemini-3.8-flash-high` przez lokalne `agy`, bez narzędzi i bez flagi `--dangerously-skip-permissions`.

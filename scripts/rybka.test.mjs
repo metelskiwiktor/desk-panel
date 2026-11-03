@@ -86,6 +86,8 @@ it('uses a fresh pinned review with only explicit file reads and preserves separ
   expect(Object.values(config.agent)[0].model).toBe(config.model);
   expect(Object.values(config.agent)[0]).not.toHaveProperty('steps');
   expect(Object.values(config.agent)[0].prompt).toContain(join(f.cwd, 'docs/mock.html'));
+  expect(Object.values(config.agent)[0].prompt).toContain('minimalne uprawnienia klucza');
+  expect(Object.values(config.agent)[0].prompt).toContain('dowód bezpiecznej autoryzowanej próby live właściwej trasy');
   expect(Object.values(config.agent)[0].prompt).not.toContain('<h1>Makieta</h1>');
   expect(opts.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe('64000');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
@@ -302,6 +304,8 @@ it('runs agy runner without tool permissions, with inlined materials, stream-jso
   expect(args).not.toContain('--dangerously-skip-permissions');
 
   expect(capturedStdin).toContain('Recenzujesz specyfikację');
+  expect(capturedStdin).toContain('minimalne uprawnienia klucza');
+  expect(capturedStdin).toContain('dowód bezpiecznej autoryzowanej próby live właściwej trasy');
   expect(capturedStdin).toContain('--- Plik referencyjny: AGENTS.md ---');
   expect(capturedStdin).toContain('--- Plik referencyjny: docs/mock.html ---');
   expect(capturedStdin).toContain('<h1>Makieta</h1>');

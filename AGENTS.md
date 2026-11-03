@@ -99,6 +99,8 @@ Details and setup from scratch: docs/tailscale.md.
 
 ## Architecture and guardrails
 
+Nowy sekret lub zewnętrzne API wymaga przed oznaczeniem zadania `gotowe` sprawdzenia minimalnych uprawnień klucza, dostępu procesów agentów oraz kontraktu bezpieczną autoryzowaną próbą live; do dowodów trafia tylko kształt odpowiedzi, bez sekretów i kwot ([proces przygotowania](docs/agent-workflows/przygotuj-zadanie.md)).
+
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
