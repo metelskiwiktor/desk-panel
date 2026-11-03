@@ -1,7 +1,7 @@
 import type { ChatNamer } from './chat-title';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -94,10 +94,10 @@ export function agyModelArgs(env: NodeJS.ProcessEnv = process.env): string[] {
 }
 
 /** Shell-free, as the adapter does it; the whole process tree goes with the kill. */
-export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
+export function agyLauncher(env: NodeJS.ProcessEnv = process.env, panelEnvFile = path.join(homedir(), '.desk-panel', 'panel.env')): Launcher {
   return (args, cwd) => {
     const argv = [...agyModelArgs(env), ...agyPermissionArgs(env), ...args];
-    const child = spawn(agyExecutable(env), argv, { cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(agyExecutable(env), argv, { cwd, env: agyProcessEnv(env, panelEnvFile), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let exited = false, stderr = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -127,6 +127,21 @@ export function agyLauncher(env: NodeJS.ProcessEnv = process.env): Launcher {
       },
     };
   };
+}
+
+/** Reduce inherited exposure; this is not isolation from files or other processes of the same user. */
+export function agyProcessEnv(env: NodeJS.ProcessEnv, panelEnvFile: string): NodeJS.ProcessEnv {
+  const denied = new Set(['OPENROUTER_API_KEY', 'DESK_HERMES_KEY', 'DESK_NTFY_URL']);
+  try {
+    // Match Servy's envFile loader: non-comment lines split at the first '='; only names leave this scope.
+    for (const line of readFileSync(panelEnvFile, 'utf8').split(/\r?\n/)) {
+      const entry = line.trim();
+      if (entry && !entry.startsWith('#') && entry.includes('=')) denied.add(entry.slice(0, entry.indexOf('=')).trim().toUpperCase());
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Nie można odczytać nazw zmiennych panel.env; agy nie został uruchomiony.');
+  }
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !denied.has(key.toUpperCase()) && !key.toUpperCase().startsWith('DESK_')));
 }
 
 /**

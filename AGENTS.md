@@ -99,6 +99,8 @@ Details and setup from scratch: docs/tailscale.md.
 
 ## Architecture and guardrails
 
+Procesy agy, także nazywanie rozmów, nie dziedziczą żadnej zmiennej z `panel.env`, zmiennych `DESK_*` ani znanych sekretów panelu; to zmniejszenie ekspozycji, nie izolacja procesów tego samego użytkownika przez DPAPI ([docs/hermes.md](docs/hermes.md)).
+
 Nowy sekret lub zewnętrzne API wymaga przed oznaczeniem zadania `gotowe` sprawdzenia minimalnych uprawnień klucza, dostępu procesów agentów oraz kontraktu bezpieczną autoryzowaną próbą live; do dowodów trafia tylko kształt odpowiedzi, bez sekretów i kwot ([proces przygotowania](docs/agent-workflows/przygotuj-zadanie.md)).
 
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`

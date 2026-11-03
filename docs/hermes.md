@@ -12,6 +12,20 @@ silnika na zawsze.
 
 ## Jak to działa
 
+### Środowisko procesów agy
+
+`agyLauncher` (również używany przy nazywaniu rozmów) usuwa z dziedziczonego środowiska wszystkie nazwy odczytane
+z `~/.desk-panel/panel.env`, bez rozróżniania wielkości liter, oraz `DESK_*` i znane sekrety panelu
+(`OPENROUTER_API_KEY`, `DESK_HERMES_KEY`, `DESK_NTFY_URL`) nawet bez pliku. Parser nazw odpowiada loaderowi Servy;
+odczyt jest ponawiany przed każdym uruchomieniem. Brak pliku jest dozwolony, inny błąd odczytu blokuje start agy.
+Zmienne systemowe, np. `PATH`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `TEMP`, pozostają, o ile nie wpisano ich
+do `panel.env`. Panel nadal wybiera program, model i uprawnienia z własnego środowiska i przekazuje je argumentami;
+uwierzytelnienie agy korzysta z jego własnego magazynu. Filtr obejmuje agy i dziedziczące po nim terminale,
+nie zmienia środowiska panelu ani osobnej usługi Hermesa. To ogranicza przypadkową ekspozycję sekretów:
+DPAPI nie izoluje procesów tego samego użytkownika, a agy nadal ma prawa tego użytkownika do plików i ich odszyfrowania.
+
+### Przepływ rozmów
+
 ```
 ChatWindow ── useChat ── /api/chats… ── ChatHub (server/chat-hub.ts)
                                          ├─ hermes: HermesChat (server/hermes-chat.ts) ── HermesClient (server/hermes-api.ts) ── Hermes API server (127.0.0.1:8642)
