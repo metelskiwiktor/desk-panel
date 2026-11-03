@@ -273,7 +273,14 @@ describe('Hermes chat', () => {
     await finishedChat(service, id);
     const original = client.deleteSession!.bind(client);
     let attempts = 0;
-    client.deleteSession = async session => { if (++attempts === 1) throw new HermesError(409, 'session_active_turn'); await original(session); };
+    let releaseDelete!: () => void;
+    const realClock = new Promise<void>(resolve => { releaseDelete = resolve; });
+    client.deleteSession = async session => {
+      if (++attempts === 1) throw new HermesError(409, 'session_active_turn');
+      // Advance only the retry delay with fake time, never Node's real HTTP connection/timeout timers.
+      await realClock;
+      await original(session);
+    };
     vi.useFakeTimers();
     try {
       await service.remove(id);
@@ -284,9 +291,10 @@ describe('Hermes chat', () => {
       await vi.advanceTimersByTimeAsync(30_000);
       vi.useRealTimers();
       expect(attempts).toBe(2);
+      releaseDelete();
       await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
       await vi.waitFor(async () => expect(await readdir(path.dirname(marker))).not.toContain(`${id}.json`));
-    } finally { vi.useRealTimers(); }
+    } finally { vi.useRealTimers(); releaseDelete(); }
   });
 
   it('archives only inactive [test] chats after seven days at startup and daily, including test automation runs', async () => {

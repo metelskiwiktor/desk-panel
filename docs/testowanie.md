@@ -1,6 +1,7 @@
 # Testowanie, scenariusze i weryfikacja
 
 Testy tworzące repozytoria Git ustawiają tożsamość committera lokalnie w repo testowym, także dla podpiętych worktree, bez zależności od globalnej konfiguracji maszyny lub CI.
+Test retry kasowania sesji Hermesa przesuwa sztucznym zegarem tylko opóźnienie ponowienia, a prawdziwe HTTP wykonuje po przywróceniu rzeczywistych timerów Node.
 
 ## Scenariusze i zrzuty ekranu
 
