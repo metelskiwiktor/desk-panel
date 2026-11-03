@@ -2,12 +2,15 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TODO_LIMITS, todoActionSchema, todoSourceSchema, type TodoData } from '../src/todo-contract';
+import type { CezarCreateRunInput, CezarSnapshot } from '../src/cezar-contract';
+import { getTodoDispatch, todoDispatchExpected } from '../src/todo-dispatch';
 import { agentViews } from './agent-views';
 import { createPanelServer } from './app';
+import { createCockpit } from './cockpit';
 import { createScenarioSources } from './scenario';
-import { SourceError } from './sources';
+import { SourceError, type PanelSources } from './sources';
 import { TodoError, createTodoStore } from './todos';
 
 let dir: string;
@@ -780,5 +783,138 @@ describe('widok dla agenta: zadania', () => {
     expect(text).toContain('Specyfikacja (v1');
     expect(text).toContain('Stary cel.');
     expect(text).toContain('Gotowość bieżącej rewizji (v2): gotowe — projekt desk-panel, workflow analysis, rewizja 2.');
+  });
+});
+
+describe('zlecenie przygotowanego zadania na Cezara (POST /api/todos/:id/cezar-dispatch)', () => {
+  let server: Server | undefined;
+  afterEach(() => { server?.close(); server = undefined; });
+
+  const spec = ['CEL:', 'Cel zadania.', '', 'ZAKRES:', '- Zmiana.', '', 'POZA ZAKRESEM:', '- Nic.', '', 'WARUNKI ODBIORU:', '1. Test.'].join('\n');
+  const taskOf = async (store: ReturnType<typeof createTodoStore>, id: string) =>
+    (await store.read()).data!.lists.flatMap(list => list.tasks).find(task => task.id === id)!;
+  const snapshotOf = (entries: { id: string; status: 'running' | 'failed' | 'done' }[]): CezarSnapshot => ({
+    observedAt: Date.now(), partial: false, scheduled: 0, counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 },
+    tasks: entries.filter(entry => entry.status !== 'failed').map(entry => ({
+      id: entry.id, title: 'Task', project: 'desk-panel', status: entry.status, checkedAt: Date.now(), description: 'x',
+      sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${entry.id}`,
+    })),
+    finished: entries.filter(entry => entry.status === 'failed').map(entry => ({
+      id: entry.id, title: 'Task', project: 'desk-panel', status: 'failed' as const, checkedAt: Date.now(), description: 'x',
+      sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${entry.id}`,
+    })),
+  });
+
+  async function start() {
+    const store = createTodoStore({ file: path.join(dir, 'todos.json') });
+    let snapshot = snapshotOf([]);
+    let run = 0;
+    const created = vi.fn(async (input: CezarCreateRunInput) => {
+      run += 1;
+      return { ok: true as const, id: `desk-panel/run-${run}`, project: 'desk-panel', url: `http://127.0.0.1:4321/p/desk-panel/tasks/run-${run}`, workflow: input.workflow ?? 'desk-panel-task' };
+    });
+    const sources = {
+      todos: () => store.read(), todoAction: (action: Parameters<typeof store.apply>[0]) => store.apply(action),
+      cezar: async () => snapshot, cezarCreateRun: created,
+    } as unknown as PanelSources;
+    const cockpit = createCockpit({ sources, file: path.join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
+    server = createPanelServer(sources, dir, undefined, undefined, { cockpit });
+    await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); });
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const prepared = async (text = spec) => {
+      const list = (await store.apply({ action: 'createList', name: 'L' })).list!.id;
+      const id = (await store.apply({ action: 'addTask', list, title: 'Gotowe zadanie' })).task!.id;
+      await store.apply({ action: 'updateTask', task: id, spec: text, specRevision: 0 });
+      await store.apply({ action: 'updateTask', task: id, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
+      await store.apply({ action: 'setStatus', task: id, status: 'gotowe' });
+      return id;
+    };
+    const post = async (id: string, body: unknown, origin: string | null = base) => fetch(`${base}/api/todos/${id}/cezar-dispatch`, {
+      method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) },
+    });
+    const read = async () => todoSourceSchema.parse(await (await fetch(`${base}/api/todos`)).json());
+    return { base, store, created, prepared, post, read, taskOf: (id: string) => taskOf(store, id), setSnapshot: (value: CezarSnapshot) => { snapshot = value; } };
+  }
+
+  it('odrzuca bez/obcego Origin (403), nieznane zadanie (404) i zmienione lub niegotowe dane (409) bez zlecenia', async () => {
+    const { store, created, prepared, post } = await start();
+    const id = await prepared();
+    const expected = todoDispatchExpected(await taskOf(store, id));
+    expect((await post(id, { expected }, null)).status).toBe(403);
+    expect((await post(id, { expected }, 'http://evil.example')).status).toBe(403);
+    expect((await post('t-00000000', { expected })).status).toBe(404);
+    expect((await post(id, { expected: { ...expected, title: 'Inny tytuł' } })).status).toBe(409);
+    await store.apply({ action: 'setBlocked', task: id, reason: 'Czekam na decyzję' });
+    const blocked = todoDispatchExpected(await taskOf(store, id));
+    const refused = await post(id, { expected: blocked });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toContain('blokad');
+    expect(created).not.toHaveBeenCalled();
+  });
+
+  it('po sukcesie zapisuje rejestr, komentarz, link Cezara i stan realizacja, a GET niesie projekcję', async () => {
+    const { store, created, prepared, post, read, taskOf: current } = await start();
+    const id = await prepared();
+    const before = await current(id);
+    const prompt = getTodoDispatch(before).prompt;
+    const expected = todoDispatchExpected(before);
+    const response = await post(id, { expected });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ ok: true, taskId: 'desk-panel/run-1', url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' });
+    expect(created).toHaveBeenCalledWith({ task: prompt, title: 'Gotowe zadanie', project: 'desk-panel', workflow: 'desk-panel-task', todoId: id });
+    const task = await current(id);
+    expect(task.status).toBe('realizacja');
+    expect(task.links).toContainEqual(expect.objectContaining({ kind: 'cezar', id: 'desk-panel/run-1' }));
+    expect(task.links.some(link => link.kind === 'chat')).toBe(false);
+    const comment = task.history.filter(entry => entry.kind === 'comment').at(-1);
+    expect(comment).toMatchObject({ kind: 'comment', by: 'panel' });
+    expect(comment?.text).toContain('rewizja v1');
+    expect(comment?.text).toContain('desk-panel/run-1');
+    const source = await read();
+    expect(source.cezarDispatches).toEqual([{ todoId: id, specRevision: 1, mode: 'implementacja', taskId: 'desk-panel/run-1', url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' }]);
+  });
+
+  it('pełna specyfikacja 50 000 jednostek UTF-16 przechodzi do Cezara bez przycięcia', async () => {
+    const { created, prepared, post, taskOf: current } = await start();
+    const head = ['CEL:', 'Cel.', '', 'ZAKRES:', '- Zmiana.', '', 'POZA ZAKRESEM:', '- Nic.', '', 'WARUNKI ODBIORU:', '1. Test.', ''].join('\n');
+    const full = head + 'x'.repeat(TODO_LIMITS.spec - head.length);
+    expect(full.length).toBe(TODO_LIMITS.spec);
+    const id = await prepared(full);
+    const before = await current(id);
+    const prompt = getTodoDispatch(before).prompt;
+    const expected = todoDispatchExpected(before);
+    expect((await post(id, { expected })).status).toBe(200);
+    const sent = created.mock.calls[0][0];
+    expect(sent.task).toBe(prompt);
+    expect(sent.task!.length).toBeGreaterThan(TODO_LIMITS.spec);
+    expect(sent.task!.endsWith(full)).toBe(true);
+  });
+
+  it('task w toku blokuje 409 z linkiem; nieudany albo nieobecny w snapshocie pozwala ponowić po przywróceniu gotowości', async () => {
+    const { store, created, prepared, post, read, taskOf: current, setSnapshot } = await start();
+    const id = await prepared();
+    setSnapshot(snapshotOf([{ id: 'desk-panel/run-1', status: 'running' }]));
+    expect((await post(id, { expected: todoDispatchExpected(await current(id)) })).status).toBe(200);
+    await store.apply({ action: 'setStatus', task: id, status: 'gotowe' });
+    const blocked = await post(id, { expected: todoDispatchExpected(await current(id)) });
+    expect(blocked.status).toBe(409);
+    const refused = await blocked.json() as { error: string };
+    expect(refused.error).toContain('desk-panel/run-1');
+    expect(refused.error).toContain('http://127.0.0.1:4321/p/desk-panel/tasks/run-1');
+    expect(created).toHaveBeenCalledTimes(1);
+
+    setSnapshot(snapshotOf([{ id: 'desk-panel/run-1', status: 'failed' }]));
+    expect((await post(id, { expected: todoDispatchExpected(await current(id)) })).status).toBe(200);
+    expect(created).toHaveBeenCalledTimes(2);
+    const retried = await current(id);
+    expect(retried.history.filter(entry => entry.kind === 'comment').at(-1)?.text).toContain('Ponowienie po nieudanym tasku desk-panel/run-1');
+    expect((await read()).cezarDispatches?.at(-1)).toMatchObject({ taskId: 'desk-panel/run-2' });
+
+    await store.apply({ action: 'setStatus', task: id, status: 'gotowe' });
+    setSnapshot(snapshotOf([]));
+    expect((await post(id, { expected: todoDispatchExpected(await current(id)) })).status).toBe(200);
+    expect(created).toHaveBeenCalledTimes(3);
+    expect((await read()).cezarDispatches?.at(-1)).toMatchObject({ taskId: 'desk-panel/run-3' });
   });
 });

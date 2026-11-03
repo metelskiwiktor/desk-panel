@@ -26,6 +26,7 @@ npm run scenario -- inbox --shot --query ambient=night # pierwszy ekran z zapyta
 npm run scenario -- C:\temp\moj.json --shot           # dowolny plik
 just screenshots standard --pages pulpit --open tile:github-pr  # kafelek 2x2 po lewej
 just screenshots todo-spec --pages pulpit --open todo-dialog --device medialove-14 --scale all # okno zadania ze specyfikacją oraz historią
+just screenshots todo-dispatch --pages pulpit --open todo-dispatch --device medialove-14 --scale all # braki gotowości, potem kompletne zadanie z rozwiniętym podglądem promptu (C2a)
 just screenshots standard --pages pulpit --open chat-skills     # nowe menu umiejętności Wektora
 just screenshots standard --pages pulpit --open chat-compact    # czat obok pulpitu
 just screenshots wizyty --pages pulpit --open chat-appointment # syntetyczna karta dni i godzin
@@ -35,6 +36,9 @@ just screenshots wizyty --pages pulpit --open chat-appointment-axis # oś, koliz
 ```
 
 `--open tile:<rodzaj>` wstawia kafelek z pominięciem wyboru, więc najpierw sprawdza, czy pusta komórka pulpitu go proponuje.
+`--open todo-dispatch` zapisuje oba zadania (z brakami i gotowe) na wybranym ekranie oraz na telefonie 390×844
+(dla głównego skalowania). `medialove-14 --scale primary` daje 1280×720 CSS i 390×844; gotowe zadanie musi mieć
+rozwinięty podgląd promptu na obu rozmiarach, inaczej przebieg kończy się błędem. Nie klika przycisku zlecenia.
 Kafelek, który się renderuje, ale którego wybór nie proponuje (brak w `pickable()` w `src/workspace-kinds.ts`, jak `github-pr`
 w PR #36), kończy zrzut błędem; użytkownik nie mógłby go dodać. Rodzaj, którego jeszcze nie ma (zrzut „przed” nowym
 kafelkiem), daje domyślny układ jak dotąd.

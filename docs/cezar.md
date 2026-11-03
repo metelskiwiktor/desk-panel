@@ -45,6 +45,19 @@ ustawia „W realizacji” z autorem `panel`; błąd powiązania nie psuje zlece
 czatu i bez nowego odpytywania. Stan zadania pozostaje niezależny od taska Cezara i PR-a, bez dalszych automatycznych przejść
 ([zadania.md](zadania.md)).
 
+Obok karty z rozmowy jest druga ścieżka zlecenia, uruchamiana tylko kliknięciem użytkownika: „Zleć na Cezarze” w oknie
+zadania (`POST /api/todos/:id/cezar-dispatch`, UI-only i Origin-checked). Serwer czyta zadanie ponownie, porównuje stan z
+podglądem, sam liczy gotowość C1 i składa prompt, projekt i workflow; nie przyjmuje promptu, modelu ani workflow klienta,
+więc specyfikacja do 50 000 jednostek UTF-16 idzie dosłownie, bez modelu przepisującego. Klucz `todoId+specRevision+mode`
+blokuje ponowienie, gdy task jest w toku lub zakończony sukcesem; failed/cancelled albo brak taska w snapshocie pozwala
+ponowić. Udane zlecenia trafiają do `todoDispatches` w `cockpit.json`, a `GET /api/todos` niesie projekcję
+`cezarDispatches`; link `cezar`, komentarz rewizji i `realizacja` ustawia `panel`, PR dopina istniejące `linkPrs`.
+Szczegóły i ograniczenia: [zadania.md](zadania.md).
+
+**Żaden agent nie zleca zadań sam.** Kartę i przycisk ustawia użytkownik; Hermes, Wektor ani executor nie mają narzędzia
+dispatchu i nie tworzą zlecenia w tle. Wyjątkiem jest wyłącznie akcja zatwierdzona na karcie automatu w jej własnym runie
+([automaty.md](automaty.md)); zlecenie z okna zadania wymaga kliknięcia użytkownika.
+
 Task zlecony z rozmowy wraca do niej raz, gdy Cezar zacznie czekać na użytkownika albo task się skończy (zakończony,
 nieudany lub anulowany): panel wysyła wtedy turę automatyki z id, tytułem, stanem, krokiem, błędem i PR-em. Korzysta
 z odczytów Cezara, których panel już dokonuje (`onActive`/`onFinished`), a wysłane zdarzenia (`taskId|stan`) trzyma

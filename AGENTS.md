@@ -104,9 +104,11 @@ defines `PanelSources`, implemented by `real-sources.ts` (service) and
 `scenario.ts` (JSON files validated by the same contract schemas). Mock data
 lives only in scenarios/ — add a file there instead of branching in the UI. Contract schemas validate provider data. Preserve
 real observation timestamps on failures. Cezar is read-only except
-`POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked) and the chat cockpit's
-dispatch card (`POST /api/chats/:id/dispatch`, Origin-checked: the panel starts the run only on the user's click, see
-docs/czat.md); never resume or answer tasks, and no agent dispatches by itself. Quota reads must never send model prompts
+`POST /api/cezar/action` (archive, unarchive, read, unread on one finished run, Origin-checked) and two dispatch paths
+that start only on the user's click: the chat cockpit's dispatch card (`POST /api/chats/:id/dispatch`) and the to-do
+dialog's „Zleć na Cezarze” (`POST /api/todos/:id/cezar-dispatch`, UI-only and Origin-checked: it re-reads the task,
+compares the preview's expected state, recomputes C1 itself and never accepts a client prompt, model or workflow, see
+docs/zadania.md) — never resume or answer tasks, and no agent dispatches by itself. Quota reads must never send model prompts
 or start agent turns. Gmail uses `gmail.modify` only: thread reads, read/unread
 and Trash/untrash — never sending or permanent deletion. Garmin Connect
 (unofficial garminconnect-js, pinned) is read-only and polled gently; only the plan, steps and
@@ -119,7 +121,7 @@ node_modules or dist. Do not print credentials in tool output.
 
 Automat może bez kolejnego kliknięcia zapisać wydarzenie Google lub dodać alert Smart Actions wyłącznie w swoim runie, jeśli użytkownik zatwierdził tę akcję i jej parametry na karcie tworzenia/zmiany automatu (docs/automaty.md).
 
-Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i `pr` po PR-ze taska oraz stan „W realizacji” po udanym dispatchu z karty z `todoId`, bez startowania agenta.
+Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i `pr` po PR-ze taska oraz stan „W realizacji” po udanym dispatchu z karty z `todoId` albo z okna zadania („Zleć na Cezarze”, rejestr `todoDispatches` w `cockpit.json`, projekcja `cezarDispatches` w `GET /api/todos`), bez startowania agenta; żaden agent nie zleca sam.
 
 Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
 Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez

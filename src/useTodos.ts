@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollingEnabled } from './polling';
 import { todoSourceSchema, type TodoAction, type TodoData, type TodoResult, type TodoSource } from './todo-contract';
+import type { TodoDispatchExpected } from './todo-dispatch';
 
 /** The lists live on the server and the agent writes to them too, so they are read often: it is a local, in-memory read. */
 const POLL_MS = 5000;
@@ -61,6 +62,26 @@ export function useTodos() {
     }
   }, []);
   const clearError = useCallback(() => setError(''), []);
-  return { source, error, clearError, act };
+  /** The one write outside the small actions: the dialog sends exactly what it previewed, and the server re-checks it. */
+  const dispatchCezar = useCallback(async (taskId: string, expected: TodoDispatchExpected): Promise<{ ok: true; taskId: string; url: string } | { ok: false; status: number; error: string }> => {
+    setError('');
+    inFlight.current += 1;
+    try {
+      const response = await fetch(`/api/todos/${taskId}/cezar-dispatch`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expected }), signal: AbortSignal.timeout(20000),
+      });
+      const body = await response.json().catch(() => ({})) as { taskId?: unknown; url?: unknown; error?: unknown };
+      if (!response.ok) return { ok: false, status: response.status, error: typeof body.error === 'string' ? body.error : '' };
+      if (typeof body.taskId !== 'string' || typeof body.url !== 'string') return { ok: false, status: 0, error: '' };
+      return { ok: true, taskId: body.taskId, url: body.url };
+    } catch {
+      // A timeout or a lost answer says only what to do: no automatic retry.
+      return { ok: false, status: 0, error: '' };
+    } finally {
+      inFlight.current -= 1;
+      setReload(n => n + 1);
+    }
+  }, []);
+  return { source, error, clearError, act, dispatchCezar };
 }
 export type TodosState = ReturnType<typeof useTodos>;

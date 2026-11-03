@@ -9,7 +9,8 @@ export const TODO_STATUSES = {
 export const todoStatusSchema = z.enum(Object.keys(TODO_STATUSES) as [keyof typeof TODO_STATUSES, ...(keyof typeof TODO_STATUSES)[]]);
 /** Who is meant to execute a ready task and how; `null` means it was never chosen (old tasks read as null). */
 export const TODO_EXECUTORS = { cezar: 'Cezar', lokalnie: 'Lokalnie', rozmowa: 'Rozmowa' } as const;
-export const TODO_MODES = { analiza: 'Analiza', implementacja: 'Implementacja' } as const;export const todoExecutorSchema = z.enum(Object.keys(TODO_EXECUTORS) as [keyof typeof TODO_EXECUTORS, ...(keyof typeof TODO_EXECUTORS)[]]);
+export const TODO_MODES = { analiza: 'Analiza', implementacja: 'Implementacja' } as const;
+export const todoExecutorSchema = z.enum(Object.keys(TODO_EXECUTORS) as [keyof typeof TODO_EXECUTORS, ...(keyof typeof TODO_EXECUTORS)[]]);
 export const todoRepoSchema = z.literal('desk-panel');
 export const todoModeSchema = z.enum(Object.keys(TODO_MODES) as [keyof typeof TODO_MODES, ...(keyof typeof TODO_MODES)[]]);
 /** Old `agent` stays an alias for `wektor`: the same author on write and read, including old task and history data. */
@@ -31,6 +32,30 @@ export const todoIsDone = (status: keyof typeof TODO_STATUSES) => status === 'za
 
 export const todoListId = z.string().regex(/^l-[0-9a-f]{8}$/);
 export const todoTaskId = z.string().regex(/^t-[0-9a-f]{8}$/);
+/**
+ * One successful dispatch of a prepared task to Cezar, kept by the cockpit store (`cockpit.json`). `GET /api/todos`
+ * projects the last entry per to-do+revision+mode; the list data itself never carries it.
+ */
+export const todoDispatchRecordSchema = z.object({
+  todoId: todoTaskId,
+  specRevision: z.number().int().nonnegative(),
+  mode: todoModeSchema,
+  taskId: z.string().trim().min(1).max(200),
+  url: z.string().trim().min(1).max(500),
+});
+export type TodoDispatchRecord = z.infer<typeof todoDispatchRecordSchema>;
+/** The preview's own state, sent back on dispatch so the server acts only on what the user saw. */
+export const todoDispatchRequestSchema = z.object({
+  expected: z.object({
+    specRevision: z.number().int().nonnegative(),
+    title: z.string().max(TODO_LIMITS.title),
+    executor: todoExecutorSchema.nullable(),
+    repo: todoRepoSchema.nullable(),
+    mode: todoModeSchema.nullable(),
+    status: todoStatusSchema,
+    blocked: z.string().max(TODO_LIMITS.blocked).nullable(),
+  }).strict(),
+}).strict();
 const name = z.string().trim().min(1).max(TODO_LIMITS.name);
 const title = z.string().trim().min(1).max(TODO_LIMITS.title);
 const note = z.string().max(TODO_LIMITS.note);
@@ -76,6 +101,8 @@ export const todoSourceSchema = z.object({
   status: z.enum(['connected', 'offline', 'unavailable', 'loading']),
   observedAt: z.number().finite().nullable(), message: z.string().optional(),
   data: todoDataSchema.nullable(),
+  /** The dispatch register projection; an old source without it reads as no dispatches. */
+  cezarDispatches: z.array(todoDispatchRecordSchema).optional(),
 });
 export type TodoTask = z.infer<typeof todoTaskSchema>;
 export const todoOpenStatus = (task: TodoTask): TodoTask['status'] =>

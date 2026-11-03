@@ -246,6 +246,21 @@ describe('the cockpit of a conversation', () => {
       .toEqual([[`+ cezar ${RUN} — Paski`, 'panel'], [`+ chat ${CHAT}`, 'panel'], [`+ pr ${pr} — Paski`, 'panel']]);
   });
 
+  it('links the PR of a task dispatched from the to-do dialog after a restart, with no chat and from the register', async () => {
+    const { cockpit, todos, sources, file } = setup();
+    const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;
+    const todoId = (await todos.apply({ action: 'addTask', list, title: 'Paski' })).task!.id;
+    const url = `${CEZAR}p/desk-panel/tasks/f2c9501e-7121-4746-8fc8-19ee3ee9d968`;
+    cockpit.recordTodoDispatch({ todoId, specRevision: 1, mode: 'implementacja', taskId: RUN, url, at: 1 });
+    // A restarted panel with no conversation at all: only the to-do register knows the task.
+    const restarted = createCockpit({ sources, file, cezarUrl: CEZAR, gh: async () => '{}' });
+    const pr = 'https://github.com/metelskiwiktor/desk-panel/pull/32';
+    await restarted.linkPrs([{ id: RUN, pullRequestUrl: pr, title: 'Paski' }]);
+    const todo = (await todos.read()).data!.lists[0].tasks[0];
+    expect(todo.links).toContainEqual(expect.objectContaining({ kind: 'pr', id: pr, title: 'Paski' }));
+    expect(restarted.todoDispatches()).toEqual([{ todoId, specRevision: 1, mode: 'implementacja', taskId: RUN, url }]);
+  });
+
   it('links the PR from the cockpit view as soon as the watched task has one, once', async () => {
     const { cockpit, todos } = setup();
     const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;

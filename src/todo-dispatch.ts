@@ -15,6 +15,38 @@ interface TodoDispatch {
   specRevision: number;
 }
 
+/** The fields a dispatch may rely on: what the user saw in the preview, compared again on the server. */
+export interface TodoDispatchExpected {
+  specRevision: number;
+  title: string;
+  executor: TodoTask['executor'];
+  repo: TodoTask['repo'];
+  mode: TodoTask['mode'];
+  status: TodoTask['status'];
+  blocked: string | null;
+}
+
+export const todoDispatchExpected = (todo: TodoTask): TodoDispatchExpected => ({
+  specRevision: todo.specRevision,
+  title: todo.title,
+  executor: todo.executor,
+  repo: todo.repo,
+  mode: todo.mode,
+  status: todo.status,
+  blocked: todo.blocked ?? null,
+});
+
+/** Whether the task still holds everything the preview was made from; identical polling changes nothing. */
+export const todoDispatchMatches = (todo: TodoTask, expected: TodoDispatchExpected): boolean => {
+  const current = todoDispatchExpected(todo);
+  return current.specRevision === expected.specRevision && current.title === expected.title
+    && current.executor === expected.executor && current.repo === expected.repo && current.mode === expected.mode
+    && current.status === expected.status && current.blocked === expected.blocked;
+};
+
+/** The register key: one dispatch per to-do, revision and mode. */
+export const todoDispatchKey = (todoId: string, specRevision: number, mode: string | null): string => `${todoId}|${specRevision}|${mode ?? ''}`;
+
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
 /** A header is the whole line from column 0: an uppercase label and a colon, with trailing spaces or tabs only. */
