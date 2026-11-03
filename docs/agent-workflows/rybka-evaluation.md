@@ -30,9 +30,19 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | C2 `t-7dea9734` rev 2 | Gemini | 126,493 | 84 587 | brak danych | 2 | 4 | 2 | 2 | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 4 | DeepSeek — idle-timeout | 587,171 | 55 906 | 0,003680 | — | — | — | — | nie wykonywano | — | nie wykonywano |
 | C2 `t-7dea9734` rev 4 | Gemini | 262,530 | 89 693 | brak danych | 2 | 5 | 1 | — | nie wykonywano | — | nie wykonywano |
-| C2a `t-7dea9734` rev 5 | DeepSeek | 284,313 | 108 804 | 0,026364 | 0 | 5 | 3 | 0 | nie wykonywano | — | nie wykonywano |
-| C2a `t-7dea9734` rev 5 | Gemini — timeout procesu | 600,204 | 61 465 | brak danych | — | — | — | — | nie wykonywano | — | nie wykonywano |
-| C2a `t-7dea9734` rev 5 | Gemini — ponowienie | 180,541 | 66 468 | brak danych | 0 | 6 | 2 | 0 | nie wykonywano | — | nie wykonywano |
+| C2a `t-7dea9734` rev 5 | DeepSeek | 284,313 | 108 804 | 0,026364 | 0 | 5 | 3 | 0 | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| C2a `t-7dea9734` rev 5 | Gemini — timeout procesu | 600,204 | 61 465 | brak danych | — | — | — | — | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| C2a `t-7dea9734` rev 5 | Gemini — ponowienie | 180,541 | 66 468 | brak danych | 0 | 6 | 2 | 0 | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+
+### C2a — wynik executora i niezależny przegląd PR #44, 2026-11-03
+
+Jedna próba Cezara `b2e33b61-b9f8-4cb1-a21b-dea8a380185a` doprowadziła do [PR #44](https://github.com/metelskiwiktor/desk-panel/pull/44), head `f7d6a8886b3bd19044a41cecc365fd770d99e26e`, baza `f7f03a4837f41e69868daf7ce22465f7d1cb4e8f`. Realizowano C2a rev 5; wynik jest wspólny dla trzech wierszy przeglądów tej rewizji, nie oznacza trzech runów. Implementacja: 18 min 42 s; całość: 24 min 50 s; pierwsza zakończona edycja po 3 min 27,6 s od startu implement (3 min 40,4 s od startu runu, plik scenariusza). Zero rund `fix` i `address`, pierwsze verify przeszło; review agy zakończyło się `approve`, bez uwag. W implement uruchamiano testy celowane (końcowo 191 testów), typecheck i knip; nie znaleziono wywołania pełnego zestawu testów ani `just check` przed krokiem verify. Nie dokończono kodu lokalnie, nie scalono ani nie zmieniono PR-a.
+
+Executor napotkał problemy niezgłoszone przez rybki: nowy helper testowy czekał na `listening` bez uruchomienia serwera, co powodowało timeouty nawet po podwyższeniu limitu; poprawił kolejność `listen`/oczekiwania. Zapis testów przez PowerShell uszkodził polskie literały (13 porażek); executor odtworzył plik z bazy i ponownie naniósł dopisek. Naprawiał też własne asercje czytające odpowiedź JSON dwukrotnie i obliczające prompt już po zmianie stanu. Są to potknięcia implementacji/narzędzi, nie nowe nierozstrzygnięte decyzje specyfikacji. Źródło: `.ai/cezar/runs/b2e33b61-b9f8-4cb1-a21b-dea8a380185a.ndjson`, m.in. wiersze 784, 808, 835, 852, 871, 1031, 1039 i 1073; końcowe podsumowanie implement w wierszu 1570.
+
+Niezależny przegląd dokładnego headu w osobnym worktree: 191/191 testów celowanych oraz pełne `just check` (1168/1168 testów, typy, knip, build) przeszły. Dodatkowe próby z atrapą Cezara potwierdziły odrzucenie czterech kluczy klienta (`prompt`, `model`, `workflow`, `project`) oraz dokładny prompt i workflow C1 dla obu trybów. Odtworzono błąd P2: po otwarciu podglądu zmiana wykonawcy na `lokalnie` ukrywa podgląd i przycisk odświeżenia (`src/TodoDialog.tsx:185`), wbrew jawnemu wymaganiu rev 5; test sprawdza tylko zmianę pomiędzy dwoma gotowymi trybami. To przeoczenie implementacji, a nie niezgłoszony brak specyfikacji (rybki wcześniej wskazywały zachowanie podglądu).
+
+Ponownie wygenerowano i obejrzano widoki obu zadań przy 1280×720 oraz 390×844: sekcja, braki i rozwinięty prompt są czytelne, bez poziomego przepełnienia. Runner `--open todo-dispatch` robi jednak na telefonie tylko gotowe zadanie (`scripts/scenario.ts:352`); niegotowe sprawdzono osobnym przebiegiem tego samego scenariusza. Należy dopiąć ten brakujący zrzut i wymagać obecności podglądu zamiast warunkowo pomijać jego otwarcie. Artefakty i logi pozostają poza Gitem. Nie wykonano prawdziwego zlecenia Cezara. Aktualizacja rejestru nie naprawia tych dwóch uwag P2.
 
 ### C1 — wynik executora i niezależny przegląd PR #43, 2026-11-02
 
