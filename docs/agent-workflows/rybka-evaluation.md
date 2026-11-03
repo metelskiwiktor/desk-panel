@@ -39,6 +39,9 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | OpenRouter `t-0fc77df7` rev 3 | Gemini | 208,519 | 72 840 | brak danych | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
 | OpenRouter `t-0fc77df7` rev 4 | DeepSeek | 72,269 | 103 021 | 0,013821 | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
 | OpenRouter `t-0fc77df7` rev 4 | Gemini | 207,347 | 72 832 | brak danych | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 5 | DeepSeek | 137,193 | 106 205 | 0,016728 | 0 | 5 | 3 | 0 | tak: układ kart i adnotacji, szczegóły niżej | 1 | tak: poprawka UI po scaleniu #45 |
+| OpenRouter `t-0fc77df7` rev 5 | Gemini — provider-error | 238,210 | 126 782 | brak danych | — | — | — | — | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 5 | Gemini — ponowienie | 320,596 | 89 850 | brak danych | 0 | 5 | 3 | 0 | tak: układ kart i adnotacji, szczegóły niżej | 1 | tak: poprawka UI po scaleniu #45 |
 
 ### OpenRouter — oficjalne dane konta, 2026-11-03
 
@@ -124,6 +127,81 @@ Pełny raport oraz klasyfikacja są w zadaniu; `.ai/rybka-runs/2026-11-03T11-25-
 Po obu przeglądach dokładnej rev 4, dowodzie live i zapisaniu rozstrzygnięć zdjęto blokadę, ustawiono `gotowe`
 i potwierdzono brak braków C1. Nie ma nowego sekretu; nie wykonano implementacji ani dispatchu. Test runnera 23/23
 oraz pełne `just check` zmian procesu przeszły.
+
+#### Rev 5 — przywrócenie salda konta na życzenie użytkownika
+
+2026-11-03 użytkownik przywrócił saldo konta z `GET /api/v1/credits` tym samym istniejącym kluczem, jako
+`data.total_credits − data.total_usage`. Jedna autoryzowana próba live: HTTP 200, `{data: object}`;
+`total_credits`: number, `total_usage`: number. Zapisano wyłącznie nazwy i typy, bez kwot i surowej odpowiedzi.
+Nie przyznano nowych uprawnień ani nie skonfigurowano nowego sekretu; nie wywołano `/api/v1/activity`.
+
+Rev 5 wymaga pięciu głównych wartości: Dzisiaj, Ten tydzień, Ten miesiąc, Łącznie (koszty bieżącego klucza),
+Saldo konta (odrębny zakres konta), a limitu jako jednej adnotacji „bez limitu” lub „limit X, zostało Y”.
+Usunięto reset z prezentacji zamiast rozszerzać adnotację. Dwa requesty startują równolegle, błąd któregokolwiek
+oznacza błąd całego odczytu, a cache przyjmuje wyłącznie kompletny udany payload. Testy mają wymusić równoległy start,
+sprawdzić obie jednostronne awarie i brak częściowego cache; nie dodajemy retry ani częściowego sukcesu.
+Poprzednie przeglądy rev 4 nie zastępują przeglądu nowego zakresu: uruchomiono obie rybki dla dokładnej rev 5.
+
+DeepSeek: redakcyjne 2, 3, 5, 7, 8; chybione 1, 4, 6; brak blokujących. Rozstrzygnięcia zapisano w komentarzu:
+materiały nie są allowlistą, klient żyje poza handlerem; `observedAt` oznacza kompletny odczyt, a limit jest jedną
+adnotacją zamiast dwóch metryk proponowanych w rev 4. Późny sukces drugiej atrapy nie może zapełnić cache po błędzie
+pierwszej — to sprawdzenie już zapisanego zakazu częściowego cache, bez nowej reguły anulowania. Pozostawiono istniejące
+`formatUsd`; nie projektujemy priorytetów różnych błędów ani zachowania w jednej milisekundzie granicy TTL.
+Gemini przerwał pierwszą próbę błędem dostawcy bez poprawnego raportu; ponowiono tylko jego przegląd.
+
+Gemini: redakcyjne 1, 2, 3, 6, 7; chybione 4, 5, 8; bez blokujących. Zachowano jawne typy `/key`, precyzję backendu
+i TTL bez wymuszania konkretnej zmiennej cache; testy mogą porównywać zmiennoprzecinkowe saldo z tolerancją.
+Nie dodajemy protokołu priorytetów błędów. Układ i miejsce adnotacji były wyborem UI; uwagę 2 oraz decyzję użytkownika
+po #45 wykorzystano w lokalnej poprawce opisanej niżej. Pełne raporty obu modeli i klasyfikacje zapisano w komentarzach.
+Raport ponowienia Gemini zakończył się już po ręcznym ustawieniu `gotowe` przez użytkownika i rozpoczęciu runu —
+nie przedstawiamy go jako bramki zakończonej przed dispatch. Specyfikacja pozostała v5.
+Raporty: `.ai/rybka-runs/2026-11-03T11-37-53-426Z-opencode-53b133d1/` oraz
+`.ai/rybka-runs/2026-11-03T11-43-32-906Z-agy-a9da4319/`.
+
+#### Pierwsze zlecenie przyciskiem — wynik executora i odbiór PR #45
+
+Run `f830f1a5-c453-431f-904e-0c53e4cf6d37`, [PR #45](https://github.com/metelskiwiktor/desk-panel/pull/45),
+commit `304e1c6`, scalony jako `8b41da6`. Jedno zlecenie z okna zadania, specyfikacja v5; 0 rund `fix`/`address`,
+review `approve` bez uwag. Automat `panel` dopisał link `cezar`, komentarz z v5 i id taska oraz stan `realizacja`,
+następnie link `pr`. Historia zawiera też późniejsze ręczne przełączenia stanu przez użytkownika; nie są działaniem automatyki.
+
+| Etap | Czas |
+| --- | ---: |
+| prepare | 11,881 s |
+| implement | 3 min 16,048 s |
+| implementation-scope | 1,047 s |
+| verify (`just check`) | 1 min 1,173 s |
+| changed | 0,232 s |
+| review | 3 min 55,921 s |
+| commit | 1,241 s |
+| pr | 6,914 s |
+| screenshots-comment / review-comment | 3,017 s / 1,202 s |
+| Całość od startu do końca runu | 8 min 41,335 s |
+
+Źródło czasów: `.ai/cezar/runs/f830f1a5-c453-431f-904e-0c53e4cf6d37.ndjson`:
+start w. 1, implement start/koniec w. 9/409, verify w. 414/417, approve w. 599, koniec w. 614
+(identyfikatory zdarzeń `seq`: odpowiednio 1, 9/448, 453/456, 720, 735).
+Executor przeprowadził 34 testy celowane i typecheck; pełne sprawdzenie wykonał osobny verify.
+
+Rewizje przygotowania: **1** — Analytics/Explore z management key, saldo i historia per model;
+**2** — poprawiono załącznik odrzucany przez walidator, modele dostały pełne materiały;
+**3** — jawny kontrakt Analytics, podział kluczy (management dla Analytics, zwykły dla credits), całościowy błąd/cache
+i czyszczenie `last`;
+**4** — rezygnacja z nowego sekretu/Analytics/historii na rzecz czterech liczników `/key` i limitu;
+**5** — przywrócenie salda `/credits` tym samym kluczem, pięć wartości i jedna adnotacja, dwa równoległe żądania
+z błędem całości. Nowe trasy sprawdzono live w przygotowaniu, zapisując wyłącznie nazwy i typy.
+
+Progress log w `.ai/cezar/runs/f830f1a5-c453-431f-904e-0c53e4cf6d37.handoff.md` zawiera wpis executora
+`2026-11-03T12:55:00.000Z — step "implement" complete`, choć faktyczne zakończenie to `11:54:09.812Z`.
+To fałszywy znacznik czasu w tekście modelu, nie pomiar; czasy powyżej pochodzą ze zdarzeń Cezara.
+
+Odbiór po scaleniu: `just update` potwierdził już serwowaną wersję. Dashboard OpenRouter, cztery koszty klucza
+i saldo konta: **zgodne**. Nie zapisano kwot. Zadanie przeniesiono do zakończonych po kontroli automatyki.
+Lokalne dokończenie UI na życzenie użytkownika: cztery karty zajmują całą szerokość szerokiego kafelka, podpisy
+tygodnia/miesiąca bez łamania, „Klucz bez limitu” przy sekcji klucza. Executor widział łamanie podpisów i uznał je za
+czytelne (NDJSON w. 373, `seq=408`); reviewer zaakceptował układ. Rybka Gemini wspomniała układ/adnotację, ale nie zgłosiła
+konkretnego problemu niepełnej szerokości. Zrzuty syntetyczne przed/po: `output/screenshots/openrouter-layout-before.png`
+i `openrouter-layout-after.png`, 1280×720 CSS; PNG pozostają poza Gitem.
 
 ### C2a — wynik executora i niezależny przegląd PR #44, 2026-11-03
 

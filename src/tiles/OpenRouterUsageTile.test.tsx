@@ -56,7 +56,9 @@ describe('OpenRouterUsageTile', () => {
 
   it('renders one limit annotation: no limit, and an em dash for an unknown remainder', () => {
     const { rerender } = render(<OpenRouterUsageTile usage={{ ...sampleUsage, limitUsd: null, limitRemainingUsd: null }} wide tall />);
-    expect(screen.getByText('bez limitu')).toBeTruthy();
+    const note = screen.getByText('Klucz bez limitu');
+    expect(note).toBeTruthy();
+    expect(note.compareDocumentPosition(screen.getByText('Konto')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     rerender(<OpenRouterUsageTile usage={{ ...sampleUsage, limitUsd: 20, limitRemainingUsd: null }} wide tall />);
     expect(screen.getByText('limit $20.00, zostało —')).toBeTruthy();

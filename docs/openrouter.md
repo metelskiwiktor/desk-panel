@@ -1,6 +1,6 @@
 # OpenRouter: koszty klucza, saldo konta i adnotacja limitu
 
-Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pustym miejscu pulpitu ikona monet) pokazuje pięć oficjalnych wartości z API OpenRouter: koszt bieżącego klucza **dziś**, w **tym tygodniu**, w **tym miesiącu** i **łącznie** oraz **saldo całego konta**. Cztery liczniki kosztu dotyczą klucza, saldo konta — całego konta; kafelek oznacza oba zakresy osobno. Limit klucza jest jedną adnotacją: „bez limitu” albo „limit X, zostało Y”. Nie ma wykresu per model, historii dziennej ani resetu limitu.
+Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pustym miejscu pulpitu ikona monet) pokazuje pięć oficjalnych wartości z API OpenRouter: koszt bieżącego klucza **dziś**, w **tym tygodniu**, w **tym miesiącu** i **łącznie** oraz **saldo całego konta**. Cztery liczniki kosztu dotyczą klucza, saldo konta — całego konta; kafelek oznacza oba zakresy osobno. Limit klucza jest jedną adnotacją przy sekcji kosztów klucza: „Klucz bez limitu” albo „limit X, zostało Y”. W szerokim kafelku cztery karty kosztów zajmują cały wiersz, w wąskim dwa wiersze; podpisy pozostają w jednej linii. Nie ma wykresu per model, historii dziennej ani resetu limitu.
 
 ## Klucz API i współdzielenie z Hermesem
 

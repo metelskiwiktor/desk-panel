@@ -21,7 +21,7 @@ function formatUsd(amount: number | null | undefined): string {
 }
 
 function limitNote(usage: OpenRouterUsage): string {
-  if (usage.limitUsd === null) return 'bez limitu';
+  if (usage.limitUsd === null) return 'Klucz bez limitu';
   const remaining = usage.limitRemainingUsd === null ? '—' : formatUsd(usage.limitRemainingUsd);
   return `limit ${formatUsd(usage.limitUsd)}, zostało ${remaining}`;
 }
@@ -90,6 +90,7 @@ function OpenRouterUsageTileView({
             <Metric label="Ten tydzień" value={data.weeklyUsd} title="Koszt bieżącego klucza w tym tygodniu" />
             <Metric label="Ten miesiąc" value={data.monthlyUsd} title="Koszt bieżącego klucza w tym miesiącu" />
             <Metric label="Łącznie" value={data.allTimeUsd} title="Łączny koszt bieżącego klucza" />
+            <span className="or-limit">{limitNote(data)}</span>
             <span className="or-scope-label">Konto</span>
             <Metric
               label="Saldo konta"
@@ -97,7 +98,6 @@ function OpenRouterUsageTileView({
               title="Saldo całego konta OpenRouter: doładowania minus wykorzystane środki"
               className="or-metric-account"
             />
-            <span className="or-limit">{limitNote(data)}</span>
           </div>
         )}
       </div>
