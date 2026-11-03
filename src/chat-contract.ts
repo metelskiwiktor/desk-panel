@@ -48,15 +48,16 @@ export const BANK_GUIDE: readonly string[] = [
  * start of every conversation: a long preamble dilutes the rules for a small model and grows with every area (bank, calendar,
  * to-dos…). The preamble only says that a guide exists and when to read it (one line each, made from `when`).
  */
+const TODO_DISPATCH_RULE = 'Dla zadania z listy odczytaj pełne panel_todos zadanie=<t-…>; użyj gotowości i listy braków C1 z odpowiedzi. Gotowe: otwórz zadanie, rozwiń „Pokaż podgląd” i kliknij „Zleć na Cezarze”. Jeśli niegotowe, wymień braki z C1 i skieruj do okna zadania. Dla zadania z listy STOP: bez rekonesansu, składania lub przepisywania promptu, panel_recon_report i panel_cezar_propose; prompt składa serwer. Nie zlecaj sam, nie zmieniaj pól, stanu ani blokady w celu umożliwienia zlecenia.';
+
 export const PANEL_GUIDES = {
   zadania: {
     when: 'rozmowa o zadaniach z list użytkownika',
-    core: 'stan i komentarze na prośbę użytkownika; Cezar i PR nie wyznaczają stanu zadania',
+    core: 'zadanie z listy zlecaj przyciskiem w jego oknie, według gotowości C1 z panel_todos; bez karty czatu; Cezar i PR nie wyznaczają stanu zadania',
     lines: [
       'Zadania z list czytaj przez panel_todos (zadanie, list, stan, ukonczone); zmieniaj przez panel_todo_action. Bez wskazanej listy użyj jedynej lub jednoznacznie pasującej; gdy niepewny, pytaj. Gdy list nie ma, utwórz Zadania. Usuwaj tylko na wyraźną prośbę.',
       'Stan zadania zmieniaj na prośbę użytkownika. Ustalenia z rozmowy możesz zapisać komentarzem, gdy użytkownik o to prosi. Blokada jest niezależna od stanu. Stan zadania jest niezależny od Cezara i PR-a: zakończenie Cezara nie kończy zadania.',
-      'Przy pracy nad konkretnym zadaniem z listy najpierw przeczytaj je w całości przez panel_todos z zadanie=<id t-…> (wersja=N dla wybranej rewizji): pole specyfikacji niesie pełną treść Markdown; kontekst wskazania i widok listy są skrótami. CEL, ZAKRES, DECYZJE i WARUNKI ODBIORU ze specyfikacji w notatce, polu spec i komentarzach przenieś do promptu executora w całości, dosłownie, bez skracania i tłumaczenia. Własnych poleceń od użytkownika nie zamieniaj w kryteria, a lista plików w rekonesansie musi obejmować wszystkie moduły, przez które przechodzi zmiana (kontrakt, adaptery, widoki, testy). Rekonesans tylko uzupełnia ustalenia; nie zastępuje ani nie osłabia ustaleń.',
-      'Przy propozycji zlecenia Cezara z zadania podaj todoId. Po kliknięciu karty panel sam podpina task Cezara i rozmowę oraz ustawia W realizacji.',
+      TODO_DISPATCH_RULE,
     ],
   },
   wizyty: {
@@ -121,10 +122,10 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
   {
     id: 'zaimplementuj-zadanie',
     title: 'Zaimplementuj zadanie',
-    description: 'Rekonesans w repo, dwuetapowy workflow (analiza/implementacja) i karta zgody na zlecenie taska na Cezarze',
+    description: 'Zadanie z listy: gotowość i przycisk w oknie. Prośba spoza listy: rekonesans i karta zgody na Cezara.',
     prompt: [
-      'You dispatch Desk Panel (repo: C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel). Prepare a self-contained Cezar Executor Prompt and propose it; the user decides in a card.',
-      'For a to-do, read panel_todos (zadanie=<t-…>, wersja=N): spec is in its own field. Copy CEL, ZAKRES, DECYZJE and WARUNKI ODBIORU verbatim and unabridged into Notes (overrides English below). Never turn user commands into criteria: keep as guidance. Relevant files must cover all modules the change passes through (contract, adapters, views, tests). Recon only supplements them.',
+      TODO_DISPATCH_RULE,
+      'Only for requests outside user to-do lists: prepare a Cezar Executor Prompt for Desk Panel (repo: C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel); the user decides in a card. Never turn user commands into criteria: keep as guidance. Relevant files cover contract, adapters, views and tests.',
       'Two-stage analytical workflow:',
       '- Phase 0 (Earlier work): Before recon, call panel_cezar (no arguments) for finished analyses/implementations of the feature. Read any match with panel_cezar (id, then krok) and its handoff note; carry every user decision (reuse, sharing, scope) into Acceptance criteria. Name the prior task in the plan, or say there is none.',
       '- Phase 1 (Recon and Mode Decision): Do a short read-only recon: search first (search_files for names and symbols), then read only files the search returned; never read or cite a path, commit or id that no tool result in this conversation showed. Send a call that depends on another result only after that result arrives. Identify the exact files in src/ or server/ that need changes, check matching scenarios in scenarios/*.json, and decide whether the change is UI (changes visible in the browser: src/, styles.css, scenarios/) or non-UI (backend-only in server/, tests, or scripts where screenshots would not change). Before proposing to change a function or component, search for its callers: one nothing in production calls is dead code (say so; removing or wiring it is new work), not a bug to patch. Stop once you can name the files; the executor reads deeply. Budget: about 15 tool calls for Phases 0-1. Hermes ends the turn after 40 model calls, card or not: send panel_recon_report by your 20th call with what you have (open questions go to Notes for executor), and at once when a tool result carries an "iteration budget checkpoint" notice. This skill and the tool descriptions are the contract: unless the task changes them, never read server/panel-mcp.ts, server/agent-views.ts, server/hermes-*.ts, src/chat-contract.ts, src/cockpit-contract.ts, scripts/scenario.ts or docs/agent-workflows/, never open credentials (auth.json, .env, tokens), and never search for panel_* tool names or `open:` syntax; read a Cezar step with panel_cezar krok, not log files. Evaluate complexity during recon:',
@@ -154,7 +155,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
       '     - [ ] ...',
       '     Notes for executor:',
       '     - Follow the Desk Panel Executor Instructions in your workflow prompt strictly (Phases 1-4).',
-      '- Then, in this order, each step only after the previous one\'s result arrived: (1) call the panel tool panel_recon_report ALONE, once the search results are in, with files (path + short note; "new": true for a file to create), kind, scenario and the Executor Prompt; its answer gives a recon id (r-…); it refuses what the rules above forbid (missing files or sections, unknown names, asks without "→", soft criteria) and says why; (2) write a short plan for the user in Polish (3-6 bullets, naming the earlier task you built on); (3) call panel_cezar_propose with a short Polish title, the same prompt, "recon" from step 1, optional workflow ("analysis" or "desk-panel-task"), and the todoId of a to-do item from the context if there is one; a proposal sent before the recon\'s answer is refused; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',
+      '- Then, in this order, each step only after the previous one\'s result arrived: (1) call the panel tool panel_recon_report ALONE, once the search results are in, with files (path + short note; "new": true for a file to create), kind, scenario and the Executor Prompt; its answer gives a recon id (r-…); it refuses what the rules above forbid (missing files or sections, unknown names, asks without "→", soft criteria) and says why; (2) write a short plan for the user in Polish (3-6 bullets, naming the earlier task you built on); (3) call panel_cezar_propose with a short Polish title, the same prompt, "recon" from step 1 and optional workflow ("analysis" or "desk-panel-task"), without todoId; a proposal sent before the recon\'s answer is refused; (4) STOP. Do not repeat the prompt in text and do not ask "Zlecić na Cezarze?" in text: the card asks.',
     ].join('\n'),
   },
   {

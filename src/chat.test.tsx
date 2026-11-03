@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CHAT_SKILLS, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
+import { CHAT_SKILLS, PANEL_GUIDES, type ChatMessage, type ChatPart, type ChatSummary } from './chat-contract';
 import { ChatWindow, groupOf } from './ChatWindow';
 import { contextFrom, ctx, markPicked, pickableAt } from './chat-context';
 import { withMessage } from './useChat';
@@ -363,6 +363,18 @@ describe('CHAT_SKILLS', () => {
     expect(skill!.prompt.length).toBeLessThan(8000);
     expect(skill!.prompt).toContain('panel_cezar');
     expect(skill!.prompt).toContain('panel_cezar_propose');
+    const todoRule = PANEL_GUIDES.zadania.lines.find(line => line.includes('Dla zadania z listy STOP:'))!;
+    expect(todoRule).toBeDefined();
+    expect(skill!.prompt.startsWith(todoRule)).toBe(true);
+    expect(todoRule).toContain('gotowości i listy braków C1');
+    expect(todoRule).toContain('„Pokaż podgląd” i kliknij „Zleć na Cezarze”');
+    expect(todoRule).toContain('bez rekonesansu, składania lub przepisywania promptu, panel_recon_report i panel_cezar_propose');
+    expect(todoRule).toContain('Jeśli niegotowe, wymień braki z C1');
+    expect(skill!.prompt).toContain('Only for requests outside user to-do lists');
+    expect(skill!.prompt).toContain('without todoId');
+    expect(skill!.prompt.indexOf(todoRule)).toBeLessThan(skill!.prompt.indexOf('Phase 0'));
+    expect(PANEL_GUIDES.zadania.core).toContain('bez karty czatu');
+    expect(skill!.prompt).not.toContain('Copy CEL');
   });
 });
 

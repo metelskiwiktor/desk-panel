@@ -86,6 +86,11 @@ rewizji.
 
 ## Zlecenie na Cezarze z okna zadania
 
+Wektor (także `@Zaimplementuj zadanie`) najpierw czyta pełne `panel_todos zadanie=<t-…>` i korzysta z gotowości C1.
+Gotowe zadanie kieruje do jego okna: „Pokaż podgląd”, potem „Zleć na Cezarze”; przy niegotowym wymienia braki C1.
+Nie robi rekonesansu, nie przepisuje specyfikacji ani nie pokazuje karty dispatch z czatu dla zadania z listy.
+Dotychczasowa karta pozostaje dla szybkich próśb spoza list, bez `todoId`; historyczne powiązania kart nadal działają.
+
 Sekcja „Zleć na Cezarze” (w panelu bocznym pod stanem) prowadzi całą ścieżkę bez modelu: selecty `executor`, `repo` i
 `mode` z opcją „brak” (od razu `updateTask`; `null` czyści pole), lista braków i dosłowny prompt z C1
 (`src/todo-dispatch.ts:getTodoDispatch`), workflow i numer rewizji oraz przycisk zlecenia. Przycisk pojawia się przy

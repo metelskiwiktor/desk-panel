@@ -76,7 +76,7 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   `npx shadcn add https://r.assistant-ui.com/<nazwa>.json` (`components.json`: prefiks `tw`, alias `@/` → `src/`); po
   aktualizacji z rejestru trzeba ponownie nanieść zmiany opisane na górze `thread.aui.tsx`.
 - **Karty w rozmowie**: narzędzia o znanych nazwach mają własne karty (`src/cockpit/cards.tsx`): rekonesans
-  `@Zaimplementuj zadanie` (kroki, przeszukane pliki, typ UI/non-UI, prompt dla executora), **zgoda przed zleceniem na
+  `@Zaimplementuj zadanie` dla próśb spoza list zadań (kroki, przeszukane pliki, typ UI/non-UI, prompt dla executora), **zgoda przed zleceniem na
   Cezarze** („Zleć na Cezarze”, „Edytuj prompt”, „Odrzuć”), nasłuchiwanie Cezara (pasek postępu i kroki worktree) i prośba
   Hermesa o zgodę na narzędzie. Inne narzędzia to zwijany wiersz.
 - **Hermes niedostępny**: nad polem wiadomości karta „Hermes nie odpowiada” z przyciskiem „Ponów próbę” (pyta serwer
@@ -129,7 +129,7 @@ panel i skąd bierze dane. To, co użytkownik **wskaże** na pulpicie, dostaje r
   Cała strefa „Najbliższe dni” niesie w kontekście każdy widoczny dzień z jego wydarzeniami i treningami (pusty dzień bez
   pozycji), w zakresie zgodnym z rozmiarem: siedem dni albo pięć tygodni.
 - **Wysyłanie**: `Enter` wysyła, `Shift+Enter` to nowa linia. Podczas odpowiedzi przycisk wysyłania zamienia się w „Zatrzymaj”.
-- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Skill `@Zaimplementuj zadanie` robi rekonesans tylko do odczytu i proponuje zlecenie kartą zgody. Agent sam nie uruchamia Cezara: dopiero kliknięcie użytkownika wysyła z panelu `POST /api/chats/:id/dispatch`; backend odczytuje propozycję z tej rozmowy i zwraca powiązanie z taskiem.
+- **Wybór skillów (`@`)**: wpisanie `@` w polu czatu otwiera listę skillów (`@Zaimplementuj zadanie`, `@Nasłuchuj Cezara`: tylko odczyt statusu taska). Wybranie skilla (`Enter`, `Tab` albo kliknięcie) zamienia wpisany token `@…` na podświetlony chip kontekstu z przyciskiem `×` (jak wskazany element pulpitu). Dla zadania z listy `@Zaimplementuj zadanie` czyta pełne `panel_todos` i kieruje do przycisku w oknie zadania lub wymienia braki C1 — bez rekonesansu, przepisywania promptu i karty czatu. Dla próśb spoza list zachowuje rekonesans tylko do odczytu i kartę zgody. Agent sam nie uruchamia Cezara: z okna zadania kliknięcie użytkownika wysyła `POST /api/todos/:id/cezar-dispatch`, a z karty czatu `POST /api/chats/:id/dispatch`. Serwer składa prompt zadania z listy przez C1; propozycję spoza list czyta z rozmowy.
 - Rozmowę można usunąć (kosz, wymaga drugiego dotknięcia). Nazwę zmienia się w nagłówku rozmowy (Enter zapisuje, Esc anuluje, pusta lub niezmieniona się nie zapisuje); tak nadanej nazwy panel już nie nadpisuje.
 - Wąski ekran (telefon przez Tailscale): pełny widok zajmuje cały ekran, kompaktowy i wskazywanie są u dołu.
 

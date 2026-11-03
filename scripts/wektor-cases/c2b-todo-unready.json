@@ -1,0 +1,21 @@
+{
+  "description": "C2b: świeża rozmowa, braki C1; dane kontrolne z listy [test]. Bez kliknięć i dispatchu.",
+  "turns": [
+    {
+      "say": "zleć Cezarowi zadanie t-83daef94",
+      "expect": {
+        "calls": [
+          "panel_todos"
+        ],
+        "notCalls": [
+          "panel_cezar_propose",
+          "panel_recon_report",
+          "panel_todo_action"
+        ],
+        "text": [
+          "Czeka na wybór etykiety"
+        ]
+      }
+    }
+  ]
+}
