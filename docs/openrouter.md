@@ -4,6 +4,15 @@ Kafelek **OpenRouter** (`openrouter`, `src/tiles/OpenRouterUsageTile.tsx`; w pus
 
 ## Klucz API i współdzielenie z Hermesem
 
+Planowane zastąpienie lokalnego źródła (zadanie `t-0fc77df7`, jeszcze niewdrożone):
+użytkownik 2026-11-03 wybrał dane konta zgodne z dashboardem OpenRouter zamiast rekonstrukcji z logów Hermesa.
+Oficjalny [opis Activity](https://openrouter.ai/docs/guides/features/activity) wskazuje
+`GET /api/v1/analytics/meta` i `POST /api/v1/analytics/query` jako dostęp do tych samych agregatów co Explore;
+[kontrakt query](https://openrouter.ai/docs/api/api-reference/analytics/query-analytics-data) wymaga management key.
+Uzgodniona osobna zmienna backendu to `OPENROUTER_MANAGEMENT_KEY` w `panel.env`, poza Gitem; obecny klucz Hermesa pozostaje bez zmian.
+Test `analytics/meta` obecnym kluczem zwrócił 403. Nie wywoływano `/api/v1/activity`; jego zakaz pozostaje.
+Opis poniżej dotyczy nadal działającej implementacji opartej na logu.
+
 Panel nie wymaga osobnego klucza typu provisioning czy management key. Wykorzystuje **ten sam pojedynczy klucz OpenRouter**, którego używa już Hermes Agent:
 - Zmienna: `OPENROUTER_API_KEY` w pliku `%USERPROFILE%\.desk-panel\panel.env`.
 - Klucz pozostaje wyłącznie na backendzie; nigdy nie jest przesyłany do przeglądarki ani zapisywany w plikach cache czy logach.

@@ -33,6 +33,59 @@ Po każdym przebiegu słoń analizuje uwagi zgłoszone przez danego recenzenta i
 | C2a `t-7dea9734` rev 5 | DeepSeek | 284,313 | 108 804 | 0,026364 | 0 | 5 | 3 | 0 | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
 | C2a `t-7dea9734` rev 5 | Gemini — timeout procesu | 600,204 | 61 465 | brak danych | — | — | — | — | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
 | C2a `t-7dea9734` rev 5 | Gemini — ponowienie | 180,541 | 66 468 | brak danych | 0 | 6 | 2 | 0 | tak: uruchomienie serwera testowego i kodowanie Windows; szczegóły niżej | 1 | nie — bez lokalnych poprawek kodu; PR wymaga korekt |
+| OpenRouter `t-0fc77df7` rev 2 | DeepSeek | 103,031 | 57 500 | 0,016868 | 3 | 3 | 2 | 1 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 2 | Gemini | 257,361 | 80 106 | brak danych | 3 | 3 | 2 | 1 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 3 | DeepSeek | 68,129 | 67 891 | 0,011283 | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
+| OpenRouter `t-0fc77df7` rev 3 | Gemini | 208,519 | 72 840 | brak danych | 0 | 4 | 4 | 0 | nie wykonywano | — | nie wykonywano |
+
+### OpenRouter — oficjalne dane konta, 2026-11-03
+
+Wybrano istniejące `t-0fc77df7` z listy „Usprawnienia Desk Panel”. Użytkownik odrzucił proponowane samo oznaczenie
+braków lokalnego logu: chce kwoty zgodne z dashboardem OpenRouter. Potwierdził konfigurację osobnego management key
+poza Gitem. Oficjalna dokumentacja wskazuje `analytics/meta` i `analytics/query` jako źródło agregatów Explore;
+próba `analytics/meta` zwykłym kluczem panelu dała 403. Zakaz `/api/v1/activity` pozostał i nie wywołano tej trasy.
+Zmiana jest przygotowana dla `executor=cezar`, `repo=desk-panel`, `mode=implementacja`, bez dispatchu.
+
+Rev 1 nie dotarła do modeli: walidator załączników potraktował wzmiankę o przyszłym pliku scenariusza jako istniejący
+załącznik. Usunięto ją z sekcji ZAŁĄCZNIKI; zakres pozostał. Obie rybki skutecznie przeczytały rev 2.
+Pełne raporty zapisano w komentarzach zadania, z kontrolą odtworzenia treści. Pierwszy zapis DeepSeek przyciął końce
+wierszy części przez `trim` API; zastąpił go oznaczony poprawiony komplet (końcowy LF pliku raportu nie jest treścią modelu).
+
+Klasyfikacja rev 2: DeepSeek — blokujące 1, 2, 5 (5 unikalna), redakcyjne 3, 4, 6, chybione 7, 8;
+Gemini — blokujące 1, 2, 3 (3 unikalna w części o uprawnieniach `credits`, nie nazwie opcji), redakcyjne 4, 5, 8,
+chybione 6, 7. Wspólne braki to dokładne body czasu i schemat odpowiedzi. DeepSeek zauważył rzeczywisty konflikt:
+hook po błędzie zwracał `last` jako sukces. Gemini wskazał niezapisane założenie o uprawnieniach management key do
+`credits`. Rev 3 usuwa te braki: Analytics dostaje managementKey, istniejący `apiKey` służy tylko `credits`, błąd czyści
+frontendowy `last`. Cache to wyłącznie jeden udany payload przez 60 s, bez odświeżania `observedAt` przy trafieniu.
+Bez retry, paginacji i nowej ochrony współbieżności; odpowiedź ucięta ma jawnie zawieść.
+
+Nie dodano skomplikowanej arytmetyki ani pełnej kopii standardowego scenariusza. Kwoty backendu pozostają Number,
+formatowanie robi UI; minimalny scenariusz błędu obsługuje istniejący runner, a wykonanie before po dodaniu samego
+fixture było już zapisane. Są to odrzucone rozszerzenia, nie nowe wymagania. Dla finalnej rev 3 uruchomiono ponownie
+obie rybki, żeby gotowość odnosiła się do dokładnie przeczytanej rewizji. Prywatne raporty:
+`.ai/rybka-runs/2026-11-03T10-57-08-316Z-opencode-22a3f6a6/` i
+`.ai/rybka-runs/2026-11-03T10-57-11-612Z-agy-4387116d/`.
+
+DeepSeek rev 3: zero blokujących; redakcyjne 2, 4, 6, 8, chybione 1, 3, 5, 7. Czyszczenie `last`, mapowanie błędów,
+jeden pełny payload cache i brak deduplikacji są już jawne. Dokładny tekst komunikatu, dobór walidacji oraz usunięcie
+zbędnych opcji/helperów to praca implementacyjna; nie zamawiamy priorytetyzacji dwóch jednoczesnych błędów ani
+osobnej gramatyki egzotycznych zapisów liczb. `settled()` ma tylko konsumenta testowego, więc nie potrzebuje no-op
+„dla zgodności”. Minimalny fixture `{"openrouterUsage":{"$error":503}}` sprawdzono lokalnym `loadScenario` bez modeli
+i zmian implementacji. Raport rev 3: `.ai/rybka-runs/2026-11-03T11-03-43-430Z-opencode-42018f33/`.
+
+Gemini rev 3: zero blokujących; redakcyjne 1, 3, 4, 6, chybione 2, 5, 7, 8. Wymienienie obu kluczy obejmuje klucz
+zarządzający, kontrakt określa postać daty i dopuszcza ujemne saldo, a walidacja/formalny błąd 502 nie zamawia obsługi
+hipotetycznego konta post-paid. Mechanizm timeoutu i mock respektujący abort są wyborem wykonawcy; nie dokładamy
+filtrowania poprawnych zerowych kwot oficjalnej odpowiedzi. Uwagi o czyszczeniu `last` oraz `settled()` były już
+rozstrzygnięte w rev 3 i regułach repo. Pełny raport i klasyfikację zapisano w komentarzach bez zmiany rev 3;
+`.ai/rybka-runs/2026-11-03T11-03-46-606Z-agy-a5dbd069/`. Pozostałe sugestie nie wprowadzają nowych decyzji produktu.
+
+Minimalny scenariusz dodatkowo przeszedł prawdziwy runner zrzutów na izolowanym API
+(`--open tile:openrouter`, 1280×720 CSS), bez `pageerror`; brak pozostałych źródeł daje obsługiwane odpowiedzi 503.
+Oba skuteczne przeglądy finalnej rev 3 sklasyfikowano i rozstrzygnięto bez kolejnej rozbudowy specyfikacji.
+Końcowy odczyt C1 potwierdził `gotowe`, rev 3, workflow `desk-panel-task`, bez braków. Nie wykonano implementacji
+ani dispatchu. Porównanie live z Explore pozostaje jawnym odbiorem po przyszłym PR-ze, z kluczem użytkownika;
+przygotowanie ani testy na atrapach go nie zastępują. `just check` przygotowania przeszedł.
 
 ### C2a — wynik executora i niezależny przegląd PR #44, 2026-11-03
 
