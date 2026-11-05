@@ -2,6 +2,8 @@
 
 Testy tworzące repozytoria Git ustawiają tożsamość committera lokalnie w repo testowym, także dla podpiętych worktree, bez zależności od globalnej konfiguracji maszyny lub CI.
 Test retry kasowania sesji Hermesa przesuwa sztucznym zegarem tylko opóźnienie ponowienia, a prawdziwe HTTP wykonuje po przywróceniu rzeczywistych timerów Node.
+Scenariusze czatu tymczasowego Hermesa są rozdzielone na instrukcje i usunięcie, sprzątanie po restarcie oraz zachowanie rozmowy: każdy ma własny limit i wskazuje osobno, co zawiodło.
+Testy domyślnego układu pulpitu czekają na kafelki limitów i poczty przed sprawdzeniem lub zmianą układu: te dane przychodzą niezależnie.
 
 ## Scenariusze i zrzuty ekranu
 

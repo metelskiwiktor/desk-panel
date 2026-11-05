@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { scenarioFetch, type ScenarioName } from './test-fixtures';
@@ -51,7 +51,8 @@ describe('the work area', () => {
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
     expect(screen.queryByRole('button', { name: 'Edytuj układ pulpitu' })).toBeNull();
-    expect(grid().querySelectorAll('.wk-cell')).toHaveLength(5);
+    // Mail can arrive before quota accounts: wait for the layout driven by both responses.
+    await waitFor(() => expect(grid().querySelectorAll('.wk-cell')).toHaveLength(5));
     for (const tile of grid().querySelectorAll<HTMLElement>('.wk-cell')) {
       expect(tile.querySelector('.wk-grip')).toBeTruthy();
       expect(tile.querySelector('.wk-x')).toBeTruthy();
@@ -64,6 +65,7 @@ describe('the work area', () => {
     const user = userEvent.setup();
     renderWith();
     await screen.findByRole('region', { name: 'Poczta' });
+    await waitFor(() => expect(grid().querySelectorAll('.wk-cell')).toHaveLength(5));
     await user.click(screen.getByRole('button', { name: 'Wyłącz kafelek: Poczta' }));
     expect(cell('mail')).toBeNull();
     expect(at('cezar')).toMatchObject({ w: 2, h: 2 }); // the first change keeps the arrangement as it was

@@ -242,7 +242,7 @@ describe('Hermes chat', () => {
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
 
-  it('hides temporary chats, instructs every turn, deletes sessions and cleans orphans on startup; keep persists', async () => {
+  it('hides temporary chats, instructs every turn and deletes their sessions', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'Tymczasowa', temporary: true });
     await finishedChat(service, id);
@@ -254,15 +254,23 @@ describe('Hermes chat', () => {
     await service.remove(id);
     await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
     await expect(service.get(id)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('cleans orphaned temporary chats and their sessions on startup', async () => {
+    const service = hermes();
     const orphan = await service.create({ text: 'Osierocona', temporary: true });
     await finishedChat(service, orphan.id); service.close(); await service.drain();
     const restarted = hermes(); await restarted.list();
     await expect(restarted.get(orphan.id)).rejects.toMatchObject({ status: 404 });
     await vi.waitFor(() => expect(mock.sessions.size).toBe(0));
-    const kept = await restarted.create({ text: 'Zachowana', temporary: true });
-    await finishedChat(restarted, kept.id); await restarted.update!(kept.id, { temporary: false });
-    expect(await restarted.list()).toMatchObject([{ id: kept.id, temporary: false }]);
-    restarted.close(); await restarted.drain();
+  });
+
+  it('keeps a temporary chat after saving it across a restart', async () => {
+    const service = hermes();
+    const kept = await service.create({ text: 'Zachowana', temporary: true });
+    await finishedChat(service, kept.id); await service.update!(kept.id, { temporary: false });
+    expect(await service.list()).toMatchObject([{ id: kept.id, temporary: false }]);
+    service.close(); await service.drain();
     expect((await hermes().get(kept.id)).temporary).toBe(false);
   });
 
