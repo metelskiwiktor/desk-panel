@@ -787,8 +787,9 @@ button.p2-badge.bank-todo { border: 0; cursor: pointer; background: color-mix(in
 .bank .p2-card-head .p2-badge ~ .bank-gear { margin-left: 4px; }
 .bank .p2-card-head .bank-gear svg { margin-left: 0; color: var(--p2-muted); }
 
-.bank-dlg { width: min(560px, 100%); gap: 6px; }
+.bank-dlg { width: min(560px, 100%); height: auto; max-height: 100%; gap: 6px; padding: 20px; overflow-y: auto; }
 .bank-dlg > * { flex-shrink: 0; }
+.bank-dlg > .todo-dlg-head { padding: 0 0 12px; }
 .bank-dlg-op { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 4px 0 6px; }
 .bank-dlg-name { overflow: hidden; font-size: 18px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .bank-dlg-op b { font-size: 18px; font-variant-numeric: tabular-nums; }

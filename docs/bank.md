@@ -61,6 +61,8 @@ a panel podpisuje zapytania krótkim JWT RS256 kluczem aplikacji (`server/bank.t
 
 ## Oznaczenia operacji
 
+Okno oznaczania przewija się w całości, gdy formularz nie mieści się na ekranie, dzięki czemu dostępne są także opis i przycisk zapisu.
+
 Najpierw jedno pytanie: **co zrobiły pieniądze**. Odpowiedź to **ruch**, a ruch decyduje, do której sumy operacja trafia, i ma
 dokładnie jedną oś. Dzięki temu każdy wykres czyta jedno pole i sumuje się do 100%.
 
