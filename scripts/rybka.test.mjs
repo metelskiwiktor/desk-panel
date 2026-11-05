@@ -7,10 +7,11 @@ import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   reviewMaterials, runRybka, fetchTaskSpec, isTaskId, parseRybkaArgs,
-  validReport, formatReportHeader, splitReportComments, AGY_MODEL, MODEL,
+  validReport, formatReportHeader, splitReportComments, AGY_MODEL, CLAUDE_MODEL, MODEL,
 } from './rybka.mjs';
 
 const dirs = [];
+const goodReport = 'BLOKUJĄCE:\nbrak uwag blokujących\n\nROZMIAR: adekwatny';
 it('preserves report whitespace through API trimming and respects UTF-16 and JSON byte limits', () => {
   const report = ' \n\t' + ('ą😀"\\\n   '.repeat(1800)) + '\r\n\t ';
   const parts = splitReportComments(report);
@@ -29,6 +30,7 @@ function fixture(attachments = 'docs/mock.html') {
   mkdirSync(join(dir, 'docs'));
   writeFileSync(join(dir, 'spec.md'), `CEL:\nNowy widok.\nPOZA ZAKRESEM:\nZałączniki do zadań i docs/nie-czytaj.md.\nZAŁĄCZNIKI:\n${attachments}\n`);
   writeFileSync(join(dir, 'AGENTS.md'), 'Zasady repo.');
+  writeFileSync(join(dir, 'role.md'), '---\nname: rybka\n---\nRecenzujesz specyfikację. BLOKUJĄCE: DROBNE: ROZMIAR:');
   writeFileSync(join(dir, 'docs/mock.html'), '<h1>Makieta</h1>');
   return dir;
 }
@@ -36,7 +38,7 @@ function setup(overrides = {}) {
   const cwd = fixture(); const child = new EventEmitter(); child.pid = 4242;
   child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
   const calls = [], printed = [], configs = [];
-  const options = { specPath: 'spec.md', runner: 'opencode', cwd, log: line => printed.push(line),
+  const options = { specPath: 'spec.md', runner: 'opencode', cwd, rolePath: join(cwd, 'role.md'), log: line => printed.push(line),
     env: { SECRET_TOKEN: 'do-not-print', OPENCODE_CONFIG_CONTENT: 'host-inline' },
     execImpl: (command, args, opts) => {
       configs.push(opts.env.OPENCODE_CONFIG_CONTENT);
@@ -47,7 +49,7 @@ function setup(overrides = {}) {
   return { cwd, child, calls, printed, configs, options };
 }
 function event(child, frame) { child.stdout.write(JSON.stringify(frame) + '\n'); }
-function report(child, text = 'brak uwag') {
+function report(child, text = goodReport) {
   event(child, { type: 'text', part: { text } });
   event(child, { type: 'step_finish', part: { type: 'step-finish', reason: 'stop', tokens: { input: 10, output: 4, reasoning: 2, total: 16 } } });
 }
@@ -98,8 +100,8 @@ it('uses a fresh pinned review with only explicit file reads and preserves separ
   expect(Object.values(config.agent)[0].model).toBe(config.model);
   expect(Object.values(config.agent)[0]).not.toHaveProperty('steps');
   expect(Object.values(config.agent)[0].prompt).toContain(join(f.cwd, 'docs/mock.html'));
-  expect(Object.values(config.agent)[0].prompt).toContain('minimalne uprawnienia klucza');
-  expect(Object.values(config.agent)[0].prompt).toContain('dowód bezpiecznej autoryzowanej próby live właściwej trasy');
+  expect(Object.values(config.agent)[0].prompt).toContain('Recenzujesz specyfikację');
+  expect(Object.values(config.agent)[0].prompt).not.toContain('name: rybka');
   expect(Object.values(config.agent)[0].prompt).not.toContain('<h1>Makieta</h1>');
   expect(opts.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe('64000');
   expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
@@ -163,7 +165,7 @@ it('resets idle only for events, decodes split UTF-8, and accepts a complete fou
   await vi.advanceTimersByTimeAsync(80);
   event(f.child, { type: 'step_start' });
   await vi.advanceTimersByTimeAsync(80);
-  const text = 'Niejasność: A\nNiezapisane założenie: B\nWpływ na wykonanie: C\nPytanie: D?';
+  const text = 'BLOKUJĄCE:\n1. Niejasność: A\nNiezapisane założenie: B\nWpływ na wykonanie: C\nPytanie: D?\n\nROZMIAR: adekwatny';
   const raw = Buffer.from(JSON.stringify({ type: 'text', part: { text } }) + '\n');
   const cut = raw.indexOf(Buffer.from('ś')) + 1;
   f.child.stdout.write(raw.subarray(0, cut)); f.child.stdout.write(raw.subarray(cut));
@@ -273,6 +275,7 @@ it('parses CLI arguments for task ID or file path and runner selection with both
   expect(isTaskId('spec.md')).toBe(false);
 
   expect(parseRybkaArgs(['t-00c6c30f'])).toEqual({ specPath: 't-00c6c30f', runner: 'both' });
+  expect(parseRybkaArgs(['spec.md', '--runner', 'claude'])).toEqual({ specPath: 'spec.md', runner: 'claude' });
   expect(parseRybkaArgs(['spec.md', '--runner', 'agy'])).toEqual({ specPath: 'spec.md', runner: 'agy' });
   expect(parseRybkaArgs(['spec.md', '--runner=opencode'])).toEqual({ specPath: 'spec.md', runner: 'opencode' });
   expect(parseRybkaArgs(['--help'])).toEqual({ help: true });
@@ -299,6 +302,7 @@ it('runs agy runner without tool permissions, with inlined materials, stream-jso
     specPath: 'spec.md',
     runner: 'agy',
     cwd,
+    rolePath: join(cwd, 'role.md'),
     log: line => printed.push(line),
     spawnImpl: (...args) => { calls.push(args); return child; },
     killTree: () => child.emit('close', null),
@@ -317,8 +321,8 @@ it('runs agy runner without tool permissions, with inlined materials, stream-jso
   expect(args).not.toContain('--dangerously-skip-permissions');
 
   expect(capturedStdin).toContain('Recenzujesz specyfikację');
-  expect(capturedStdin).toContain('minimalne uprawnienia klucza');
-  expect(capturedStdin).toContain('dowód bezpiecznej autoryzowanej próby live właściwej trasy');
+  expect(capturedStdin).toContain('Recenzujesz specyfikację');
+  expect(capturedStdin).not.toContain('name: rybka');
   expect(capturedStdin).toContain('--- Plik referencyjny: AGENTS.md ---');
   expect(capturedStdin).toContain('--- Plik referencyjny: docs/mock.html ---');
   expect(capturedStdin).toContain('<h1>Makieta</h1>');
@@ -328,13 +332,13 @@ it('runs agy runner without tool permissions, with inlined materials, stream-jso
   child.stdout.write(JSON.stringify({ event: 'init', init: { model: AGY_MODEL } }) + '\n');
   child.stdout.write(JSON.stringify({
     event: 'step_update',
-    step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'brak uwag' }
+    step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: goodReport }
   }) + '\n');
   child.stdout.write(JSON.stringify({
     event: 'result',
     result: {
       status: 'SUCCESS',
-      response: 'brak uwag\n',
+      response: goodReport,
       usage: { input_tokens: 1500, output_tokens: 25, total_tokens: 1525 }
     }
   }) + '\n');
@@ -358,6 +362,7 @@ it('runs both runners in parallel, each creating its own directory under .ai/ryb
   const cwd = fixture();
   const children = [];
   const calls = [];
+  const inputs = [];
 
   const spawnImpl = (...args) => {
     calls.push(args);
@@ -366,6 +371,9 @@ it('runs both runners in parallel, each creating its own directory under .ai/ryb
     child.stdout = new PassThrough();
     child.stderr = new PassThrough();
     child.stdin = new PassThrough();
+    const index = children.length;
+    inputs[index] = '';
+    child.stdin.on('data', chunk => { inputs[index] += chunk.toString(); });
     children.push(child);
     return child;
   };
@@ -374,6 +382,7 @@ it('runs both runners in parallel, each creating its own directory under .ai/ryb
     specPath: 'spec.md',
     runner: 'both',
     cwd,
+    rolePath: join(cwd, 'role.md'),
     log: () => {},
     spawnImpl,
     killTree: child => child.emit('close', null),
@@ -382,34 +391,42 @@ it('runs both runners in parallel, each creating its own directory under .ai/ryb
 
   // Both should have been spawned
   expect(calls).toHaveLength(2);
-  const [opencodeCall, agyCall] = calls;
-  expect(opencodeCall[0]).toBe('opencode');
+  const [claudeCall, agyCall] = calls;
+  expect(claudeCall[0]).toBe('claude');
   expect(agyCall[0]).toMatch(/agy(\.exe)?$/);
 
-  const [opencodeChild, agyChild] = children;
+  const [claudeChild, agyChild] = children;
 
-  // Emit report on OpenCode
-  report(opencodeChild, 'brak uwag');
-  opencodeChild.emit('close', 0);
+  // Emit report on Claude
+  event(claudeChild, { type: 'result', subtype: 'success', result: goodReport });
+  claudeChild.emit('close', 0);
 
   // Emit report on agy
   agyChild.stdout.write(JSON.stringify({
     event: 'result',
-    result: { status: 'SUCCESS', response: 'brak uwag\n', usage: { total_tokens: 200 } }
+    result: { status: 'SUCCESS', response: goodReport, usage: { total_tokens: 200 } }
   }) + '\n');
   agyChild.emit('close', 0);
 
   const result = await done;
   expect(result.ok).toBe(true);
   expect(result.results).toHaveLength(2);
-  const [opencodeRes, agyRes] = result.results;
+  const [claudeRes, agyRes] = result.results;
 
-  expect(opencodeRes.ok).toBe(true);
+  expect(claudeRes.ok).toBe(true);
   expect(agyRes.ok).toBe(true);
-  expect(opencodeRes.dir).not.toBe(agyRes.dir);
-  expect(opencodeRes.dir).toContain('-opencode-');
+  expect(claudeRes.dir).not.toBe(agyRes.dir);
+  expect(claudeRes.dir).toContain('-claude-');
   expect(agyRes.dir).toContain('-agy-');
-  expect(existsSync(opencodeRes.reportPath)).toBe(true);
+  expect(existsSync(claudeRes.reportPath)).toBe(true);
+  const claudeReport = readFileSync(claudeRes.reportPath, 'utf8');
+  expect(claudeReport).toContain(`- Model: ${CLAUDE_MODEL}`);
+  expect(JSON.parse(readFileSync(join(claudeRes.dir, 'report-comments.json'), 'utf8'))).toEqual(splitReportComments(claudeReport));
+  expect(inputs[0]).toContain('Recenzujesz specyfikację');
+  expect(inputs[0]).not.toContain('name: rybka');
+  expect(inputs[0]).toContain('<h1>Makieta</h1>');
+  expect(inputs[0]).toContain(readFileSync(join(cwd, 'spec.md'), 'utf8'));
+  expect(JSON.parse(inputs[1]).message.content).toBe(inputs[0]);
   expect(existsSync(agyRes.reportPath)).toBe(true);
 });
 
@@ -437,6 +454,7 @@ it('handles task ID in runRybka, writing task ID and revision in report headers'
     specPath: 't-00c6c30f',
     runner: 'opencode',
     cwd,
+    rolePath: join(cwd, 'role.md'),
     log: () => {},
     fetchImpl,
     spawnImpl: () => child,
@@ -444,7 +462,7 @@ it('handles task ID in runRybka, writing task ID and revision in report headers'
   });
 
   setImmediate(() => {
-    report(child, 'brak uwag');
+    report(child);
     child.emit('close', 0);
   });
 
@@ -465,14 +483,16 @@ it('validReport accepts reports with headers and rejects incomplete reports', ()
     model: 'gemini-3.8-flash-high',
   });
 
-  expect(validReport(header + '\nbrak uwag')).toBe(true);
+  expect(validReport(header + '\n' + goodReport)).toBe(true);
 
   const issueReport = [
     header,
-    'Niejasność: brak opisu błędu',
+    'BLOKUJĄCE:',
+    '1. Niejasność: brak opisu błędu',
     'Niezapisane założenie: zakładamy status 400',
     'Wpływ na wykonanie: niejednoznaczna implementacja',
     'Pytanie: czy 400 czy 422?',
+    'ROZMIAR: za duży: wydzielić drugi widok',
   ].join('\n');
   expect(validReport(issueReport)).toBe(true);
 
@@ -481,4 +501,30 @@ it('validReport accepts reports with headers and rejects incomplete reports', ()
     'Niejasność: tylko jedno pole',
   ].join('\n');
   expect(validReport(incompleteReport)).toBe(false);
+});
+
+
+it('reads the role at startup and fails before spawning if it is missing', async () => {
+  const f = setup();
+  await expect(runRybka({ ...f.options, rolePath: join(f.cwd, 'missing.md') })).rejects.toThrow(/skill.*Nie uruchomiono modeli/);
+  expect(f.calls).toHaveLength(0);
+});
+
+it.each(['empty', 'partial', 'length', 'tool', 'provider', 'exit', 'unfinished'])('rejects unsuccessful Claude output: %s', async kind => {
+  const f = setup({ runner: 'claude' }); const done = runRybka(f.options);
+  const [, args, opts] = f.calls[0];
+  expect(args).toEqual(expect.arrayContaining(['--model', CLAUDE_MODEL, '--effort', 'medium', '--tools', '', '--strict-mcp-config']));
+  expect(opts.stdio).toEqual(['pipe', 'pipe', 'pipe']);
+  if (kind === 'tool') event(f.child, { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read' }] } });
+  else if (kind !== 'unfinished') event(f.child, { type: 'result', subtype: kind === 'provider' ? 'error_during_execution' : 'success',
+    result: kind === 'empty' ? '' : kind === 'partial' ? 'BLOKUJĄCE:\nbrak uwag blokujących' : goodReport,
+    stop_reason: kind === 'length' ? 'max_tokens' : 'end_turn' });
+  f.child.emit('close', kind === 'exit' ? 1 : 0);
+  expect((await done).ok).toBe(false);
+});
+
+it('requires a complete skill verdict, including every blocking issue', () => {
+  for (const text of ['', 'brak uwag', 'BLOKUJĄCE:\nbrak uwag blokujących', goodReport.replace('adekwatny', 'za duży:'),
+    'BLOKUJĄCE:\n1. Niejasność: A / Niezapisane założenie: B / Wpływ na wykonanie: C / Pytanie: D?\n2. Niejasność: urwane\nROZMIAR: adekwatny']) expect(validReport(text)).toBe(false);
+  expect(validReport('**BLOKUJĄCE:**\nbrak uwag blokujących\n\n**DROBNE:**\n- Nazwa.\n\n**ROZMIAR:** adekwatny')).toBe(true);
 });
