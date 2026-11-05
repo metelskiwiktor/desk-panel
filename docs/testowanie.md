@@ -106,6 +106,8 @@ jest zajęte do końca, tylko dokłada narzut. Pliki `*.test-kit.tsx` to pomocni
   zamiast go wyklikiwać.
 - Nie dopisuje się kodu ani eksportów po to, żeby test przeszedł. Kod, którego używa tylko test, jest martwy (knip go zgłosi).
 - Czas: wstrzykiwany zegar (`now`) albo `vi.useFakeTimers`, nie czekanie na `setTimeout` w teście.
+- Dane asynchroniczne przychodzą niezależnie: czekaj na stan, który naprawdę sprawdzasz lub zmieniasz (`findBy`, `waitFor`), nie na inny element ani stałe opóźnienie.
+- Długie testy integracyjne dziel według niezależnych zachowań; unikaj niepotrzebnych tur i rzeczywistych timerów. Timeout to sygnał do diagnozy, nie automatycznego zwiększenia limitu lub retry.
 
 Testy obejmują interfejs (na scenariuszach z `scenarios/` podawanych przez
 to samo API co serwer scenariuszy), layout, reguły i historię zdarzeń, gesty oraz integrację:
@@ -195,5 +197,7 @@ Wybrano ostatni wariant: bez limitu workerów w konfiguracji; tylko dziewięć t
 bo tworzą repo/worktree i uruchamiają wiele procesów git. Pozostałe timeouty nie zmieniają się.
 Wszystkie wejścia używają scripts/check.mjs: just check, verify Cezara oraz just update.
 Pełne wyjście trafia do ignorowanego .ai/check.log, raport Vitest do .ai/check-tests.json,
-a lista nieudanych testów do .ai/check-failures.json. Konsola pokazuje tylko statusy kontroli i nazwy nieudanych
+a lista nieudanych testów do .ai/check-failures.json. Ostatnie 10 zakończonych przebiegów jest w ignorowanym
+`.ai/check-history/`: każdy ma log, listę błędów, wyniki kroków z czasem i, jeśli powstał, raport Vitest. Obejmuje to
+także `just update`; najstarszy przebieg znika automatycznie. Konsola pokazuje tylko statusy kontroli i nazwy nieudanych
 testów z pierwszą linią błędu, żeby limit wyjścia Cezara nie ukrywał przyczyny.

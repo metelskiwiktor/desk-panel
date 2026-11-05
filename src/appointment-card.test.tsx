@@ -37,7 +37,7 @@ describe('the days and times card', () => {
     await x.user.click(screen.getByRole('button', { name: 'Wybieram 08:00' }));
     const link = await screen.findByRole('link', { name: /Otwórz ZnanyLekarz/ });
     expect(link.getAttribute('target')).toBe('_blank'); expect(link.getAttribute('rel')).toContain('noopener');
-    expect((await screen.findByLabelText('Nazwa wydarzenia') as HTMLInputElement).value).toBe('Wizyta — lek. Anna Maj');
+    await waitFor(() => expect((screen.getByLabelText('Nazwa wydarzenia') as HTMLInputElement).value).toBe('Wizyta — lek. Anna Maj'));
     expect((screen.getByLabelText('Godzina zakończenia') as HTMLInputElement).value).toBe('08:30');
     fireEvent.change(screen.getByLabelText('Godzina zakończenia'), { target: { value: '08:45' } });
     await waitFor(() => expect(screen.getByRole('button', { name: '08:00' }).getAttribute('title')).toContain('08:00–08:45'));
