@@ -28,6 +28,7 @@ import { BankLabelError } from './bank-labels';
 import { observerCancelSchema } from '../src/observers-contract';
 import { automationUpdateSchema } from '../src/automation-contract';
 import { AutomationError, type Automations } from './automations';
+import { usageReport, type UsageStore } from './usage';
 
 /** Small JSON request bodies only (actions), validated by the caller's schema. */
 async function readJson<T>(req: IncomingMessage, schema: z.ZodType<T>, maxBytes = 4096): Promise<T> {
@@ -60,7 +61,7 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations } = {}) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations; usage?: UsageStore } = {}) {
   const routes = jsonRoutes(sources);
   const agent = agentViews(sources);
   return createServer(async (req, res) => {
@@ -100,6 +101,21 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         if(!sources.saveWarmup)throw new SourceError(503);
         res.end(JSON.stringify(await sources.saveWarmup(provider.data,input)));
       }catch(error){res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 502).end(JSON.stringify({error:'Nie udało się wykonać operacji warmupu.'}));}
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/usage') {
+      // Usage slices from the page (docs/uzycie.md). Without a store (scenarios, previews, tests) they are accepted and dropped,
+      // so the real history is never touched; a failing store never affects the panel.
+      if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const { slices } = await readJson(req, z.object({ slices: z.array(z.unknown()).min(1).max(100) }).strict(), 256 * 1024);
+        if (!options.usage) { res.writeHead(204).end(); return; }
+        res.end(JSON.stringify(await options.usage.record(slices)));
+      } catch (error) {
+        res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 503).end(JSON.stringify({ error: 'Nie udało się zapisać pomiaru.' }));
+      }
       return;
     }
     const todoDispatch = /^\/api\/todos\/(t-[0-9a-f]{8})\/cezar-dispatch$/.exec(url.pathname);
@@ -202,6 +218,17 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       return;
     }
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
+    if (url.pathname === '/api/usage/summary') {
+      // The export: local callers only (not through the Tailscale name), a period of dates in Europe/Warsaw.
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json');
+      const from = url.searchParams.get('from') ?? '0000-01-01', to = url.searchParams.get('to') ?? '9999-12-31';
+      if (proxied || !options.usage) { res.writeHead(proxied ? 403 : 503).end(JSON.stringify({ error: 'Pomiar użycia jest niedostępny.' })); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) { res.writeHead(400).end(JSON.stringify({ error: 'Okres: from i to jako RRRR-MM-DD.' })); return; }
+      try { res.end(JSON.stringify(usageReport(await options.usage.rows(from, to), from, to))); }
+      catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać pomiaru.' })); }
+      return;
+    }
     if (url.pathname === '/api/todos') {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');

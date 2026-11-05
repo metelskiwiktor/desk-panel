@@ -62,6 +62,8 @@ import { usePulpits } from './pulpits';
 import './chat.css';
 import { useChatPresentation } from './useChatPresentation';
 import { PANEL_NAVIGATE } from './panel-nav';
+import { useUsageMeter } from './useUsageMeter';
+import type { UsageView } from './usage-meter';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
@@ -224,6 +226,10 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const visible = (id: WidgetId) => layout.widgets.find((w) => w.id === id)?.visible ?? true;
   const dayNight = useNight(now);
   const ambient = useAmbient(now, dayNight.night);
+  // Usage measurement (docs/uzycie.md): one main view at a time, ambient > full chat > details > page; a paused host measures nothing.
+  const usageView: UsageView = ambient.ambient ? { view: 'ambient' } : chat.view === 'full' ? { view: 'chat' }
+    : detail ? { view: 'detail', detail: detail.kind } : page === 'home' ? { view: 'page', page, pulpit: pulpits.active } : { view: 'page', page };
+  useUsageMeter(usageView, pollingEnabled);
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')

@@ -33,6 +33,10 @@ wektor-ui case="all" *args:
     node scripts/ensure-deps.mjs
     npx tsx scripts/wektor-ui.ts {{case}} {{args}}
 
+# Usage measurement of a period as JSON (dates YYYY-MM-DD, default: last 7 days), read from the running service.
+usage-export *args:
+    node scripts/usage-export.mjs {{args}}
+
 # Target screens from devices.json with derived CSS sizes and Chrome DevTools values.
 devices:
     npx tsx scripts/devices.ts
