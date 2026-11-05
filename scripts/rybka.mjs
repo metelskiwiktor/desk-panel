@@ -211,7 +211,7 @@ export function validReport(text) {
   const stripped = text.replace(/^# Przegląd specyfikacji:.*?\n(?:- [^\n]+\n)*\r?\n?/s, '').trim();
   // Markdown emphasis/headings are presentation; the skill defines section names and verdict.
   const plain = stripped.replace(/\*\*/g, '').replace(/^#{1,6}\s*/gm, '').replace(/^```(?:text)?\s*$/gm, '').trim();
-  const match = plain.match(/^BLOKUJĄCE:[ \t]*\n([\s\S]*?)\n(?:DROBNE:[ \t]*\n[\s\S]*?\n)?ROZMIAR:[ \t]*(adekwatny[.!]?|za duży:[ \t]*\S[^\n]*)\s*$/i);
+  const match = plain.match(/^BLOKUJĄCE:[ \t]*\n([\s\S]*?)\n(?:DROBNE:[ \t]*\n[\s\S]*?\n)?ROZMIAR:[ \t]*(adekwatny|za duży)\b[\s\S]*$/i);
   if (!match) return false;
   const blocking = match[1].trim();
   if (/^[„"']?brak uwag blokujących[”"']?[.!]?$/i.test(blocking)) return true;

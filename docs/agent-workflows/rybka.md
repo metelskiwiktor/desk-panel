@@ -97,7 +97,8 @@ Skuteczny raport wymaga poprawnego zakończenia tury i procesu, braku błędów 
 - `BLOKUJĄCE:` z jawnym „brak uwag blokujących” albo numerowanymi uwagami, każda z polami
   `Niejasność`, `Niezapisane założenie`, `Wpływ na wykonanie`, `Pytanie` i ich treścią;
 - opcjonalne `DROBNE:`;
-- końcowy werdykt `ROZMIAR: adekwatny` albo `ROZMIAR: za duży: …` z wyjaśnieniem.
+- sekcja `ROZMIAR:` zaczynająca się od werdyktu `adekwatny` albo `za duży`, bez względu na wielkość liter
+  i interpunkcję po werdykcie; dalszy tekst może zajmować wiele linii.
 
 Pusty lub ucięty raport, brak werdyktu i dawny tekst „brak uwag” nie są sukcesem. Wykrycie wywołania narzędzia
 w Claude lub agy przerywa próbę. Nagłówek `report.md` i jego fragmenty w `report-comments.json` podają model
