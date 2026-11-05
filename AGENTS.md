@@ -14,7 +14,7 @@ below names for the area you touch.
 | The chat and Wektor in code | docs/czat.md (product, API), docs/hermes.md (engine), docs/wektor-ui.md (frontend), docs/diagnostyka-czatu-wektora.md (diagnosing a conversation) | agents changing the chat |
 | What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
 | Tests and verification | docs/testowanie.md, `just check` | agents |
-| Agent skills, e.g. how we give Wektor new abilities and judge his answers | skills/<name>/SKILL.md, e.g. skills/wektor-capabilities/SKILL.md; task preparation: [docs/agent-workflows/przygotuj-zadanie.md](docs/agent-workflows/przygotuj-zadanie.md), [docs/agent-workflows/rybka.md](docs/agent-workflows/rybka.md); .claude/skills (Claude Code) and .agents/skills (Codex) are local links to skills/, made by `just setup` | any agent: Claude Code and Codex load them as skills |
+| Agent skills, e.g. how we give Wektor new abilities and judge his answers | skills/<name>/SKILL.md, e.g. skills/wektor-capabilities/SKILL.md; task preparation: the specialist `socius-desk-panel` and skills `slon`, `rybka` live in the user's Tabularium vault (`C:\Tabularium\skills`, linked into ~/.claude/skills and ~/.agents/skills), task fields and readiness pitfalls in `C:\Tabularium\AI\DeskPanel\Zadania.md`, reviewer runner in [docs/agent-workflows/rybka.md](docs/agent-workflows/rybka.md); .claude/skills (Claude Code) and .agents/skills (Codex) are local links to skills/, made by `just setup` | any agent: Claude Code and Codex load them as skills |
 | Cezar's executor | .ai/cezar/workflows/desk-panel-task.yaml, docs/agent-workflows/desk-panel-task.md, docs/agent-workflows/executor-brief.md, scripts/executor-prepare.mjs, scripts/executor-run.mjs, scripts/executor-commit.mjs; results: docs/agent-workflows/executor-evaluation-2026-10-31.md | Cezar |
 | Executor and reviewer measurements | docs/agent-workflows/executor-hidden-acceptance-2026-11-01.md, docs/agent-workflows/reviewer-evaluation-2026-11-01.md, docs/agent-workflows/rybka-evaluation.md | people, agents choosing briefs and review models |
 | `@Zaimplementuj zadanie` | what Wektor reads: `CHAT_SKILLS` in src/chat-contract.ts (a rule changes there first); why each rule exists (dated incidents), the prompt templates and examples: docs/agent-workflows/skills/zaimplementuj-zadanie.md | Wektor; people |
@@ -72,7 +72,7 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   its tool permissions are autonomy, not a filesystem sandbox. Cezar's own check nodes commit the approved diff
   (docs/agent-workflows/desk-panel-task.md).
 - `just rybka SPEC [--runner opencode|agy|both]`: local specification review (task id `t-…` or file path) with bounded materials, progress and private logs; see
-  [docs/agent-workflows/przygotuj-zadanie.md](docs/agent-workflows/przygotuj-zadanie.md). Never dispatches Cezar or marks a to-do ready.
+  [docs/agent-workflows/rybka.md](docs/agent-workflows/rybka.md). Never dispatches Cezar or marks a to-do ready.
 - `just check`: tests, typecheck, dead code (knip, production mode) and frontend build in parallel. Run before publishing;
   `just test-fast` runs only the tests touched by uncommitted changes. Tests guard invariants, not commits: change the
   existing test, merge duplicates, and add no code that only a test uses (docs/testowanie.md).
@@ -101,7 +101,7 @@ Details and setup from scratch: docs/tailscale.md.
 
 Procesy agy, także nazywanie rozmów, nie dziedziczą żadnej zmiennej z `panel.env`, zmiennych `DESK_*` ani znanych sekretów panelu; to zmniejszenie ekspozycji, nie izolacja procesów tego samego użytkownika przez DPAPI ([docs/hermes.md](docs/hermes.md)).
 
-Nowy sekret lub zewnętrzne API wymaga przed oznaczeniem zadania `gotowe` sprawdzenia minimalnych uprawnień klucza, dostępu procesów agentów oraz kontraktu bezpieczną autoryzowaną próbą live; do dowodów trafia tylko kształt odpowiedzi, bez sekretów i kwot ([proces przygotowania](docs/agent-workflows/przygotuj-zadanie.md)).
+Nowy sekret lub zewnętrzne API wymaga przed oznaczeniem zadania `gotowe` sprawdzenia minimalnych uprawnień klucza, dostępu procesów agentów oraz kontraktu bezpieczną autoryzowaną próbą live; do dowodów trafia tylko kształt odpowiedzi, bez sekretów i kwot (`C:\Tabularium\AI\DeskPanel\Zadania.md`, sekcja „Specyfikacja i gotowość”).
 
 Source is in src/ and server/. The UI reads only `/api/*`; `server/sources.ts`
 defines `PanelSources`, implemented by `real-sources.ts` (service) and

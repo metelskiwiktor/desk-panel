@@ -1,7 +1,7 @@
 # Runner recenzji specyfikacji: złota rybka (scripts/rybka.mjs)
 
 Dokument techniczny dla [scripts/rybka.mjs](../../scripts/rybka.mjs) — runnera procesu recenzji specyfikacji
-przez **złotą rybkę** w procesie [przygotuj-zadanie.md](przygotuj-zadanie.md).
+przez **złotą rybkę** w procesie słonia i rybki (skille `slon` i `rybka` w `C:\Tabularium\skills`).
 Runner uruchamia recenzję w świeżej sesji, bez historii rozmowy i z jawnymi, ograniczonymi materiałami referencyjnymi.
 Nie uruchamiaj go w runie wykonawcy Cezara.
 
@@ -28,7 +28,7 @@ Oba przebiegi startują w świeżych sesjach bez historii:
 
 Wspólna rola obu rybek sprawdza także uprawnienia i przechowywanie nowego sekretu oraz dowód próby live nowego API
 (data, status, kształt bez sekretów i kwot). Przy braku tych ustaleń ma zgłosić pytanie, zamiast traktować mock lub
-przykład dokumentacji jako potwierdzony kontrakt; pełna checklista jest w [procesie przygotowania](przygotuj-zadanie.md).
+przykład dokumentacji jako potwierdzony kontrakt; pełna lista jest w `C:\Tabularium\AI\DeskPanel\Zadania.md` (sekcja „Specyfikacja i gotowość”).
 
 - **DeepSeek** (`opencode`): model `openrouter/deepseek/deepseek-v4.1-flash-1017`. Specyfikacja jest jedyną wiadomością użytkownika,
   a model czyta AGENTS.md i załączniki narzędziem `read` (do 12 wywołań).
@@ -98,5 +98,5 @@ pola:
 
 Samo wymienienie nazw pól ani komunikat o wyczerpaniu kroków nie jest raportem. Kontrola skryptu nie zastępuje
 oceny kompletności przez słonia i omówienia uwag z użytkownikiem. Sam JSONL, fragment odpowiedzi, timeout lub
-kod 0 bez zakończonej tury nie spełniają definicji gotowości w [przygotuj-zadanie.md](przygotuj-zadanie.md).
+kod 0 bez zakończonej tury nie są raportem (`C:\Tabularium\AI\DeskPanel\Zadania.md`).
 Klasyfikację uwag z raportów rejestrujemy w [rybka-evaluation.md](rybka-evaluation.md).

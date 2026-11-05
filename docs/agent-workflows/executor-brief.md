@@ -4,7 +4,7 @@ A Cezar executor run reads one brief file. Copy this template, fill every sectio
 task-specific detail, and pass it to `node scripts/executor-run.mjs --brief ABS_PATH` or `just executor-run <path>`.
 The `implement` step of `.ai/cezar/workflows/desk-panel-task.yaml` receives the task text in the same shape.
 
-A task spec in the headed format ([przygotuj-zadanie.md](przygotuj-zadanie.md)) — `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:`,
+A task spec in the headed format (skill `slon` in the user's Tabularium vault) — `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:`,
 `DECYZJE:`, `WARUNKI ODBIORU:`, `ZAŁĄCZNIKI:` on their own lines — is a **valid brief by itself**. The sections below are
 optional detail that can be added; a brief without them still works. The brief is what the executor works from; the
 workflow prompt adds the fixed repository rules. A brief that leaves a section as `none` is a decision, not an omission:
