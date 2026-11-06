@@ -62,7 +62,7 @@ export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', 
     await new Promise<void>((done, fail) => { api.once('error', fail); api.listen(0, '127.0.0.1', () => { api.off('error', fail); done(); }); });
     const apiUrl = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
     // Vite 6 treats port 0 as its default port. Ask the OS for a port first; Vite may retry if it is taken meanwhile.
-    vite = await createServer({ server: { host: '127.0.0.1', port: await freeLoopbackPort(), strictPort: false, proxy: { '/api': { target: apiUrl, changeOrigin: false } } }, logLevel: 'warn' });
+    vite = await createServer({ define: { __DESIGNLAB__: true }, server: { host: '127.0.0.1', port: await freeLoopbackPort(), strictPort: false, proxy: { '/api': { target: apiUrl, changeOrigin: false } } }, logLevel: 'warn' });
     await vite.listen();
     return { url: vite.resolvedUrls!.local[0], stop };
   } catch (error) { await stop(); throw error; }

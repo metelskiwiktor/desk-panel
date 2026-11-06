@@ -64,6 +64,8 @@ któremu urządzeniu i skalowaniu odpowiada bieżący ekran.
 - **Skala w Windows**: 150% (logiczny obszar roboczy 1280 × 720)
 - **Orientacja**: Pozioma (Landscape)
 
+Makiety wyglądu na danych scenariusza (`?designlab=demo` w podglądzie): [designlab.md](designlab.md).
+
 Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
 prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
 `server/scenario.test.ts` sprawdza, że każdy z nich spełnia kontrakty.

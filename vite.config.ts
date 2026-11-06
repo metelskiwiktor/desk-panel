@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   // Tailwind serves only the chat cockpit (src/cockpit/cockpit.css): prefixed `tw:` utilities, no preflight.
   plugins: [react(), tailwindcss()],
+  // DesignLab (src/designlab) is off everywhere except the scenario preview, which turns it on explicitly.
+  define: { __DESIGNLAB__: false },
   // `@/…` is src/: the assistant-ui components (shadcn, src/components) import each other that way.
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   // DESK_API_URL can override the development API; scenario-runtime.ts supplies its own isolated proxy explicitly.
