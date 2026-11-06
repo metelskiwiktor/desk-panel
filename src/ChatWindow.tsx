@@ -101,7 +101,7 @@ function CockpitWindow({ requestedChat, source, onClose, view: controlledView, p
   }, [visible, mode]);
 
   return createPortal(<div className="chat-root ck-root wektor-root tw:font-ck tw:text-ck-text" data-mode={mode} data-temporary={source.temporary || undefined} hidden={!visible}>
-    <section ref={section} className="wektor-shell" role={mode === 'window' ? 'dialog' : 'complementary'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem">
+    <section ref={section} className="wektor-shell" data-usage-area="wektor" data-usage-chat={mode === 'window' ? 'full' : mode === 'dock' ? 'pointing' : 'compact'} role={mode === 'window' ? 'dialog' : 'complementary'} aria-modal={mode === 'window' ? true : undefined} aria-label="Czat z agentem">
       <header className="wektor-header">
         {!picking && <button type="button" className="wektor-icon" aria-label="Pokaż rozmowy" title="Historia rozmów" aria-expanded={historyShown} onClick={toggleHistory}><PanelLeft size={19} /></button>}
         <span className="wektor-brand"><Sparkles size={18} aria-hidden="true" /></span>

@@ -110,9 +110,12 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Type', 'application/json');
       try {
-        const { slices } = await readJson(req, z.object({ slices: z.array(z.unknown()).min(1).max(100) }).strict(), 256 * 1024);
+        const { slices, areas } = await readJson(req, z.object({ slices: z.array(z.unknown()).max(100).default([]), areas: z.array(z.unknown()).max(100).default([]) })
+          .strict().refine(b => b.slices.length + b.areas.length >= 1 && b.slices.length + b.areas.length <= 100), 256 * 1024);
         if (!options.usage) { res.writeHead(204).end(); return; }
-        res.end(JSON.stringify(await options.usage.record(slices)));
+        const main = slices.length ? await options.usage.record(slices) : { accepted: 0, duplicates: 0, rejected: 0 };
+        // The reply of the main views is unchanged; the areas are counted next to it only when sent.
+        res.end(JSON.stringify(areas.length ? { ...main, areas: await options.usage.recordAreas(areas) } : main));
       } catch (error) {
         res.writeHead(error instanceof SourceError ? error.status : error instanceof SyntaxError ? 400 : 503).end(JSON.stringify({ error: 'Nie udało się zapisać pomiaru.' }));
       }
@@ -225,7 +228,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       const from = url.searchParams.get('from') ?? '0000-01-01', to = url.searchParams.get('to') ?? '9999-12-31';
       if (proxied || !options.usage) { res.writeHead(proxied ? 403 : 503).end(JSON.stringify({ error: 'Pomiar użycia jest niedostępny.' })); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) { res.writeHead(400).end(JSON.stringify({ error: 'Okres: from i to jako RRRR-MM-DD.' })); return; }
-      try { res.end(JSON.stringify(usageReport(await options.usage.rows(from, to), from, to))); }
+      try { res.end(JSON.stringify(usageReport(await options.usage.rows(from, to), from, to, await options.usage.areaRows(from, to)))); }
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać pomiaru.' })); }
       return;
     }

@@ -35,24 +35,24 @@ export function SettingsView({
   const [arrangement, setArrangement] = useState<'kept' | 'reset' | 'failed'>('kept');
   return (
     <div className="settings-stack">
-      <Card title="Połączenia" icon={<Layers3 />}>
+      <Card title="Połączenia" icon={<Layers3 />} area="settings-connections">
         <p className="card-intro">CPU i RAM co około 2 sekundy, Cezar co 5 sekund, kalendarz co minutę. Bieżące limity AI co około minutę, bez rozmów z modelem.</p>
       </Card>
       <ScreenCard />
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
       <WarmupSettingsCard warmup={warmup} />
-      <Card title="Automaty" icon={<Bot />}>
+      <Card title="Automaty" icon={<Bot />} area="settings-automations">
         <p className="card-intro">Cykliczne i jednorazowe zadania Wektora: lista, historia runów, notatnik i przyciski stanu są w osobnym widoku.</p>
         <button className="button" onClick={onOpenAutomations}>Otwórz Automaty</button>
       </Card>
-      <Card title="Podgląd pionowy" icon={<Settings2 />}>
+      <Card title="Podgląd pionowy" icon={<Settings2 />} area="settings-preview">
         <p className="card-intro">Ten sam panel w pionowym obszarze docelowego ekranu, bez pomniejszania tekstu. Podgląd można przewijać; powiększenie przeglądarki działa jak zwykle.</p>
         <button className="button" aria-pressed={!!tabletPreview} onClick={onTabletPreviewChange}>
           {tabletPreview ? 'Zamknij podgląd pionowy' : 'Otwórz podgląd pionowy'}
         </button>
       </Card>
       <GoogleAccounts />
-      <Card title="Pulpit" icon={<Settings2 />}>
+      <Card title="Pulpit" icon={<Settings2 />} area="settings-desktop">
         <p className="card-intro">
           Co może pokazać Pulpit. Kafelki obszaru roboczego (limity, Cezar, poczta, komputer) wybierasz i rozmieszczasz na Pulpicie, przyciskiem układu w pasku u góry; tutaj wyłączasz to, czego nie chcesz tam widzieć. Zapis dotyczy tylko tej przeglądarki.
         </p>
@@ -92,7 +92,7 @@ export function SettingsView({
           {arrangement === 'failed' ? 'Nie udało się przywrócić układu.' : 'Układ kafelków wróci do domyślnego po powrocie na Pulpit.'}
         </p>}
       </Card>
-      <Card title="Źródła danych" icon={<Layers3 />}>
+      <Card title="Źródła danych" icon={<Layers3 />} area="settings-sources">
         <p className="card-intro">
           Wszystkie źródła są podłączone przez lokalny serwer. Adapter odczytuje bieżące limity z loginów CLI; nie uruchamia generowania odpowiedzi.
         </p>

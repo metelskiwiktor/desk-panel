@@ -69,7 +69,7 @@ export function SmartActionRulesDialog({ rules, onToggleRule, onClose }: SmartAc
   };
 
   return createPortal(
-    <div className="todo-dlg-scrim sa-dialog-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="todo-dlg-scrim sa-dialog-scrim" data-usage-dim="" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="todo-dlg sa-rules-dlg" role="dialog" aria-modal="true" aria-label="Konfiguracja reguł Smart Actions" ref={root} tabIndex={-1} onKeyDown={handleKeyDown}>
         <div className="todo-dlg-head sa-rules-dlg-head">
           <div className="sa-rules-dlg-title-group">

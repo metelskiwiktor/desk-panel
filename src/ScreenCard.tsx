@@ -21,7 +21,7 @@ export function ScreenCard() {
   const match = matchScreen(screen);
   const primary = match && viewportsOf(match.deviceId)[0];
   const windowed = screen.innerWidth < screen.width - 1 || screen.innerHeight < screen.height - 1;
-  return <Card title="Ekran" icon={<Monitor />}>
+  return <Card title="Ekran" icon={<Monitor />} area="settings-screen">
     <p className="card-intro">{screen.width} × {screen.height} px CSS · skalowanie {percent(screen.scale)} · {screen.touch ? 'dotyk' : 'bez dotyku'}</p>
     {match?.primary && <p className="meta">✔ Zgodny z: {match.device.name} przy {percent(match.scale)}</p>}
     {match && !match.primary && primary && <p className="warning">

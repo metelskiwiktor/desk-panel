@@ -166,7 +166,7 @@ export function BankLabelDialog({ t, data, act, error, close, done, position }: 
     : <>Przełożone {sum} · {out ? 'do' : 'z'} <Slot empty={!axisName}>{axisName ?? 'kieszeń'}</Slot></>;
 
   return createPortal(
-    <div className="todo-dlg-scrim" onMouseDown={event => { if (event.target === event.currentTarget && !dirty) close(); }}>
+    <div className="todo-dlg-scrim" data-usage-dim="" onMouseDown={event => { if (event.target === event.currentTarget && !dirty) close(); }}>
       <div className="todo-dlg bank-dlg" role="dialog" aria-modal="true" aria-label={`Oznacz operację: ${d.name}`} ref={root} onKeyDown={keys}>
         <div className="todo-dlg-head">
           <h2>Oznacz operację{position ? ` · ${position.index} z ${position.of}` : ''}</h2>

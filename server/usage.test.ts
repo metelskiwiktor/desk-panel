@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { UsageSlice } from '../src/usage-contract';
+import type { AreaSlice, UsageSlice } from '../src/usage-contract';
 import { createUsageStore, usageReport } from './usage';
 
 const H = 3_600_000;
@@ -87,5 +87,56 @@ describe('usage store', () => {
     expect(report.byView['ambient'].ms).toBe(60_000);
     expect(report.byPulpit['browser01/p1']).toMatchObject({ ms: 120_000, meanAgeS: 1.7 });
     expect(report.byPulpit['browser01/main'].ms).toBe(300_000);
+  });
+});
+
+const area = (over: Partial<AreaSlice> = {}): AreaSlice => ({
+  id: 'abcdefgh1:1', browser: 'browser01', session: 'abcdefgh1', start: HOUR + 60_000, end: HOUR + 120_000, area: 'tile', page: 'home', pulpit: 'main', kind: 'mail', tile: 'mail',
+  width: 1850, height: 1000, entry: true, visitEnd: false, touched: true, noInteractionMs: 10_000, ageIntegral: 300, maxAgeMs: 50_000, ...over,
+});
+
+describe('area records (t-01c8aa59)', () => {
+  it('keeps areas apart from the main views: separate files, rows and sums, and old history reads as before', async () => {
+    // History written before areas existed: only the old files.
+    await createUsageStore(dir).record([slice()], NOW);
+    const before = readdirSync(dir).sort();
+    expect(before).toEqual(['details-2026-11-05.ndjson', 'summary-2026-11-05.json']);
+    const store = createUsageStore(dir);
+    expect(await store.recordAreas([area(), area({ id: 'abcdefgh1:2', pulpit: 'p1', tile: 'mail' }), area({ id: 'abcdefgh1:3', area: 'clock', kind: undefined, tile: undefined })], NOW)).toEqual({ accepted: 3, duplicates: 0, rejected: 0 });
+    expect(await store.recordAreas([area()], NOW)).toEqual({ accepted: 0, duplicates: 1, rejected: 0 });
+    expect(readdirSync(dir).sort()).toEqual(['areas-details-2026-11-05.ndjson', 'areas-summary-2026-11-05.json', ...before]);
+    expect((await store.rows('2026-11-05', '2026-11-05')).map(r => r.ms)).toEqual([300_000]);
+    expect((await createUsageStore(dir).areaRows('2026-11-05', '2026-11-05')).map(r => [r.area, r.pulpit ?? null, r.ms])).toEqual(
+      [['clock', 'main', 60_000], ['tile', 'main', 60_000], ['tile', 'p1', 60_000]]);
+  });
+
+  it('exports the areas next to the views without adding them to the totals of the views or hours', async () => {
+    const store = createUsageStore(dir);
+    await store.record([slice()], NOW);
+    await store.recordAreas([
+      area(), area({ id: 'abcdefgh1:2', pulpit: 'p1', tile: 'mail' }), area({ id: 'abcdefgh1:3', kind: 'todo', tile: 'todo#2' }),
+      area({ id: 'abcdefgh1:4', kind: 'todo', tile: 'todo#3', start: HOUR + 200_000, end: HOUR + 260_000 }),
+      area({ id: 'abcdefgh1:5', area: 'detail-mail', kind: undefined, tile: undefined, source: 'mail', pulpit: undefined, page: 'tasks' }),
+      area({ id: 'abcdefgh1:6', area: 'wektor', kind: undefined, tile: undefined, chat: 'compact', pulpit: undefined, page: 'calendar' }),
+    ], NOW);
+    const report = usageReport(await store.rows('2026-11-05', '2026-11-05'), '2026-11-05', '2026-11-05', await store.areaRows('2026-11-05', '2026-11-05'));
+    expect(report.byHour['11'].ms).toBe(300_000); // as without areas
+    expect(report.byView['page:home'].ms).toBe(300_000);
+    expect(report.byArea['tile:mail'].ms).toBe(120_000);
+    expect(report.byArea['tile:todo'].ms).toBe(120_000);
+    expect(report.byAreaTile['browser01/main/todo#2'].ms).toBe(60_000);
+    expect(report.byAreaTile['browser01/main/todo#3'].ms).toBe(60_000); // two tiles of one kind stay apart
+    expect(report.byAreaTile['browser01/p1/mail'].ms).toBe(60_000); // and one kind on two desktops
+    expect(report.areaRows.find(r => r.area === 'detail-mail')).toMatchObject({ source: 'mail', page: 'tasks' });
+    expect(report.areaRows.find(r => r.area === 'wektor')).toMatchObject({ chat: 'compact', page: 'calendar' });
+    expect(report.byAreaHour['11/tile:mail'].ms).toBe(120_000);
+    expect(report.byArea['tile:mail'].meanAgeS).toBe(6); // 600 s·s over the 100 s after the first touch (120 s less 20 s before it)
+  });
+
+  it('refuses text and ids it does not know, and a main slice sent as an area', async () => {
+    const store = createUsageStore(dir);
+    const bad = [{ ...area(), title: 'Wizyta u lekarza' }, area({ kind: 'Konto Jana' }), area({ tile: undefined }), area({ source: 'mail' }), slice() as unknown];
+    expect(await store.recordAreas(bad, NOW)).toEqual({ accepted: 0, duplicates: 0, rejected: bad.length });
+    expect(readdirSync(dir)).toEqual([]);
   });
 });

@@ -71,6 +71,7 @@ prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`
 
 ## Weryfikacja
 
+Pomiar użycia w przeglądarce: `just usage-ui` (osobny magazyn tymczasowy, [uzycie.md](uzycie.md)).
 Interakcje GUI Wektora: `just wektor-ui all` lub pojedynczy przypadek `composer`, `keyboard`, `history`, `switching`.
 To syntetyczna przeglądarka na tym samym środowisku co scenariusze, bez prawdziwego agenta i zapisów na kontach użytkownika.
 Szczegóły i mapa frontendu: [wektor-ui.md](wektor-ui.md). Runner zapisuje raport, zrzuty i trace przy błędzie w `output/wektor-ui`.

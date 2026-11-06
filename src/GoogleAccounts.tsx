@@ -55,7 +55,7 @@ export function GoogleAccounts() {
     } catch { setMessage('Nie można rozpocząć logowania. Sprawdź, czy dodano plik klienta OAuth Google.'); }
     finally { setBusy(undefined); }
   }
-  return <Card title="Konta Google" icon={<CalendarDays />}>
+  return <Card title="Konta Google" icon={<CalendarDays />} area="settings-google">
     <p className="card-intro">Logujesz się na własne konta: odczyt kalendarza i tworzenie wydarzeń po Twoim potwierdzeniu na karcie; poczta z prawem oznaczania jako przeczytane i przenoszenia do kosza (nigdy trwałego usuwania).</p>
     {accounts?.map(account => <div className="google-account" key={account.email}>
       <p><strong>{account.email}</strong> · {names(account.services)}</p>

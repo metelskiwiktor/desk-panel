@@ -18,9 +18,9 @@ function browserId(): string {
 export function createUsageSink(): UsageSink {
   return {
     browser: browserId(),
-    send: async (slices, keepalive) => {
+    send: async (batch, keepalive) => {
       try {
-        const response = await fetch('/api/usage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slices }), keepalive });
+        const response = await fetch('/api/usage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch), keepalive });
         return response.ok || response.status === 204 || response.status === 400;
       } catch { return false; }
     },

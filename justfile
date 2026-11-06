@@ -65,6 +65,10 @@ kiosk-taskbar action="HIDE" display="P16":
 garmin-login:
     npx tsx scripts/garmin-login.ts
 
+# Real-browser run of the usage areas (exposure, covers, preview) against a temporary store, about two minutes; never the service.
+usage-ui:
+    npx tsx scripts/usage-ui.ts
+
 # Tests, typecheck, dead code (knip) and the frontend build, side by side. Run before publishing.
 check:
     node scripts/ensure-deps.mjs

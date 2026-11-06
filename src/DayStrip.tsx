@@ -44,7 +44,7 @@ function TrainingTile({ item, activities, now, timeZone, open }: { item: WeekIte
   const level = trainingLevel(w.phrase);
   const meta = [sportName(w.sport), w.durationSec ? formatDuration(w.durationSec) : null].filter(Boolean).join(' · ');
   const context = ctx('workout', w.id, w.name, [`Trening: ${w.name}`, meta, level ? `Poziom: ${trainingLevelNames[level]}` : '', w.trainingEffect ? `Efekt treningowy: ${w.trainingEffect}` : '', w.keyWorkout ? 'Trening kluczowy' : '', `Stan: ${progressLabel(w, progress)}`].filter(Boolean).join('\n'));
-  return <button className={`p3-train ${progress.state}`} {...context} onClick={() => open({ kind: 'workout', id: w.id })} aria-label={`Trening: ${w.name}, ${meta}, ${progressLabel(w, progress)}`}>
+  return <button className={`p3-train ${progress.state}`} data-usage-area="day-training" {...context} onClick={() => open({ kind: 'workout', id: w.id })} aria-label={`Trening: ${w.name}, ${meta}, ${progressLabel(w, progress)}`}>
     <span className="p3-train-mark">{progress.state === 'done' ? <Check size={22} aria-hidden="true" /> : <Bike size={22} aria-hidden="true" />}</span>
     <span className="p3-train-main">
       <strong>{w.name}{w.keyWorkout && <em>kluczowy</em>}</strong>
@@ -61,14 +61,14 @@ function Chip({ item, activities, now, timeZone, open }: { item: WeekItem; activ
   if (w) {
     const progress = workoutProgress(w, activities, now, timeZone);
     const meta = [w.durationSec ? formatDuration(w.durationSec) : null, progress.state === 'partial' || progress.state === 'done' ? progressLabel(w, progress) : null].filter(Boolean).join(' · ');
-    return <button className={`p3-chip train ${progress.state}`} {...ctx('workout', w.id, w.name, [`Trening: ${w.name}`, meta].filter(Boolean).join('\n'))} onClick={() => open({ kind: 'workout', id: w.id })} aria-label={`Trening: ${w.name}${meta ? `, ${meta}` : ''}`}>
+    return <button className={`p3-chip train ${progress.state}`} data-usage-area="day-training" {...ctx('workout', w.id, w.name, [`Trening: ${w.name}`, meta].filter(Boolean).join('\n'))} onClick={() => open({ kind: 'workout', id: w.id })} aria-label={`Trening: ${w.name}${meta ? `, ${meta}` : ''}`}>
       {progress.state === 'done' ? <Check size={16} aria-hidden="true" /> : <Bike size={16} aria-hidden="true" />}
       <span className="p3-chip-text"><strong>{w.name}</strong></span>
       <LevelBars phrase={w.phrase} />
     </button>;
   }
   const allDay = item.kind === 'allDay';
-  return <button className="p3-chip event" {...ctx('event', item.id, item.title, `${item.title}\n${item.at ? `Godzina: ${item.at}` : 'Cały dzień'}`)} onClick={() => open({ kind: 'event', id: item.id })} aria-label={`${item.title}${item.at ? `, ${item.at}` : ', cały dzień'}`}>
+  return <button className="p3-chip event" data-usage-area="day-meetings" {...ctx('event', item.id, item.title, `${item.title}\n${item.at ? `Godzina: ${item.at}` : 'Cały dzień'}`)} onClick={() => open({ kind: 'event', id: item.id })} aria-label={`${item.title}${item.at ? `, ${item.at}` : ', cały dzień'}`}>
     <i className="p3-dot" aria-hidden="true" />
     <span className="p3-chip-text"><strong>{item.title}</strong></span>
     {!allDay && <small>{item.at}</small>}
@@ -107,7 +107,7 @@ export function DayStrip(p: DayStripProps) {
   const grip = topGrip(p);
   const strip = ctx('tile', 'day', `Pasek dnia: ${isToday ? 'dziś' : long}`);
   if (p.size === 'cmp') return <section className="p3-day cmp" aria-label={aria} {...strip}>
-    <div className="p3-label"><strong>{long}</strong>{rel && <span>{rel}</span>}</div>
+    <div className="p3-label" data-usage-area="day-date"><strong>{long}</strong>{rel && <span>{rel}</span>}</div>
     <div className="p3-items">
       {p.items.map(item => <Chip key={`${item.kind}:${item.id}`} item={item} activities={p.activities} now={p.now} timeZone={p.timeZone} open={p.open} />)}
       {p.notice && <span className="p3-notice">{p.notice}</span>}
@@ -119,17 +119,17 @@ export function DayStrip(p: DayStripProps) {
   const shown = meetings.length > MEETING_ROWS ? meetings.slice(0, MEETING_ROWS - 1) : meetings;
   const hidden = meetings.length - shown.length;
   return <section className="p3-day std" aria-label={aria} {...strip}>
-    <div className={`p3-date ${isToday ? '' : 'other'}`}>
+    <div className={`p3-date ${isToday ? '' : 'other'}`} data-usage-area="day-date">
       <div className="p3-tile"><small>{weekday}</small><b>{p.date.slice(8).replace(/^0/, '')}</b></div>
       <span>{rel ?? month}</span>
     </div>
-    <div className="p3-col train">
+    <div className="p3-col train" data-usage-area="day-training">
       <h3>Trening{workouts.length > 1 ? ` · ${workouts.length}` : ''}</h3>
       {workouts.length ? <TrainingTile item={workouts[0]} activities={p.activities} now={p.now} timeZone={p.timeZone} open={p.open} />
         : <span className="p3-none">{p.known ? 'bez treningu' : '—'}</span>}
       {p.yesterday.map(y => <button key={y.id} className="p3-yday" onClick={() => p.open({ kind: 'workout', id: y.id })}><b>{y.label}</b> {y.badge}</button>)}
     </div>
-    <div className="p3-col meet">
+    <div className="p3-col meet" data-usage-area="day-meetings">
       <h3>Spotkania{meetings.length ? ` · ${meetings.length}` : ''}</h3>
       {shown.map(item => <button key={`${item.kind}:${item.id}`} className={`p3-meet ${p.next?.id === item.id && p.next.soon ? 'soon' : ''}`} {...ctx('event', item.id, item.title, `${item.title}\n${item.at ? `Godzina: ${item.at}` : 'Cały dzień'}\nDzień: ${long}`)} onClick={() => p.open({ kind: 'event', id: item.id })}
         aria-label={`${item.title}${item.at ? `, ${item.at}` : ', cały dzień'}`}>
@@ -138,7 +138,7 @@ export function DayStrip(p: DayStripProps) {
       {hidden > 0 && <button className="p3-meet more" onClick={p.showCalendar}>+{hidden} więcej</button>}
       {!meetings.length && <span className="p3-none">{p.known ? 'bez spotkań' : '—'}</span>}
     </div>
-    {p.next && <div className={`p3-count ${p.next.soon ? 'soon' : ''}`}><b>{countdown(p.next.ms)}</b><small>{p.next.ongoing ? 'do końca spotkania' : 'do spotkania'}</small></div>}
+    {p.next && <div className={`p3-count ${p.next.soon ? 'soon' : ''}`} data-usage-area="day-countdown"><b>{countdown(p.next.ms)}</b><small>{p.next.ongoing ? 'do końca spotkania' : 'do spotkania'}</small></div>}
     {p.notice && <span className="p3-notice">{p.notice}</span>}
     {grip}
   </section>;

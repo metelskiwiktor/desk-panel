@@ -122,7 +122,7 @@ export function TodoDialog({ list, task, act, close, snapshot, dispatches, error
   const specEmpty = task.spec === ''; // "empty" is exactly the empty string, without trimming.
 
   return createPortal(
-    <div className="todo-dlg-scrim" onMouseDown={event => { if (event.target === event.currentTarget && !dirty) close(); }}>
+    <div className="todo-dlg-scrim" data-usage-dim="" onMouseDown={event => { if (event.target === event.currentTarget && !dirty) close(); }}>
       <div className="todo-dlg" role="dialog" aria-modal="true" aria-label="Zadanie" ref={root} onKeyDown={keys}>
         <div className="todo-dlg-head">
           <h2>Zadanie · {list.name}</h2>

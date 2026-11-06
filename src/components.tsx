@@ -55,6 +55,7 @@ export function Card({
   action,
   children,
   className = '',
+  area,
 }: {
   title: string;
   eyebrow?: string;
@@ -62,9 +63,11 @@ export function Card({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Marks the card as a measured area (docs/uzycie.md): one of USAGE_AREAS. */
+  area?: string;
 }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`card ${className}`} data-usage-area={area}>
       <div className="card-heading">
         <div className="title-group">
           <span className="card-icon">{icon}</span>

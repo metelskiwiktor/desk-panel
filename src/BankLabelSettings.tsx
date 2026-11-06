@@ -54,7 +54,7 @@ export function BankLabelSettings({ data, act, error, close }: { data: BankLabel
   };
 
   return createPortal(
-    <div className="todo-dlg-scrim" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+    <div className="todo-dlg-scrim" data-usage-dim="" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <div className="todo-dlg bank-dlg" role="dialog" aria-modal="true" aria-label="Ustawienia oznaczeń" onKeyDown={keys}>
         <div className="todo-dlg-head">
           <h2>Oznaczenia operacji</h2>

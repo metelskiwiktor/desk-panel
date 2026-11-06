@@ -29,7 +29,7 @@ export function DaysZone({ week, month, size, known, selected, select, open, cyc
   const zone = { known, selected, select, open };
   const title = size === 'month' ? monthTitle(month) : 'Najbliższe dni';
   const days = size === 'month' ? month : week;
-  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni" {...ctx('tile', 'days', title, days.map(dayText).join('\n'))}>
+  return <section className={`p3-days ${size}`} aria-label="Najbliższe dni" data-usage-area="days" {...ctx('tile', 'days', title, days.map(dayText).join('\n'))}>
     <div className="p3-days-head">
       <h2 className="p2-eyebrow">{title}</h2>
       <button className="p3-cal" aria-label="Otwórz kalendarz" onClick={showCalendar}>Kalendarz</button>

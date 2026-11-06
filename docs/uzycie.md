@@ -1,8 +1,10 @@
 # Pomiar użycia
 
 Panel zbiera lokalnie dane o tym, jak długo i gdzie jest wyświetlany: fundament pod decyzję o pierwszej stronie nowego GUI.
-To etap 1 (t-be2f1b56): strony, pulpity, ambient, pełny czat i szczegóły. Użycie kafelków i funkcji (t-01c8aa59) oraz epizody
-błędów (t-fbcda0d3) rozbudują ten sam magazyn. Wyświetlanie nie oznacza patrzenia człowieka.
+Etap 1 (t-be2f1b56) to strony, pulpity, ambient, pełny czat i szczegóły. Etap 2 (t-01c8aa59) dodaje **ekspozycję obszarów**:
+kafelków, limitów AI, zegara, stref dnia, chipów, powiadomień, nawigacji, sekcji Ustawień, treści podstron i szczegółów oraz
+powłoki Wektora (opis niżej). Wnętrze Wektora (t-5b8f3c8b), liczniki akcji (t-eb618ffa) i epizody błędów (t-fbcda0d3) rozbudują ten
+sam magazyn.
 
 ## Co jest mierzone
 
@@ -25,6 +27,39 @@ i wskazywanie nie zastępują strony. Ukryta karta (`document.hidden`) wstrzymuj
   (`localStorage`, `desk-panel.usage-browser`) i karty, rozmiar okna w krokach co 50 px. Zwykli klienci (także host Tailscale) są
   mierzeni tak samo; telefonu się nie wykrywa. Pulpit jest identyfikowany parą przeglądarka + id.
 
+## Obszary (etap 2)
+
+Obszar to oznaczony element strony (`data-usage-area`, lista zamknięta `USAGE_AREAS` w `src/usage-contract.ts`). Obszary mierzy się
+**równolegle** i **osobno od głównych widoków**: czas obszaru nigdy nie wchodzi do `byView`, `byHour` ani `byPulpit`.
+
+- **Widoczność** (`src/usage-dom.ts`, `isExposed`): obszar jest wystawiony, gdy jakakolwiek jego część jest w oknie (w podglądzie
+  pionowym: w widocznym wycinku ramki), nie jest przycięta i nie jest w całości zakryta. Widoczną część sprawdza siatka 5×5 punktów
+  przez `document.elementsFromPoint`; pierwszy punkt, w którym wierzchnim elementem (z pominięciem warstw `data-usage-dim`) jest
+  obszar, wystarcza. Zwinięty (`display:none`, rozmiar 0, praca zwinięta w miesiącu), poza ekranem, w całości pod pełnym czatem
+  albo oknem, w ukrytej karcie albo na wstrzymanym hoście obszar nie dostaje czasu. Częściowe zakrycie (kompaktowy czat, popover)
+  nie pauzuje, przyciemnienie (`data-usage-dim` na tle okien dialogowych) też nie. Strona patrzy co 1 s (`SCAN_MS`) i od razu
+  po zmianie widoku lub strony; czas obszaru jest liczony między dwoma spojrzeniami.
+- **Podgląd pionowy**: host (`TabletPreview`) wysyła ramce co sekundę, przy przewijaniu i na jej prośbę wycinek, który pokazuje jego
+  przewijane okno (`desk-panel:preview-viewport`, same-origin); ramka mierzy te same obszary tylko w tym wycinku, host pod spodem
+  jest wstrzymany. Podgląd nie jest osobnym rodzajem obszaru ani nie ma osobnego oznaczenia.
+- **Interakcja** (te same zaufane zdarzenia co w etapie 1) trafia tylko do najbliższego obszaru zawierającego cel zdarzenia
+  (klawiatura: element z fokusem), nie zeruje obszarów nadrzędnych ani sąsiednich; zdarzenie poza obszarami nie trafia do żadnego,
+  a obszar niewystawiony jej nie przyjmuje. Miary jak w etapie 1 liczone **osobno dla obszaru** (`AreaMeter`, `src/usage-areas.ts`: jeden
+  `UsageMeter` na obszar): pierwsza interakcja i czas od ostatniej dotyczą obszaru w sesji karty; pauza nie nalicza ekspozycji, a
+  czas od ostatniej interakcji płynie zegarowo i przeżywa pauzę. Każde wejście w obszar po pauzie to nowa wizyta.
+- **Tożsamość**: odcinek ma `area`, `page` (strona pod spodem) i `pulpit` (tylko na `home`), dla kafelka `kind` + `tile` (id
+  kafelka: dwa kafelki Zadań to `todo#1`, `todo#2`), dla szczegółów `source` (rodzaj kafelka, z którego kliknięto, tylko gdy wejście
+  było z kafelka; z chipa, dzwonka czy czatu pole zostaje puste), dla powłoki Wektora `chat` (`full`, `compact`, `pointing`).
+  Kafelek identyfikuje przeglądarka + pulpit + id. Limity AI mają techniczne id (`claude`, `codex`, `agy-` i skrót grupy;
+  `src/usage-ids.ts`), bez nazw od dostawcy. Żadnych identyfikatorów rekordów (zadań, maili, rozmów, wydarzeń) ani tekstu.
+- **Pokrycie i granice**: pasek dnia ma cztery obszary (data, trening, spotkania, odliczanie; w trybie kompaktowym chipy
+  treningu i spotkań); dolna strefa dni (`days`); `chip-pc`, `chip-cezar`, `chip-gmail`; `bell` i `notifications` (lista);
+  `clock` (zegar w pasku) i `ambient`; `nav`, `pulpits` (menu); `page-tasks|calendar|system|events|automations` (treść podstrony,
+  element `main`) i `detail-*` (siedem rodzajów szczegółów, ten sam element `main`); sekcje Ustawień `settings-*`; `tile`; `wektor`
+  (jedna powłoka, tryb jako kontekst). Puste komórki siatki, wnętrze Wektora i pojedyncze rekordy nie są obszarami. Obszary
+  zagnieżdżone (np. `notifications` w `bell`-owym kontenerze, sekcje w stronie Ustawień) są mierzone oba, a interakcja trafia do
+  najbliższego.
+
 ## Dane i zapis
 
 Przeglądarka tnie czas na **odcinki** (`src/usage-meter.ts`, czysta klasa z wstrzykiwanym zegarem): przy zmianie widoku,
@@ -40,6 +75,12 @@ Magazyn (`server/usage.ts`) jest w `~/.desk-panel/usage`, poza Gitem, bez szyfro
 | --- | --- | --- |
 | `details-RRRR-MM-DD.ndjson` | przyjęte odcinki dnia (Europe/Warsaw) | 90 dni (`DETAIL_DAYS`), czyszczone przy starcie i co 6 h |
 | `summary-RRRR-MM-DD.json` | sumy godzinowe dnia i liczba bajtów dziennika, które obejmują | bezterminowo |
+
+Obszary to osobny rodzaj rekordu w tym samym magazynie: `POST /api/usage` przyjmuje `{ slices, areas }` (razem do 100, co najmniej
+jeden; odpowiedź dla `slices` bez zmian, przy `areas` dochodzi klucz `areas`), a `server/usage.ts` zapisuje je w
+`areas-details-DATA.ndjson` i `areas-summary-DATA.json` (retencja i odbudowa jak wyżej). Kolejka przeglądarki mieści 2000 odcinków
+(równoległych obszarów jest kilkanaście, więc ok. kilkaset odcinków na godzinę), co minutę wysyła do 5 paczek po 100. Stara
+historia (pliki bez `areas-`) czyta się jak dotąd.
 
 Odcinek ma unikalne id (`sesja:numer`), więc ponowna wysyłka nie podwaja sum. Sumy dnia powstają z dziennika: podsumowanie
 niezgodne z dziennikiem (awaria między zapisami) jest przebudowywane przy następnym odczycie lub zapisie, a przed usunięciem
@@ -58,6 +99,12 @@ usługi `GET /api/usage/summary?from=&to=` (tylko loopback, nigdy przez host Tai
 (`przeglądarka/id pulpitu`, tylko `home`) ze średnim czasem od interakcji w sekundach (`meanAgeS`). Dni i godziny są w Europe/Warsaw.
 Wektor nie ma do tego narzędzia MCP.
 
+Obszary są osobnym zbiorem w tym samym wyniku i nie wchodzą do sum powyżej: `areaRows` (godzina po godzinie: `date`, `hour`,
+`browser`, `area`, `page`, `pulpit`, `kind`, `tile`, `source`, `chat`, `ms`, `entries`, `visitsWithoutInteraction`,
+`noInteractionMs`, `ageIntegral`, `maxAgeMs`), `byArea` (`tile:<rodzaj>` albo obszar), `byAreaHour` (`GG/obszar`) i `byAreaTile`
+(`przeglądarka/pulpit/id kafelka`, tylko kafelki), każdy ze średnim czasem od interakcji `meanAgeS`. Czasy obszarów nakładają
+się w czasie: ich suma w godzinie może przekroczyć godzinę.
+
 Przykład porównania: `byHour` pokazuje, w których godzinach panel jest wyświetlany; `byView` ile czasu spędza ambient, czat,
 szczegóły i każda strona; `byPulpit`, który pulpit jest otwarty najdłużej.
 
@@ -65,10 +112,19 @@ szczegóły i każda strona; `byPulpit`, który pulpit jest otwarty najdłużej.
 
 | Pomiar | Wspólny dla wszystkich | Tylko w danej funkcji |
 | --- | --- | --- |
-| Czas widoku, wejścia, interakcje | strony, pulpity, ambient, pełny czat, szczegóły | — (kafelki i funkcje: t-01c8aa59) |
+| Czas widoku, wejścia, interakcje | strony, pulpity, ambient, pełny czat, szczegóły | — |
+| Ekspozycja i interakcje obszarów (równolegle, osobno od widoków) | kafelki i limity AI, zegar, ambient, pasek dnia (data, trening, spotkania, odliczanie), dolna strefa dni, chipy PC/Cezar/Gmail, dzwonek i lista, nawigacja, menu pulpitów, sekcje Ustawień, treść podstron, szczegóły (z kafelkiem źródłowym), powłoka Wektora (tryb jako kontekst) | wnętrze Wektora: t-5b8f3c8b; liczniki akcji: t-eb618ffa |
 | Błędy i niedostępność | — | t-fbcda0d3 |
 
 ## Testy
 
 `src/usage-meter.test.ts` (przebieg z kontrolowanym zegarem), `server/usage.test.ts` (restart, ponowne przyjęcie, retencja,
-awaria zapisu, brak treści), `server/usage-route.test.ts` (trasa) (izolacja scenariusza, Origin).
+awaria zapisu, brak treści, rekordy obszarów i zgodność ze starą historią), `server/usage-route.test.ts` (trasa) (izolacja
+scenariusza, Origin). Obszary: `src/usage-areas.test.ts` (równoległy czas, pauza, niezależny czas od interakcji, brak wpływu na
+główne widoki, ścisły kontrakt), `src/usage-dom.test.tsx` (widoczność: zwinięcie, poza ekranem, zakrycie pełne i częściowe,
+przyciemnienie, wycinek podglądu; źródło szczegółów; techniczne id; równoległy czas w stronie z zegarem).
+
+`just usage-ui` (`scripts/usage-ui.ts`, ok. 2 min) to przebieg Playwright na prawdziwych zdarzeniach przeglądarki, na
+magazynie w katalogu tymczasowym (`startScenario(..., usage)`; zwykłe scenariusze magazynu nie dostają): równoległa ekspozycja,
+kółko myszy nad jednym kafelkiem, pełny i kompaktowy czat, ukryta karta, miesiąc zwijający kafelki, strony i sekcje Ustawień,
+podgląd pionowy z przewijaniem. Nie jest częścią `just check` (jak `just wektor-ui`).

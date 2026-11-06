@@ -22,7 +22,7 @@ export function PulpitMenu({ pulpits }: { pulpits: Pulpits }) {
     setEditing(null);
   };
   return (
-    <div className="pulpit-menu" ref={root} data-pick-through="">
+    <div className="pulpit-menu" ref={root} data-pick-through="" data-usage-area="pulpits">
       <button className={`top-button pulpit-button${several ? ' named' : ''}`} aria-label={`Pulpity: ${current.name}`} aria-haspopup="dialog" aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}>
         <LayoutDashboard size={20} />

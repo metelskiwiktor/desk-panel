@@ -9,6 +9,7 @@ import { createPanelServer } from '../server/app';
 import { createCockpit } from '../server/cockpit';
 import { createScenarioSources, loadScenario, SCENARIO_PR } from '../server/scenario';
 import { createScenarioChat } from '../server/scenario-chat';
+import type { UsageStore } from '../server/usage';
 import { PANEL_TOOLS } from '../server/panel-mcp';
 import { devices, viewportsOf, type Viewport } from '../src/devices';
 
@@ -21,7 +22,8 @@ async function freeLoopbackPort() {
 }
 
 /** One isolated API, stand-in Hermes and Vite. No real provider, service port or user storage is used. */
-export async function startScenario(file: string, hermes: 'up' | 'down' = 'up') {
+/** `usage` is for a run that checks the measurement itself, with a store of its own (a temporary directory); scenarios have none otherwise. */
+export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', usage?: UsageStore) {
   loadScenario(file);
   const sources = createScenarioSources(file);
   const chat = await createScenarioChat({ hermes, toolScript: async message => {
@@ -38,7 +40,7 @@ export async function startScenario(file: string, hermes: 'up' | 'down' = 'up') 
     gh: async () => JSON.stringify({ number: 42, title: 'Chip statusu taska w kokpicie', state: 'OPEN', headRefName: 'cez/00000000', url: SCENARIO_PR,
       statusCheckRollup: ['test', 'typecheck', 'build'].map((name, i) => ({ name, status: checksAsked++ > 2 + i ? 'COMPLETED' : 'IN_PROGRESS', conclusion: checksAsked > 3 + i ? 'SUCCESS' : '' })) }),
   });
-  const api = createPanelServer(sources, join(process.cwd(), 'dist'), undefined, chat, { cockpit });
+  const api = createPanelServer(sources, join(process.cwd(), 'dist'), undefined, chat, { cockpit, usage });
   let vite: ViteDevServer | undefined, stopping: Promise<void> | undefined;
   const stop = () => stopping ??= (async () => {
     try { await vite?.close(); }

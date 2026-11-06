@@ -1,16 +1,26 @@
-import { HOUR_MS, type UsageSlice } from './usage-contract';
+import { HOUR_MS, type AreaSlice, type UsageSlice, type USAGE_AREAS } from './usage-contract';
 
 /** What is on screen now, as the meter sees it; the main view only (ambient > full chat > details > page). */
 export interface UsageView {
   view: UsageSlice['view']; page?: UsageSlice['page']; detail?: UsageSlice['detail']; pulpit?: string;
 }
-const same = (a: UsageView, b: UsageView) => a.view === b.view && a.page === b.page && a.detail === b.detail && a.pulpit === b.pulpit;
+const same = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
+const defined = (v: object) => Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined));
+
+/** What an area is, as the area meter sees it (the same fields an `AreaSlice` carries about it). */
+export interface AreaView {
+  area: (typeof USAGE_AREAS)[number]; page: AreaSlice['page']; pulpit?: string; kind?: string; tile?: string; source?: string; chat?: AreaSlice['chat'];
+}
 
 /** More than this between two ticks of a running clock means the browser was not observed (sleep, frozen tab). */
 export const GAP_MS = 15_000;
 export const TICK_MS = 5_000;
 
-export interface MeterIdentity { browser: string; session: string; size: () => { width: number; height: number } }
+export interface MeterIdentity {
+  browser: string; session: string; size: () => { width: number; height: number };
+  /** Hands out slice ids; meters that share a session share one counter so the ids stay unique. */
+  nextId?: () => string;
+}
 
 /**
  * Turns "what is on screen" plus a clock into slices. Pure: the caller feeds `show`, `tick`, `interaction`, `setVisible`
@@ -18,10 +28,10 @@ export interface MeterIdentity { browser: string; session: string; size: () => {
  * slice ends at the last tick), time before the first interaction of the tab session is kept apart from the time since
  * the last one, and no slice crosses a clock hour.
  */
-export class UsageMeter {
+export class UsageMeter<V extends object = UsageView, S extends { start: number; end: number; session: string; visitEnd: boolean; touched: boolean } = UsageSlice> {
   private seq = 0;
-  private done: UsageSlice[] = [];
-  private view: UsageView | null = null;
+  private done: S[] = [];
+  private view: V | null = null;
   private visible = true;
   /** Start of the open slice, or null when nothing is measured (hidden tab, no view yet). */
   private start: number | null = null;
@@ -32,10 +42,10 @@ export class UsageMeter {
   private noInteractionMs = 0;
   private ageIntegral = 0;
   private maxAgeMs = 0;
-  constructor(private readonly who: MeterIdentity) {}
+  constructor(private readonly who: MeterIdentity, private readonly describe: (view: V) => object = defined) {}
 
   /** The main view changed (or is known for the first time). */
-  show(view: UsageView, now: number) {
+  show(view: V, now: number) {
     if (this.view && same(this.view, view)) return;
     this.advance(now);
     this.end(true);
@@ -61,14 +71,14 @@ export class UsageMeter {
     this.advance(now);
   }
   /** Slices ready to send; the running one is cut at `now` so nothing waits for the tab to close. */
-  take(now: number): UsageSlice[] {
+  take(now: number): S[] {
     this.advance(now);
     this.end(false);
     if (this.view && this.visible) this.resume(now);
     return this.done.splice(0);
   }
   /** Slices that could not be sent go back in front of the queue. */
-  restore(slices: UsageSlice[]) { this.done.unshift(...slices); }
+  restore(slices: S[]) { this.done.unshift(...slices); }
 
   private begin(now: number) {
     this.entry = true;
@@ -103,14 +113,13 @@ export class UsageMeter {
     if (this.start === null || !this.view) return;
     if (this.cursor > this.start) {
       const { width, height } = this.who.size();
-      const { view, page, detail, pulpit } = this.view;
       this.done.push({
-        id: `${this.who.session}:${this.seq++}`, browser: this.who.browser, session: this.who.session, start: this.start, end: this.cursor,
-        view, ...(page ? { page } : {}), ...(detail ? { detail } : {}), ...(pulpit ? { pulpit } : {}),
+        id: this.who.nextId?.() ?? `${this.who.session}:${this.seq++}`, browser: this.who.browser, session: this.who.session, start: this.start, end: this.cursor,
+        ...this.describe(this.view),
         width: Math.round(width / 50) * 50, height: Math.round(height / 50) * 50,
         entry: this.entry, visitEnd, touched: this.visitTouched,
         noInteractionMs: this.noInteractionMs, ageIntegral: Math.round(this.ageIntegral * 1000) / 1000, maxAgeMs: this.maxAgeMs,
-      });
+      } as unknown as S);
       this.entry = false;
     } else if (visitEnd) {
       // The visit ended right after a cut: the unsent last slice of it carries the end.

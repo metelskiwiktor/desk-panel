@@ -8,7 +8,7 @@ import { usePollingEnabled } from './polling';
 
 export function QuotaVisibilitySettings({accounts,value,change,error}:{accounts:QuotaAccount[]|null;value:QuotaVisibility;change:(value:QuotaVisibility)=>void;error:boolean}) {
   const groups=[...new Set([...(accounts?.find(a=>a.provider==='AGY')?.snapshots.flatMap(s=>s.model ? [s.model] : []) || []),...value.hiddenAgyGroups])];
-  return <Card title="Widoczność limitów AI" icon={<Settings2 />}>
+  return <Card title="Widoczność limitów AI" icon={<Settings2 />} area="settings-limits">
     <p className="card-intro">Każdy limit to osobny kafelek na pulpicie. Wyłączony znika z pulpitu, z listy wyboru w pustych kafelkach i ze szczegółów; odczyt danych działa dalej. Ustawienie dotyczy tej przeglądarki.</p>
     {(['Claude','Codex'] as const).map(provider=><label className="visibility-toggle widget-setting" key={provider}>
       <input type="checkbox" checked={!value.hiddenProviders.includes(provider)} onChange={e=>change({...value,hiddenProviders:e.target.checked ? value.hiddenProviders.filter(p=>p!==provider) : [...value.hiddenProviders,provider]})}/><span>{provider === 'Codex' ? 'ChatGPT / Codex' : 'Claude'}</span>
@@ -119,7 +119,7 @@ function WarmupForm({provider,settings,last,save,run}:{provider:WarmupProvider;s
 }
 export function WarmupSettingsCard({warmup}:{warmup:WarmupState}) {
   const {status,error}=warmup;
-  return <Card title="Warmup AI" icon={<Settings2 />}>
+  return <Card title="Warmup AI" icon={<Settings2 />} area="settings-warmup">
     <p className="card-intro">Domyślnie wyłączony. Co 30 sekund sprawdza, czy okno 5h jest zamknięte i nie ma aktywnej sesji CLI. Wtedy sam wyśle krótki prompt z istniejącej subskrypcji, aby rozpocząć kolejne okno. Zużywa quota i nie zwiększa limitu.</p>
     <p className="meta">Automat działa przez całą dobę, bez ustalania godziny. Zmiany dotyczą usługi na tym komputerze i obowiązują po zapisaniu. Aktywny proces CLI blokuje próbę, również gdy jest bezczynny. Nieznane quota blokują warmup. Automat zachowuje minimum 5h między próbami, także po błędzie. Wyłączenie zatrzymuje przyszłe próby automatyczne; rozpoczęta próba może się dokończyć. Równoległe wywołania warmupu są blokowane także w trybie ręcznym.</p>
     {error && !status ? <p role="alert">Ustawienia warmupu niedostępne. Wymagany jest aktualny adapter. <button className="button" onClick={warmup.retry}>Ponów odczyt</button></p> : !status ? <p role="status">Odczyt ustawień…</p> :
@@ -150,7 +150,7 @@ function HistoryRow({entry}:{entry:WarmupHistoryEntry}) {
 }
 export function WarmupHistoryCard({warmup}:{warmup:WarmupState}) {
   const {status,error}=warmup,history=status?.history;
-  return <Card title="Historia warmupu" icon={<History />}>
+  return <Card title="Historia warmupu" icon={<History />} area="settings-warmup-history">
     <p className="card-intro">Każdy wysłany prompt warmupu: kiedy, co wysłano, co wróciło, tokeny i quota przed i po. Pominięte sprawdzenia co 30 s nie trafiają tutaj. Rozwiń wiersz, aby zobaczyć szczegóły.</p>
     {error && !status ? <p className="meta">Historia niedostępna bez adaptera.</p> : !status ? <p role="status">Odczyt historii…</p> :
       !history ? <p className="meta">Ta wersja adaptera nie zapisuje historii. Zaktualizuj adapter.</p> :

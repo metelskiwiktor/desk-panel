@@ -68,12 +68,12 @@ export function StatusChips({ data, mail, now, open, navigate, showPc = true }: 
   const cezar = cezarChip(data, now);
   const gmail: Tone = mail.source.status === 'connected' && mail.source.accounts.every(a => a.status === 'connected') ? 'ok' : 'warn';
   return <div className="status-chips">
-    {showPc && <div className="sys-root" ref={pcRoot}>
+    {showPc && <div className="sys-root" ref={pcRoot} data-usage-area="chip-pc">
       <button className={`status-chip ${pc[0]}`} aria-expanded={pcOpen} aria-haspopup="dialog" onClick={() => setPcOpen(!pcOpen)}><i />{pc[1]}</button>
       {pcOpen && <SystemPopover samples={data.system.data ?? []} threshold={SYSTEM_ALERT_PERCENT} close={() => setPcOpen(false)} showPage={() => navigate('system')} />}
     </div>}
-    <button className={`status-chip ${cezar[0]}`} onClick={() => navigate('tasks')}><i />{cezar[1]}</button>
-    <button className={`status-chip ${gmail}`} onClick={() => navigate('settings')}><i />Gmail</button>
+    <button className={`status-chip ${cezar[0]}`} data-usage-area="chip-cezar" onClick={() => navigate('tasks')}><i />{cezar[1]}</button>
+    <button className={`status-chip ${gmail}`} data-usage-area="chip-gmail" onClick={() => navigate('settings')}><i />Gmail</button>
   </div>;
 }
 

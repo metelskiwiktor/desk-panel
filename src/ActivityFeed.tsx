@@ -80,12 +80,12 @@ export function ActivityFeed({ entries, open, dismiss, restore, canUndo, storage
   const fresh = expanded ? 0 : entries.filter(e => e.detectedAt > seenAt).length;
   const label = `Zdarzenia panelu: ${entries.length}${fresh ? `, ${nowe(fresh)}: ${fresh}` : ''}${top ? `, najnowsze: ${top.title}` : ''}`;
   return <div className="events-root" ref={root}>
-    <button className={`events-icon ${fresh ? 'fresh' : ''}`} aria-expanded={expanded} aria-label={label} onClick={() => toggle(!expanded)}>
+    <button className={`events-icon ${fresh ? 'fresh' : ''}`} data-usage-area="bell" aria-expanded={expanded} aria-label={label} onClick={() => toggle(!expanded)}>
       {entries.length ? <Bell size={20} /> : <BellOff size={20} />}
       <span className="events-count">{entries.length}</span>
       {fresh > 0 && <span className="events-new" aria-hidden="true" title={`${fresh} ${nowe(fresh)}`}>+{fresh}</span>}
     </button>
-    {expanded && <section className="events-panel" aria-labelledby="events-title">
+    {expanded && <section className="events-panel" aria-labelledby="events-title" data-usage-area="notifications">
       <div className="events-head">
         <h2 id="events-title">Zdarzenia panelu</h2>
         {baseline !== null && entries.some(e => e.detectedAt > baseline) && <span className="events-total fresh">{entries.filter(e => e.detectedAt > baseline).length} {nowe(entries.filter(e => e.detectedAt > baseline).length)}</span>}

@@ -63,6 +63,7 @@ import './chat.css';
 import { useChatPresentation } from './useChatPresentation';
 import { PANEL_NAVIGATE } from './panel-nav';
 import { useUsageMeter } from './useUsageMeter';
+import { sourceOfOpening } from './usage-dom';
 import type { UsageView } from './usage-meter';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
@@ -106,6 +107,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
   const [detail, setDetail] = useState<Detail | null>(null);
+  /** The kind of the tile a detail was opened from, when the click came from one (usage areas). */
+  const [detailSource, setDetailSource] = useState<string>();
   const chat = useChatPresentation();
   const chatOpen = chat.view !== 'hidden' || chat.picking;
   const pulpits = usePulpits();
@@ -120,7 +123,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     main.current?.focus();
     window.scrollTo?.(0, 0);
   }, [page, detail]);
-  const open = (target: Detail) => setDetail(target);
+  const open = (target: Detail) => { setDetailSource(sourceOfOpening(Date.now())); setDetail(target); };
   const navigate = (target: Page) => {
     setDetail(null);
     setPage(target);
@@ -229,7 +232,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   // Usage measurement (docs/uzycie.md): one main view at a time, ambient > full chat > details > page; a paused host measures nothing.
   const usageView: UsageView = ambient.ambient ? { view: 'ambient' } : chat.view === 'full' ? { view: 'chat' }
     : detail ? { view: 'detail', detail: detail.kind } : page === 'home' ? { view: 'page', page, pulpit: pulpits.active } : { view: 'page', page };
-  useUsageMeter(usageView, pollingEnabled);
+  useUsageMeter(usageView, pollingEnabled, { page, pulpit: pulpits.active });
+  const mainArea = detail ? `detail-${detail.kind}` : page === 'home' || page === 'settings' ? undefined : `page-${page}`;
   function renderDetail() {
     if (!detail) return null;
     if (detail.kind === 'system')
@@ -407,7 +411,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`} data-night={dayNight.night}>
       {ambientView}
       <header className="top-bar">
-        <div className="top-clock">
+        <div className="top-clock" data-usage-area="clock">
           <time dateTime={new Date(now).toISOString()}>{time(now)}</time>
           <span className="clock-seconds">{new Date(now).getSeconds().toString().padStart(2, '0')}</span>
           <span className="today">{date(now)}</span>
@@ -429,7 +433,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <button className="top-button" aria-label="Otwórz ustawienia" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}><Settings2 size={20} /></button>
         </div>
       </header>
-      <main ref={main} tabIndex={-1} id="main-content">
+      <main ref={main} tabIndex={-1} id="main-content" data-usage-area={mainArea} data-usage-source={detail ? detailSource : undefined}>
         {detail ? (
           <>
             <button className="back-button" onClick={() => setDetail(null)}>
@@ -528,7 +532,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
       >
         <MessageSquare size={22} aria-hidden="true" />
       </button>
-      <nav aria-label="Główna nawigacja">
+      <nav aria-label="Główna nawigacja" data-usage-area="nav">
         {(Object.keys(pageNames) as Page[]).map((id) => {
           const Icon = navIcons[id];
           return (

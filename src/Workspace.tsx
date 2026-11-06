@@ -24,6 +24,7 @@ import { MULTI_KINDS, kindOfCard, limitKinds, pickable } from './workspace-kinds
 import { ctx } from './chat-context';
 import { listContext } from './todo-context';
 import { workspaceKey } from './pulpits';
+import { usageKind, usageTile } from './usage-ids';
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
 const sameLayout = (a: Tile[], b: Tile[]) => a.length === b.length && a.every(t => b.some(o => o.id === t.id && o.c === t.c && o.r === t.r && o.w === t.w && o.h === t.h));
@@ -219,7 +220,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     {readingOrder(tiles).map(tile => {
       const title = tileTitle(tile);
       const dragging = drag?.id === tile.id;
-      return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} {...pointAt(tile, title)}
+      return <div key={tile.id} className={`wk-cell ${dragging ? 'dragging' : ''} ${active === tile.id ? 'active' : ''}`} data-kind={tile.kind} data-tile={tile.id} data-usage-area="tile" data-usage-kind={usageKind(tile.kind)} data-usage-tile={usageTile(tile.id)} {...pointAt(tile, title)}
         style={{ ...areaOf(tile), ...(dragging ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {}) }}>
         <div className="wk-body">{content(tile)}</div>
         <button className="wk-grip" aria-label={`Przesuń kafelek: ${title}`} title="Przeciągnij, żeby przesunąć" onPointerDown={e => startMove(e, tile)}><i /></button>
