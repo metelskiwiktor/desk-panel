@@ -1,2 +1,35 @@
 .designlab { padding: 16px; min-height: 100vh; }
 .designlab-demo { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+.fila-lab { max-width: 1800px; margin: 0 auto; color: var(--p2-text); display: flex; flex-direction: column; gap: 16px; }
+.fila-header, .fila-viewbar, .fila-section-heading, .fila-column > header { display: flex; align-items: center; gap: 12px; }
+.fila-header h1 { font-size: 28px; margin-top: 4px; }
+.fila-header .button { display: inline-flex; align-items: center; gap: 6px; }
+.fila-search { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--p2-muted); }
+.fila-search input { width: 220px; border: 1px solid var(--p2-line); border-radius: 10px; padding: 10px 12px; color: var(--p2-text); background: var(--p2-surface); }
+.fila-viewbar { padding-bottom: 12px; border-bottom: 1px solid var(--p2-line); }
+.fila-lab-note { margin-left: auto; }
+.fila-section { padding: 16px 20px; gap: 10px; }
+.fila-section-heading { color: var(--p2-muted); }
+.fila-section-heading h2 { color: var(--p2-text); font-size: 19px; }
+.fila-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fila-pills > span { padding: 4px 10px; border-radius: 10px; background: var(--p2-surface-2); color: var(--p2-muted); font-size: 12px; }
+.fila-row { gap: 12px; padding: 5px 0; }
+.fila-row .todo-text { white-space: normal; overflow-wrap: anywhere; }
+.fila-row-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--p2-muted); font-size: 11px; }
+.fila-module { width: 90px; font-size: 12px; }
+.fila-row > .todo-status { width: 145px; max-width: none; }
+.fila-kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fila-column { min-width: 0; padding: 12px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); }
+.fila-column h3 { display: flex; align-items: center; gap: 2px; font-size: 14px; margin: 0; }
+.fila-column header > .p2-meta { margin-left: auto; font-size: 12px; }
+.fila-column-query { font-size: 11px; margin: 6px 0 12px; }
+.fila-ticket { align-items: flex-start; padding: 10px 6px; margin-top: 8px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface); }
+.fila-ticket .todo-check { margin-top: 5px; width: 18px; height: 18px; }
+.fila-ticket .todo-title { padding: 0; gap: 6px; }
+.fila-ticket .todo-text { font-size: 14px; }
+.fila-ticket .todo-note { font-size: 12px; }
+.fila-column-empty { padding: 24px 0; text-align: center; }
+.fila-notice { padding: 12px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface); }
+.fila-notice code { display: block; margin-top: 8px; white-space: pre-wrap; }
+@media (max-width: 850px) { .fila-kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fila-header { flex-wrap: wrap; } .fila-search { margin-left: 0; } .fila-lab-note { display: none; } }
+@media (max-width: 500px) { .fila-kanban { grid-template-columns: minmax(0, 1fr); } .fila-module { display: none; } .fila-row > .todo-status { width: 85px; white-space: normal; } .fila-section { padding: 12px; } }

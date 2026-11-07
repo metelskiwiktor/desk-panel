@@ -23,4 +23,20 @@ just scenario standard      # wypisuje adres; link do makiety: <adres>?designlab
 
 ## Weryfikacja
 
+## Fila — pierwsza propozycja etapu 1
+
+`just scenario fila`, następnie `?designlab=fila`: tablica DeskPanel, sekcja „Do przejrzenia” i kanban „Funkcje”.
+Makieta używa klas wierszy Zadania, oznaczeń `TODO_STATUSES`, komponentu `Empty` oraz tokenów pulpitu.
+Dane testowe są wyłącznie w `scenarios/fila.json`; `/api/todos` służy jako tymczasowe źródło danych makiety,
+bez nowego kontraktu Fili i bez zapisów. Wyszukiwanie działa lokalnie, ikony przy pigułkach odsłaniają roboczy
+tekst zapytania (jego składnia nie jest decyzją techniczną). Pozostałe akcje są nieaktywne.
+
+Zrzuty: `just screenshots fila --query designlab=fila --device medialove-14 --scale all`.
+Sprawdzono wizualnie trzy skalowania Medialove 14″; przy 150% strona przewija się pionowo.
+Pusty wynik można zobaczyć po wpisaniu niepasującej frazy, stany ładowania i niedostępności korzystają z odczytu źródła.
+Styl jest propozycją do oceny użytkownika; strona wątku, wybór rewizji i pola Cezara czekają na kolejną iterację po
+przyjęciu pierwszego scenariusza (pictor). Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila`.
+
+## Sprawdzenia infrastruktury
+
 `src/designlab/gate.test.ts` (parametr ignorowany bez włączenia) i `scripts/designlab.test.mjs` (podgląd włącza DesignLab i serwuje źródła scenariusza). Ocena wyglądu zrzutów jest wzrokowa.
