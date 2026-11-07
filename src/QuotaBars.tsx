@@ -2,28 +2,37 @@ import { ChartPie } from 'lucide-react';
 import { SourceNote, quotaReason } from './components';
 import { time } from './format';
 import { MAX_AGE, fresh, quotaState, type DashboardData, type Detail, type QuotaSnapshot } from './model';
-import { normalizeQuotaWindow, quotaPace, quotaPaceLabels, quotaResetIn } from './quota-pace';
+import { normalizeQuotaWindow, nextCheckpoint, quotaPace, quotaPaceLabels, quotaProjection, quotaResetIn } from './quota-pace';
 import type { QuotaCardItem } from './quota-cards';
 
 const percent = (n: number) => `${Number(n.toFixed(1))}%`;
+const checkpointPercent = (n: number) => `${n.toLocaleString('pl-PL', { maximumFractionDigits: 1 })}%`;
+/** The next 10:00 is today or tomorrow, so a day word plus the hour is enough. */
+const checkpointText = (at: number, now: number, projected: number) =>
+  `${new Date(at).toDateString() === new Date(now).toDateString() ? 'dziś' : 'jutro'} ${time(at)} · ${checkpointPercent(projected)}`;
 
-interface Arc { used: number | null; state: 'fresh' | 'stale' | 'unavailable'; tone: keyof typeof quotaPaceLabels | 'muted'; elapsed: number | null }
+interface Arc { used: number | null; state: 'fresh' | 'stale' | 'unavailable'; tone: keyof typeof quotaPaceLabels | 'muted'; elapsed: number | null; future: number | null }
 /** One window of a limit: how much is used, how far the window has run, and the pace colour (only while the reading is current). */
-function arcOf(snapshot: QuotaSnapshot | undefined, now: number, connected: boolean): Arc | null {
+function arcOf(snapshot: QuotaSnapshot | undefined, now: number, connected: boolean, at: number): Arc | null {
   if (!snapshot) return null;
   const measured = quotaState(snapshot, now);
   const state = !connected && measured === 'fresh' ? 'stale' : measured;
   const pace = state === 'fresh' ? quotaPace(snapshot, now) : null;
-  return { used: state === 'unavailable' ? null : snapshot.usedPercent, state, tone: pace?.tone ?? 'muted', elapsed: pace?.elapsedPercent ?? null };
+  const projection = state === 'fresh' ? quotaProjection(snapshot, now, at) : null;
+  return {
+    used: state === 'unavailable' ? null : snapshot.usedPercent, state, tone: pace?.tone ?? 'muted',
+    elapsed: pace?.elapsedPercent ?? null, future: projection?.running ? projection.percent : null,
+  };
 }
 
-/** A bar for one window: the use as a fill coloured by the pace, a white tick where the window's time has got to. */
+/** A bar for one window: the use as a fill coloured by the pace, a white tick where the window's time has got to, and a blue one where it will be at the checkpoint. */
 function WindowRow({ name, arc, lead }: { name: string; arc: Arc; lead: boolean }) {
   return <span className={`p3-lrow ${lead ? 'lead' : 'thin'}`}>
     <span className="p3-lname">{name}</span>
     <span className="p3-lbar" data-tone={arc.tone} aria-hidden="true">
       {arc.used !== null && arc.used > 0 && <i style={{ width: `${Math.min(100, arc.used)}%` }} />}
       {arc.elapsed !== null && <u style={{ left: `${Math.min(100, arc.elapsed)}%` }} />}
+      {arc.future !== null && <span className="p3-lfuture" style={{ left: `${Math.min(100, arc.future)}%` }} />}
     </span>
     <b>{arc.used === null ? '—' : percent(arc.used)}</b>
   </span>;
@@ -34,13 +43,16 @@ export function LimitCard({ card, now, connected, open }: { card: QuotaCardItem;
   const seven = card.snapshots.find(s => normalizeQuotaWindow(s.window) === '7d');
   const other = card.snapshots.filter(s => s !== five && s !== seven);
   const lead = card.snapshots.find(s => s === (five ?? seven ?? other[0]));
-  const leadArc = arcOf(five ?? seven, now, connected);
-  const windows = [five && ['5h', arcOf(five, now, connected)], seven && ['7d', arcOf(seven, now, connected)], ...other.map(s => [s.label || s.window, arcOf(s, now, connected)])]
+  const checkpointAt = nextCheckpoint(now);
+  const leadArc = arcOf(five ?? seven, now, connected, checkpointAt);
+  const windows = [five && ['5h', arcOf(five, now, connected, checkpointAt)], seven && ['7d', arcOf(seven, now, connected, checkpointAt)], ...other.map(s => [s.label || s.window, arcOf(s, now, connected, checkpointAt)])]
     .filter(Boolean) as [string, Arc][];
+  const projection = windows.find(([, arc]) => arc.future !== null);
+  const checkpoint = projection ? checkpointText(checkpointAt, now, projection[1].future!) : null;
   const detail = !card.snapshots.length ? (card.reason ? quotaReason(card.reason) : 'brak pomiaru')
     : lead?.state === 'auth_required' ? 'wymaga logowania'
     : leadArc?.state === 'stale' && lead?.reason === 'http_429' ? `limit zapytań dostawcy${lead.retryAt ? ` · kolejna próba ${time(lead.retryAt)}` : ''} · ostatnia obserwacja`
-    : leadArc?.state === 'fresh' && lead?.resetAt ? `reset za ${quotaResetIn(lead.resetAt, now)}`
+    : leadArc?.state === 'fresh' && lead?.resetAt ? `reset za ${quotaResetIn(lead.resetAt, now)}${checkpoint ? ` · ${checkpoint}` : ''}`
     : leadArc?.state === 'unavailable' ? (lead?.reason ? quotaReason(lead.reason) : 'brak pomiaru')
     : `nieaktualne${lead?.observedAt ? ` · odczyt ${time(lead.observedAt)}` : ''}`;
   const summary = windows.map(([name, arc]) => `${name} ${arc.used === null ? '—' : percent(arc.used)}`).join(' · ');

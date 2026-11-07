@@ -128,3 +128,9 @@ przyciemnienie, wycinek podglądu; źródło szczegółów; techniczne id; równ
 magazynie w katalogu tymczasowym (`startScenario(..., usage)`; zwykłe scenariusze magazynu nie dostają): równoległa ekspozycja,
 kółko myszy nad jednym kafelkiem, pełny i kompaktowy czat, ukryta karta, miesiąc zwijający kafelki, strony i sekcje Ustawień,
 podgląd pionowy z przewijaniem. Nie jest częścią `just check` (jak `just wektor-ui`).
+
+## Znacznik przyszłego okna
+
+Kafelek limitu AI pokazuje, gdzie okno będzie o następnej 10:00 (czas lokalny): niebieska przerywana kreska na pasku i podpis
+`jutro 10:00 · 62,5%` obok `reset za …`. Prognoza liczy się z nominalnej długości okna i terminu resetu; okno kończące się
+przed 10:00 nie dostaje kreski ani podpisu. To pomoc w planowaniu, nie osobny pomiar.

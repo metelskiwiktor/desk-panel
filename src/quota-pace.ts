@@ -14,6 +14,20 @@ export function normalizeQuotaWindow(window: string): '5h' | '7d' | null {
   return null;
 }
 
+/** The nominal length of a window; the reset anchors it, so the start of the window is only inferred. */
+const quotaWindowMs = (norm: '5h' | '7d') => (norm === '5h' ? 300 : 7 * 24 * 60) * MINUTE;
+
+/** The local hour at which the tile shows where each window will stand; there is no setting for it. */
+export const QUOTA_CHECKPOINT_HOUR = 10;
+
+/** The next local 10:00 strictly after `now`. */
+export function nextCheckpoint(now: number): number {
+  const at = new Date(now);
+  at.setHours(QUOTA_CHECKPOINT_HOUR, 0, 0, 0);
+  if (at.getTime() <= now) at.setDate(at.getDate() + 1);
+  return at.getTime();
+}
+
 export function sortSnapshots(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
   return [...snapshots].sort((a, b) => {
     if (a.model !== b.model) return 0;
@@ -29,7 +43,7 @@ export function sortSnapshots(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
 export function quotaPace(snapshot: QuotaSnapshot, now: number) {
   const norm = normalizeQuotaWindow(snapshot.window);
   if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !norm) return null;
-  const duration = (norm === '5h' ? 300 : 7 * 24 * 60) * MINUTE;
+  const duration = quotaWindowMs(norm);
   const elapsedPercent = Math.max(0, Math.min(100, ((duration - (snapshot.resetAt! - now)) * 100) / duration));
   const excess = snapshot.usedPercent! - elapsedPercent;
   // Avoid moving an exact boundary across a colour due to floating-point noise.
@@ -37,6 +51,15 @@ export function quotaPace(snapshot: QuotaSnapshot, now: number) {
   const tone: keyof typeof quotaPaceLabels = exhausted ? 'red' : excess <= QUOTA_PACE_TOLERANCE + 1e-9 ? 'green'
     : excess <= QUOTA_PACE_WARNING + 1e-9 ? 'yellow' : 'red';
   return { elapsedPercent, tone, exhausted };
+}
+
+/** Where the window's time will be at `at`; `running` is false once the reset has passed, and then the time is spent (100%). */
+export function quotaProjection(snapshot: QuotaSnapshot, now: number, at: number): { percent: number; running: boolean } | null {
+  const norm = normalizeQuotaWindow(snapshot.window);
+  if (quotaState(snapshot, now) !== 'fresh' || !snapshot.resetAt || !norm) return null;
+  const duration = quotaWindowMs(norm);
+  const percent = Math.max(0, Math.min(100, ((duration - (snapshot.resetAt! - at)) * 100) / duration));
+  return { percent, running: snapshot.resetAt > at };
 }
 
 export function quotaResetIn(resetAt: number, now: number) {

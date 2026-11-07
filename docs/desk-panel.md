@@ -51,7 +51,9 @@ pod drugą, a układ nie zależy od urządzenia:
 - **środek: obszar roboczy**, siatka 4 kolumn × 2 wierszy kafelków. Kafelek zajmuje jedną komórkę albo kilka i jest jedną rzeczą:
   jednym limitem AI (osobny kafelek dla Claude, Codex, Gemini i każdej grupy Antigravity, np. „Claude & GPT” czy frontier;
   okno 5h jako gruby pasek, 7d jako cienki, biała kreska pokazuje, ile czasu okna już upłynęło, a kolor mówi tylko, czy
-  zużycie wyprzedza czas; przycisk w rogu otwiera podział zużycia), Cezarem (najpierw zadania czekające na Ciebie, potem
+  zużycie wyprzedza czas; niebieska przerywana kreska pokazuje, gdzie okno będzie o następnej 10:00, a obok „reset za …”
+  stoi podpis „jutro 10:00 · 62,5%” — okno kończące się przed tą godziną nie ma znacznika ani podpisu; przycisk w rogu
+  otwiera podział zużycia), Cezarem (najpierw zadania czekające na Ciebie, potem
   te w toku i zakończone), pocztą (lista nadawca / temat / początek wiadomości, w lewo przeczytane, w prawo kosz; w
   kafelku jednokomórkowym tylko nadawca i temat) albo komputerem (CPU i RAM jako dwa paski, od dwóch komórek jako wykresy
   z ostatnich 5 minut), albo kontem bankowym (saldo, sumy 30 dni i ostatnie operacje, zob. [bank.md](bank.md)). Kafelek zawsze rysuje się w całości: jeśli źródło milczy, mówi to spokojnie, zamiast znikać.
