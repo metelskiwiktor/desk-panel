@@ -8,7 +8,7 @@ import { MarkdownText } from '../../components/markdown-text';
 import { TODO_STATUSES, todoIsDone } from '../../todo-contract';
 import { Link, useSearch } from '../nav';
 import {
-  BOARD_HISTORY, MODULES, PROJECTS, THREADS, TYPES, VIEWS, WORKFLOW_PRACA,
+  BOARD_HISTORY, MODULES, PROJECTS, THREADS, VIEWS, WORKFLOW_PRACA,
   type Author, type Cezar, type CustomField, type Entry, type Section, type Status, type Thread, type ThreadType, type View,
 } from './fila-data';
 
@@ -105,7 +105,6 @@ export default function Fila() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'DESK-36': true });
   const [renaming, setRenaming] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const view = views.find(item => item.id === params.get('widok')) ?? views[0];
   const opened = threads.find(thread => thread.id === params.get('thread'));
   const live = threads.filter(thread => !thread.archived);
@@ -201,21 +200,6 @@ export default function Fila() {
     setRenaming(id);
   };
 
-  const create = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const title = form.get('title')?.toString().trim();
-    if (!title) return;
-    const key = form.get('project')?.toString() ?? 'DESK';
-    const numbers = threads.filter(thread => thread.project === key).map(thread => Number(thread.id.split('-')[1]));
-    const id = `${key}-${(numbers.length ? Math.max(...numbers) : 0) + 1}`;
-    const type = form.get('type') as ThreadType;
-    setThreads(previous => [...previous, { id, type, title, description: '', status: 'pomysl', module: '', project: key, tags: [], custom: [], spec: [], activity: [{ at: now(), by: 'Ty', text: 'utworzył wątek' }] }]);
-    setCreating(false);
-    window.history.pushState(null, '', href({ thread: id }));
-    window.dispatchEvent(new Event('designlab-navigate'));
-  };
-
   const navItem = (label: string, icon: ReactNode, tone: string, active = false) => active
     ? <Link href={href()} className={`fila-nav-item ${tone} active`} aria-current="page">{icon}<span>{label}</span></Link>
     : <button type="button" className={`fila-nav-item ${tone}`}>{icon}<span>{label}</span></button>;
@@ -238,7 +222,6 @@ export default function Fila() {
             <div><p className="fila-eyebrow">Tablica</p><h1>DeskPanel</h1></div>
             <div className="fila-head-actions">
               <button className="fila-icon-button" aria-label="Historia tablicy" aria-pressed={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}><History size={19} /></button>
-              <button className="fila-primary" onClick={() => setCreating(true)}><Plus size={17} /> Nowy wątek</button>
             </div>
           </header>
           <div className="fila-views" role="tablist" aria-label="Widoki tablicy">
@@ -259,20 +242,6 @@ export default function Fila() {
               <ul className="fila-timeline">{BOARD_HISTORY.map((entry, index) => <li key={index}><span className="fila-author">{entry.by}</span> {entry.text}<time>{when(entry.at)}</time></li>)}</ul>
             </aside>}
           </div>
-          {creating && <div className="fila-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) setCreating(false); }}>
-            <form className="fila-dialog" role="dialog" aria-label="Nowy wątek" onSubmit={create} onKeyDown={event => { if (event.key === 'Escape') setCreating(false); }}>
-              <h2>Nowy wątek</h2>
-              <label>Tytuł<input name="title" autoFocus required maxLength={200} placeholder="Co trzeba zrobić albo zapamiętać" /></label>
-              <div className="fila-dialog-row">
-                <label>Projekt<select name="project" defaultValue="DESK">{PROJECTS.map(project => <option key={project.key} value={project.key}>{project.name}</option>)}</select></label>
-                <label>Typ<select name="type" defaultValue="Sprawa">{TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
-              </div>
-              <div className="fila-form-actions">
-                <button type="button" className="fila-text-button" onClick={() => setCreating(false)}>Anuluj</button>
-                <button type="submit" className="fila-primary">Utwórz</button>
-              </div>
-            </form>
-          </div>}
         </>}
     </div>
   </div>;

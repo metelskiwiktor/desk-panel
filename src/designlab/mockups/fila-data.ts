@@ -19,7 +19,6 @@ export type Thread = {
 export const WORKFLOW_PRACA: Status[] = ['pomysl', 'przygotowanie', 'gotowe', 'realizacja', 'sprawdzenie', 'zakonczone', 'porzucone'];
 export const MODULES = ['Fila', 'Wektor', 'Pulpit', 'System', 'Cezar'];
 export const PROJECTS = [{ key: 'DESK', name: 'DeskPanel' }, { key: 'CEZR', name: 'Cezar' }, { key: 'TABU', name: 'Tabularium' }];
-export const TYPES: ThreadType[] = ['Sprawa', 'Funkcja', 'Błąd', 'Spotkanie', 'Notatka'];
 
 const at = (text: string) => new Date(`2026-${text}:00`).getTime();
 

@@ -44,12 +44,12 @@ więc działają obok podglądu. `just update` odmawia przy działającym serwer
 `just scenario fila`, następnie `?designlab=fila` (tokeny pulpitu, D-071): tablica DeskPanel z widokami Przegląd i Wszystko, sekcje listy i kanban, pusta sekcja Pilne, oraz strona
 wątku `&thread=DESK-37`. Fila nie ma jeszcze kontraktu, więc dane makiety są w `src/designlab/mockups/fila-data.ts`
 (rodzic, tagi, pola własne, zestaw Cezara, rewizje, archiwum); scenariusz `fila` służy tylko do uruchomienia podglądu.
-Wszystkie zmiany (Stan, sekcje, zapytania, nowy wątek, komentarze, pola) żyją w pamięci strony, bez zapisów.
+Wszystkie zmiany (Stan, sekcje, zapytania, komentarze, pola) żyją w pamięci strony, bez zapisów.
 
 Tablica: Stan zmienia się z wiersza i z karty (wybór z workflow Praca, wartości zamykające osobno), sekcje mają menu „⋯”
 (zmień nazwę, przesuń wyżej i niżej, usuń) i „Dodaj sekcję” na końcu, pigułki zapytania rozwijają edytowalny tekst pod sobą
-(kolumny kanbanu mają własne), podwątki jeden poziom pod rodzicem z licznikiem zamkniętych, „Nowy wątek” w nagłówku
-(tytuł, projekt, typ) i historia tablicy w panelu bocznym. Strona wątku: tytuł i opis edytowalne w GUI (tymczasowo, Q-043),
+(kolumny kanbanu mają własne), podwątki jeden poziom pod rodzicem z licznikiem zamkniętych i historia tablicy w panelu bocznym; tablica nie tworzy
+wątków (D-072). Strona wątku: tytuł i opis edytowalne w GUI (D-073),
 podwątki, specyfikacja z wyborem rewizji tylko do odczytu, jedna oś aktywności z komentarzami, pola (Stan, Moduł, tagi,
 pola własne) i zestaw Cezara z gotowością i „Zleć Cezarowi”; menu „⋯”: przeniesienie, archiwizacja, trwałe usunięcie z archiwum.
 
