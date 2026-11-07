@@ -21,24 +21,35 @@ just scenario standard      # wypisuje adres; link do makiety: <adres>?designlab
 2. Jedna linia w `src/designlab/mockups/index.ts`.
 3. Zrzuty: `just screenshots standard --query designlab=<nazwa> --device medialove-14 --scale all` → `output/screenshots` (poza Git). Zrzut pokazuje widok wyjściowy (bez klikania); szczegóły oglądamy ręcznie pod linkiem.
 
-## Weryfikacja
-
-## Fila — pierwsza propozycja etapu 1
+## Fila — propozycja etapu 1
 
 `just scenario fila`, następnie `?designlab=fila`: tablica DeskPanel, sekcja „Do przejrzenia” i kanban „Funkcje”.
-Makieta używa klas wierszy Zadania, oznaczeń `TODO_STATUSES`, komponentu `Empty` oraz tokenów pulpitu.
+Makieta używa oznaczeń `TODO_STATUSES`, komponentów `Empty` i `MarkdownText` oraz tokenów pulpitu.
 Dane testowe są wyłącznie w `scenarios/fila.json`; `/api/todos` służy jako tymczasowe źródło danych makiety,
-bez nowego kontraktu Fili i bez zapisów. Wyszukiwanie działa lokalnie, ikony przy pigułkach odsłaniają roboczy
-tekst zapytania (jego składnia nie jest decyzją techniczną). Pozostałe akcje są nieaktywne.
+bez nowego kontraktu Fili i bez zapisów. Wyszukiwanie po ID lub tytule działa lokalnie, kliknięcie skrótu zapytania
+odsłania jego roboczy tekst (składnia nie jest decyzją techniczną).
 Tekst zapytania rozwija się bezpośrednio pod pigułkami własnej sekcji; sekcje mają niezależne rozwinięcia.
-Nagłówek tablicy pokazuje podpisany przycisk „Menu tablicy”, a każda sekcja — „Sekcja”.
-Menu sekcji pozwala pokazać lub ukryć zapytanie; pozycje zmieniające dane są prezentowane jako nieaktywne.
+Lewa nawigacja rozdziela Tablice i Projekty; DeskPanel jest klikalny, Cezar i Tabularium pokazują miejsce przyszłych ekranów.
+Sekcje i wiersze są bez zewnętrznych kart, typy mają kolorowe ikony, kolumny kanbanu akcenty stanów.
+Nie ma tekstowego menu zarządzania tablicą ani dodawania wątku na tablicy. Projekt ma robocze wejście z listą
+i nieaktywną ikoną tworzenia wątku; jego docelowy ekran pozostaje do zaprojektowania.
 
-Zrzuty: `just screenshots fila --query designlab=fila --device medialove-14 --scale all`.
+Przytrzymanie nagłówka przez 550 ms wybiera sekcję do przeniesienia; następnie kliknięcie oznaczenia przed lub za
+inną sekcją zmienia kolejność tylko w pamięci podglądu. Uchwyt daje to samo wejście klawiaturą, Escape anuluje.
+To nie jest przeciąganie wątków ani zmiana zapytań. Gest sprawdzono myszą w przeglądarce; fizyczny dotyk czeka na ocenę użytkownika.
+
+Kliknięcie tytułu otwiera stronę wątku z własnym adresem `?designlab=fila&thread=DESK-37`:
+opis, pola, pełny Markdown specyfikacji, wybór rewizji z autorem i czasem, aktywność. Wartość Stanu można zmienić
+lokalnie; wyjście ze strony odrzuca zmianę. Checkboxy na tablicy są ukryte w tej propozycji wyglądu (Q-041),
+co nie zmienia reguł odhaczania z D-018 i D-030. Zestaw Cezara i gotowość pozostają do dopracowania.
+
+Zrzuty: `just screenshots fila --nav --query designlab=fila --device medialove-14 --scale all`.
+`--nav` zachowuje także lewą nawigację makiety (runner domyślnie ukrywa wszystkie elementy `nav`).
+W PowerShell zapytanie z `&` przekazuj bezpośrednio do npm, gdyż recepta `just screenshots` gubi cudzysłowy:
+`npm run scenario -- fila --shot --nav --query 'designlab=fila&thread=DESK-37' --device medialove-14 --scale all`.
 Sprawdzono wizualnie trzy skalowania Medialove 14″; przy 150% strona przewija się pionowo.
 Pusty wynik można zobaczyć po wpisaniu niepasującej frazy, stany ładowania i niedostępności korzystają z odczytu źródła.
-Styl jest propozycją do oceny użytkownika; strona wątku, wybór rewizji i pola Cezara czekają na kolejną iterację po
-przyjęciu pierwszego scenariusza (pictor). Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila`.
+Styl i gesty są propozycją do oceny użytkownika. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila`.
 
 ## Sprawdzenia infrastruktury
 

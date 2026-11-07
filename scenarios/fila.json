@@ -1236,7 +1236,43 @@
               "done": false,
               "createdAt": "now-2d",
               "completedAt": null,
-              "by": "claude"
+              "by": "claude",
+              "spec": "## Cel\nPokazać pełną specyfikację wątku i pozwolić odczytać wcześniejszą rewizję.\n\n## Zakres\n- Treść Markdown w głównej kolumnie strony wątku.\n- Wybór zapisanej rewizji z numerem i autorem.\n- Pola wątku pozostają widoczne obok treści.\n\n## Warunki odbioru\n1. Po otwarciu widać aktualną specyfikację.\n2. Zmiana rewizji zmienia wyświetlaną treść.\n3. Długi tekst nie zasłania pól wątku.",
+              "specRevision": 2,
+              "specRevisions": [
+                {
+                  "revision": 1,
+                  "spec": "## Cel\nPokazać specyfikację bez opuszczania wątku.\n\n## Zakres\nOdczyt treści Markdown.",
+                  "by": "claude",
+                  "at": "now-2d"
+                },
+                {
+                  "revision": 2,
+                  "spec": "## Cel\nPokazać pełną specyfikację wątku i pozwolić odczytać wcześniejszą rewizję.\n\n## Zakres\n- Treść Markdown w głównej kolumnie strony wątku.\n- Wybór zapisanej rewizji z numerem i autorem.\n- Pola wątku pozostają widoczne obok treści.\n\n## Warunki odbioru\n1. Po otwarciu widać aktualną specyfikację.\n2. Zmiana rewizji zmienia wyświetlaną treść.\n3. Długi tekst nie zasłania pól wątku.",
+                  "by": "codex",
+                  "at": "now-1h"
+                }
+              ],
+              "history": [
+                {
+                  "at": "now-2d",
+                  "by": "claude",
+                  "kind": "spec",
+                  "text": "Zapisał specyfikację · rewizja 1"
+                },
+                {
+                  "at": "now-1h",
+                  "by": "codex",
+                  "kind": "spec",
+                  "text": "Zapisał specyfikację · rewizja 2"
+                },
+                {
+                  "at": "now-30m",
+                  "by": "user",
+                  "kind": "comment",
+                  "text": "Przy wyborze rewizji chcę widzieć, którą wersję właśnie czytam."
+                }
+              ]
             },
             {
               "id": "t-00000026",
