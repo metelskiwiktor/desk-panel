@@ -5,7 +5,7 @@ import { TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
   filaActionSchema, filaDataSchema,
-  type FilaAction, type FilaActor, type FilaData, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaThread, type FilaWorkflow,
+  type FilaAction, type FilaActor, type FilaData, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { SourceError } from './sources';
 
@@ -25,19 +25,30 @@ export interface FilaThreadView {
   parent: string | null; children: string[];
   module: string | null;
   fields: Record<string, FilaFieldValue>;
+  /** Specyfikacja: whether the field is on the thread and the newest revision number (0 = none yet). The text: `spec()`. */
+  spec: { enabled: boolean; revision: number };
   archived: boolean; revision: number;
   createdAt: number; updatedAt: number; createdBy: string;
   history: FilaThread['history'];
 }
+export interface FilaSpecView {
+  thread: string; enabled: boolean;
+  /** The revision shown; 0 with `text: null` = no revision yet (an empty revision has `text: ''`). */
+  revision: number; text: string | null; by: FilaSpecRevision['by'] | null; at: number | null;
+  /** The newest revision number of the thread. */
+  latest: number;
+}
 export interface FilaRegistries {
   projects: (FilaProject & { counts: { open: number; closed: number; archived: number } })[];
   workflows: FilaWorkflow[];
-  types: { key: string; label: string; workflow: string; fields: string[] }[];
+  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean }[];
   fieldDefs: FilaData['fieldDefs'];
 }
 export interface FilaStore {
   registries(): Promise<FilaRegistries>;
   thread(id: string): Promise<FilaThreadView>;
+  /** The Specyfikacja: the current text (needs the field on the thread) or one numbered revision (also after the field was removed). */
+  spec(id: string, revision?: number): Promise<FilaSpecView>;
   /** The actor comes from the caller's authentication, never from the action. */
   apply(action: FilaAction, actor: FilaActor): Promise<FilaResult>;
   /** Text for the caller when the stored file could not be used as it was. */
@@ -62,7 +73,7 @@ export function defaultFilaData(): FilaData {
   };
 }
 
-const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow']);
+const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow', 'setSpec', 'addSpecField', 'removeSpecField']);
 const userOnly = new Set<FilaAction['action']>(['deleteThread']);
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
 const lower = (s: string) => s.toLocaleLowerCase('pl');
@@ -150,6 +161,9 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     return chain;
   };
 
+  const specOf = (t: FilaThread) => t.spec ?? { enabled: FILA_TYPES[t.type].spec, revisions: [] };
+  const latestSpec = (t: FilaThread) => specOf(t).revisions.at(-1);
+
   const view = (t: FilaThread): FilaThreadView => {
     const workflow = workflowOf(t.workflow);
     const parent = t.parent ? byUid(t.parent) : undefined;
@@ -161,7 +175,9 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       title: t.title, description: t.description,
       parent: parent ? idOf(parent) : null,
       children: data.threads.filter(c => c.parent === t.uid).map(idOf),
-      module: t.module, fields: structuredClone(t.fields), archived: t.archived, revision: t.revision,
+      module: t.module, fields: structuredClone(t.fields),
+      spec: { enabled: specOf(t).enabled, revision: latestSpec(t)?.number ?? 0 },
+      archived: t.archived, revision: t.revision,
       createdAt: t.createdAt, updatedAt: t.updatedAt, createdBy: t.history[0]?.by ?? 'user',
       history: structuredClone(t.history),
     };
@@ -216,7 +232,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         const t: FilaThread = {
           uid: uid(), project: project.key, number: project.nextNumber++, type: action.type, workflow: workflow.id, state: workflow.states[0]!.name,
           title: action.title, description: action.description ?? '', parent: parent?.uid ?? null, module: action.module ?? null,
-          fields, archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
+          fields, spec: { enabled: FILA_TYPES[action.type].spec, revisions: [] }, archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
         };
         data.threads.push(t);
         record(t, actor, { kind: 'created', text: FILA_TYPES[action.type].label });
@@ -303,6 +319,31 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         record(t, actor, { kind: 'changed', changes: [{ field: name, from: show(before), to: null }] });
         return done(t);
       }
+      case 'setSpec': {
+        const t = threadOf(action.thread);
+        if (!specOf(t).enabled) throw new FilaError(409, 'Wątek nie ma pola Specyfikacja: dodaj je (addSpecField).');
+        const latest = latestSpec(t);
+        const current = latest?.number ?? 0;
+        // The same text changes nothing whatever the base, so a retried request is safe (a first empty write is a no-op too).
+        if (action.text === (latest?.text ?? '')) return done(t, { specRevision: current });
+        if (action.baseRevision !== current) throw new FilaError(409, `Konflikt: oczekiwana rewizja Specyfikacji ${action.baseRevision}, aktualna ${current}. Przeczytaj ją i spróbuj ponownie.`);
+        const revision = current + 1;
+        t.spec = { enabled: true, revisions: [...specOf(t).revisions, { number: revision, text: action.text, by: actor, at: now() }] };
+        t.revision += 1;
+        record(t, actor, { kind: 'changed', changes: [{ field: 'Specyfikacja', from: current ? `v${current}` : null, to: `v${revision}` }] });
+        return done(t, { specRevision: revision });
+      }
+      case 'addSpecField': case 'removeSpecField': {
+        const t = threadOf(action.thread);
+        const enable = action.action === 'addSpecField';
+        const spec = specOf(t);
+        if (spec.enabled !== enable) {
+          t.spec = { enabled: enable, revisions: spec.revisions };
+          t.revision += 1;
+          record(t, actor, { kind: 'changed', changes: [{ field: 'Specyfikacja', from: enable ? null : 'pole', to: enable ? 'pole' : null }] });
+        }
+        return done(t, { specRevision: latestSpec(t)?.number ?? 0 });
+      }
       case 'comment': {
         const t = threadOf(action.thread);
         record(t, actor, { kind: 'comment', text: action.text });
@@ -334,7 +375,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   return {
     async registries() {
       await tail; await load();
-      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: FILA_DEFAULT_WORKFLOW, fields: [...type.fields] }));
+      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: FILA_DEFAULT_WORKFLOW, fields: [...type.fields], spec: type.spec }));
       const projects = data.projects.map(p => {
         const own = data.threads.filter(t => t.project === p.key);
         const closed = (t: FilaThread) => workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false;
@@ -343,6 +384,21 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return { projects, workflows: structuredClone(data.workflows), types, fieldDefs: structuredClone(data.fieldDefs) };
     },
     async thread(id) { await tail; await load(); return view(threadOf(id)); },
+    async spec(id, revision) {
+      await tail; await load();
+      const t = threadOf(id);
+      const { enabled, revisions } = specOf(t);
+      const latest = revisions.at(-1)?.number ?? 0;
+      const shown = (r: FilaSpecRevision | undefined): FilaSpecView => ({ thread: idOf(t), enabled, revision: r?.number ?? 0, text: r ? r.text : null, by: r?.by ?? null, at: r?.at ?? null, latest });
+      if (revision === undefined) {
+        if (!enabled) throw new FilaError(404, `Wątek ${idOf(t)} nie ma pola Specyfikacja.`);
+        return shown(revisions.at(-1));
+      }
+      if (!Number.isInteger(revision) || revision < 1) throw new FilaError(400, 'Numer rewizji to liczba całkowita od 1.');
+      const found = revisions.find(r => r.number === revision);
+      if (!found) throw new FilaError(404, `Wątek ${idOf(t)} nie ma rewizji ${revision} Specyfikacji (najnowsza: ${latest}).`);
+      return shown(found);
+    },
     apply(action, actor) {
       const run = tail.then(async () => {
         await load();

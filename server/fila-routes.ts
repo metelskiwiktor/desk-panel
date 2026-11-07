@@ -30,7 +30,7 @@ const same = (given: string, expected: string) => {
 const clientOf = (given: string, tokens: FilaTokens) => FILA_CLIENTS.find(client => { const token = tokens[client]; return !!token && same(given, token); });
 
 const json = (res: ServerResponse, status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body)); };
-const MAX_BODY = 256 * 1024;
+const MAX_BODY = 512 * 1024;
 
 /**
  * `/api/fila…`. Reads are open like the other panel views. A write is the user's when it comes from the panel's own page
@@ -53,6 +53,12 @@ export async function handleFilaRoute(req: IncomingMessage, res: ServerResponse,
     if (req.method === 'GET' && url.pathname === '/api/fila') { json(res, 200, { ...await ctx.fila.registries(), notice: await ctx.fila.notice() }); return true; }
     const thread = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)$/.exec(url.pathname);
     if (req.method === 'GET' && thread) { json(res, 200, await ctx.fila.thread(thread[1]!)); return true; }
+    const spec = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)\/spec(?:\/([^/]+))?$/.exec(url.pathname);
+    if (req.method === 'GET' && spec) {
+      const number = spec[2] === undefined ? undefined : /^\d+$/.test(spec[2]) ? Number(spec[2]) : Number.NaN;
+      json(res, 200, await ctx.fila.spec(spec[1]!, number));
+      return true;
+    }
     if (req.method === 'POST' && url.pathname === '/api/fila/action') {
       // The caller decides the author, never the body: a token means that client, the panel's own Origin means the user.
       const actor = client ?? (req.headers.origin === ctx.ownOrigin ? 'user' : undefined);

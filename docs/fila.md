@@ -1,6 +1,6 @@
 # Fila: rdzeń wątków i API
 
-Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **część 1.1a etapu 1**: trwały rdzeń i HTTP API. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); Fila ich nie czyta ani nie zmienia. Nie ma jeszcze: rewizji specyfikacji (1.1b), zapytań i tablic (1.2), MCP i klientów (1.3), Cezara na wątku i migracji (1.4), interfejsu (1.5).
+Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a i 1.1b etapu 1**: trwały rdzeń, HTTP API oraz Specyfikacje z rewizjami. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); Fila ich nie czyta ani nie zmienia. Nie ma jeszcze: zapytań i tablic (1.2), MCP i klientów (1.3), Cezara na wątku i migracji (1.4), interfejsu (1.5).
 
 ## Gdzie co jest
 
@@ -19,7 +19,7 @@ Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projekt
 
 - **Projekt**: klucz, dokładnie cztery wielkie litery A–Z (`^[A-Z]{4}$`, unikalny, niezmienny), nazwa, lista wartości Moduł, licznik `nextNumber`. Projektów na start nie ma w kodzie: trzy projekty (DESK, CEZA, TABU) założy migracja 1.4b.
 - **Wątek**: ID `KLUCZ-numer` (np. `DESK-32`), wewnętrzny stały `uid` (rodzic wskazuje `uid`, więc przeniesienie nie zrywa relacji), typ (niezmienny), workflow, Stan, tytuł, opis, rodzic (dowolna głębokość, także w innym projekcie, bez cykli), Moduł, pola, `archived`, `revision`, historia.
-- **Typy**: pięć szablonów w kodzie (Sprawa, Funkcja, Błąd, Notatka, Spotkanie), każdy z polem Tagi i workflow Praca. Funkcja i Błąd dostaną pole Specyfikacja w 1.1b; Kiedy/Termin (etap 3) i Implementacja Cezara (etap 2) nie istnieją. Typów nie edytuje się.
+- **Typy**: pięć szablonów w kodzie (Sprawa, Funkcja, Błąd, Notatka, Spotkanie), każdy z polem Tagi i workflow Praca. Funkcja i Błąd mają pole Specyfikacja z szablonu, pozostałe typy mogą je dostać (sekcja „Specyfikacja i rewizje”); Kiedy/Termin (etap 3) i Implementacja Cezara (etap 2) nie istnieją. Typów nie edytuje się.
 - **Workflow**: dane (id `w-…`), uporządkowana lista Stanów z flagą zamykającą. Seed „Praca” = dzisiejsze stany (`TODO_STATUSES`): Pomysł · Do przygotowania · Gotowe do realizacji · W realizacji · Do sprawdzenia · **Zakończone** · **Porzucone**. Nowy wątek dostaje pierwszy Stan. Wątek jest zamknięty, gdy jego Stan jest zamykający (`closed`); checkboxa nie ma (D-070).
 - **Pola własne** (D-047): definicja globalna (nazwa, rodzaj `text|number|date|bool|multi`), pierwsze użycie ustala rodzaj (`setField` z `kind`), potem nazwa znaczy to samo wszędzie; porównanie nazw bez względu na wielkość liter. `date` to `RRRR-MM-DD`, `multi` to lista bez duplikatów. Zastrzeżone nazwy (Stan, Moduł, Tytuł, Opis, Typ, Projekt, Workflow, Rodzic, Specyfikacja, Kiedy, Termin, Zablokowane, Implementacja Cezara, ID) nie są polami własnymi. Zmiana rodzaju pola i usunięcie globalnej definicji są **odłożone poza etap 1, bez terminu** (Q-032); z wątku pole można usunąć (`removeField`).
 - **Historia**: każdy wpis ma autora, czas i zmianę (`changes: pole, było, jest`; długie teksty obcięte do 200 znaków). Komentarz to wpis historii (`kind: comment`). Historii nie obcina się (inaczej niż w listach zadań, które trzymają 200 wpisów): ma ją każda zmiana pola, Stanu, tytułu, opisu, rodzica, workflow, projektu, archiwizacji i usunięcia pola.
@@ -70,10 +70,34 @@ Wszystko pod `/api/fila`, JSON, `Cache-Control: no-store`.
 | `GET /api/fila/threads/KLUCZ-n` | wątek: pola, `closed`, `parent`, `children`, `createdBy`, `history` |
 | `POST /api/fila/action` | jedna akcja, odpowiedź `{ ok, project? \| workflow? \| thread: { id, revision, previousId? } \| removed? }` |
 
-Akcje (`action`): `createProject`, `setModules`, `createWorkflow`, `updateWorkflow`, `createThread`, `updateThread`, `setField`, `removeField`, `comment`, `archiveThread`, `restoreThread`, `deleteThread` (pola: `src/fila-contract.ts`). Błąd: `{ "error": "zdanie po polsku" }` ze statusem 400 (kształt), 403 (rola), 404, 409 (konflikt, reguła domenowa) albo 413. Brak listowania wątków: zapytania są w 1.2.
+Akcje (`action`): `setSpec`, `addSpecField`, `removeSpecField` (niżej), `createProject`, `setModules`, `createWorkflow`, `updateWorkflow`, `createThread`, `updateThread`, `setField`, `removeField`, `comment`, `archiveThread`, `restoreThread`, `deleteThread` (pola: `src/fila-contract.ts`). Błąd: `{ "error": "zdanie po polsku" }` ze statusem 400 (kształt), 403 (rola), 404, 409 (konflikt, reguła domenowa) albo 413. Odczyt Specyfikacji: `GET /api/fila/threads/KLUCZ-n/spec` (bieżąca) i `…/spec/N` (rewizja N). Brak listowania wątków: zapytania są w 1.2.
+
+## Specyfikacja i rewizje (1.1b)
+
+Zaprogramowane pole wątku (nie pole własne; nazwa zastrzeżona). Kontrakt, na którym opiera się 1.3 (MCP, runner, skille słonia i rybki); GUI nie ma (1.4–1.6).
+
+- **Pole**: Funkcja i Błąd mają je od utworzenia; do dowolnego innego typu dodaje je `addSpecField`, a `removeSpecField` zdejmuje (obie tylko AI; zmiana pola to wpis historii i rewizja wątku, powtórzenie bez zmiany nic nie robi). Wątki zapisane przed 1.1b czytają się z polem z szablonu i bez rewizji.
+- **Zapis** `{ action: "setSpec", thread, text, baseRevision }`: tylko AI (użytkownik 403, `by` odrzucone jako nieznane, autor z tokenu); `text` najwyżej **50 000 jednostek UTF-16** (dłuższy: 400; limit jak w zadaniach); `baseRevision` wymagane (0 = jeszcze nie ma rewizji). Odpowiedź ma `specRevision`.
+  - Inna treść niż bieżąca i `baseRevision` = numer bieżącej rewizji: nowa rewizja n+1 (pełna treść, klient, czas serwera), rewizja wątku rośnie, w historii wpis `Specyfikacja: v(n) → v(n+1)`.
+  - Inna treść i nieaktualna baza: **409**, bez zmiany treści, numeru, historii i innych pól.
+  - Ta sama treść co bieżąca, **niezależnie od bazy**: nic się nie zmienia, odpowiedź z bieżącym numerem (bezpieczne ponowienie). Pierwszy zapis pustej treści (brak rewizji) jest więc no-opem; wyczyszczenie istniejącej treści to nowa, pusta rewizja.
+  - Brak pola na wątku: 409 z podpowiedzią `addSpecField`.
+- **Odczyt** (jak inne GET-y), odpowiedź `{ thread, enabled, revision, text, by, at, latest }`:
+
+  | Wywołanie | Wynik |
+  | --- | --- |
+  | `/spec`, pole jest, brak rewizji | 200, `revision: 0`, `text: null` |
+  | `/spec`, pole jest, pusta rewizja | 200, `text: ""` |
+  | `/spec`, pola nie ma na wątku | 404 |
+  | `/spec/N`, rewizja istnieje (także po zdjęciu pola) | 200 |
+  | `/spec/N`, N większe niż najnowsza (lub brak rewizji) | 404 z numerem najnowszej |
+  | `/spec/N`, N nie jest liczbą całkowitą ≥ 1 | 400 |
+  | wątek nie istnieje | 404 |
+- **Zdjęcie i powrót pola**: rewizje zostają i są czytelne po numerze, zapis jest odrzucony; po `addSpecField` bieżąca treść to ostatnia rewizja, a numeracja idzie dalej. Rewizje trzymane są wszystkie, bez limitu liczby (w listach zadań 10); `GET /api/fila/threads/ID` pokazuje tylko `spec: { enabled, revision }`.
+- **Przeniesienie** zachowuje rewizje (są w wątku, nie w ID); trwałe usunięcie usuwa je z wątkiem. Rewizje leżą w `fila.json` przy wątku (bez migracji).
 
 ## Magazyn
 
 Jeden proces, jedna kolejka: akcje wykonują się po kolei na danych w pamięci, a po każdej plik jest zapisywany w całości (plik tymczasowy, potem `rename`), więc awaria nie zostawia pół pliku, a równoległe żądania się nie nadpisują. Akcja odrzucona albo z nieudanym zapisem cofa pamięć; dysk zostaje jak był. Uszkodzony plik jest odkładany jako `fila.json.corrupt-<czas>` i Fila startuje pusta z komunikatem w `notice`; nieczytelny z innego powodu blokuje zapis. Nie ma obsługi wielu procesów piszących ten sam plik.
 
-Własne wartości i powody: limity z `FILA_LIMITS` (tytuł 200, opis 20 000, komentarz 5000, tekst pola 2000, 60 pól na wątek, 50 000 wątków, 100 projektów, 50 workflow, 30 Stanów na workflow, 200 definicji pól) ustawione bardzo szeroko, jak w `todo-contract.ts`, tylko jako ochrona pliku i pamięci; treść ciała żądania najwyżej 256 KiB.
+Własne wartości i powody: limity z `FILA_LIMITS` (tytuł 200, opis 20 000, komentarz 5000, tekst pola 2000, 60 pól na wątek, 50 000 wątków, 100 projektów, 50 workflow, 30 Stanów na workflow, 200 definicji pól) ustawione bardzo szeroko, jak w `todo-contract.ts`, tylko jako ochrona pliku i pamięci; treść ciała żądania najwyżej 512 KiB (Specyfikacja 50 000 jednostek UTF-16 mieści się nawet przy 6 bajtach na znak po zakodowaniu w JSON).

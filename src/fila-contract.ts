@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const FILA_LIMITS = {
   projects: 100, workflows: 50, states: 30, modules: 100, fieldDefs: 200, threads: 50_000,
   name: 80, state: 60, module: 60, fieldName: 60, title: 200, description: 20_000, comment: 5000,
-  text: 2000, multi: 50, multiItem: 200, fieldsPerThread: 60,
+  text: 2000, multi: 50, multiItem: 200, fieldsPerThread: 60, spec: 50_000,
 } as const;
 
 /** The clients of D-057. Each has its own token on the backend; none of them is ever the user (D-006). */
@@ -18,11 +18,11 @@ export type FilaActor = z.infer<typeof filaActorSchema>;
 /** Types are templates in code (D-025): the base fields and the default workflow. Nothing here can be edited. */
 export const FILA_DEFAULT_WORKFLOW = 'w-praca';
 export const FILA_TYPES = {
-  sprawa: { label: 'Sprawa', fields: ['Tagi'] },
-  funkcja: { label: 'Funkcja', fields: ['Tagi'] },
-  blad: { label: 'Błąd', fields: ['Tagi'] },
-  notatka: { label: 'Notatka', fields: ['Tagi'] },
-  spotkanie: { label: 'Spotkanie', fields: ['Tagi'] },
+  sprawa: { label: 'Sprawa', fields: ['Tagi'], spec: false },
+  funkcja: { label: 'Funkcja', fields: ['Tagi'], spec: true },
+  blad: { label: 'Błąd', fields: ['Tagi'], spec: true },
+  notatka: { label: 'Notatka', fields: ['Tagi'], spec: false },
+  spotkanie: { label: 'Spotkanie', fields: ['Tagi'], spec: false },
 } as const;
 export const filaTypeSchema = z.enum(Object.keys(FILA_TYPES) as [keyof typeof FILA_TYPES, ...(keyof typeof FILA_TYPES)[]]);
 
@@ -68,6 +68,11 @@ export const filaHistorySchema = z.object({
   text: z.string().max(FILA_LIMITS.comment).optional(),
   changes: z.array(changeSchema).max(20).optional(),
 });
+/** One revision of the Specyfikacja (D-061): the whole text, who wrote it (a client, D-006) and when. Numbers start at 1 and never repeat. */
+export const filaSpecRevisionSchema = z.object({
+  number: z.number().int().min(1), text: z.string().max(FILA_LIMITS.spec), by: filaActorSchema, at: z.number().finite(),
+});
+export type FilaSpecRevision = z.infer<typeof filaSpecRevisionSchema>;
 export const filaThreadSchema = z.object({
   /** Internal and permanent: parents point at it, so a move (a new display ID) keeps every relation. */
   uid: z.string().regex(/^f-[0-9a-f]{8}$/),
@@ -77,6 +82,8 @@ export const filaThreadSchema = z.object({
   parent: z.string().regex(/^f-[0-9a-f]{8}$/).nullable(),
   module: moduleName.nullable(),
   fields: z.record(fieldName, filaFieldValueSchema),
+  /** Specyfikacja: `enabled` = the field is on the thread now; revisions outlive removing the field. Absent = the type's template, no revisions. */
+  spec: z.object({ enabled: z.boolean(), revisions: z.array(filaSpecRevisionSchema) }).optional(),
   archived: z.boolean(),
   revision: z.number().int().min(1),
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
@@ -112,6 +119,9 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   }).strict().refine(a => Object.entries(a).some(([key, value]) => !['action', 'thread', 'expectedRevision'].includes(key) && value !== undefined), { message: 'Nothing to change' }),
   z.object({ action: z.literal('setField'), thread: threadId, field: fieldName, value: filaFieldValueSchema, kind: filaFieldKindSchema.optional(), expectedRevision: z.number().int().min(1).optional() }).strict(),
   z.object({ action: z.literal('removeField'), thread: threadId, field: fieldName, expectedRevision: z.number().int().min(1).optional() }).strict(),
+  z.object({ action: z.literal('setSpec'), thread: threadId, text: z.string().max(FILA_LIMITS.spec), baseRevision: z.number().int().min(0) }).strict(),
+  z.object({ action: z.literal('addSpecField'), thread: threadId }).strict(),
+  z.object({ action: z.literal('removeSpecField'), thread: threadId }).strict(),
   z.object({ action: z.literal('comment'), thread: threadId, text: z.string().trim().min(1).max(FILA_LIMITS.comment) }).strict(),
   z.object({ action: z.literal('archiveThread'), thread: threadId }).strict(),
   z.object({ action: z.literal('restoreThread'), thread: threadId }).strict(),
@@ -120,4 +130,4 @@ export const filaActionSchema = z.discriminatedUnion('action', [
 export type FilaAction = z.infer<typeof filaActionSchema>;
 
 /** What an action answers: the ids it made or touched. */
-export interface FilaResult { ok: true; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; removed?: number }
+export interface FilaResult { ok: true; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; specRevision?: number; removed?: number }
