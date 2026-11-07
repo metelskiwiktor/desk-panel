@@ -4,15 +4,15 @@ import path from 'node:path';
 import { TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
-  filaActionSchema, filaDataSchema,
-  type FilaAction, type FilaActor, type FilaData, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
+  filaActionSchema, filaDataSchema, isFilaBoardAction,
+  type FilaAction, type FilaActor, type FilaBoard, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
-import { SourceError } from './sources';
+import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
+import { applyBoardAction, createStarterBoard, seedStarterBoards } from './fila-boards';
+import { FilaError } from './fila-error';
+import { compileFilaQuery, narrowFilaQuery, selectFilaThreads } from './fila-query';
 
-/** A refused action, with a sentence the caller (the screen, the agent) can read. */
-export class FilaError extends SourceError {
-  constructor(status: number, message: string) { super(status); this.message = message; }
-}
+export { FilaError };
 
 export interface FilaThreadView {
   id: string; project: string; number: number;
@@ -39,13 +39,34 @@ export interface FilaSpecView {
   latest: number;
 }
 export interface FilaRegistries {
-  projects: (FilaProject & { counts: { open: number; closed: number; archived: number } })[];
+  /** `board`: the id of the board the project got at the start, null once it was deleted. */
+  projects: (FilaProject & { counts: { open: number; closed: number; archived: number }; board: string | null })[];
+  boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
   types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean }[];
   fieldDefs: FilaData['fieldDefs'];
 }
+/** A thread as a query result: what a list row or a card needs, without the history. */
+export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'>;
+export interface FilaQueryResult { query: string; project: string; total: number; threads: FilaThreadSummary[] }
+export interface FilaBoardResult {
+  board: { id: string; name: string }; view: { id: string; name: string };
+  sections: (Omit<FilaSection, 'columns'> & {
+    /** Set when the stored query could not be run; the rest of the view is still answered. */
+    error?: string;
+    total: number; threads: FilaThreadSummary[];
+    columns: (FilaSection['columns'][number] & { total: number; threads: FilaThreadSummary[] })[];
+  })[];
+}
 export interface FilaStore {
   registries(): Promise<FilaRegistries>;
+  /** Checks a query text without running or storing it: the canonical text and the parsed query, or a 400. */
+  check(text: string, kind: FilaQueryKind): Promise<{ text: string; query: FilaQuery }>;
+  /** The threads a section query selects (`limit` per call, `offset` to page; `total` is the full count). */
+  query(text: string, page?: { limit?: number; offset?: number }): Promise<FilaQueryResult>;
+  board(id: string): Promise<FilaBoard & { project: string | null }>;
+  /** A view with every section answered by its own query (columns narrow it, D-029). */
+  boardView(board: string, view: string, limit?: number): Promise<FilaBoardResult>;
   thread(id: string): Promise<FilaThreadView>;
   /** The Specyfikacja: the current text (needs the field on the thread) or one numbered revision (also after the field was removed). */
   spec(id: string, revision?: number): Promise<FilaSpecView>;
@@ -69,7 +90,7 @@ export function defaultFilaData(): FilaData {
     projects: [],
     workflows: [{ id: FILA_DEFAULT_WORKFLOW, name: 'Praca', states: Object.entries(TODO_STATUSES).map(([key, label]) => ({ name: label, closing: todoIsDone(key as keyof typeof TODO_STATUSES) })) }],
     fieldDefs: [{ name: 'Tagi', kind: 'multi' }],
-    threads: [],
+    threads: [], boards: [], starterBoards: {},
   };
 }
 
@@ -96,7 +117,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   const load = () => loaded ??= (async () => {
     const { file } = options;
-    if (!file) { data = filaDataSchema.parse(options.initial ?? defaultFilaData()); return; }
+    if (!file) { data = filaDataSchema.parse(options.initial ?? defaultFilaData()); seedStarterBoards(data, now()); return; }
     let raw: string;
     try { raw = await readFile(file, 'utf8'); }
     catch (error) {
@@ -105,7 +126,12 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     }
     let parsed: ReturnType<typeof filaDataSchema.safeParse> | undefined;
     try { const value = JSON.parse(raw); if (value?.version === 1) parsed = filaDataSchema.safeParse(value.data); } catch { /* corrupt, handled below */ }
-    if (parsed?.success) { data = parsed.data; return; }
+    if (parsed?.success) {
+      data = parsed.data;
+      // Projects from before 1.2 get their starter board once; the record in starterBoards keeps it from coming back.
+      if (seedStarterBoards(data, now())) await persist().catch(() => undefined);
+      return;
+    }
     // Never write over what cannot be read: keep it aside and start again, and say so.
     const aside = `${file}.corrupt-${now()}`;
     await rename(file, aside).catch(() => { unsafeFile = true; });
@@ -183,16 +209,26 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     };
   };
 
+  const summary = (t: FilaThread): FilaThreadSummary => {
+    const v = view(t);
+    return { id: v.id, project: v.project, number: v.number, type: v.type, state: v.state, closed: v.closed, title: v.title, parent: v.parent, module: v.module, fields: v.fields, archived: v.archived, revision: v.revision, updatedAt: v.updatedAt };
+  };
+  const pageOf = (threads: FilaThread[], limit: number, offset = 0) => ({ total: threads.length, threads: threads.slice(offset, offset + limit).map(summary) });
+  const boardOf = (id: string) => data.boards.find(b => b.id === id) ?? (() => { throw new FilaError(404, `Nie ma tablicy ${id}.`); })();
+  const clampLimit = (limit: number | undefined) => Math.min(Math.max(1, Math.trunc(limit ?? 500) || 500), FILA_LIMITS.results);
+
   /** Validates, then changes; a refusal is thrown before anything is touched (and memory is restored if one comes late). */
   const mutate = (action: FilaAction, actor: FilaActor): FilaResult => {
     if (aiOnly.has(action.action) && actor === 'user') throw new FilaError(403, 'Definicje workflow i wartości Modułu zmienia tylko AI (D-033).');
     if (userOnly.has(action.action) && actor !== 'user') throw new FilaError(403, 'Trwale usuwa wątek tylko użytkownik, z archiwum (D-038); AI może go zarchiwizować.');
+    if (isFilaBoardAction(action)) return applyBoardAction(data, action, actor, now());
     const done = (t: FilaThread, extra: Partial<FilaResult> = {}): FilaResult => ({ ok: true, thread: { id: idOf(t), revision: t.revision }, ...extra });
     switch (action.action) {
       case 'createProject': {
         if (data.projects.some(p => p.key === action.key)) throw new FilaError(409, `Projekt ${action.key} już jest.`);
         if (data.projects.length >= FILA_LIMITS.projects) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.projects} projektów.`);
         data.projects.push({ key: action.key, name: action.name, createdAt: now(), modules: [], nextNumber: 1 });
+        createStarterBoard(data, action.key, actor, now());
         return { ok: true, project: action.key };
       }
       case 'setModules': {
@@ -381,7 +417,40 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         const closed = (t: FilaThread) => workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false;
         return { ...structuredClone(p), counts: { open: own.filter(t => !t.archived && !closed(t)).length, closed: own.filter(t => !t.archived && closed(t)).length, archived: own.filter(t => t.archived).length } };
       });
-      return { projects, workflows: structuredClone(data.workflows), types, fieldDefs: structuredClone(data.fieldDefs) };
+      const boards = data.boards.map(b => ({ id: b.id, name: b.name, views: b.views.map(v => ({ id: v.id, name: v.name })) }));
+      return { projects: projects.map(p => ({ ...p, board: data.boards.some(b => b.id === data.starterBoards[p.key]) ? data.starterBoards[p.key]! : null })), boards, workflows: structuredClone(data.workflows), types, fieldDefs: structuredClone(data.fieldDefs) };
+    },
+    async check(text, kind) {
+      await tail; await load();
+      const query = compileFilaQuery(text, data, kind);
+      return { text: formatFilaQuery(query), query };
+    },
+    async query(text, page = {}) {
+      await tail; await load();
+      const query = compileFilaQuery(text, data, 'section');
+      return { query: formatFilaQuery(query), project: query.project!, ...pageOf(selectFilaThreads(data, query), clampLimit(page.limit), Math.max(0, Math.trunc(page.offset ?? 0) || 0)) };
+    },
+    async board(id) {
+      await tail; await load();
+      const b = boardOf(id);
+      return { ...structuredClone(b), project: Object.entries(data.starterBoards).find(([, board]) => board === b.id)?.[0] ?? null };
+    },
+    async boardView(boardId, viewId, limit) {
+      await tail; await load();
+      const b = boardOf(boardId);
+      const v = b.views.find(x => x.id === viewId) ?? (() => { throw new FilaError(404, `Nie ma widoku ${viewId} na tablicy ${b.id}.`); })();
+      const size = clampLimit(limit);
+      const run = (section: FilaSection) => {
+        try {
+          const own = compileFilaQuery(section.query, data, 'section');
+          const columns = section.columns.map(c => ({ ...c, ...pageOf(selectFilaThreads(data, narrowFilaQuery(own, compileFilaQuery(c.query, data, 'column'))), size) }));
+          return { ...section, columns, ...(section.kind === 'list' ? pageOf(selectFilaThreads(data, own), size) : { total: 0, threads: [] }) };
+        } catch (error) {
+          if (!(error instanceof FilaError)) throw error;
+          return { ...section, error: error.message, total: 0, threads: [], columns: section.columns.map(c => ({ ...c, total: 0, threads: [] })) };
+        }
+      };
+      return { board: { id: b.id, name: b.name }, view: { id: v.id, name: v.name }, sections: v.sections.map(run) };
     },
     async thread(id) { await tail; await load(); return view(threadOf(id)); },
     async spec(id, revision) {

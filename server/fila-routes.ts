@@ -59,6 +59,22 @@ export async function handleFilaRoute(req: IncomingMessage, res: ServerResponse,
       json(res, 200, await ctx.fila.spec(spec[1]!, number));
       return true;
     }
+    if (req.method === 'GET' && url.pathname === '/api/fila/query') {
+      const number = (name: string) => { const raw = url.searchParams.get(name); return raw === null ? undefined : Number(raw); };
+      json(res, 200, await ctx.fila.query(url.searchParams.get('q') ?? '', { limit: number('limit'), offset: number('offset') }));
+      return true;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/fila/query/check') {
+      const checked = await ctx.fila.check(url.searchParams.get('q') ?? '', url.searchParams.get('kind') === 'column' ? 'column' : 'section');
+      json(res, 200, { ok: true, ...checked });
+      return true;
+    }
+    const board = /^\/api\/fila\/boards\/(b-[0-9a-f]{8})(?:\/views\/(v-[0-9a-f]{8}))?$/.exec(url.pathname);
+    if (req.method === 'GET' && board) {
+      const limit = url.searchParams.get('limit');
+      json(res, 200, board[2] ? await ctx.fila.boardView(board[1]!, board[2], limit === null ? undefined : Number(limit)) : await ctx.fila.board(board[1]!));
+      return true;
+    }
     if (req.method === 'POST' && url.pathname === '/api/fila/action') {
       // The caller decides the author, never the body: a token means that client, the panel's own Origin means the user.
       const actor = client ?? (req.headers.origin === ctx.ownOrigin ? 'user' : undefined);

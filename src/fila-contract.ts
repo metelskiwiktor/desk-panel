@@ -8,6 +8,7 @@ export const FILA_LIMITS = {
   projects: 100, workflows: 50, states: 30, modules: 100, fieldDefs: 200, threads: 50_000,
   name: 80, state: 60, module: 60, fieldName: 60, title: 200, description: 20_000, comment: 5000,
   text: 2000, multi: 50, multiItem: 200, fieldsPerThread: 60, spec: 50_000,
+  boards: 200, views: 30, sections: 30, columns: 30, query: 2000, results: 5000,
 } as const;
 
 /** The clients of D-057. Each has its own token on the backend; none of them is ever the user (D-006). */
@@ -89,22 +90,82 @@ export const filaThreadSchema = z.object({
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
   history: z.array(filaHistorySchema),
 });
+
+const boardId = z.string().regex(/^b-[0-9a-f]{8}$/);
+const viewId = z.string().regex(/^v-[0-9a-f]{8}$/);
+const sectionId = z.string().regex(/^s-[0-9a-f]{8}$/);
+const columnId = z.string().regex(/^c-[0-9a-f]{8}$/);
+const queryText = z.string().max(FILA_LIMITS.query);
+/** A board's history also knows the panel itself (the starter board made with a project, D-019). */
+export const filaBoardActorSchema = z.enum([...filaActorSchema.options, 'panel']);
+export type FilaBoardActor = z.infer<typeof filaBoardActorSchema>;
+export const filaColumnSchema = z.object({ id: columnId, name, query: queryText });
+/** A list shows the section's threads; a kanban splits them into columns, each a narrowing query (D-029). */
+export const filaSectionSchema = z.object({ id: sectionId, name, kind: z.enum(['list', 'kanban']), query: queryText, columns: z.array(filaColumnSchema).max(FILA_LIMITS.columns) });
+export const filaViewSchema = z.object({ id: viewId, name, sections: z.array(filaSectionSchema).min(1).max(FILA_LIMITS.sections) });
+/** One entry per change of the board's structure or settings (D-062): who, when, what, with the old and new value. */
+export const filaBoardHistorySchema = z.object({
+  at: z.number().finite(), by: filaBoardActorSchema,
+  kind: z.enum(['created', 'renamed', 'changed', 'moved', 'removed']),
+  target: z.enum(['board', 'view', 'section', 'column']),
+  name: z.string().max(FILA_LIMITS.name),
+  /** The parent the target sits in (the view of a section, the section of a column). */
+  in: z.string().max(FILA_LIMITS.name * 2 + 4).optional(),
+  changes: z.array(changeSchema).max(20).optional(),
+});
+/** A board is only a name and its views: no scope of its own (D-013). */
+export const filaBoardSchema = z.object({
+  id: boardId, name, createdAt: z.number().finite(),
+  views: z.array(filaViewSchema).min(1).max(FILA_LIMITS.views),
+  history: z.array(filaBoardHistorySchema),
+});
 export const filaDataSchema = z.object({
   projects: z.array(filaProjectSchema).max(FILA_LIMITS.projects),
   workflows: z.array(filaWorkflowSchema).max(FILA_LIMITS.workflows),
   fieldDefs: z.array(filaFieldDefSchema).max(FILA_LIMITS.fieldDefs),
   threads: z.array(filaThreadSchema).max(FILA_LIMITS.threads),
+  boards: z.array(filaBoardSchema).max(FILA_LIMITS.boards).default([]),
+  /** Project → the board it got at the start. A record of its own, so a deleted starter board is not made again (D-019). */
+  starterBoards: z.record(projectKey, boardId).default({}),
 });
 export type FilaData = z.infer<typeof filaDataSchema>;
 export type FilaProject = z.infer<typeof filaProjectSchema>;
 export type FilaWorkflow = z.infer<typeof filaWorkflowSchema>;
 export type FilaThread = z.infer<typeof filaThreadSchema>;
+export type FilaBoard = z.infer<typeof filaBoardSchema>;
+export type FilaSection = z.infer<typeof filaSectionSchema>;
 
 /**
  * Every change is one small action. The author is never in the action: the server takes it from the caller's
  * authentication (a client token, or the panel's own page for the user), see docs/fila.md.
  */
+const sectionInput = z.object({
+  name, kind: z.enum(['list', 'kanban']), query: queryText,
+  columns: z.array(z.object({ name, query: queryText }).strict()).max(FILA_LIMITS.columns).optional(),
+}).strict();
+const position = z.number().int().min(0);
+const atLeastOne = (keys: string[]) => (a: Record<string, unknown>) => keys.some(key => a[key] !== undefined);
+/** Boards, views, sections and columns (1.2). The user and the AI change the structure by the same rules (D-032). */
+const filaBoardActions = [
+  z.object({ action: z.literal('createBoard'), name, view: name.optional(), section: sectionInput }).strict(),
+  z.object({ action: z.literal('renameBoard'), board: boardId, name }).strict(),
+  z.object({ action: z.literal('deleteBoard'), board: boardId }).strict(),
+  z.object({ action: z.literal('createView'), board: boardId, name, section: sectionInput, position: position.optional() }).strict(),
+  z.object({ action: z.literal('renameView'), view: viewId, name }).strict(),
+  z.object({ action: z.literal('moveView'), view: viewId, position }).strict(),
+  z.object({ action: z.literal('deleteView'), view: viewId }).strict(),
+  z.object({ action: z.literal('createSection'), view: viewId, section: sectionInput, position: position.optional() }).strict(),
+  z.object({ action: z.literal('updateSection'), section: sectionId, name: name.optional(), query: queryText.optional() }).strict().refine(atLeastOne(['name', 'query']), { message: 'Nothing to change' }),
+  z.object({ action: z.literal('moveSection'), section: sectionId, position }).strict(),
+  z.object({ action: z.literal('deleteSection'), section: sectionId }).strict(),
+  z.object({ action: z.literal('createColumn'), section: sectionId, name, query: queryText, position: position.optional() }).strict(),
+  z.object({ action: z.literal('updateColumn'), column: columnId, name: name.optional(), query: queryText.optional() }).strict().refine(atLeastOne(['name', 'query']), { message: 'Nothing to change' }),
+  z.object({ action: z.literal('moveColumn'), column: columnId, position }).strict(),
+  z.object({ action: z.literal('deleteColumn'), column: columnId }).strict(),
+] as const;
+
 export const filaActionSchema = z.discriminatedUnion('action', [
+  ...filaBoardActions,
   z.object({ action: z.literal('createProject'), key: projectKey, name }).strict(),
   z.object({ action: z.literal('setModules'), project: projectKey, modules: z.array(moduleName).max(FILA_LIMITS.modules).refine(unique, 'Duplicate module') }).strict(),
   z.object({ action: z.literal('createWorkflow'), name, states: filaWorkflowSchema.shape.states }).strict(),
@@ -128,6 +189,10 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('deleteThread'), thread: threadId }).strict(),
 ]);
 export type FilaAction = z.infer<typeof filaActionSchema>;
+export type FilaBoardAction = z.infer<(typeof filaBoardActions)[number]>;
+export type FilaSectionInput = z.infer<typeof sectionInput>;
+const boardActionNames = new Set<string>(filaBoardActions.map(schema => schema.shape.action.value));
+export const isFilaBoardAction = (action: FilaAction): action is FilaBoardAction => boardActionNames.has(action.action);
 
 /** What an action answers: the ids it made or touched. */
-export interface FilaResult { ok: true; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; specRevision?: number; removed?: number }
+export interface FilaResult { ok: true; board?: string; view?: string; section?: string; column?: string; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; specRevision?: number; removed?: number }
