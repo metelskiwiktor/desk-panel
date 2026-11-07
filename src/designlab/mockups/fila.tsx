@@ -1,80 +1,453 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeft, ArrowUpToLine, Bug, Check, ChevronDown, Circle, FileText, Folder, GripVertical, Layers3, Lightbulb, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import {
+  ArrowLeft, Archive, Bug, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Ellipsis, FileText, Folder,
+  FolderInput, GitPullRequest, History, Layers3, Lightbulb, Pencil, Plus, Send, SlidersHorizontal, StickyNote, Trash2, X,
+} from 'lucide-react';
 import { Empty } from '../../components';
 import { MarkdownText } from '../../components/markdown-text';
-import { TODO_STATUSES, todoIsDone, type TodoTask } from '../../todo-contract';
-import { useTodos } from '../../useTodos';
+import { TODO_STATUSES, todoIsDone } from '../../todo-contract';
 import { Link, useSearch } from '../nav';
+import {
+  BOARD_HISTORY, MODULES, PROJECTS, THREADS, TYPES, VIEWS, WORKFLOW_PRACA,
+  type Author, type Cezar, type CustomField, type Entry, type Section, type Status, type Thread, type ThreadType, type View,
+} from './fila-data';
 
-type SectionKey = 'inbox' | 'kanban';
-const threadId = (task: TodoTask) => `DESK-${parseInt(task.id.slice(2), 16)}`;
-const accents = { 'Błąd': 'var(--quota-red)', 'Funkcja': 'var(--p2-cal)', 'Sprawa': 'var(--amber)' };
-const typeStyle = (type: string) => ({ '--fila-accent': accents[type as keyof typeof accents] ?? 'var(--p2-muted)' }) as CSSProperties;
-const typeIcon = (type: string) => type === 'Błąd' ? <Bug size={17} /> : type === 'Funkcja' ? <Lightbulb size={17} /> : <Circle size={17} />;
-const threadHref = (task: TodoTask) => `?designlab=fila&thread=${threadId(task)}`;
+/** Visual exploration of Fila stage 1 (docs/designlab.md): mockup data and in-memory changes only. */
 
-/** Visual exploration: scenario data and in-memory interactions only; no writes. */
-export default function Fila() {
-  const { source } = useTodos();
-  const [search, setSearch] = useState('');
-  const [queries, setQueries] = useState({ inbox: false, kanban: false });
-  const [order, setOrder] = useState<SectionKey[]>(['inbox', 'kanban']);
-  const [moving, setMoving] = useState<SectionKey | null>(null);
-  const [localStatuses, setLocalStatuses] = useState<Record<string, TodoTask['status']>>({});
-  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearHold = () => { if (hold.current) clearTimeout(hold.current); hold.current = null; };
+const TYPE_ICON: Record<ThreadType, (size: number) => ReactNode> = {
+  'Błąd': size => <Bug size={size} />, 'Funkcja': size => <Lightbulb size={size} />, 'Sprawa': size => <CircleDot size={size} />,
+  'Spotkanie': size => <CalendarDays size={size} />, 'Notatka': size => <StickyNote size={size} />,
+};
+const TYPE_TONE: Record<ThreadType, string> = { 'Błąd': 'blad', 'Funkcja': 'funkcja', 'Sprawa': 'sprawa', 'Spotkanie': 'spotkanie', 'Notatka': 'notatka' };
+const typeClass = (thread: Thread) => `tone-${TYPE_TONE[thread.type]}`;
+const closed = (thread: Thread) => todoIsDone(thread.status);
+const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const now = () => new Date('2026-11-07T11:20:00').getTime() + (performance.now() % 60_000);
+
+/** Closes a popover on an outside press or Escape. */
+function useDismiss(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const cancel = (event: KeyboardEvent) => { if (event.key === 'Escape') { clearHold(); setMoving(null); } };
-    window.addEventListener('keydown', cancel);
-    return () => { clearHold(); window.removeEventListener('keydown', cancel); };
-  }, []);
-  const params = new URLSearchParams(useSearch());
-  const project = params.get('project');
-  const threads = (source.data?.lists ?? []).flatMap(list => list.tasks.map(task => ({ ...task, status: localStatuses[task.id] ?? task.status, type: list.name.split(' · ')[0], module: list.name.split(' · ')[1] })));
-  const opened = threads.find(task => threadId(task) === params.get('thread'));
-  const [revision, setRevision] = useState<number | null>(null);
-  // Leaving a thread drops its draft state change and picked revision; the board and the thread read the scenario again.
-  useEffect(() => () => { setLocalStatuses({}); setRevision(null); }, [opened?.id]);
-  const filtered = threads.filter(task => `${threadId(task)} ${task.title}`.toLocaleLowerCase('pl').includes(search.toLocaleLowerCase('pl')));
-  const inbox = filtered.filter(task => !todoIsDone(task.status) && (task.status === 'pomysl' || task.type !== 'Funkcja'));
-  const columns: TodoTask['status'][] = ['przygotowanie', 'gotowe', 'realizacja', 'sprawdzenie'];
-  const toggleQuery = (key: SectionKey) => setQueries(previous => ({ ...previous, [key]: !previous[key] }));
-  const relocate = (target: SectionKey, after: boolean) => {
-    if (!moving) return;
-    const next = order.filter(key => key !== moving);
-    next.splice(next.indexOf(target) + (after ? 1 : 0), 0, moving);
-    setOrder(next); setMoving(null);
-  };
-  const row = (task: typeof threads[number], kanban = false) => <li key={task.id} style={typeStyle(task.type)} className={`fila-item${kanban ? ' fila-ticket' : ''}`}>
-    <Link href={threadHref(task)} className="fila-thread-link"><span className="fila-type-icon" title={task.type}>{typeIcon(task.type)}</span><span className="fila-thread-copy"><span className="fila-row-meta"><span>{threadId(task)}</span><span className="fila-type-name">{task.type}</span>{kanban && <span>{task.module}</span>}</span><span className="fila-thread-title">{task.title}</span>{kanban && task.note && <span className="todo-note">{task.note}</span>}</span></Link>
-    {!kanban && <><span className="p2-meta fila-module">{task.module}</span><span className={`todo-status ${task.status}`}>{TODO_STATUSES[task.status]}</span></>}
+    if (!open) return;
+    const press = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node)) close(); };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+    document.addEventListener('pointerdown', press);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', press); document.removeEventListener('keydown', key); };
+  }, [open, close]);
+  return ref;
+}
+
+function StatusPicker({ status, onPick, compact = false, label = 'Stan' }: { status: Status; onPick: (status: Status) => void; compact?: boolean; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const pick = (value: Status) => { setOpen(false); if (value !== status) onPick(value); };
+  const item = (value: Status) => <li key={value}>
+    <button role="option" aria-selected={value === status} onClick={() => pick(value)}>
+      <span className={`fila-dot st-${value}`} />{TODO_STATUSES[value]}{value === status && <Check size={14} />}
+    </button>
   </li>;
-  const pills = (key: SectionKey) => <><button className="fila-pills" aria-label={`Zapytanie sekcji ${key === 'kanban' ? 'Funkcje' : 'Do przejrzenia'}`} aria-expanded={queries[key]} aria-controls={`fila-query-${key}`} onClick={() => toggleQuery(key)}><span>DeskPanel</span><span className="fila-query-separator">/</span>{key === 'kanban' ? <><span>Funkcja</span><span className="fila-query-separator">/</span><span>Bez rodzica</span></> : <span>Pomysł lub typ ≠ Funkcja</span>}<SlidersHorizontal size={14} /></button>
-    {queries[key] && <div className="fila-query" id={`fila-query-${key}`}><code>{key === 'kanban' ? 'projekt = DeskPanel AND typ = Funkcja AND rodzic IS EMPTY ORDER BY id' : 'projekt = DeskPanel AND otwarte AND (stan = Pomysł OR typ != Funkcja) ORDER BY id'}</code><small className="p2-note">Robocza składnia makiety</small></div>}</>;
-  const section = (key: SectionKey) => <section key={key} className={`fila-section${moving === key ? ' fila-moving' : ''}`} aria-label={key === 'inbox' ? 'Do przejrzenia' : 'Funkcje'}>
-    {moving && moving !== key && <button className="fila-drop" aria-label="Umieść przenoszoną sekcję przed tą sekcją" title="Umieść przed" onClick={() => relocate(key, false)}><ArrowUpToLine size={18} /></button>}
-    <header className="fila-section-heading" onPointerDown={event => { if ((event.target as HTMLElement).closest('button')) return; clearHold(); hold.current = setTimeout(() => setMoving(key), 550); }} onPointerUp={clearHold} onPointerCancel={clearHold} onPointerLeave={clearHold} onContextMenu={event => { event.preventDefault(); setMoving(key); }}>
-      <h2>{key === 'inbox' ? 'Do przejrzenia' : 'Funkcje'}</h2><span className="p2-meta">{key === 'inbox' ? inbox.length : filtered.filter(task => task.type === 'Funkcja' && columns.includes(task.status)).length}</span>
-      <button className="fila-icon-action fila-grip" aria-label={`Przenieś sekcję ${key === 'inbox' ? 'Do przejrzenia' : 'Funkcje'}`} title="Przytrzymaj nagłówek, aby przenieść sekcję" aria-pressed={moving === key} onClick={() => setMoving(moving === key ? null : key)}>{moving === key ? <X size={17} /> : <GripVertical size={17} />}</button>
-    </header>{pills(key)}
-    {key === 'inbox' ? inbox.length ? <ul className="fila-list">{inbox.map(task => row(task))}</ul> : <Empty>Brak wątków pasujących do zapytania.</Empty>
-      : <div className="fila-kanban">{columns.map(status => { const items = filtered.filter(task => task.type === 'Funkcja' && task.status === status); return <section className={`fila-column ${status}`} key={status}><header><h3><span className={`todo-status ${status}`} />{TODO_STATUSES[status]}</h3><span className="p2-meta">{items.length}</span></header><ul className="fila-list">{items.map(task => row(task, true))}</ul>{!items.length && <p className="p2-note fila-column-empty">Brak wątków</p>}</section>; })}</div>}
-    {moving && moving !== key && <button className="fila-drop" aria-label="Umieść przenoszoną sekcję za tą sekcją" title="Umieść za" onClick={() => relocate(key, true)}><ArrowDownToLine size={18} /></button>}
-  </section>;
-  const navItem = (label: string, icon: ReactNode, tone: string, href?: string, active = false) => href ? <Link href={href} className={`fila-nav-item ${tone}${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></Link> : <span className={`fila-nav-item ${tone} fila-nav-preview`}>{icon}<span>{label}</span></span>;
-  const spec = opened?.specRevisions.find(item => item.revision === (revision ?? opened.specRevision));
-  return <div className="fila-lab">
-    <aside className="fila-sidebar"><Link className="fila-brand" href="?designlab=fila"><Layers3 size={24} /> Fila</Link><nav aria-label="Nawigacja Fili"><h2>Tablice</h2>{navItem('DeskPanel', <Layers3 size={16} />, 'blue', '?designlab=fila', !project && !opened)}{navItem('Cezar', <Layers3 size={16} />, 'violet')}{navItem('Tabularium', <Layers3 size={16} />, 'green')}
-      <h2>Projekty</h2>{navItem('DeskPanel', <Folder size={16} />, 'blue', '?designlab=fila&project=DeskPanel', !!project)}{navItem('Cezar', <Folder size={16} />, 'violet')}{navItem('Tabularium', <Folder size={16} />, 'green')}</nav><p className="fila-sidebar-foot p2-note">DesignLab · etap 1<br />Propozycja wyglądu</p></aside>
+  return <div className="fila-popover-anchor" ref={ref}>
+    <button className={`fila-status st-${status}${compact ? ' compact' : ''}`} aria-haspopup="listbox" aria-expanded={open}
+      aria-label={`${label}: ${TODO_STATUSES[status]}`} onClick={() => setOpen(!open)}>
+      <span className="fila-dot" />{!compact && <span className="fila-status-name">{TODO_STATUSES[status]}</span>}
+      {todoIsDone(status) && !compact && <Check size={13} />}<ChevronDown size={13} className="fila-chevron" />
+    </button>
+    {open && <ul className="fila-popover" role="listbox" aria-label="Workflow Praca">
+      {WORKFLOW_PRACA.filter(value => !todoIsDone(value)).map(item)}
+      <li className="fila-popover-label" role="presentation">Zamyka wątek</li>
+      {WORKFLOW_PRACA.filter(todoIsDone).map(item)}
+    </ul>}
+  </div>;
+}
+
+type MenuItem = { label: string; icon?: ReactNode; onSelect?: () => void; disabled?: boolean; danger?: boolean };
+function Menu({ label, items, icon = <Ellipsis size={18} /> }: { label: string; items: MenuItem[]; icon?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return <div className="fila-popover-anchor" ref={ref}>
+    <button className="fila-icon-button" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{icon}</button>
+    {open && <ul className="fila-popover" role="menu" aria-label={label}>
+      {items.map(entry => <li key={entry.label}>
+        <button role="menuitem" disabled={entry.disabled} className={entry.danger ? 'danger' : undefined} onClick={() => { setOpen(false); entry.onSelect?.(); }}>
+          {entry.icon}{entry.label}
+        </button>
+      </li>)}
+    </ul>}
+  </div>;
+}
+
+/** Query pills of a section or a kanban column; a click opens the editable query text right below them (D-060, D-067). */
+function QueryText({ id, pills, text, onSave, compact = false }: { id: string; pills: string[]; text: string; onSave: (text: string) => void; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(text);
+  useEffect(() => setDraft(text), [text]);
+  return <>
+    <button className={`fila-pills${compact ? ' compact' : ''}`} aria-expanded={open} aria-controls={`fila-query-${id}`} aria-label={`Zapytanie: ${pills.join(', ')}`} onClick={() => setOpen(!open)}>
+      {pills.map((pill, index) => <span key={index} className="fila-pill">{pill}</span>)}
+      <SlidersHorizontal size={13} />
+    </button>
+    {open && <form className="fila-query" id={`fila-query-${id}`} onSubmit={event => { event.preventDefault(); onSave(draft); setOpen(false); }}>
+      <textarea aria-label="Tekst zapytania" value={draft} spellCheck={false} rows={Math.max(2, draft.split('\n').length)} onChange={event => setDraft(event.target.value)} />
+      <div className="fila-form-actions">
+        <button type="button" className="fila-text-button" onClick={() => { setDraft(text); setOpen(false); }}>Anuluj</button>
+        <button type="submit" className="fila-primary small" disabled={draft === text}>Zapisz zapytanie</button>
+      </div>
+    </form>}
+  </>;
+}
+
+export default function Fila() {
+  const params = new URLSearchParams(useSearch());
+  const direction = params.get('kierunek') === 'b' ? 'b' : 'a';
+  const href = (extra: Record<string, string> = {}) => `?${new URLSearchParams({ designlab: 'fila', ...(direction === 'b' ? { kierunek: 'b' } : {}), ...extra })}`;
+  const [threads, setThreads] = useState<Thread[]>(THREADS);
+  const [views, setViews] = useState<View[]>(VIEWS);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'DESK-36': true });
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const view = views.find(item => item.id === params.get('widok')) ?? views[0];
+  const opened = threads.find(thread => thread.id === params.get('thread'));
+  const live = threads.filter(thread => !thread.archived);
+
+  const update = (id: string, change: (thread: Thread) => Partial<Thread>, note?: string, by: Author = 'Ty') =>
+    setThreads(previous => previous.map(thread => thread.id !== id ? thread : { ...thread, ...change(thread), activity: note ? [...thread.activity, { at: now(), by, text: note }] : thread.activity }));
+  const setStatus = (thread: Thread, status: Status) => update(thread.id, () => ({ status }), `Stan: ${TODO_STATUSES[thread.status]} → ${TODO_STATUSES[status]}`);
+  const editSections = (change: (sections: Section[]) => Section[]) => setViews(previous => previous.map(item => item.id === view.id ? { ...item, sections: change(item.sections) } : item));
+  const children = (thread: Thread) => threads.filter(child => child.parent === thread.id && !child.archived);
+  const toggle = (id: string) => setExpanded(previous => ({ ...previous, [id]: !previous[id] }));
+
+  const progress = (thread: Thread) => {
+    const kids = children(thread);
+    if (!kids.length) return null;
+    return <button className="fila-progress" aria-expanded={!!expanded[thread.id]} aria-label={`Podwątki ${thread.id}: ${kids.filter(closed).length} z ${kids.length} zamkniętych`} onClick={() => toggle(thread.id)}>
+      {expanded[thread.id] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{kids.filter(closed).length}/{kids.length}
+    </button>;
+  };
+  const tags = (thread: Thread) => thread.tags.map(tag => <span key={tag} className="fila-tag">#{tag}</span>);
+
+  const row = (thread: Thread, nested = false): ReactNode => <li key={thread.id} className={`fila-row ${typeClass(thread)}${closed(thread) ? ' closed' : ''}${nested ? ' nested' : ''}`}>
+    <div className="fila-row-line">
+      <span className="fila-type-icon" title={thread.type} aria-label={thread.type}>{TYPE_ICON[thread.type](16)}</span>
+      <span className="fila-id">{thread.id}</span>
+      <div className="fila-row-main">
+        <Link className="fila-title" href={href({ ...(view.id !== views[0].id ? { widok: view.id } : {}), thread: thread.id })}>{thread.title}</Link>
+        {progress(thread)}{tags(thread)}
+      </div>
+      <span className="fila-module">{thread.module}</span>
+      <StatusPicker status={thread.status} onPick={status => setStatus(thread, status)} label={`Stan ${thread.id}`} />
+    </div>
+    {!nested && expanded[thread.id] && children(thread).length > 0 && <ul className="fila-subrows">{children(thread).map(child => row(child, true))}</ul>}
+  </li>;
+
+  const card = (thread: Thread) => <li key={thread.id} className={`fila-card ${typeClass(thread)}`}>
+    <div className="fila-card-top">
+      <span className="fila-type-icon" title={thread.type} aria-label={thread.type}>{TYPE_ICON[thread.type](15)}</span>
+      <span className="fila-id">{thread.id}</span><span className="fila-module">{thread.module}</span>
+      <StatusPicker compact status={thread.status} onPick={status => setStatus(thread, status)} label={`Stan ${thread.id}`} />
+    </div>
+    <Link className="fila-title" href={href({ ...(view.id !== views[0].id ? { widok: view.id } : {}), thread: thread.id })}>{thread.title}</Link>
+    {(thread.tags.length > 0 || children(thread).length > 0) && <div className="fila-card-meta">{progress(thread)}{tags(thread)}</div>}
+    {expanded[thread.id] && children(thread).length > 0 && <ul className="fila-card-subs">{children(thread).map(child => <li key={child.id} className={closed(child) ? 'closed' : undefined}>
+      <span className={`fila-dot st-${child.status}`} title={TODO_STATUSES[child.status]} /><Link href={href({ thread: child.id })}><span className="fila-id">{child.id}</span> {child.title}</Link>
+    </li>)}</ul>}
+  </li>;
+
+  const sectionView = (section: Section, index: number, all: Section[]) => {
+    const matching = live.filter(section.query.match);
+    // One level of subthreads (D-051): a child whose parent is also in the section shows under its parent.
+    const top = matching.filter(thread => !thread.parent || !matching.some(parent => parent.id === thread.parent));
+    const move = (by: number) => editSections(sections => { const next = [...sections]; const [item] = next.splice(index, 1); next.splice(index + by, 0, item); return next; });
+    const count = section.kind === 'kanban' ? section.columns.reduce((sum, columnItem) => sum + matching.filter(columnItem.query.match).length, 0) : matching.length;
+    return <section key={section.id} className={`fila-section kind-${section.kind}`} aria-label={section.name}>
+      <header className="fila-section-head">
+        {renaming === section.id
+          ? <form className="fila-rename" onSubmit={event => { event.preventDefault(); const name = new FormData(event.currentTarget).get('name')?.toString().trim(); if (name) editSections(sections => sections.map(item => item.id === section.id ? { ...item, name } : item)); setRenaming(null); }}>
+            <input name="name" aria-label="Nazwa sekcji" defaultValue={section.name} autoFocus onBlur={event => event.currentTarget.form?.requestSubmit()} onKeyDown={event => { if (event.key === 'Escape') setRenaming(null); }} />
+          </form>
+          : <h2>{section.name}</h2>}
+        <span className="fila-count">{count}</span>
+        <Menu label={`Sekcja ${section.name}`} items={[
+          { label: 'Zmień nazwę', icon: <Pencil size={15} />, onSelect: () => setRenaming(section.id) },
+          { label: 'Przesuń wyżej', icon: <ChevronDown size={15} style={{ transform: 'rotate(180deg)' }} />, disabled: index === 0, onSelect: () => move(-1) },
+          { label: 'Przesuń niżej', icon: <ChevronDown size={15} />, disabled: index === all.length - 1, onSelect: () => move(1) },
+          { label: 'Usuń sekcję', icon: <Trash2 size={15} />, danger: true, onSelect: () => editSections(sections => sections.filter(item => item.id !== section.id)) },
+        ]} />
+      </header>
+      <QueryText id={section.id} pills={section.query.pills} text={section.query.text}
+        onSave={text => editSections(sections => sections.map(item => item.id === section.id ? { ...item, query: { ...item.query, text } } : item))} />
+      {section.kind === 'lista'
+        ? top.length ? <ul className="fila-list">{top.map(thread => row(thread))}</ul> : <Empty>Żaden wątek nie pasuje do zapytania.</Empty>
+        : <div className="fila-kanban" style={{ '--fila-columns': section.columns.length } as CSSProperties}>
+          {section.columns.map((columnItem, columnIndex) => {
+            const items = matching.filter(columnItem.query.match);
+            return <section key={columnItem.status} className={`fila-column st-${columnItem.status}`} aria-label={`Kolumna ${TODO_STATUSES[columnItem.status]}`}>
+              <header><span className="fila-dot" /><h3>{TODO_STATUSES[columnItem.status]}</h3><span className="fila-count">{items.length}</span></header>
+              <QueryText compact id={`${section.id}-${columnIndex}`} pills={columnItem.query.pills} text={columnItem.query.text}
+                onSave={text => editSections(sections => sections.map(item => item.id === section.id && item.kind === 'kanban' ? { ...item, columns: item.columns.map((c, i) => i === columnIndex ? { ...c, query: { ...c.query, text } } : c) } : item))} />
+              {items.length ? <ul className="fila-cards">{items.map(card)}</ul> : <p className="fila-column-empty">Brak wątków</p>}
+            </section>;
+          })}
+        </div>}
+    </section>;
+  };
+
+  const addSection = (kind: Section['kind']) => {
+    const id = `nowa-${Date.now()}`;
+    const query = { pills: ['DeskPanel', 'otwarte'], text: 'projekt = DESK AND otwarte', match: (thread: Thread) => !closed(thread) };
+    const statuses: Status[] = ['pomysl', 'przygotowanie', 'realizacja', 'sprawdzenie'];
+    editSections(sections => [...sections, kind === 'lista' ? { id, kind, name: 'Nowa sekcja', query }
+      : { id, kind, name: 'Nowa sekcja', query, columns: statuses.map(status => ({ status, query: { pills: [`Stan = ${TODO_STATUSES[status]}`], text: `Stan = "${TODO_STATUSES[status]}"`, match: (thread: Thread) => thread.status === status } })) }]);
+    setRenaming(id);
+  };
+
+  const create = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = form.get('title')?.toString().trim();
+    if (!title) return;
+    const key = form.get('project')?.toString() ?? 'DESK';
+    const numbers = threads.filter(thread => thread.project === key).map(thread => Number(thread.id.split('-')[1]));
+    const id = `${key}-${(numbers.length ? Math.max(...numbers) : 0) + 1}`;
+    const type = form.get('type') as ThreadType;
+    setThreads(previous => [...previous, { id, type, title, description: '', status: 'pomysl', module: '', project: key, tags: [], custom: [], spec: [], activity: [{ at: now(), by: 'Ty', text: 'utworzył wątek' }] }]);
+    setCreating(false);
+    window.history.pushState(null, '', href({ thread: id }));
+    window.dispatchEvent(new Event('designlab-navigate'));
+  };
+
+  const navItem = (label: string, icon: ReactNode, tone: string, active = false) => active
+    ? <Link href={href()} className={`fila-nav-item ${tone} active`} aria-current="page">{icon}<span>{label}</span></Link>
+    : <button type="button" className={`fila-nav-item ${tone}`}>{icon}<span>{label}</span></button>;
+
+  return <div className={`fila-lab dir-${direction}`}>
+    <aside className="fila-sidebar">
+      <Link className="fila-brand" href={href()}><Layers3 size={22} /> Fila</Link>
+      <nav aria-label="Nawigacja Fili">
+        <h2>Tablice</h2>
+        {navItem('DeskPanel', <Layers3 size={16} />, 'blue', true)}{navItem('Cezar', <Layers3 size={16} />, 'violet')}{navItem('Tabularium', <Layers3 size={16} />, 'green')}
+        <h2>Projekty</h2>
+        {navItem('DeskPanel', <Folder size={16} />, 'blue')}{navItem('Cezar', <Folder size={16} />, 'violet')}{navItem('Tabularium', <Folder size={16} />, 'green')}
+      </nav>
+    </aside>
     <div className="fila-workspace">
-      <header className="fila-header"><div><p className="p2-eyebrow">{opened ? `DeskPanel / ${threadId(opened)}` : project ? 'Projekt' : 'Tablica'}</p>{!opened && <h1>DeskPanel</h1>}</div>{!opened && <label className="fila-search"><Search size={17} /><input aria-label="Szukaj w widoku" placeholder="Szukaj po tytule lub ID…" value={search} onChange={event => setSearch(event.target.value)} /></label>}{project && <button className="fila-icon-action" disabled aria-label="Nowy wątek w projekcie DeskPanel" title="Tworzenie wątku w projekcie — podgląd"><Plus size={21} /></button>}</header>
-      {source.status === 'loading' ? <Empty>Ładowanie wątków…</Empty> : !source.data ? <Empty>Wątki są niedostępne. Uruchom scenariusz fila.</Empty> : opened ? <>
-        <Link className="fila-back" href="?designlab=fila"><ArrowLeft size={16} /> Tablica DeskPanel</Link>
-        <div className="fila-thread-page" style={typeStyle(opened.type)}><article><div className="fila-thread-type">{typeIcon(opened.type)} {opened.type}<span>{threadId(opened)}</span></div><h1>{opened.title}</h1><p className="fila-description">{opened.note || 'Brak opisu.'}</p>
-          <section className="fila-detail-section"><header><FileText size={17} /><h3>Specyfikacja</h3>{opened.specRevision > 0 && <label className="fila-revision"><select aria-label="Rewizja specyfikacji" value={revision ?? opened.specRevision} onChange={event => setRevision(Number(event.target.value))}>{[...opened.specRevisions].reverse().map(item => <option key={item.revision} value={item.revision}>Rewizja {item.revision}{item.revision === opened.specRevision ? ' · aktualna' : ''}</option>)}</select><ChevronDown size={13} /></label>}</header>{opened.spec ? <><p className="fila-spec-author p2-note">{spec?.by === 'claude' ? 'Claude Desktop' : spec?.by === 'codex' ? 'Codex' : spec?.by ?? '—'}{spec && ` · ${new Date(spec.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}`}</p><MarkdownText text={spec?.spec ?? opened.spec} className="todo-spec-markdown" externalLinks /></> : <p className="p2-note">Nie ma jeszcze specyfikacji.</p>}</section>
-          <section className="fila-detail-section"><header><h3>Aktywność</h3></header>{opened.history.length ? <ul className="todo-history">{opened.history.map((entry, index) => <li key={index}><small>{entry.by === 'claude' ? 'Claude Desktop' : entry.by === 'codex' ? 'Codex' : entry.by === 'user' ? 'Ty' : entry.by} · {new Date(entry.at).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}</small><p>{entry.text ?? (entry.to ? `Stan: ${TODO_STATUSES[entry.to]}` : '')}</p></li>)}</ul> : <p className="p2-note">Brak aktywności w tym przykładzie.</p>}</section>
-        </article><aside className="fila-properties"><dl><dt>Stan</dt><dd><select aria-label="Stan wątku (tylko makieta)" value={opened.status} onChange={event => setLocalStatuses(previous => ({ ...previous, [opened.id]: event.target.value as TodoTask['status'] }))}>{Object.entries(TODO_STATUSES).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>{todoIsDone(opened.status) && <Check size={16} />}</dd><dt>Projekt</dt><dd><Link href="?designlab=fila&project=DeskPanel">DeskPanel</Link></dd><dt>Typ</dt><dd className="fila-thread-type">{typeIcon(opened.type)}{opened.type}</dd><dt>Workflow</dt><dd>Praca</dd><dt>Moduł</dt><dd>{opened.module}</dd></dl><p className="p2-note">Zmiana Stanu działa tylko w tym podglądzie.</p></aside></div>
-      </> : project ? <><p className="fila-project-note p2-note">Robocze wejście do projektu — docelowy ekran pozostaje do zaprojektowania.</p><ul className="fila-list">{filtered.map(task => row(task))}</ul></> : <><div className="fila-viewbar"><span className="fila-view-active">Przegląd</span><span className="p2-note">{threads.filter(task => !todoIsDone(task.status)).length} otwartych wątków</span></div>{order.map(section)}</>}
+      {opened
+        ? <ThreadPage key={opened.id} thread={opened} threads={threads} href={href} boardHref={href(view.id !== views[0].id ? { widok: view.id } : {})} update={update} setStatus={setStatus} subthreads={children(opened)} />
+        : <>
+          <header className="fila-board-head">
+            <div><p className="fila-eyebrow">Tablica</p><h1>DeskPanel</h1></div>
+            <div className="fila-head-actions">
+              <button className="fila-icon-button" aria-label="Historia tablicy" aria-pressed={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}><History size={19} /></button>
+              <button className="fila-primary" onClick={() => setCreating(true)}><Plus size={17} /> Nowy wątek</button>
+            </div>
+          </header>
+          <div className="fila-views" role="tablist" aria-label="Widoki tablicy">
+            {views.map(item => <Link key={item.id} role="tab" aria-selected={item.id === view.id} className={`fila-view${item.id === view.id ? ' active' : ''}`} href={href(item.id === views[0].id ? {} : { widok: item.id })}>{item.name}</Link>)}
+            <span className="fila-views-note">{live.filter(thread => !closed(thread)).length} otwartych · {live.filter(closed).length} zamkniętych</span>
+          </div>
+          <div className={`fila-board${historyOpen ? ' with-drawer' : ''}`}>
+            <div className="fila-sections">
+              {view.sections.map(sectionView)}
+              <div className="fila-add-section">
+                <Menu label="Dodaj sekcję" icon={<><Plus size={16} /> Dodaj sekcję</>} items={[
+                  { label: 'Lista', onSelect: () => addSection('lista') }, { label: 'Kanban', onSelect: () => addSection('kanban') },
+                ]} />
+              </div>
+            </div>
+            {historyOpen && <aside className="fila-drawer" aria-label="Historia tablicy">
+              <header><h2>Historia tablicy</h2><button className="fila-icon-button" aria-label="Zamknij historię" onClick={() => setHistoryOpen(false)}><X size={17} /></button></header>
+              <ul className="fila-timeline">{BOARD_HISTORY.map((entry, index) => <li key={index}><span className="fila-author">{entry.by}</span> {entry.text}<time>{when(entry.at)}</time></li>)}</ul>
+            </aside>}
+          </div>
+          {creating && <div className="fila-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) setCreating(false); }}>
+            <form className="fila-dialog" role="dialog" aria-label="Nowy wątek" onSubmit={create} onKeyDown={event => { if (event.key === 'Escape') setCreating(false); }}>
+              <h2>Nowy wątek</h2>
+              <label>Tytuł<input name="title" autoFocus required maxLength={200} placeholder="Co trzeba zrobić albo zapamiętać" /></label>
+              <div className="fila-dialog-row">
+                <label>Projekt<select name="project" defaultValue="DESK">{PROJECTS.map(project => <option key={project.key} value={project.key}>{project.name}</option>)}</select></label>
+                <label>Typ<select name="type" defaultValue="Sprawa">{TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+              </div>
+              <div className="fila-form-actions">
+                <button type="button" className="fila-text-button" onClick={() => setCreating(false)}>Anuluj</button>
+                <button type="submit" className="fila-primary">Utwórz</button>
+              </div>
+            </form>
+          </div>}
+        </>}
+    </div>
+  </div>;
+}
+
+type PageProps = {
+  thread: Thread; threads: Thread[]; subthreads: Thread[]; href: (extra?: Record<string, string>) => string; boardHref: string;
+  update: (id: string, change: (thread: Thread) => Partial<Thread>, note?: string, by?: Author) => void;
+  setStatus: (thread: Thread, status: Status) => void;
+};
+
+function ThreadPage({ thread, threads, subthreads: children, href, boardHref, update, setStatus }: PageProps) {
+  const [revision, setRevision] = useState(thread.spec.at(-1)?.n ?? 0);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [comment, setComment] = useState('');
+  const [addingTag, setAddingTag] = useState(false);
+  const [addingField, setAddingField] = useState(false);
+  const parent = threads.find(item => item.id === thread.parent);
+  const spec = thread.spec.find(item => item.n === revision);
+  const project = PROJECTS.find(item => item.key === thread.project);
+  const cezar: Cezar = thread.cezar ?? { executor: null, repo: null, mode: null };
+  const missing = [
+    !thread.spec.length && 'specyfikacji', thread.status !== 'gotowe' && 'Stanu „Gotowe do realizacji”',
+    cezar.executor !== 'Cezar' && 'wykonawcy Cezar', !cezar.repo && 'repo', !cezar.mode && 'trybu',
+  ].filter(Boolean) as string[];
+  const setCezar = (change: Partial<Cezar>, note: string) => update(thread.id, () => ({ cezar: { ...cezar, ...change } }), note);
+
+  const saveTitle = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = new FormData(event.currentTarget).get('title')?.toString().trim();
+    if (title && title !== thread.title) update(thread.id, () => ({ title }), `Tytuł: „${thread.title}” → „${title}”`);
+    setEditingTitle(false);
+  };
+  const saveDescription = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const description = new FormData(event.currentTarget).get('description')?.toString() ?? '';
+    if (description !== thread.description) update(thread.id, () => ({ description }), 'zmienił opis');
+    setEditingDescription(false);
+  };
+  const addField = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = form.get('name')?.toString().trim();
+    if (!name) return;
+    const field: CustomField = { name, kind: form.get('kind') as CustomField['kind'], value: form.get('value')?.toString() ?? '' };
+    update(thread.id, item => ({ custom: [...item.custom, field] }), `dodał pole ${name}`);
+    setAddingField(false);
+  };
+
+  return <div className={`fila-thread ${typeClass(thread)}${closed(thread) ? ' closed' : ''}`}>
+    <Link className="fila-back" href={boardHref}><ArrowLeft size={16} /> Tablica DeskPanel</Link>
+    {thread.archived && <div className="fila-banner" role="status">
+      <Archive size={17} /><span>Wątek jest zarchiwizowany i nie pokazuje się w sekcjach.</span>
+      <button className="fila-text-button" onClick={() => update(thread.id, () => ({ archived: false }), 'przywrócił wątek z archiwum')}>Przywróć</button>
+      <button className="fila-text-button danger">Usuń trwale</button>
+    </div>}
+    <header className="fila-thread-head">
+      <div className="fila-kicker">
+        <span className="fila-type-badge">{TYPE_ICON[thread.type](15)}{thread.type}</span>
+        <span className="fila-id">{thread.id}</span>
+        {parent && <span className="fila-parent">podwątek <Link href={href({ thread: parent.id })}>{parent.id} · {parent.title}</Link></span>}
+        <span className="fila-head-menu"><Menu label="Działania wątku" items={[
+          { label: 'Przenieś do projektu…', icon: <FolderInput size={15} /> },
+          thread.archived
+            ? { label: 'Przywróć z archiwum', icon: <Archive size={15} />, onSelect: () => update(thread.id, () => ({ archived: false }), 'przywrócił wątek z archiwum') }
+            : { label: 'Archiwizuj', icon: <Archive size={15} />, onSelect: () => update(thread.id, () => ({ archived: true }), 'zarchiwizował wątek') },
+          ...(thread.archived ? [{ label: 'Usuń trwale', icon: <Trash2 size={15} />, danger: true }] : []),
+        ]} /></span>
+      </div>
+      {editingTitle
+        ? <form className="fila-title-form" onSubmit={saveTitle}>
+          <textarea name="title" aria-label="Tytuł wątku" defaultValue={thread.title} autoFocus rows={2} maxLength={200}
+            onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } if (event.key === 'Escape') setEditingTitle(false); }} />
+          <div className="fila-form-actions"><button type="button" className="fila-text-button" onClick={() => setEditingTitle(false)}>Anuluj</button><button className="fila-primary small">Zapisz</button></div>
+        </form>
+        : <h1><button className="fila-editable" onClick={() => setEditingTitle(true)} aria-label={`Zmień tytuł: ${thread.title}`}>{thread.title}<Pencil size={16} className="fila-edit-hint" /></button></h1>}
+    </header>
+
+    <div className="fila-thread-grid">
+      <article className="fila-thread-main">
+        <section className="fila-block" aria-label="Opis">
+          {editingDescription
+            ? <form onSubmit={saveDescription} className="fila-description-form">
+              <textarea name="description" aria-label="Opis wątku" defaultValue={thread.description} autoFocus rows={Math.max(4, thread.description.split('\n').length + 2)} placeholder="Opis w Markdownie" />
+              <div className="fila-form-actions"><button type="button" className="fila-text-button" onClick={() => setEditingDescription(false)}>Anuluj</button><button className="fila-primary small">Zapisz opis</button></div>
+            </form>
+            : thread.description
+              ? <div className="fila-description"><MarkdownText text={thread.description} className="todo-spec-markdown" externalLinks /><button className="fila-icon-button fila-description-edit" aria-label="Zmień opis" onClick={() => setEditingDescription(true)}><Pencil size={15} /></button></div>
+              : <button className="fila-add-description" onClick={() => setEditingDescription(true)}><Plus size={15} /> Dodaj opis</button>}
+        </section>
+
+        {children.length > 0 && <section className="fila-block" aria-label="Podwątki">
+          <header className="fila-block-head"><h2>Podwątki</h2><span className="fila-count">{children.filter(closed).length}/{children.length} zamknięte</span></header>
+          <div className="fila-meter" aria-hidden><span style={{ width: `${100 * children.filter(closed).length / children.length}%` }} /></div>
+          <ul className="fila-list">{children.map(child => <li key={child.id} className={`fila-row nested ${typeClass(child)}${closed(child) ? ' closed' : ''}`}><div className="fila-row-line">
+            <span className="fila-type-icon" aria-label={child.type}>{TYPE_ICON[child.type](15)}</span><span className="fila-id">{child.id}</span>
+            <div className="fila-row-main"><Link className="fila-title" href={href({ thread: child.id })}>{child.title}</Link></div>
+            <StatusPicker status={child.status} onPick={status => setStatus(child, status)} label={`Stan ${child.id}`} />
+          </div></li>)}</ul>
+        </section>}
+
+        <section className="fila-block" aria-label="Specyfikacja">
+          <header className="fila-block-head">
+            <FileText size={16} /><h2>Specyfikacja</h2>
+            {thread.spec.length > 0 && <label className="fila-revision">
+              <select aria-label="Rewizja specyfikacji" value={revision} onChange={event => setRevision(Number(event.target.value))}>
+                {[...thread.spec].reverse().map(item => <option key={item.n} value={item.n}>Rewizja {item.n}{item.n === thread.spec.at(-1)?.n ? ' · aktualna' : ''}</option>)}
+              </select><ChevronDown size={13} />
+            </label>}
+          </header>
+          {spec
+            ? <><p className="fila-byline">{spec.by} · {when(spec.at)}</p><MarkdownText text={spec.text} className="todo-spec-markdown fila-spec" externalLinks /></>
+            : <p className="fila-muted">Specyfikacji jeszcze nie ma.</p>}
+        </section>
+
+        <section className="fila-block" aria-label="Aktywność">
+          <header className="fila-block-head"><h2>Aktywność</h2></header>
+          <ul className="fila-timeline">{thread.activity.map((entry: Entry, index) => entry.comment
+            ? <li key={index} className="comment"><div className="fila-comment-head"><span className="fila-author">{entry.by}</span><time>{when(entry.at)}</time></div><p>{entry.text}</p></li>
+            : <li key={index}><span className="fila-author">{entry.by}</span> {entry.text}<time>{when(entry.at)}</time></li>)}</ul>
+          <form className="fila-composer" onSubmit={event => { event.preventDefault(); const text = comment.trim(); if (!text) return; update(thread.id, item => ({ activity: [...item.activity, { at: now(), by: 'Ty', text, comment: true }] })); setComment(''); }}>
+            <textarea aria-label="Komentarz" placeholder="Dodaj komentarz…" rows={2} value={comment} onChange={event => setComment(event.target.value)} />
+            <button className="fila-primary small" disabled={!comment.trim()}><Send size={14} /> Dodaj</button>
+          </form>
+        </section>
+      </article>
+
+      <aside className="fila-props" aria-label="Pola wątku">
+        <dl>
+          <dt>Stan</dt><dd><StatusPicker status={thread.status} onPick={status => setStatus(thread, status)} label="Stan wątku" /></dd>
+          <dt>Moduł</dt><dd><select className="fila-select" aria-label="Moduł" value={thread.module} onChange={event => update(thread.id, () => ({ module: event.target.value }), `Moduł: ${thread.module || '—'} → ${event.target.value}`)}>
+            {!thread.module && <option value="">—</option>}{MODULES.map(module => <option key={module}>{module}</option>)}
+          </select></dd>
+          <dt>Typ</dt><dd className="fila-type-value">{TYPE_ICON[thread.type](15)}{thread.type}</dd>
+          <dt>Projekt</dt><dd>{project?.name} <span className="fila-muted">{project?.key}</span></dd>
+          <dt>Workflow</dt><dd className="fila-muted-value">Praca</dd>
+          <dt>Tagi</dt><dd className="fila-tag-list">
+            {thread.tags.map(tag => <span key={tag} className="fila-tag removable">#{tag}<button aria-label={`Usuń tag ${tag}`} onClick={() => update(thread.id, item => ({ tags: item.tags.filter(t => t !== tag) }), `usunął tag ${tag}`)}><X size={12} /></button></span>)}
+            {addingTag
+              ? <form onSubmit={event => { event.preventDefault(); const tag = new FormData(event.currentTarget).get('tag')?.toString().trim().replace(/^#/, ''); if (tag && !thread.tags.includes(tag)) update(thread.id, item => ({ tags: [...item.tags, tag] }), `dodał tag ${tag}`); setAddingTag(false); }}>
+                <input name="tag" className="fila-inline-input" aria-label="Nowy tag" autoFocus onBlur={event => event.currentTarget.form?.requestSubmit()} onKeyDown={event => { if (event.key === 'Escape') setAddingTag(false); }} />
+              </form>
+              : <button className="fila-add-chip" aria-label="Dodaj tag" onClick={() => setAddingTag(true)}><Plus size={13} /></button>}
+          </dd>
+          {thread.custom.map(field => <div key={field.name} className="fila-field"><dt>{field.name}</dt><dd>{field.value}<button className="fila-remove" aria-label={`Usuń pole ${field.name}`} onClick={() => update(thread.id, item => ({ custom: item.custom.filter(f => f.name !== field.name) }), `usunął pole ${field.name}`)}><X size={13} /></button></dd></div>)}
+        </dl>
+        {addingField
+          ? <form className="fila-field-form" onSubmit={addField}>
+            <input name="name" aria-label="Nazwa pola" placeholder="Nazwa pola" autoFocus required />
+            <select name="kind" aria-label="Rodzaj pola" defaultValue="tekst">{['tekst', 'liczba', 'data', 'tak/nie', 'wiele wartości'].map(kind => <option key={kind}>{kind}</option>)}</select>
+            <input name="value" aria-label="Wartość" placeholder="Wartość" />
+            <div className="fila-form-actions"><button type="button" className="fila-text-button" onClick={() => setAddingField(false)}>Anuluj</button><button className="fila-primary small">Dodaj pole</button></div>
+          </form>
+          : <button className="fila-text-button fila-add-field" onClick={() => setAddingField(true)}><Plus size={14} /> Pole</button>}
+
+        <div className="fila-cezar" aria-label="Cezar">
+          <h2>Cezar</h2>
+          <dl>
+            <dt>Wykonawca</dt><dd><select className="fila-select" aria-label="Wykonawca" value={cezar.executor ?? ''} onChange={event => setCezar({ executor: (event.target.value || null) as Cezar['executor'] }, `Wykonawca: ${event.target.value || '—'}`)}><option value="">—</option><option>Cezar</option><option>Lokalnie</option><option>Rozmowa</option></select></dd>
+            <dt>Repo</dt><dd><select className="fila-select" aria-label="Repo" value={cezar.repo ?? ''} onChange={event => setCezar({ repo: (event.target.value || null) as Cezar['repo'] }, `Repo: ${event.target.value || '—'}`)}><option value="">—</option><option>desk-panel</option></select></dd>
+            <dt>Tryb</dt><dd><select className="fila-select" aria-label="Tryb" value={cezar.mode ?? ''} onChange={event => setCezar({ mode: (event.target.value || null) as Cezar['mode'] }, `Tryb: ${event.target.value || '—'}`)}><option value="">—</option><option>Analiza</option><option>Implementacja</option></select></dd>
+            {cezar.task && <><dt>Task</dt><dd><a className="fila-link" href="#" onClick={event => event.preventDefault()}>{cezar.task}</a></dd></>}
+            {cezar.pr && <><dt>PR</dt><dd><a className="fila-link" href="#" onClick={event => event.preventDefault()}><GitPullRequest size={14} /> {cezar.pr}</a></dd></>}
+          </dl>
+          {cezar.task
+            ? <p className="fila-ready running">Zlecone · {cezar.mode}</p>
+            : missing.length
+              ? <p className="fila-ready">Do zlecenia brakuje: {missing.join(', ')}.</p>
+              : <p className="fila-ready ok"><Check size={14} /> Gotowe do zlecenia · rewizja {thread.spec.at(-1)?.n}</p>}
+          {!cezar.task && <button className="fila-primary wide" disabled={missing.length > 0}
+            onClick={() => setCezar({ task: `cz-${1200 + Number(thread.id.split('-')[1])}` }, `zlecił Cezarowi (${cezar.mode}), rewizja ${thread.spec.at(-1)?.n}`)}><Send size={15} /> Zleć Cezarowi</button>}
+        </div>
+      </aside>
     </div>
   </div>;
 }

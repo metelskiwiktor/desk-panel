@@ -29,37 +29,31 @@ describe('DesignLab preview', () => {
       const alive = () => page.evaluate(() => window.__survives === true);
       const sections = () => page.locator('section.fila-section').evaluateAll(list => list.map(s => s.getAttribute('aria-label')));
 
-      await page.getByLabel('Szukaj w widoku').fill('Wektor');
-      await page.getByLabel('Przenieś sekcję Do przejrzenia').click();
-      await page.getByLabel('Umieść przenoszoną sekcję za tą sekcją').click();
-      expect(await sections()).toEqual(['Funkcje', 'Do przejrzenia']);
+      await page.getByLabel('Sekcja Do przejrzenia').click();
+      await page.getByRole('menuitem', { name: 'Przesuń niżej' }).click();
+      expect(await sections()).toEqual(['Funkcje', 'Do przejrzenia', 'Pilne']);
 
       await page.getByRole('link', { name: /Wektor gubi kontekst/ }).click();
       await page.waitForURL(/thread=DESK-32/);
-      const state = page.getByLabel('Stan wątku (tylko makieta)');
-      expect(await state.inputValue()).toBe('pomysl');
-      await state.selectOption('zakonczone');
+      await page.getByLabel('Stan wątku: Pomysł').click();
+      await page.getByRole('option', { name: 'Zakończone' }).click();
+      await page.getByLabel('Stan wątku: Zakończone').waitFor();
 
       await page.getByRole('link', { name: /Tablica DeskPanel/ }).click();
       await page.waitForURL(url => !url.search.includes('thread'));
-      expect(await page.getByLabel('Szukaj w widoku').inputValue()).toBe('Wektor');
-      expect(await sections()).toEqual(['Funkcje', 'Do przejrzenia']);
+      expect(await sections()).toEqual(['Funkcje', 'Do przejrzenia', 'Pilne']);
+      // Closed now, so the section query no longer picks it (in memory only).
+      expect(await page.getByRole('region', { name: 'Do przejrzenia' }).getByText('Wektor gubi kontekst').count()).toBe(0);
 
-      await page.getByRole('link', { name: /Wektor gubi kontekst/ }).click();
-      expect(await page.getByLabel('Stan wątku (tylko makieta)').inputValue()).toBe('pomysl');
-
-      await page.getByRole('navigation').getByRole('link', { name: 'DeskPanel' }).last().click();
-      await page.waitForURL(/project=DeskPanel/);
+      await page.getByRole('tab', { name: 'Wszystko' }).click();
+      await page.waitForURL(/widok=wszystko/);
       await page.goBack();
-      await page.waitForURL(/thread=DESK-32/);
-      await page.getByLabel('Stan wątku (tylko makieta)').waitFor();
-      await page.goForward();
-      await page.getByText('Robocze wejście do projektu').waitFor();
+      await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
       expect(await alive()).toBe(true);
 
       const direct = await browser.newPage();
       await direct.goto(new URL('?designlab=fila&thread=DESK-32', fila.url).href);
-      await direct.getByRole('heading', { name: 'Wektor gubi kontekst wskazanego wątku' }).waitFor();
+      await direct.getByRole('heading', { name: /Wektor gubi kontekst wskazanego wątku/ }).waitFor();
     } finally { await fila.stop(); }
   }, 90_000);
 });
