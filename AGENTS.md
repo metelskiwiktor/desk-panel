@@ -34,6 +34,11 @@ rule changes) in the same commit; documentation is part of the change, not a fol
   dispatch or open PRs; Cezar's check nodes prepare the worktree, verify with `just check`, review, then commit the
   approved diff and open the PR (docs/agent-workflows/desk-panel-task.md). If origin/main moved, merge it (check overlaps
   with local work) and run the tests again before pushing.
+- Exception, DesignLab mockup drafts (docs/designlab.md): while the user has not accepted a mockup, working edits only in
+  `src/designlab/mockups/*`, `src/designlab/designlab.css` and `scenarios/*.json` are checked in the running preview
+  (`just scenario NAME`, always http://127.0.0.1:5175) and committed locally, without the full `just check`, push or
+  `just update`. Once the user clearly accepts the mockup: `just check`, push and deploy once, as above (stop the preview
+  first, `just scenario-stop`). Shared components, hooks, scripts and other infrastructure follow the normal procedure.
 - Po pushu na `main` agent lokalny (Claude Code, Codex, Antigravity) sam uruchamia `just update`, a gdy zmiana dotyczy schematu narzędzi MCP albo konfiguracji Hermesa, także `just hermes RESTART`, przestrzegając warunków bezpieczeństwa z [docs/hermes.md](docs/hermes.md) (bez trwającej tury, bez oczekujących runów i bez automatu w ciągu 10 minut); użytkownik nie musi tego robić ani zatwierdzać. Wektor i executor Cezara nadal nie wdrażają ani nie restartują usług.
 - Commit messages: conventional commits in English (`feat(chat): ...`), with no attribution lines (`Co-Authored-By`,
   "Generated with ..."), even when a tool suggests them.
@@ -51,7 +56,7 @@ rule changes) in the same commit; documentation is part of the change, not a fol
 - `just dev`: run API and Vite during development.
 - `just scenario NAME` / `just screenshots NAME [--pages pulpit,ustawienia]
   [--device ID|all] [--scale N|primary|all]`: run the real UI against
-  `scenarios/NAME.json` (Vite + a scenario API on free ports, never the service
+  `scenarios/NAME.json` (Vite + a scenario API; the interactive preview of `just scenario` always on 5175, screenshots on free ports, never the service
   port) and take Playwright screenshots into output/screenshots. Use this to
   check UI changes visually on the target screens. `--query ambient=day|night` shoots the
   idle clock instead of walking the pages.

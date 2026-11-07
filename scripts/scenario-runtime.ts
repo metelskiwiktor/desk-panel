@@ -21,9 +21,13 @@ async function freeLoopbackPort() {
   return port;
 }
 
+/** Interactive preview address (docs/designlab.md); screenshots, tests and usage-ui keep free ports. */
+export const PREVIEW_PORT = 5175;
+
 /** One isolated API, stand-in Hermes and Vite. No real provider, service port or user storage is used. */
 /** `usage` is for a run that checks the measurement itself, with a store of its own (a temporary directory); scenarios have none otherwise. */
-export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', usage?: UsageStore) {
+/** `port` pins Vite to that port; a taken port is an error, never another address. */
+export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', usage?: UsageStore, port?: number) {
   loadScenario(file);
   const sources = createScenarioSources(file);
   const chat = await createScenarioChat({ hermes, toolScript: async message => {
@@ -62,8 +66,11 @@ export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', 
     await new Promise<void>((done, fail) => { api.once('error', fail); api.listen(0, '127.0.0.1', () => { api.off('error', fail); done(); }); });
     const apiUrl = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
     // Vite 6 treats port 0 as its default port. Ask the OS for a port first; Vite may retry if it is taken meanwhile.
-    vite = await createServer({ define: { __DESIGNLAB__: true }, server: { host: '127.0.0.1', port: await freeLoopbackPort(), strictPort: false, proxy: { '/api': { target: apiUrl, changeOrigin: false } } }, logLevel: 'warn' });
-    await vite.listen();
+    vite = await createServer({ define: { __DESIGNLAB__: true }, server: { host: '127.0.0.1', port: port ?? await freeLoopbackPort(), strictPort: port !== undefined, proxy: { '/api': { target: apiUrl, changeOrigin: false } } }, logLevel: 'warn' });
+    try { await vite.listen(); } catch (error) {
+      if (port !== undefined && /already in use|EADDRINUSE/i.test((error as Error).message)) throw new Error(`Port ${port} jest zajęty: działa już inny podgląd scenariusza (just scenario-stop) albo inny program. Adres się nie zmienia automatycznie.`);
+      throw error;
+    }
     return { url: vite.resolvedUrls!.local[0], stop };
   } catch (error) { await stop(); throw error; }
 }

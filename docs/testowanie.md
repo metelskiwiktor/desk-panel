@@ -66,8 +66,8 @@ któremu urządzeniu i skalowaniu odpowiada bieżący ekran.
 
 Makiety wyglądu na danych scenariusza (`?designlab=demo` w podglądzie): [designlab.md](designlab.md).
 
-Skrypt uruchamia Vite i API scenariusza na wolnych portach (nie dotyka usługi ani
-prawdziwych źródeł). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
+Skrypt uruchamia Vite i API scenariusza (nie dotyka usługi ani prawdziwych źródeł). Interaktywny `just scenario NAME`
+stoi zawsze na porcie 5175 (zajęty to błąd); zrzuty, testy i `usage-ui` biorą wolne porty i działają obok niego (docs/designlab.md). Te same pliki zasilają testy UI (`src/test-fixtures.ts`), a
 `server/scenario.test.ts` sprawdza, że każdy z nich spełnia kontrakty.
 
 

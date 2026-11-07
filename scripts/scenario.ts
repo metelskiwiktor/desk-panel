@@ -15,7 +15,7 @@ import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { deflateSync } from 'node:zlib';
 import { devices } from '../src/devices';
-import { launchChromium, selectViewports, startScenario } from './scenario-runtime';
+import { launchChromium, PREVIEW_PORT, selectViewports, startScenario } from './scenario-runtime';
 import { screenshotPath, validateSingleScreenshot, withPageErrors } from './browser-checks';
 
 /** A small PNG that looks like a dashboard card, so the attachment screenshots show a real thumbnail. */
@@ -73,7 +73,11 @@ if (values.shot) {
   if (unknown.length) throw new Error(`Nieznane strony: ${unknown.join(', ')}. Dostępne: ${Object.keys(PAGES).join(', ')}`);
   validateSingleScreenshot(values.file, targets.length, values.query && !cockpitMock ? 1 : pages.length);
 }
-const { url, stop } = await startScenario(file, values.hermes === 'down' ? 'down' : 'up');
+const { url, stop } = await startScenario(file, values.hermes === 'down' ? 'down' : 'up', undefined, values.shot ? undefined : PREVIEW_PORT).catch(error => {
+  if (values.shot) throw error;
+  console.error(error instanceof Error ? error.message : error); // e.g. the preview port is taken: a plain message, no stack
+  process.exit(1);
+});
 
 if (!values.shot) {
   console.log(`Scenariusz ${label}: ${url}  (plik czytany przy każdym zapytaniu; Ctrl+C kończy)`);
