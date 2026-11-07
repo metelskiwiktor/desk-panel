@@ -52,8 +52,8 @@ Tablica: Stan zmienia się z wiersza i z karty (wybór z workflow Praca, wartoś
 wątków (D-072). Strona wątku: tytuł i opis edytowalne w GUI (D-073),
 podwątki, specyfikacja z wyborem rewizji tylko do odczytu, jedna oś aktywności z komentarzami, pola (Stan, Moduł, tagi,
 pola własne) i zestaw Cezara z gotowością i „Zleć Cezarowi”; menu „⋯”: przeniesienie, archiwizacja, trwałe usunięcie z archiwum.
-Ekran projektu `&project=DESK`: klucz, liczby wątków, „Nowy wątek” (tytuł, typ), przejście do tablicy, zakładki Archiwum
-(przywróć, usuń trwale z potwierdzeniem) i Pola i workflow (`&zakladka=pola`, tylko do odczytu); „+” przy Projektach zakłada projekt.
+Ekran projektu `&project=DESK`: klucz, liczby wątków, „Nowy wątek” (tytuł, typ), przejście do tablicy, zakładki Pola i workflow
+(pierwsza, tylko do odczytu) i Archiwum (`&zakladka=archiwum`; przywróć, usuń trwale z potwierdzeniem); „+” przy Projektach zakłada projekt.
 
 Zrzuty (PowerShell, zapytanie z `&` bezpośrednio do npm):
 `npm run scenario -- fila --shot --nav --query 'designlab=fila&thread=DESK-37' --device medialove-14 --scale 1.5`.

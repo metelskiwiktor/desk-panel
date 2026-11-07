@@ -302,7 +302,7 @@ type ProjectProps = {
 };
 
 function ProjectPage({ project, threads, href, update, onNewThread, onDelete }: ProjectProps) {
-  const tab = new URLSearchParams(useSearch()).get('zakladka') === 'pola' ? 'pola' : 'archiwum';
+  const tab = new URLSearchParams(useSearch()).get('zakladka') === 'archiwum' ? 'archiwum' : 'pola';
   const [confirming, setConfirming] = useState<string | null>(null);
   const archived = threads.filter(thread => thread.archived);
   const live = threads.filter(thread => !thread.archived);
@@ -322,8 +322,8 @@ function ProjectPage({ project, threads, href, update, onNewThread, onDelete }: 
       <div><dt>W archiwum</dt><dd>{archived.length}</dd></div>
     </dl>
     <div className="fila-views" role="tablist" aria-label="Zakładki projektu">
-      <Link role="tab" aria-selected={tab === 'archiwum'} className={`fila-view${tab === 'archiwum' ? ' active' : ''}`} href={href({ project: project.key })}>Archiwum</Link>
-      <Link role="tab" aria-selected={tab === 'pola'} className={`fila-view${tab === 'pola' ? ' active' : ''}`} href={href({ project: project.key, zakladka: 'pola' })}>Pola i workflow</Link>
+      <Link role="tab" aria-selected={tab === 'pola'} className={`fila-view${tab === 'pola' ? ' active' : ''}`} href={href({ project: project.key })}>Pola i workflow</Link>
+      <Link role="tab" aria-selected={tab === 'archiwum'} className={`fila-view${tab === 'archiwum' ? ' active' : ''}`} href={href({ project: project.key, zakladka: 'archiwum' })}>Archiwum</Link>
     </div>
     {tab === 'archiwum'
       ? archived.length
