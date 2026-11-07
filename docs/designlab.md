@@ -41,8 +41,7 @@ więc działają obok podglądu. `just update` odmawia przy działającym serwer
 
 ## Fila — propozycja etapu 1
 
-`just scenario fila`, następnie `?designlab=fila` (kierunek A, tokeny pulpitu) albo `?designlab=fila&kierunek=b` (kierunek B,
-tokeny `--fila-b-*`): tablica DeskPanel z widokami Przegląd i Wszystko, sekcje listy i kanban, pusta sekcja Pilne, oraz strona
+`just scenario fila`, następnie `?designlab=fila` (tokeny pulpitu, D-071): tablica DeskPanel z widokami Przegląd i Wszystko, sekcje listy i kanban, pusta sekcja Pilne, oraz strona
 wątku `&thread=DESK-37`. Fila nie ma jeszcze kontraktu, więc dane makiety są w `src/designlab/mockups/fila-data.ts`
 (rodzic, tagi, pola własne, zestaw Cezara, rewizje, archiwum); scenariusz `fila` służy tylko do uruchomienia podglądu.
 Wszystkie zmiany (Stan, sekcje, zapytania, nowy wątek, komentarze, pola) żyją w pamięci strony, bez zapisów.
@@ -55,7 +54,7 @@ podwątki, specyfikacja z wyborem rewizji tylko do odczytu, jedna oś aktywnośc
 pola własne) i zestaw Cezara z gotowością i „Zleć Cezarowi”; menu „⋯”: przeniesienie, archiwizacja, trwałe usunięcie z archiwum.
 
 Zrzuty (PowerShell, zapytanie z `&` bezpośrednio do npm):
-`npm run scenario -- fila --shot --nav --query 'designlab=fila&kierunek=b&thread=DESK-37' --device medialove-14 --scale 1.5`.
+`npm run scenario -- fila --shot --nav --query 'designlab=fila&thread=DESK-37' --device medialove-14 --scale 1.5`.
 `--nav` zachowuje lewą nawigację makiety (runner domyślnie ukrywa elementy `nav`). Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila`.
 ## Sprawdzenia infrastruktury
 

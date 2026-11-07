@@ -99,8 +99,7 @@ function QueryText({ id, pills, text, onSave, compact = false }: { id: string; p
 
 export default function Fila() {
   const params = new URLSearchParams(useSearch());
-  const direction = params.get('kierunek') === 'b' ? 'b' : 'a';
-  const href = (extra: Record<string, string> = {}) => `?${new URLSearchParams({ designlab: 'fila', ...(direction === 'b' ? { kierunek: 'b' } : {}), ...extra })}`;
+  const href = (extra: Record<string, string> = {}) => `?${new URLSearchParams({ designlab: 'fila', ...extra })}`;
   const [threads, setThreads] = useState<Thread[]>(THREADS);
   const [views, setViews] = useState<View[]>(VIEWS);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'DESK-36': true });
@@ -221,7 +220,7 @@ export default function Fila() {
     ? <Link href={href()} className={`fila-nav-item ${tone} active`} aria-current="page">{icon}<span>{label}</span></Link>
     : <button type="button" className={`fila-nav-item ${tone}`}>{icon}<span>{label}</span></button>;
 
-  return <div className={`fila-lab dir-${direction}`}>
+  return <div className="fila-lab">
     <aside className="fila-sidebar">
       <Link className="fila-brand" href={href()}><Layers3 size={22} /> Fila</Link>
       <nav aria-label="Nawigacja Fili">
