@@ -49,6 +49,13 @@ describe('DesignLab preview', () => {
       await page.waitForURL(/widok=wszystko/);
       await page.goBack();
       await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
+      await page.getByRole('navigation').getByRole('link', { name: 'DeskPanel' }).last().click();
+      await page.waitForURL(/project=DESK/);
+      await page.getByRole('button', { name: 'Nowy wątek' }).click();
+      await page.getByLabel('Tytuł').fill('Wymienić baterię w pilocie');
+      await page.getByRole('button', { name: 'Utwórz' }).click();
+      await page.waitForURL(/thread=DESK-54/);
+      await page.getByRole('heading', { name: /Wymienić baterię w pilocie/ }).waitFor();
       expect(await alive()).toBe(true);
 
       const direct = await browser.newPage();

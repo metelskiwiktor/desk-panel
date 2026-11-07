@@ -126,6 +126,49 @@
 .fila-card-subs .fila-id { font-size: 11px; }
 .fila-column-empty { margin: 0; padding: 22px 0; color: var(--p2-faint); font-size: 12px; text-align: center; }
 
+/* Okna: nowy wątek, nowy projekt */
+.fila-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgb(3 6 12 / .6); }
+.fila-dialog { display: flex; flex-direction: column; gap: 14px; width: min(520px, 100%); padding: 20px 22px; border: 1px solid var(--p2-line); border-radius: 14px; background: var(--fila-raise); box-shadow: 0 24px 60px rgb(0 0 0 / .5); }
+.fila-dialog h2 { margin: 0; font-size: 18px; }
+.fila-dialog label { display: flex; flex-direction: column; gap: 6px; color: var(--p2-muted); font-size: 12px; }
+.fila-dialog input, .fila-dialog select { min-height: 38px; padding: 6px 10px; border: 1px solid var(--p2-line); border-radius: 8px; background: var(--fila-panel); color: var(--p2-text); font-size: 14px; }
+.fila-dialog-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 12px; }
+.fila-dialog .fila-muted { line-height: 1.55; }
+.fila-key-input { text-transform: uppercase; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+
+/* Lewa nawigacja: nagłówek z akcją */
+.fila-nav-head { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+.fila-nav-head h2 { margin-top: 0 !important; margin-bottom: 0 !important; }
+.fila-icon-button.small { min-width: 28px; min-height: 28px; padding: 2px; }
+.fila-nav-item.amber { --nav-tone: var(--amber); }
+
+/* Projekt */
+.fila-key { display: inline-block; margin-left: 6px; padding: 1px 8px; border: 1px solid var(--p2-line); border-radius: 6px; color: var(--p2-muted); font-size: 13px; font-weight: 600; letter-spacing: .12em; vertical-align: middle; }
+.fila-stats { display: flex; gap: 36px; margin: 2px 0 20px; }
+.fila-stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
+.fila-stats dt { color: var(--p2-muted); font-size: 12px; }
+.fila-stats dd { margin: 0; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fila-archive .fila-row-line { grid-template-columns: 18px 62px minmax(0, 1fr) auto; }
+.fila-archive .fila-row-main { flex-direction: column; align-items: flex-start; gap: 2px; }
+.fila-archived-by { color: var(--p2-muted); font-size: 12px; }
+.fila-row-actions, .fila-confirm { display: flex; align-items: center; gap: 4px; }
+.fila-confirm span { margin-right: 6px; color: var(--quota-red); font-size: 13px; }
+.fila-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 40px; max-width: 980px; }
+.fila-setting h2 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 15px; }
+.fila-setting h2 .fila-muted { font-size: 12px; font-weight: 400; }
+.fila-setting p { margin: 0; }
+.fila-setting .fila-key { margin: 0 8px 0 0; }
+.fila-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fila-chip { padding: 3px 10px; border-radius: 999px; background: var(--fila-panel); border: 1px solid var(--p2-line); font-size: 13px; }
+.fila-workflow h3 { margin: 0 0 8px; font-size: 13px; }
+.fila-workflow ol { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 0; padding: 0; list-style: none; }
+.fila-workflow li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--st) 12%, transparent); color: var(--st); font-size: 12.5px; }
+.fila-workflow li.closing { outline: 1px dashed color-mix(in srgb, var(--st) 60%, transparent); }
+.fila-custom-list { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 13.5px; }
+.fila-custom-list div { display: contents; }
+.fila-custom-list dd { margin: 0; color: var(--p2-muted); }
+.fila-settings-note { grid-column: 1 / -1; font-size: 12px; }
+
 /* Historia tablicy */
 .fila-drawer { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 48px); overflow: auto; padding: 4px 0 4px 20px; border-left: 1px solid var(--p2-line); }
 .fila-drawer header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }

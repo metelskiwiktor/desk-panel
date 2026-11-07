@@ -8,8 +8,8 @@ import { MarkdownText } from '../../components/markdown-text';
 import { TODO_STATUSES, todoIsDone } from '../../todo-contract';
 import { Link, useSearch } from '../nav';
 import {
-  BOARD_HISTORY, MODULES, PROJECTS, THREADS, VIEWS, WORKFLOW_PRACA,
-  type Author, type Cezar, type CustomField, type Entry, type Section, type Status, type Thread, type ThreadType, type View,
+  BOARD_HISTORY, PROJECTS, THREADS, TYPES, VIEWS, WORKFLOW_PRACA,
+  type Author, type Project, type Cezar, type CustomField, type Entry, type Section, type Status, type Thread, type ThreadType, type View,
 } from './fila-data';
 
 /** Visual exploration of Fila stage 1 (docs/designlab.md): mockup data and in-memory changes only. */
@@ -105,9 +105,13 @@ export default function Fila() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'DESK-36': true });
   const [renaming, setRenaming] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>(PROJECTS);
+  const [dialog, setDialog] = useState<'thread' | 'project' | null>(null);
+  const shownProject = projects.find(item => item.key === params.get('project'));
   const view = views.find(item => item.id === params.get('widok')) ?? views[0];
   const opened = threads.find(thread => thread.id === params.get('thread'));
-  const live = threads.filter(thread => !thread.archived);
+  // The DeskPanel board's sections all ask for project = DESK (D-019, D-026).
+  const live = threads.filter(thread => !thread.archived && thread.project === 'DESK');
 
   const update = (id: string, change: (thread: Thread) => Partial<Thread>, note?: string, by: Author = 'Ty') =>
     setThreads(previous => previous.map(thread => thread.id !== id ? thread : { ...thread, ...change(thread), activity: note ? [...thread.activity, { at: now(), by, text: note }] : thread.activity }));
@@ -200,22 +204,48 @@ export default function Fila() {
     setRenaming(id);
   };
 
-  const navItem = (label: string, icon: ReactNode, tone: string, active = false) => active
-    ? <Link href={href()} className={`fila-nav-item ${tone} active`} aria-current="page">{icon}<span>{label}</span></Link>
-    : <button type="button" className={`fila-nav-item ${tone}`}>{icon}<span>{label}</span></button>;
+  const navItem = (label: string, icon: ReactNode, tone: string, target?: string, active = false) => target
+    ? <Link key={label + target} href={target} className={`fila-nav-item ${tone}${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span></Link>
+    : <button key={label} type="button" className={`fila-nav-item ${tone}`}>{icon}<span>{label}</span></button>;
+
+  const go = (search: string) => { window.history.pushState(null, '', search); window.scrollTo(0, 0); window.dispatchEvent(new Event('designlab-navigate')); };
+  const createThread = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = form.get('title')?.toString().trim();
+    if (!title || !shownProject) return;
+    const numbers = threads.filter(thread => thread.project === shownProject.key).map(thread => Number(thread.id.split('-')[1]));
+    const id = `${shownProject.key}-${(numbers.length ? Math.max(...numbers) : 0) + 1}`;
+    setThreads(previous => [...previous, { id, type: form.get('type') as ThreadType, title, description: '', status: 'pomysl', module: '', project: shownProject.key, tags: [], custom: [], spec: [], activity: [{ at: now(), by: 'Ty', text: 'utworzył wątek' }] }]);
+    setDialog(null);
+    go(href({ thread: id }));
+  };
+  const createProject = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = form.get('name')?.toString().trim();
+    const key = form.get('key')?.toString().trim().toUpperCase() ?? '';
+    if (!name || !/^[A-Z]{4}$/.test(key) || projects.some(item => item.key === key)) return;
+    setProjects(previous => [...previous, { key, name, tone: 'amber', modules: [] }]);
+    setDialog(null);
+    go(href({ project: key }));
+  };
 
   return <div className="fila-lab">
     <aside className="fila-sidebar">
       <Link className="fila-brand" href={href()}><Layers3 size={22} /> Fila</Link>
       <nav aria-label="Nawigacja Fili">
         <h2>Tablice</h2>
-        {navItem('DeskPanel', <Layers3 size={16} />, 'blue', true)}{navItem('Cezar', <Layers3 size={16} />, 'violet')}{navItem('Tabularium', <Layers3 size={16} />, 'green')}
-        <h2>Projekty</h2>
-        {navItem('DeskPanel', <Folder size={16} />, 'blue')}{navItem('Cezar', <Folder size={16} />, 'violet')}{navItem('Tabularium', <Folder size={16} />, 'green')}
+        {projects.map(item => navItem(item.name, <Layers3 size={16} />, item.tone, item.key === 'DESK' ? href() : undefined, item.key === 'DESK' && !opened && !shownProject))}
+        <div className="fila-nav-head"><h2>Projekty</h2><button className="fila-icon-button small" aria-label="Nowy projekt" onClick={() => setDialog('project')}><Plus size={15} /></button></div>
+        {projects.map(item => navItem(item.name, <Folder size={16} />, item.tone, href({ project: item.key }), shownProject?.key === item.key && !opened))}
       </nav>
     </aside>
     <div className="fila-workspace">
-      {opened
+      {!opened && shownProject
+        ? <ProjectPage project={shownProject} threads={threads.filter(thread => thread.project === shownProject.key)} href={href} update={update}
+          onNewThread={() => setDialog('thread')} onDelete={id => setThreads(previous => previous.filter(thread => thread.id !== id))} />
+        : opened
         ? <ThreadPage key={opened.id} thread={opened} threads={threads} href={href} boardHref={href(view.id !== views[0].id ? { widok: view.id } : {})} update={update} setStatus={setStatus} subthreads={children(opened)} />
         : <>
           <header className="fila-board-head">
@@ -244,6 +274,93 @@ export default function Fila() {
           </div>
         </>}
     </div>
+    {dialog && <div className="fila-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) setDialog(null); }}>
+      {dialog === 'thread' && shownProject
+        ? <form className="fila-dialog" role="dialog" aria-label="Nowy wątek" onSubmit={createThread} onKeyDown={event => { if (event.key === 'Escape') setDialog(null); }}>
+          <h2>Nowy wątek w {shownProject.name}</h2>
+          <label>Tytuł<input name="title" autoFocus required maxLength={200} placeholder="Co trzeba zrobić albo zapamiętać" /></label>
+          <label>Typ<select name="type" defaultValue="Sprawa">{TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
+          <div className="fila-form-actions"><button type="button" className="fila-text-button" onClick={() => setDialog(null)}>Anuluj</button><button type="submit" className="fila-primary">Utwórz</button></div>
+        </form>
+        : <form className="fila-dialog" role="dialog" aria-label="Nowy projekt" onSubmit={createProject} onKeyDown={event => { if (event.key === 'Escape') setDialog(null); }}>
+          <h2>Nowy projekt</h2>
+          <div className="fila-dialog-row">
+            <label>Nazwa<input name="name" autoFocus required maxLength={80} placeholder="np. Prywatne" /></label>
+            <label>Klucz<input name="key" required pattern="[A-Za-z]{4}" maxLength={4} placeholder="PRYW" className="fila-key-input" /></label>
+          </div>
+          <p className="fila-muted">Klucz ma 4 litery i nie da się go później zmienić; z niego powstają ID wątków, np. PRYW-1. Projekt dostaje od razu tablicę ze wszystkimi swoimi wątkami.</p>
+          <div className="fila-form-actions"><button type="button" className="fila-text-button" onClick={() => setDialog(null)}>Anuluj</button><button type="submit" className="fila-primary">Załóż projekt</button></div>
+        </form>}
+    </div>}
+  </div>;
+}
+
+type ProjectProps = {
+  project: Project; threads: Thread[]; href: (extra?: Record<string, string>) => string;
+  update: (id: string, change: (thread: Thread) => Partial<Thread>, note?: string) => void;
+  onNewThread: () => void; onDelete: (id: string) => void;
+};
+
+function ProjectPage({ project, threads, href, update, onNewThread, onDelete }: ProjectProps) {
+  const tab = new URLSearchParams(useSearch()).get('zakladka') === 'pola' ? 'pola' : 'archiwum';
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const archived = threads.filter(thread => thread.archived);
+  const live = threads.filter(thread => !thread.archived);
+  const custom = [...new Map(threads.flatMap(thread => thread.custom).map(field => [field.name, field])).values()];
+  const archivedAt = (thread: Thread) => [...thread.activity].reverse().find(entry => entry.text.startsWith('zarchiwizował'));
+  return <div className="fila-project">
+    <header className="fila-board-head">
+      <div><p className="fila-eyebrow">Projekt</p><h1>{project.name} <span className="fila-key">{project.key}</span></h1></div>
+      <div className="fila-head-actions">
+        {project.key === 'DESK' && <Link className="fila-text-button" href={href()}><Layers3 size={16} /> Tablica {project.name}</Link>}
+        <button className="fila-primary" onClick={onNewThread}><Plus size={17} /> Nowy wątek</button>
+      </div>
+    </header>
+    <dl className="fila-stats">
+      <div><dt>Otwarte</dt><dd>{live.filter(thread => !closed(thread)).length}</dd></div>
+      <div><dt>Zamknięte</dt><dd>{live.filter(closed).length}</dd></div>
+      <div><dt>W archiwum</dt><dd>{archived.length}</dd></div>
+    </dl>
+    <div className="fila-views" role="tablist" aria-label="Zakładki projektu">
+      <Link role="tab" aria-selected={tab === 'archiwum'} className={`fila-view${tab === 'archiwum' ? ' active' : ''}`} href={href({ project: project.key })}>Archiwum</Link>
+      <Link role="tab" aria-selected={tab === 'pola'} className={`fila-view${tab === 'pola' ? ' active' : ''}`} href={href({ project: project.key, zakladka: 'pola' })}>Pola i workflow</Link>
+    </div>
+    {tab === 'archiwum'
+      ? archived.length
+        ? <ul className="fila-list fila-archive">{archived.map(thread => <li key={thread.id} className={`fila-row ${typeClass(thread)}`}><div className="fila-row-line">
+          <span className="fila-type-icon" aria-label={thread.type}>{TYPE_ICON[thread.type](16)}</span>
+          <span className="fila-id">{thread.id}</span>
+          <div className="fila-row-main">
+            <Link className="fila-title" href={href({ thread: thread.id })}>{thread.title}</Link>
+            <span className="fila-archived-by">{TODO_STATUSES[thread.status]} · zarchiwizował {archivedAt(thread)?.by ?? '—'}{archivedAt(thread) ? `, ${when(archivedAt(thread)!.at)}` : ''}</span>
+          </div>
+          {confirming === thread.id
+            ? <div className="fila-confirm"><span>Usunąć {thread.id} na zawsze?</span><button className="fila-text-button" onClick={() => setConfirming(null)}>Anuluj</button><button className="fila-text-button danger" onClick={() => { onDelete(thread.id); setConfirming(null); }}>Usuń</button></div>
+            : <div className="fila-row-actions">
+              <button className="fila-text-button" onClick={() => update(thread.id, () => ({ archived: false }), 'przywrócił wątek z archiwum')}><Archive size={15} /> Przywróć</button>
+              <button className="fila-icon-button" aria-label={`Usuń trwale ${thread.id}`} onClick={() => setConfirming(thread.id)}><Trash2 size={15} /></button>
+            </div>}
+        </div></li>)}</ul>
+        : <Empty>Archiwum jest puste.</Empty>
+      : <div className="fila-settings">
+        <section className="fila-setting">
+          <h2>Klucz</h2>
+          <p><span className="fila-key">{project.key}</span> <span className="fila-muted">ID wątków: {project.key}-1, {project.key}-2…</span></p>
+        </section>
+        <section className="fila-setting">
+          <h2>Moduł <span className="fila-muted">pole wyboru projektu</span></h2>
+          {project.modules.length ? <p className="fila-chips">{project.modules.map(module => <span key={module} className="fila-chip">{module}</span>)}</p> : <p className="fila-muted">Projekt nie używa pola Moduł.</p>}
+        </section>
+        <section className="fila-setting">
+          <h2>Workflow <span className="fila-muted">używane przez wątki projektu</span></h2>
+          <div className="fila-workflow"><h3>Praca</h3><ol>{WORKFLOW_PRACA.map(status => <li key={status} className={`st-${status}${todoIsDone(status) ? ' closing' : ''}`}><span className="fila-dot" />{TODO_STATUSES[status]}{todoIsDone(status) && <Check size={13} />}</li>)}</ol></div>
+        </section>
+        <section className="fila-setting">
+          <h2>Pola własne <span className="fila-muted">w wątkach projektu</span></h2>
+          {custom.length ? <dl className="fila-custom-list">{custom.map(field => <div key={field.name}><dt>{field.name}</dt><dd>{field.kind}</dd></div>)}</dl> : <p className="fila-muted">Wątki projektu nie mają pól własnych.</p>}
+        </section>
+        <p className="fila-muted fila-settings-note">Moduł i workflow zmienia AI, np. w Claude Desktop.</p>
+      </div>}
   </div>;
 }
 
@@ -374,10 +491,10 @@ function ThreadPage({ thread, threads, subthreads: children, href, boardHref, up
         <dl>
           <dt>Stan</dt><dd><StatusPicker status={thread.status} onPick={status => setStatus(thread, status)} label="Stan wątku" /></dd>
           <dt>Moduł</dt><dd><select className="fila-select" aria-label="Moduł" value={thread.module} onChange={event => update(thread.id, () => ({ module: event.target.value }), `Moduł: ${thread.module || '—'} → ${event.target.value}`)}>
-            {!thread.module && <option value="">—</option>}{MODULES.map(module => <option key={module}>{module}</option>)}
+            {!thread.module && <option value="">—</option>}{(project?.modules ?? []).map(module => <option key={module}>{module}</option>)}
           </select></dd>
           <dt>Typ</dt><dd className="fila-type-value">{TYPE_ICON[thread.type](15)}{thread.type}</dd>
-          <dt>Projekt</dt><dd>{project?.name} <span className="fila-muted">{project?.key}</span></dd>
+          <dt>Projekt</dt><dd><Link className="fila-link" href={href({ project: thread.project })}>{project?.name}</Link> <span className="fila-muted">{project?.key}</span></dd>
           <dt>Workflow</dt><dd className="fila-muted-value">Praca</dd>
           <dt>Tagi</dt><dd className="fila-tag-list">
             {thread.tags.map(tag => <span key={tag} className="fila-tag removable">#{tag}<button aria-label={`Usuń tag ${tag}`} onClick={() => update(thread.id, item => ({ tags: item.tags.filter(t => t !== tag) }), `usunął tag ${tag}`)}><X size={12} /></button></span>)}

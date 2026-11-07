@@ -18,7 +18,13 @@ export type Thread = {
 
 export const WORKFLOW_PRACA: Status[] = ['pomysl', 'przygotowanie', 'gotowe', 'realizacja', 'sprawdzenie', 'zakonczone', 'porzucone'];
 export const MODULES = ['Fila', 'Wektor', 'Pulpit', 'System', 'Cezar'];
-export const PROJECTS = [{ key: 'DESK', name: 'DeskPanel' }, { key: 'CEZR', name: 'Cezar' }, { key: 'TABU', name: 'Tabularium' }];
+export type Project = { key: string; name: string; tone: string; modules: string[] };
+export const PROJECTS: Project[] = [
+  { key: 'DESK', name: 'DeskPanel', tone: 'blue', modules: MODULES },
+  { key: 'CEZR', name: 'Cezar', tone: 'violet', modules: ['Kolejka', 'Executory', 'Runner'] },
+  { key: 'TABU', name: 'Tabularium', tone: 'green', modules: [] },
+];
+export const TYPES: ThreadType[] = ['Sprawa', 'Funkcja', 'Błąd', 'Spotkanie', 'Notatka'];
 
 const at = (text: string) => new Date(`2026-${text}:00`).getTime();
 
@@ -104,6 +110,12 @@ export const THREADS: Thread[] = [
     activity: [{ at: at('11-01T19:00'), by: 'Ty', text: 'utworzył wątek' }, { at: at('11-02T19:30'), by: 'Ty', text: 'Stan: Pomysł → Zakończone' }] },
   { id: 'DESK-53', type: 'Funkcja', title: 'Czasomierz według pola Kiedy', description: 'Etap 3.', status: 'pomysl', module: 'Fila', project: 'DESK', tags: ['etap-3'], custom: [], spec: [],
     activity: [{ at: at('11-02T13:00'), by: 'ChatGPT', text: 'utworzył wątek' }] },
+  { id: 'CEZR-12', type: 'Błąd', title: 'Executor Codex nie zwalnia slotu po przekroczeniu czasu', description: '', status: 'realizacja', module: 'Executory', project: 'CEZR', tags: [], custom: [], spec: [],
+    activity: [{ at: at('11-06T22:40'), by: 'Claude Code', text: 'utworzył wątek' }] },
+  { id: 'CEZR-13', type: 'Funkcja', title: 'Priorytety w kolejce zleceń', description: '', status: 'pomysl', module: 'Kolejka', project: 'CEZR', tags: [], custom: [], spec: [],
+    activity: [{ at: at('11-07T07:10'), by: 'ChatGPT', text: 'utworzył wątek' }] },
+  { id: 'DESK-30', type: 'Sprawa', title: 'Sprawdzić import starych list z pliku JSON', description: '', status: 'zakonczone', module: 'System', project: 'DESK', tags: [], custom: [], spec: [], archived: true,
+    activity: [{ at: at('10-28T12:00'), by: 'Wektor', text: 'utworzył wątek' }, { at: at('11-02T09:15'), by: 'Claude Code', text: 'zarchiwizował wątek' }] },
   { id: 'DESK-31', type: 'Błąd', title: 'Wektor gubi kontekst (duplikat)', description: '', status: 'pomysl', module: 'Wektor', project: 'DESK', tags: [], custom: [], spec: [], archived: true,
     activity: [{ at: at('11-06T21:13'), by: 'Claude Desktop', text: 'utworzył wątek' }, { at: at('11-06T21:20'), by: 'Ty', text: 'zarchiwizował wątek' }] },
 ];
