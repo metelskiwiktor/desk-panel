@@ -31,5 +31,17 @@
 .fila-column-empty { padding: 24px 0; text-align: center; }
 .fila-notice { padding: 12px; border: 1px solid var(--p2-line); border-radius: 10px; background: var(--p2-surface); }
 .fila-notice code { display: block; margin-top: 8px; white-space: pre-wrap; }
+.fila-query-toggle, .fila-menu > summary { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
+.fila-query-toggle { padding: 6px 10px; font-size: 12px; }
+.fila-menu { position: relative; flex: none; }
+.fila-menu > summary { cursor: pointer; list-style: none; }
+.fila-menu > summary::-webkit-details-marker { display: none; }
+.fila-menu > summary:focus-visible { outline: 3px solid var(--p2-cal); outline-offset: 3px; }
+.fila-menu[open] > summary { color: var(--p2-cal); }
+.fila-section-menu { margin-left: auto; }
+.fila-menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; width: min(260px, 80vw); padding: 8px; border: 1px solid var(--p2-line); border-radius: 12px; background: var(--p2-surface-2); }
+.fila-menu-pop button { display: flex; align-items: center; gap: 8px; min-height: 40px; width: 100%; padding: 8px 12px; border-radius: 8px; text-align: left; background: transparent; }
+.fila-menu-pop button:disabled { opacity: 1; color: var(--p2-muted); }
+.fila-menu-pop p { padding: 8px 12px; border-top: 1px solid var(--p2-line); font-size: 11px; }
 @media (max-width: 850px) { .fila-kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fila-header { flex-wrap: wrap; } .fila-search { margin-left: 0; } .fila-lab-note { display: none; } }
 @media (max-width: 500px) { .fila-kanban { grid-template-columns: minmax(0, 1fr); } .fila-module { display: none; } .fila-row > .todo-status { width: 85px; white-space: normal; } .fila-section { padding: 12px; } }

@@ -30,6 +30,9 @@ Makieta używa klas wierszy Zadania, oznaczeń `TODO_STATUSES`, komponentu `Empt
 Dane testowe są wyłącznie w `scenarios/fila.json`; `/api/todos` służy jako tymczasowe źródło danych makiety,
 bez nowego kontraktu Fili i bez zapisów. Wyszukiwanie działa lokalnie, ikony przy pigułkach odsłaniają roboczy
 tekst zapytania (jego składnia nie jest decyzją techniczną). Pozostałe akcje są nieaktywne.
+Tekst zapytania rozwija się bezpośrednio pod pigułkami własnej sekcji; sekcje mają niezależne rozwinięcia.
+Nagłówek tablicy pokazuje podpisany przycisk „Menu tablicy”, a każda sekcja — „Sekcja”.
+Menu sekcji pozwala pokazać lub ukryć zapytanie; pozycje zmieniające dane są prezentowane jako nieaktywne.
 
 Zrzuty: `just screenshots fila --query designlab=fila --device medialove-14 --scale all`.
 Sprawdzono wizualnie trzy skalowania Medialove 14″; przy 150% strona przewija się pionowo.
