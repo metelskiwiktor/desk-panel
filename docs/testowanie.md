@@ -13,7 +13,7 @@ implementacje: `server/real-sources.ts` (usługa: Cezar, Google, komputer, adapt
 limitów) i `server/scenario.ts` (plik JSON). UI nie wie, która odpowiada.
 
 Scenariusz w `scenarios/*.json` zawiera po jednej odpowiedzi na endpoint (`cezar`,
-`calendar`, `calendarConnection`, `training`, `system`, `quotas`; opcjonalnie `todos`, zob. [docs/zadania.md](zadania.md)) dokładnie w kształcie API.
+`calendar`, `calendarConnection`, `training`, `system`, `quotas`; opcjonalnie `todos`, zob. [docs/zadania.md](zadania.md), i `fila`, zob. [docs/fila.md](fila.md)) dokładnie w kształcie API.
 Czasy zapisuje się względem chwili zapytania: `"now"`, `"now-20m"`, `"now+1h30m"`
 (ms, s, m, h, d). Dni kalendarzowe: `"today"`, `"today+2"`, `"today-1"` (data lokalna), a
 `"today-1@22:10"` to ta godzina tego dnia. Scenariusze `training-*` pokazują dzień z interwałami,

@@ -10,7 +10,7 @@ below names for the area you touch.
 | --- | --- | --- |
 | Rules every change must keep (security, writes, what never happens) | this file | every agent session, Cezar's executor |
 | Setup, running, service, kiosk | README.md, docs/desk-panel.md, docs/system.md, servy/README.md, docs/tailscale.md | people, agents |
-| How one area works | docs/bank.md, calendar.md, cezar.md, garmin.md (+ garmin-data.md), github.md, gmail.md, openrouter.md, smart-actions.md, zadania.md, zdarzenia.md, znanylekarz.md, automaty.md, uzycie.md, designlab.md | agents changing that area |
+| How one area works | docs/bank.md, calendar.md, cezar.md, garmin.md (+ garmin-data.md), github.md, gmail.md, openrouter.md, smart-actions.md, zadania.md, fila.md, zdarzenia.md, znanylekarz.md, automaty.md, uzycie.md, designlab.md | agents changing that area |
 | The chat and Wektor in code | docs/czat.md (product, API), docs/hermes.md (engine), docs/wektor-ui.md (frontend), docs/diagnostyka-czatu-wektora.md (diagnosing a conversation) | agents changing the chat |
 | What Wektor himself is told | code only: `PANEL_GUIDES` and `CHAT_SKILLS` (src/chat-contract.ts), `COCKPIT_TOOLS` (src/cockpit-contract.ts), the preamble (server/hermes-chat.ts); Markdown never reaches him | Wektor |
 | Tests and verification | docs/testowanie.md, `just check` | agents |
@@ -133,6 +133,8 @@ node_modules or dist. Do not print credentials in tool output.
 Automat może bez kolejnego kliknięcia zapisać wydarzenie Google lub dodać alert Smart Actions wyłącznie w swoim runie, jeśli użytkownik zatwierdził tę akcję i jej parametry na karcie tworzenia/zmiany automatu (docs/automaty.md).
 
 Zadania (docs/zadania.md): stan zadania z listy jest niezależny od Cezara i PR-a; jedyna automatyka to linki Cezara/rozmowy i `pr` po PR-ze taska oraz stan „W realizacji” po udanym dispatchu z karty z `todoId` albo z okna zadania („Zleć na Cezarze”, rejestr `todoDispatches` w `cockpit.json`, projekcja `cezarDispatches` w `GET /api/todos`), bez startowania agenta; żaden agent nie zleca sam.
+
+Fila (docs/fila.md): wątki i projekty w `~/.desk-panel/fila.json` (poza Gitem), `/api/fila` — zapis tylko akcją `POST /api/fila/action`: autora (użytkownik albo klient D-057) serwer bierze z uwierzytelnienia, nigdy z akcji; token klienta z `~/.desk-panel/fila-tokens.json` (poza Gitem, przeglądarką i logami) nigdy nie daje roli użytkownika, także z Origin panelu, i nie działa przez nazwę Tailscale; definicje workflow i wartości Modułu zmienia tylko AI, trwale usuwa z archiwum tylko użytkownik. Scenariusze nie zapisują danych usługi. Do przełączenia (1.6) listy zadań (docs/zadania.md) pozostają źródłem.
 
 Wizyty (docs/znanylekarz.md): `panel_znanylekarz` pokazuje terminy z anonimowych GET-ów publicznego formularza pacjenta.
 Token strony pozostaje na backendzie; tylko znanylekarz.pl, bez obcych przekierowań. Czas trwania czytaj przez

@@ -13,6 +13,7 @@ import { createHermesChat } from './hermes-chat';
 import { createAutomationExecutor } from './automation-actions';
 import { createAutomations, type Automations } from './automations';
 import { mcpToken } from './panel-mcp';
+import { filaTokens } from './fila-routes';
 import { createUsageStore } from './usage';
 import { createRealSources } from './real-sources';
 
@@ -71,6 +72,6 @@ automations.start();
 const usage = createUsageStore(join(panelDir, 'usage'));
 void usage.prune().catch(() => undefined);
 setInterval(() => void usage.prune().catch(() => undefined), 6 * 3_600_000).unref();
-const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), cockpit, cezarUrl: cezar.href, automations, usage }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), filaTokens: filaTokens(), cockpit, cezarUrl: cezar.href, automations, usage }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

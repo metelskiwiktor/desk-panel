@@ -12,6 +12,7 @@ import { agentViews, serveAgentView } from './agent-views';
 import { handleChatRoute } from './chat-routes';
 import type { Cockpit } from './cockpit';
 import { handleMcpRoute } from './panel-mcp';
+import { handleFilaRoute, type FilaTokens } from './fila-routes';
 import { todoActionSchema, todoDispatchRequestSchema, type TodoAction } from '../src/todo-contract';
 import { getTodoDispatch, todoDispatchKey, todoDispatchMatches } from '../src/todo-dispatch';
 import { TodoError } from './todos';
@@ -61,7 +62,7 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations; usage?: UsageStore } = {}) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; filaTokens?: FilaTokens; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations; usage?: UsageStore } = {}) {
   const routes = jsonRoutes(sources);
   const agent = agentViews(sources);
   return createServer(async (req, res) => {
@@ -82,6 +83,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       return;
     }
     if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations)) return;
+    if (await handleFilaRoute(req, res, url, { ownOrigin, proxied, fila: sources.fila, tokens: options.filaTokens })) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
     if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [] }); return; }
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {

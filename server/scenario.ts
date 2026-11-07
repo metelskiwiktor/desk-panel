@@ -13,6 +13,8 @@ import { systemSourceSchema } from '../src/system-contract';
 import { quotaSourceSchema } from '../src/quota-contract';
 import { todoSourceSchema } from '../src/todo-contract';
 import { createTodoStore, type TodoStore } from './todos';
+import { createFilaStore, type FilaStore } from './fila';
+import { filaDataSchema } from '../src/fila-contract';
 import { usageBreakdownSchema } from '../src/usage-breakdown-contract';
 import { warmupStatusSchema,warmupEditFor,warmupRunResultSchema } from '../src/warmup-contract';
 import { gitHubPrSourceSchema, type GitHubPrSource } from '../src/types';
@@ -51,6 +53,8 @@ export const scenarioSchema = z.object({
   quotas: endpoint(quotaSourceSchema),
   /** The lists the scenario starts with; the actions taken in this session are remembered in memory. Empty when left out. */
   todos: z.union([special, todoSourceSchema]).default({ live: true, name: 'Zadania', status: 'connected', observedAt: null, data: { lists: [] } }),
+  /** Fila's projects and threads the scenario starts with (the same contract as the stored data); actions are remembered in memory only. Default: the workflow Praca and no projects. */
+  fila: filaDataSchema.optional(),
   /** The bank account; `now-…` and `today-…` give the day of each operation. */
   bank: endpoint(bankSourceSchema),
   /** The user's marks the scenario starts with (categories, people, marks by operation id); actions are remembered in memory. */
@@ -66,7 +70,7 @@ export const scenarioSchema = z.object({
   automations: endpoint(automationListSchema).default({ automations: [] }),
 }).strict();
 export type Scenario = z.infer<typeof scenarioSchema>;
-export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels'>;
+export type ScenarioEndpoint = Exclude<keyof Scenario, '$schema' | 'description' | 'bankLabels' | 'fila'>;
 
 export type EndpointResult<K extends ScenarioEndpoint> =
   K extends 'cezar' ? z.infer<typeof cezarSchema> :
@@ -158,6 +162,8 @@ export function createScenarioSources(file: string): PanelSources {
   let warmup:import('../src/warmup-contract').WarmupStatus|undefined;
   /** Made from the scenario the first time the lists are asked for, so they stay as the session changed them. */
   let todoStore: TodoStore | undefined;
+  /** Fila likewise: made once, so a session keeps what the actions changed and never touches the service's data. */
+  let filaStore: FilaStore | undefined;
   /** Observers cancelled in this session: the settings card behaves as the real one, without a service or a clock. */
   const cancelledObservers = new Set<string>();
   async function observerRows() {
@@ -269,6 +275,7 @@ export function createScenarioSources(file: string): PanelSources {
     quotas: () => serve('quotas'),
     async todos() { const source = await serve('todos'); return { ...source, ...(await (await todos()).read()), status: source.status, message: source.message }; },
     async todoAction(action) { return (await todos()).apply(action); },
+    get fila() { return filaStore ??= createFilaStore({ initial: loadScenario(file).fila }); },
     usageBreakdown: () => serve('usageBreakdown'),
     observers: observerRows,
     async observerCancel(id) { cancelledObservers.add(id); return observerRows(); },

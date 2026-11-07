@@ -10,6 +10,7 @@ import type { SystemSource } from '../src/system-contract';
 import type { QuotaSource } from '../src/quota-contract';
 import type { TrainingSource } from '../src/training-contract';
 import type { TodoAction, TodoResult, TodoSource } from '../src/todo-contract';
+import type { FilaStore } from './fila';
 import type { UsageBreakdown } from '../src/usage-breakdown-contract';
 import type { WarmupStatus, WarmupProvider, WarmupSettings, WarmupRunResult } from '../src/warmup-contract';
 import type { GitHubPrSource } from '../src/types';
@@ -53,6 +54,8 @@ export interface PanelSources {
   /** The user's to-do lists: the panel's own data, changed only by `todoAction`. */
   todos(): Promise<TodoSource>;
   todoAction(action: TodoAction): Promise<TodoResult>;
+  /** Fila's threads and projects: the panel's own data, changed only by `fila.apply` (docs/fila.md). */
+  fila?: FilaStore;
   /** The bank account (balance and booked operations), read-only; the consent is given in the bank, see `bankConnect`. */
   bank(): Promise<BankSource>;
   /** Starts the bank consent and resolves to the address where the user signs in to the bank. */

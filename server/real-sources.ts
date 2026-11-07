@@ -17,6 +17,7 @@ import { createMailReader, mailFailure } from './gmail';
 import { createSmartRuleStore } from './smart-rules';
 import { createSystemReader } from './system';
 import { createTodoStore } from './todos';
+import { createFilaStore } from './fila';
 import { createQuotaReader } from './quotas';
 import { createUsageBreakdownReader } from './usageBreakdown';
 import { createWarmupClient } from './warmup';
@@ -75,6 +76,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   const bankLabels = createBankLabelStore({ operations: () => bank.cached(), persistence: privateFile(join(dir, 'bank-labels.dpapi'), { read: readPrivate, write: writePrivate }) });
   const readSystem = createSystemReader();
   const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
+  const fila = createFilaStore({ file: join(dir, 'fila.json') });
   const smartRules = createSmartRuleStore(join(dir, 'smart-rules.json'));
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -161,6 +163,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     quotas: () => readQuotas(),
     todos: () => todoStore.read(),
     todoAction: action => todoStore.apply(action),
+    fila,
     bank: () => bank.read(),
     bankLabels: () => bankLabels.read(),
     bankLabelAction: action => bankLabels.apply(action),
