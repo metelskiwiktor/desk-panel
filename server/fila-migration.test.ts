@@ -30,7 +30,7 @@ function fixture() {
   };
   const plan: MigrationPlan = {
     version: 1, id: 'proposal-test', at: 100, sourceHash: migrationHash(input), status: 'proposal', unresolved: [],
-    records: todos.map((t, i) => ({ oldId: t.id, project: i % 2 ? 'TABU' : 'DESK', newId: `${i % 2 ? 'TABU' : 'DESK'}-${i + 1}`, uid: `f-${String(i + 1).padStart(8, '0')}`, type: 'funkcja', module: 'Próba', fields: { Tagi: ['test'], Liczba: 7, Flaga: true }, reason: 'jawna decyzja próbna', unresolved: [] })),
+    records: todos.map((t, i) => ({ oldId: t.id, project: i % 2 ? 'TABL' : 'DESK', newId: `${i % 2 ? 'TABL' : 'DESK'}-${i + 1}`, uid: `f-${String(i + 1).padStart(8, '0')}`, type: 'funkcja', module: 'Próba', fields: { Tagi: ['test'], Liczba: 7, Flaga: true }, reason: 'jawna decyzja próbna', unresolved: [] })),
     tiles: [{ source: 'device/main', tile: 'todo#1', query: 'projekt = DESK AND otwarte', settings: { showAgent: true }, reason: 'jawna zmiana zbioru', unresolved: [] }],
   };
   return { input, plan, todos };
@@ -61,9 +61,9 @@ describe('offline migration integrity', () => {
     expect(result.report.contexts[0]).toMatchObject({ context: input.contexts[0], target: { thread: 'DESK-1' } });
     expect(result.report.tiles[0]).toMatchObject({ removed: expect.arrayContaining(['t-00000002']), oldSettings: { hideDone: true, showAgent: true } });
     expect(result.report.tiles[0].after).toMatchObject({ c: 0, r: 0, w: 2, h: 1, config: { query: 'projekt = DESK AND otwarte' } });
-    await store.apply({ action: 'updateThread', thread: 'DESK-1', project: 'CEZA', module: null }, 'codex');
-    expect(await store.idOfUid(plan.records[0].uid)).toBe('CEZA-1');
-    expect((await store.query('projekt = CEZA AND pole("Dawne ID") = "t-00000001"')).threads[0].id).toBe('CEZA-1');
+    await store.apply({ action: 'updateThread', thread: 'DESK-1', project: 'CEZR', module: null }, 'codex');
+    expect(await store.idOfUid(plan.records[0].uid)).toBe('CEZR-1');
+    expect((await store.query('projekt = CEZR AND pole("Dawne ID") = "t-00000001"')).threads[0].id).toBe('CEZR-1');
     await expect(store.thread('t-00000001')).rejects.toThrow();
     expect(migrationHash(input)).toBe(original);
     expect(previewMigration(input, plan)).toEqual(result);
@@ -84,11 +84,11 @@ describe('offline migration integrity', () => {
     const cockpit = createCockpit({ file, cezarUrl: 'http://localhost', sources: { fila: store, todoAction } as unknown as PanelSources });
     expect(cockpit.threadDispatches()).toHaveLength(1);
     expect(cockpit.threadDispatches()[0].taskId).toBe('latest-run');
-    await store.apply({ action: 'updateThread', thread: 'DESK-1', project: 'CEZA', module: null }, 'codex');
+    await store.apply({ action: 'updateThread', thread: 'DESK-1', project: 'CEZR', module: null }, 'codex');
     await cockpit.linkPrs([{ id: 'latest-run', pullRequestUrl: 'https://github.com/a/b/pull/2' }, { id: 'card-run', pullRequestUrl: 'https://github.com/a/b/pull/3' }]);
-    expect((await store.thread('CEZA-1')).cezar.links.some(l => l.id.endsWith('/2'))).toBe(true);
-    expect((await store.thread('TABU-2')).cezar.links.some(l => l.id.endsWith('/3'))).toBe(true);
-    expect((await store.thread('CEZA-1')).uid).toBe('f-00000001');
+    expect((await store.thread('CEZR-1')).cezar.links.some(l => l.id.endsWith('/2'))).toBe(true);
+    expect((await store.thread('TABL-2')).cezar.links.some(l => l.id.endsWith('/3'))).toBe(true);
+    expect((await store.thread('CEZR-1')).uid).toBe('f-00000001');
   });
 
   it('refuses stale input, omissions, duplicate ids, unknown source data, spec loss and invalid queries; lists all unresolved references', () => {

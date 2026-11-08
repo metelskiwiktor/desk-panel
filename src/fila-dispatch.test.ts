@@ -55,7 +55,7 @@ describe('the preview state of a thread', () => {
       { ...thread, cezar: { ...thread.cezar, mode: 'analiza' as const } }, { ...thread, cezar: { ...thread.cezar, blocked: 'x' } },
       { ...thread, cezar: { ...thread.cezar, executor: 'lokalnie' as const } },
     ]) expect(filaDispatchMatches(changed, expected)).toBe(false);
-    expect(filaDispatchMatches({ ...thread, id: 'CEZA-1' }, expected)).toBe(true);
+    expect(filaDispatchMatches({ ...thread, id: 'CEZR-1' }, expected)).toBe(true);
     expect(filaDispatchKey('f-00000007', 2, 'implementacja')).toBe('f-00000007|2|implementacja');
   });
 });

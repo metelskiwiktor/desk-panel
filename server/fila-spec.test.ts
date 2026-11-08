@@ -20,9 +20,9 @@ const refused = async (promise: Promise<unknown>, status: number, text?: RegExp)
 const spec = (store: FilaStore, thread: string, text: string, baseRevision: number, actor: FilaActor = 'claude-code') => act(store, { action: 'setSpec', thread, text, baseRevision }, actor);
 async function seeded(store = createFilaStore()) {
   await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
-  await act(store, { action: 'createProject', key: 'CEZA', name: 'Cezar' });
+  await act(store, { action: 'createProject', key: 'CEZR', name: 'Cezar' });
   await act(store, { action: 'setModules', project: 'DESK', modules: ['Wektor'] });
-  await act(store, { action: 'setModules', project: 'CEZA', modules: ['Wektor'] });
+  await act(store, { action: 'setModules', project: 'CEZR', modules: ['Wektor'] });
   return store;
 }
 
@@ -116,13 +116,13 @@ describe('specifications and their revisions', () => {
     const store = await seeded();
     await act(store, { action: 'createThread', project: 'DESK', type: 'funkcja', title: 'F', module: 'Wektor' });
     await spec(store, 'DESK-1', 'treść', 0);
-    const moved = await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA' });
-    expect(moved.thread!.id).toBe('CEZA-1');
-    expect(await store.spec('CEZA-1')).toMatchObject({ revision: 1, text: 'treść' });
+    const moved = await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR' });
+    expect(moved.thread!.id).toBe('CEZR-1');
+    expect(await store.spec('CEZR-1')).toMatchObject({ revision: 1, text: 'treść' });
     await refused(store.spec('DESK-1'), 404);
-    await act(store, { action: 'archiveThread', thread: 'CEZA-1' });
-    await act(store, { action: 'deleteThread', thread: 'CEZA-1' }, 'user');
-    await refused(store.spec('CEZA-1', 1), 404);
+    await act(store, { action: 'archiveThread', thread: 'CEZR-1' });
+    await act(store, { action: 'deleteThread', thread: 'CEZR-1' }, 'user');
+    await refused(store.spec('CEZR-1', 1), 404);
   });
 
   it('reads a thread stored before 1.1b with the template default and no revisions', async () => {

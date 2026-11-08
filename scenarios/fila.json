@@ -1,5 +1,5 @@
 {
-  "description": "Fila etapu 1: projekty DESK, CEZA, TABU z wątkami i tablicami (magazyn w pamięci), plus dane pulpitu. Zapisy nie trafiają do usługi.",
+  "description": "Fila etapu 1: projekty DESK, CEZR, TABL z wątkami i tablicami (magazyn w pamięci), plus dane pulpitu. Zapisy nie trafiają do usługi.",
   "bank": {
     "live": true,
     "name": "PKO BP",
@@ -1837,7 +1837,7 @@
         "nextNumber": 17
       },
       {
-        "key": "CEZA",
+        "key": "CEZR",
         "name": "Cezar",
         "createdAt": 1793519583000,
         "modules": [
@@ -1847,7 +1847,7 @@
         "nextNumber": 3
       },
       {
-        "key": "TABU",
+        "key": "TABL",
         "name": "Tabularium",
         "createdAt": 1793519705000,
         "modules": [
@@ -2597,7 +2597,7 @@
       },
       {
         "uid": "f-32d9594f",
-        "project": "CEZA",
+        "project": "CEZR",
         "number": 1,
         "type": "funkcja",
         "workflow": "w-praca",
@@ -2640,7 +2640,7 @@
       },
       {
         "uid": "f-3ce3c435",
-        "project": "CEZA",
+        "project": "CEZR",
         "number": 2,
         "type": "blad",
         "workflow": "w-praca",
@@ -2671,7 +2671,7 @@
       },
       {
         "uid": "f-2809bf40",
-        "project": "TABU",
+        "project": "TABL",
         "number": 1,
         "type": "sprawa",
         "workflow": "w-praca",
@@ -2714,7 +2714,7 @@
       },
       {
         "uid": "f-95316f33",
-        "project": "TABU",
+        "project": "TABL",
         "number": 2,
         "type": "notatka",
         "workflow": "w-praca",
@@ -3013,7 +3013,7 @@
                 "id": "s-3ecf8de2",
                 "name": "Wszystkie wątki",
                 "kind": "list",
-                "query": "projekt = CEZA",
+                "query": "projekt = CEZR",
                 "columns": []
               }
             ]
@@ -3045,7 +3045,7 @@
               {
                 "field": "Zapytanie",
                 "from": null,
-                "to": "projekt = CEZA"
+                "to": "projekt = CEZR"
               }
             ]
           }
@@ -3064,7 +3064,7 @@
                 "id": "s-b8f96e1f",
                 "name": "Wszystkie wątki",
                 "kind": "list",
-                "query": "projekt = TABU",
+                "query": "projekt = TABL",
                 "columns": []
               }
             ]
@@ -3096,7 +3096,7 @@
               {
                 "field": "Zapytanie",
                 "from": null,
-                "to": "projekt = TABU"
+                "to": "projekt = TABL"
               }
             ]
           }
@@ -3105,8 +3105,8 @@
     ],
     "starterBoards": {
       "DESK": "b-7fc325c6",
-      "CEZA": "b-0c7a02b4",
-      "TABU": "b-6ed04082"
+      "CEZR": "b-0c7a02b4",
+      "TABL": "b-6ed04082"
     }
   }
 }

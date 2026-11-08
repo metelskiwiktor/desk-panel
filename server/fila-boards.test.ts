@@ -52,7 +52,7 @@ it('gives a new project one starter board with one list section over the whole p
 it('gives a project from before 1.2 its board once, and does not make a deleted one again', async () => {
   const file = join(tmp(), 'fila.json');
   const old = { version: 1, data: {
-    projects: [{ key: 'DESK', name: 'DeskPanel', createdAt: 1, modules: [], nextNumber: 2 }, { key: 'CEZA', name: 'Cezar', createdAt: 1, modules: [], nextNumber: 1 }],
+    projects: [{ key: 'DESK', name: 'DeskPanel', createdAt: 1, modules: [], nextNumber: 2 }, { key: 'CEZR', name: 'Cezar', createdAt: 1, modules: [], nextNumber: 1 }],
     workflows: [{ id: 'w-praca', name: 'Praca', states: [{ name: 'Pomysł', closing: false }] }], fieldDefs: [{ name: 'Tagi', kind: 'multi' }],
     threads: [{ uid: 'f-00000001', project: 'DESK', number: 1, type: 'sprawa', workflow: 'w-praca', state: 'Pomysł', title: 'Stary', description: '', parent: null, module: null, fields: {}, archived: false, revision: 1, createdAt: 1, updatedAt: 1, history: [] }],
   } };
@@ -197,7 +197,7 @@ it('serves lists and a kanban over HTTP on a separate store, with the same threa
 
   // Check without writing: the canonical text, or a readable 400; stage 1 has no dates and no several projects.
   expect((await get(`/api/fila/query/check?q=${encodeURIComponent('PROJEKT=desk')}`)).body).toMatchObject({ ok: true, text: 'projekt = DESK' });
-  for (const [text, reason] of [['projekt = DESK AND kiedy < dziś', /dat i terminów/], ['projekt IN (DESK, CEZA)', /projekty/], ['typ = funkcja', /projekt/]] as const) {
+  for (const [text, reason] of [['projekt = DESK AND kiedy < dziś', /dat i terminów/], ['projekt IN (DESK, CEZR)', /projekty/], ['typ = funkcja', /projekt/]] as const) {
     const res = await get(q(text));
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(reason);

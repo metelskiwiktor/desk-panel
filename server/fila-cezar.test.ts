@@ -13,7 +13,7 @@ const refused = async (promise: Promise<unknown>, status: number, text?: RegExp)
 async function seeded() {
   const store = createFilaStore();
   await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
-  await act(store, { action: 'createProject', key: 'CEZA', name: 'Cezar' });
+  await act(store, { action: 'createProject', key: 'CEZR', name: 'Cezar' });
   await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Wątek' });
   return store;
 }
@@ -73,13 +73,13 @@ describe('the Cezar kit of a thread', () => {
     await act(store, { action: 'setCezar', thread: 'DESK-1', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' });
     await act(store, { action: 'linkCezar', thread: 'DESK-1', kind: 'cezar', id: 'desk-panel/run-1' });
     const { uid } = await store.thread('DESK-1');
-    expect(await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA' })).toMatchObject({ thread: { id: 'CEZA-1', previousId: 'DESK-1' } });
-    expect(await store.idOfUid(uid)).toBe('CEZA-1');
-    expect((await store.thread('CEZA-1')).cezar).toMatchObject({ executor: 'cezar', links: [{ kind: 'cezar', id: 'desk-panel/run-1' }] });
-    await act(store, { action: 'removeCezarKit', thread: 'CEZA-1' });
-    expect((await store.thread('CEZA-1')).cezar).toMatchObject({ enabled: false, executor: 'cezar' });
-    await act(store, { action: 'addCezarKit', thread: 'CEZA-1' });
-    expect((await store.thread('CEZA-1')).cezar.links).toHaveLength(1);
+    expect(await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR' })).toMatchObject({ thread: { id: 'CEZR-1', previousId: 'DESK-1' } });
+    expect(await store.idOfUid(uid)).toBe('CEZR-1');
+    expect((await store.thread('CEZR-1')).cezar).toMatchObject({ executor: 'cezar', links: [{ kind: 'cezar', id: 'desk-panel/run-1' }] });
+    await act(store, { action: 'removeCezarKit', thread: 'CEZR-1' });
+    expect((await store.thread('CEZR-1')).cezar).toMatchObject({ enabled: false, executor: 'cezar' });
+    await act(store, { action: 'addCezarKit', thread: 'CEZR-1' });
+    expect((await store.thread('CEZR-1')).cezar.links).toHaveLength(1);
     expect(await store.idOfUid('f-00000000')).toBeNull();
   });
 

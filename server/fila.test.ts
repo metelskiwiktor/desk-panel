@@ -20,9 +20,9 @@ const refused = async (promise: Promise<unknown>, status: number, text?: RegExp)
 /** Two projects with modules, so a move has something to match. */
 async function seeded(store = createFilaStore()) {
   await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
-  await act(store, { action: 'createProject', key: 'CEZA', name: 'Cezar' });
+  await act(store, { action: 'createProject', key: 'CEZR', name: 'Cezar' });
   await act(store, { action: 'setModules', project: 'DESK', modules: ['Wektor', 'Bank'] });
-  await act(store, { action: 'setModules', project: 'CEZA', modules: ['Wektor', 'Silnik'] });
+  await act(store, { action: 'setModules', project: 'CEZR', modules: ['Wektor', 'Silnik'] });
   return store;
 }
 
@@ -81,16 +81,16 @@ describe('threads', () => {
 
   it('keeps parents across projects, refuses cycles and orphans the children of a deleted parent', async () => {
     const store = await seeded();
-    for (const project of ['DESK', 'CEZA', 'DESK'] as const) await act(store, { action: 'createThread', project, type: 'funkcja', title: project });
-    await act(store, { action: 'updateThread', thread: 'CEZA-1', parent: 'DESK-1' });
-    await act(store, { action: 'updateThread', thread: 'DESK-2', parent: 'CEZA-1' });
-    expect(await store.thread('DESK-1')).toMatchObject({ children: ['CEZA-1'], parent: null });
+    for (const project of ['DESK', 'CEZR', 'DESK'] as const) await act(store, { action: 'createThread', project, type: 'funkcja', title: project });
+    await act(store, { action: 'updateThread', thread: 'CEZR-1', parent: 'DESK-1' });
+    await act(store, { action: 'updateThread', thread: 'DESK-2', parent: 'CEZR-1' });
+    expect(await store.thread('DESK-1')).toMatchObject({ children: ['CEZR-1'], parent: null });
     await refused(act(store, { action: 'updateThread', thread: 'DESK-1', parent: 'DESK-2' }), 409, /przodkiem/);
     await refused(act(store, { action: 'updateThread', thread: 'DESK-1', parent: 'DESK-1' }), 409);
     await act(store, { action: 'archiveThread', thread: 'DESK-1' });
     await act(store, { action: 'deleteThread', thread: 'DESK-1' }, 'user');
-    expect(await store.thread('CEZA-1')).toMatchObject({ parent: null });
-    expect((await store.thread('CEZA-1')).history.at(-1)!.changes).toEqual([{ field: 'Rodzic', from: 'DESK-1', to: null }]);
+    expect(await store.thread('CEZR-1')).toMatchObject({ parent: null });
+    expect((await store.thread('CEZR-1')).history.at(-1)!.changes).toEqual([{ field: 'Rodzic', from: 'DESK-1', to: null }]);
   });
 });
 
@@ -100,15 +100,15 @@ describe('moving a thread and changing the workflow', () => {
     await act(store, { action: 'createThread', project: 'DESK', type: 'blad', title: 'Rodzic' });
     await act(store, { action: 'createThread', project: 'DESK', type: 'blad', title: 'Dziecko', parent: 'DESK-1', module: 'Wektor' });
     await act(store, { action: 'setField', thread: 'DESK-1', field: 'Tagi', value: ['a', 'b'] });
-    await act(store, { action: 'createThread', project: 'CEZA', type: 'sprawa', title: 'Inny' });
-    const moved = await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA' });
-    expect(moved.thread).toEqual({ id: 'CEZA-2', revision: 3, previousId: 'DESK-1' });
+    await act(store, { action: 'createThread', project: 'CEZR', type: 'sprawa', title: 'Inny' });
+    const moved = await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR' });
+    expect(moved.thread).toEqual({ id: 'CEZR-2', revision: 3, previousId: 'DESK-1' });
     await refused(store.thread('DESK-1'), 404);
-    const parent = await store.thread('CEZA-2');
+    const parent = await store.thread('CEZR-2');
     expect(parent).toMatchObject({ fields: { Tagi: ['a', 'b'], 'Dawne ID': ['DESK-1'] }, children: ['DESK-2'], title: 'Rodzic' });
-    expect(parent.history.at(-1)).toMatchObject({ kind: 'moved', changes: [{ field: 'ID', from: 'DESK-1', to: 'CEZA-2' }] });
+    expect(parent.history.at(-1)).toMatchObject({ kind: 'moved', changes: [{ field: 'ID', from: 'DESK-1', to: 'CEZR-2' }] });
     // The child stays in its project and still points at the moved parent.
-    expect(await store.thread('DESK-2')).toMatchObject({ project: 'DESK', parent: 'CEZA-2' });
+    expect(await store.thread('DESK-2')).toMatchObject({ project: 'DESK', parent: 'CEZR-2' });
     // A fresh thread in the source project gets a new number, not the vacated one.
     expect((await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Nowy' })).thread!.id).toBe('DESK-3');
     expect((await store.registries()).fieldDefs).toContainEqual({ name: 'Dawne ID', kind: 'multi' });
@@ -119,17 +119,17 @@ describe('moving a thread and changing the workflow', () => {
     await act(store, { action: 'createThread', project: 'DESK', type: 'blad', title: 'Bank', module: 'Bank' });
     await act(store, { action: 'createThread', project: 'DESK', type: 'blad', title: 'Wektor', module: 'Wektor' });
     const before = JSON.stringify(await store.thread('DESK-1'));
-    await refused(act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA' }), 409, /Moduł „Bank” nie pasuje/);
-    await refused(act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA', module: 'Nie ma' }), 409);
+    await refused(act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR' }), 409, /Moduł „Bank” nie pasuje/);
+    await refused(act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR', module: 'Nie ma' }), 409);
     expect(JSON.stringify(await store.thread('DESK-1'))).toBe(before);
-    expect((await store.registries()).projects.find(p => p.key === 'CEZA')!.nextNumber).toBe(1);
-    await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZA', module: null });
-    expect(await store.thread('CEZA-1')).toMatchObject({ module: null });
-    await act(store, { action: 'updateThread', thread: 'DESK-2', project: 'CEZA' });
-    expect(await store.thread('CEZA-2')).toMatchObject({ module: 'Wektor' });
+    expect((await store.registries()).projects.find(p => p.key === 'CEZR')!.nextNumber).toBe(1);
+    await act(store, { action: 'updateThread', thread: 'DESK-1', project: 'CEZR', module: null });
+    expect(await store.thread('CEZR-1')).toMatchObject({ module: null });
+    await act(store, { action: 'updateThread', thread: 'DESK-2', project: 'CEZR' });
+    expect(await store.thread('CEZR-2')).toMatchObject({ module: 'Wektor' });
     // A target project with no Moduł values never drops one silently either.
-    await act(store, { action: 'createProject', key: 'TABU', name: 'Tabularium' });
-    await refused(act(store, { action: 'updateThread', thread: 'CEZA-2', project: 'TABU' }), 409, /module: null/);
+    await act(store, { action: 'createProject', key: 'TABL', name: 'Tabularium' });
+    await refused(act(store, { action: 'updateThread', thread: 'CEZR-2', project: 'TABL' }), 409, /module: null/);
   });
 
   it('asks for a new Stan when the new workflow lacks the current one, and lets the user pick an existing workflow', async () => {

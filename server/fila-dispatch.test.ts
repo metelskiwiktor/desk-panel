@@ -44,7 +44,7 @@ async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolea
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const act = (action: FilaAction, actor: 'user' | 'claude-code' = 'claude-code') => fila.apply(action, actor);
   const prepared = async (over: { executor?: 'cezar' | 'lokalnie' | 'rozmowa'; spec?: string } = {}) => {
-    if (!(await fila.registries()).projects.length) { await act({ action: 'createProject', key: 'DESK', name: 'DeskPanel' }); await act({ action: 'createProject', key: 'CEZA', name: 'Cezar' }); }
+    if (!(await fila.registries()).projects.length) { await act({ action: 'createProject', key: 'DESK', name: 'DeskPanel' }); await act({ action: 'createProject', key: 'CEZR', name: 'Cezar' }); }
     const id = (await act({ action: 'createThread', project: 'DESK', type: 'funkcja', title: 'Gotowy wątek' })).thread!.id;
     await act({ action: 'setSpec', thread: id, text: over.spec ?? SPEC, baseRevision: 0 });
     await act({ action: 'addCezarKit', thread: id });
@@ -168,21 +168,21 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
 
     // The panel is started again on the same files, after the thread was moved to another project.
     const second = await start({ snapshot: snapshotOf([{ id: 'desk-panel/run-1', status: 'running' }]), run: 1, fail: false });
-    const moved = await second.act({ action: 'updateThread', thread: id, project: 'CEZA', state: 'Gotowe do realizacji' });
-    expect(moved.thread).toMatchObject({ id: 'CEZA-1', previousId: 'DESK-1' });
-    expect(await second.fila.idOfUid(uid)).toBe('CEZA-1');
-    expect((await second.post(id, { expected: await second.expectedOf('CEZA-1') })).status).toBe(404);
-    const blocked = await second.post('CEZA-1', { expected: await second.expectedOf('CEZA-1') });
+    const moved = await second.act({ action: 'updateThread', thread: id, project: 'CEZR', state: 'Gotowe do realizacji' });
+    expect(moved.thread).toMatchObject({ id: 'CEZR-1', previousId: 'DESK-1' });
+    expect(await second.fila.idOfUid(uid)).toBe('CEZR-1');
+    expect((await second.post(id, { expected: await second.expectedOf('CEZR-1') })).status).toBe(404);
+    const blocked = await second.post('CEZR-1', { expected: await second.expectedOf('CEZR-1') });
     expect(blocked.status).toBe(409);
     expect((await blocked.json()).error).toContain('desk-panel/run-1');
     expect(second.created).not.toHaveBeenCalled();
-    expect((await (await fetch(`${second.base}/api/fila/threads/CEZA-1/cezar-dispatch/register`)).json()).dispatches).toHaveLength(1);
+    expect((await (await fetch(`${second.base}/api/fila/threads/CEZR-1/cezar-dispatch/register`)).json()).dispatches).toHaveLength(1);
 
     // The task gets a PR: it lands on the moved thread, once, and the thread's state stays the user's.
-    await second.act({ action: 'updateThread', thread: 'CEZA-1', state: 'Do sprawdzenia' });
+    await second.act({ action: 'updateThread', thread: 'CEZR-1', state: 'Do sprawdzenia' });
     await second.cockpit.linkPrs([{ id: 'desk-panel/run-1', pullRequestUrl: PR, title: 'PR wątku' }]);
     await second.cockpit.linkPrs([{ id: 'desk-panel/run-1', pullRequestUrl: PR, title: 'PR wątku' }]);
-    const thread = await second.fila.thread('CEZA-1');
+    const thread = await second.fila.thread('CEZR-1');
     expect(thread.state).toBe('Do sprawdzenia');
     expect(thread.cezar.links.filter(l => l.kind === 'pr')).toEqual([expect.objectContaining({ id: PR, title: 'PR wątku' })]);
     expect(thread.history.filter(h => h.by === 'panel' && h.changes?.some(c => c.field === 'PR'))).toHaveLength(1);

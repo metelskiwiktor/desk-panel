@@ -11,7 +11,7 @@ import { migrateCockpitCopy } from './cockpit';
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, v) => v && typeof v === 'object' && !Array.isArray(v)
   ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
 export const migrationHash = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
-const project = z.enum(['DESK', 'CEZA', 'TABU']);
+const project = z.enum(['DESK', 'CEZR', 'TABL']);
 const contextSchema = z.object({ source: z.string(), kind: z.string(), id: z.string() }).passthrough();
 export const migrationInputSchema = z.object({
   todos: z.unknown(), cockpit: z.unknown(),
@@ -25,7 +25,7 @@ export const migrationPlanSchema = z.object({
   status: z.literal('proposal'), at: z.number().finite(),
   records: z.array(z.object({
     oldId: z.string().regex(/^t-[0-9a-f]{8}$/), project, type: filaTypeSchema,
-    newId: z.string().regex(/^(DESK|CEZA|TABU)-[1-9][0-9]*$/), uid: z.string().regex(/^f-[0-9a-f]{8}$/),
+    newId: z.string().regex(/^(DESK|CEZR|TABL)-[1-9][0-9]*$/), uid: z.string().regex(/^f-[0-9a-f]{8}$/),
     module: z.string().max(60).nullable(), fields: filaThreadSchema.shape.fields,
     reason: z.string().min(1), unresolved: z.array(z.string()),
   }).strict()),
@@ -74,7 +74,7 @@ export function previewMigration(rawInput: unknown, rawPlan: unknown) {
   const data = defaultFilaData();
   data.fieldDefs.push({ name: 'Dawne ID', kind: 'multi' });
   data.fieldDefs.push({ name: 'Dawna lista', kind: 'text' });
-  const names = { DESK: 'DeskPanel', CEZA: 'Cezar', TABU: 'Tabularium' };
+  const names = { DESK: 'DeskPanel', CEZR: 'Cezar', TABL: 'Tabularium' };
   for (const key of project.options) data.projects.push({ key, name: names[key], createdAt: plan.at, modules: [], nextNumber: 1 });
   const warnings: string[] = [];
   for (const { todo, list } of items) {

@@ -13,17 +13,17 @@ const refused = async (promise: Promise<unknown>, text: RegExp) => {
   expect(error.message).toMatch(text);
 };
 
-/** DESK-1..4 (the last archived) and CEZA-1, with a field of every kind. */
+/** DESK-1..4 (the last archived) and CEZR-1, with a field of every kind. */
 async function seeded() {
   const store = createFilaStore();
   await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
-  await act(store, { action: 'createProject', key: 'CEZA', name: 'Cezar' });
+  await act(store, { action: 'createProject', key: 'CEZR', name: 'Cezar' });
   await act(store, { action: 'setModules', project: 'DESK', modules: ['Wektor', 'Bank'] });
   await act(store, { action: 'createThread', project: 'DESK', type: 'funkcja', title: 'Beta', module: 'Wektor' });
   await act(store, { action: 'createThread', project: 'DESK', type: 'blad', title: 'alfa', parent: 'DESK-1' });
   await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Gamma' });
   await act(store, { action: 'createThread', project: 'DESK', type: 'notatka', title: 'Delta' });
-  await act(store, { action: 'createThread', project: 'CEZA', type: 'sprawa', title: 'Obca' });
+  await act(store, { action: 'createThread', project: 'CEZR', type: 'sprawa', title: 'Obca' });
   await act(store, { action: 'updateThread', thread: 'DESK-2', state: 'W realizacji' });
   await act(store, { action: 'updateThread', thread: 'DESK-3', state: 'Zakończone' });
   await act(store, { action: 'setField', thread: 'DESK-1', field: 'Tagi', value: ['a'] });
@@ -57,17 +57,17 @@ describe('the query text', () => {
     await refused(store.query('projekt = NOPE'), /Nie ma projektu NOPE/);
     await refused(store.query('projekt = DESK AND'), /brakuje warunku/);
     await refused(store.query('projekt = DESK typ = funkcja'), /Oczekiwano AND/);
-    await refused(store.query('projekt = DESK AND projekt = CEZA'), /tylko raz/);
+    await refused(store.query('projekt = DESK AND projekt = CEZR'), /tylko raz/);
     await refused(store.query('projekt = DESK AND kolor = zielony'), /Nieznany filtr/);
     await refused(store.query('projekt = DESK AND typ = zadanie'), /Nieznany typ/);
     await refused(store.query('projekt = DESK AND stan = "bez cudzysłowu'), /cudzysłowu/);
     await refused(store.query('projekt = DESK AND archiwum = kiedyś'), /Archiwum/);
     await refused(store.query('projekt = DESK SORTUJ kolor'), /Sortować można/);
     // Not in stage 1: several or all projects, dates and deadlines.
-    await refused(store.query('projekt IN (DESK, CEZA)'), /kilka lub wszystkie projekty/);
+    await refused(store.query('projekt IN (DESK, CEZR)'), /kilka lub wszystkie projekty/);
     await refused(store.query('projekt = *'), /kilka lub wszystkie projekty/);
     await refused(store.query('projekt = wszystkie'), /kilka lub wszystkie projekty/);
-    await refused(store.query('projekt = DESK, CEZA'), /kilka lub wszystkie projekty/);
+    await refused(store.query('projekt = DESK, CEZR'), /kilka lub wszystkie projekty/);
     await refused(store.query('projekt = DESK AND kiedy = jutro'), /dat i terminów/);
     await refused(store.query('projekt = DESK AND pole("Termin") = "2026-01-01"'), /nie jest dostępne/);
     await refused(store.query('projekt = DESK AND pole("Przegląd") < "2026-12-01"'), /Operator „<”/);
@@ -84,7 +84,7 @@ describe('running a query', () => {
   it('answers every filter inside the one project, archive excluded unless asked for', async () => {
     const store = await seeded();
     expect(await ids(store, 'projekt = DESK')).toEqual(['DESK-1', 'DESK-2', 'DESK-3']);
-    expect(await ids(store, 'projekt = CEZA')).toEqual(['CEZA-1']);
+    expect(await ids(store, 'projekt = CEZR')).toEqual(['CEZR-1']);
     expect(await ids(store, 'projekt = DESK AND archiwum = włącz')).toEqual(['DESK-1', 'DESK-2', 'DESK-3', 'DESK-4']);
     expect(await ids(store, 'projekt = DESK AND archiwum = tylko')).toEqual(['DESK-4']);
     expect(await ids(store, 'projekt = DESK AND typ = funkcja')).toEqual(['DESK-1']);
@@ -100,7 +100,7 @@ describe('running a query', () => {
     expect(await ids(store, 'projekt = DESK AND rodzic brak')).toEqual(['DESK-1', 'DESK-3']);
     expect(await ids(store, 'projekt = DESK AND rodzic istnieje')).toEqual(['DESK-2']);
     expect(await ids(store, 'projekt = DESK AND rodzic = desk-1')).toEqual(['DESK-2']);
-    expect(await ids(store, 'projekt = DESK AND rodzic = CEZA-1')).toEqual([]);
+    expect(await ids(store, 'projekt = DESK AND rodzic = CEZR-1')).toEqual([]);
   });
 
   it('asks about fields of every kind: existence and value; a known field with another value finds nothing', async () => {

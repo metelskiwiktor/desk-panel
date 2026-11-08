@@ -22,7 +22,7 @@ export type Project = { key: string; name: string; tone: string; modules: string
 export const PROJECTS: Project[] = [
   { key: 'DESK', name: 'DeskPanel', tone: 'blue', modules: MODULES },
   { key: 'CEZR', name: 'Cezar', tone: 'violet', modules: ['Kolejka', 'Executory', 'Runner'] },
-  { key: 'TABU', name: 'Tabularium', tone: 'green', modules: [] },
+  { key: 'TABL', name: 'Tabularium', tone: 'green', modules: [] },
 ];
 export const TYPES: ThreadType[] = ['Sprawa', 'Funkcja', 'Błąd', 'Spotkanie', 'Notatka'];
 
