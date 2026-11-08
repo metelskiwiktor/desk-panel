@@ -153,8 +153,7 @@
   .fl-app { grid-template-columns: minmax(0, 1fr); }
   .fl-sidebar { padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--p2-line); }
   .fl-workspace { padding: 16px 0; }
-  .fl-row-line, .fl-row.compact .fl-row-line { grid-template-columns: 16px minmax(0, 1fr) auto; }
-  .fl-row-line > .fl-id { display: none; }
+  .fl-row-line, .fl-row.compact .fl-row-line { grid-template-columns: 16px auto minmax(0, 1fr) auto; }
   .fl-kanban { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -163,9 +162,21 @@
 .fl-tile .fl-row-line > .fl-module { display: none; }
 
 /* Strona wątku (część 2) */
-.fl-title.open { padding: 0; border: 0; background: transparent; color: var(--p2-text) !important; text-align: left; }
-.fl-title.open:hover { color: var(--fl-accent) !important; }
-.fl-row.closed .fl-title.open { color: var(--p2-muted) !important; }
+/* The ID opens the thread: a quiet label that lights up when it can be pressed. */
+.fl-id.open { justify-self: start; margin: 0 -8px; padding: 3px 8px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fl-id.open:hover, .fl-id.open:focus-visible { background: color-mix(in srgb, var(--fl-accent) 18%, transparent); color: var(--fl-accent) !important; }
+.fl-card-subs { margin: 0; padding: 6px 0 0 10px; list-style: none; border-left: 1px solid var(--p2-line); }
+.fl-card-subs li { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12.5px; line-height: 1.4; }
+.fl-card-subs li > span:not(.fl-id) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fl-card-subs li.closed > span:not(.fl-id) { color: var(--p2-muted); text-decoration: line-through; }
+.fl-card-subs .fl-anchor { margin-left: auto; align-self: center; }
+/* Gałąź: rodzice wątku w jednej linii, od korzenia; każdy prowadzi do siebie. */
+.fl-branch { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0 0 12px; overflow: hidden; font-size: 13px; white-space: nowrap; }
+.fl-branch-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; color: var(--p2-faint); }
+.fl-branch-item button { max-width: 22ch; overflow: hidden; padding: 3px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--p2-muted) !important; text-overflow: ellipsis; }
+.fl-branch-item button:hover, .fl-branch-item button:focus-visible { background: color-mix(in srgb, var(--fl-accent) 18%, transparent); color: var(--fl-accent) !important; }
+.fl-branch-item b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.fl-branch-here { padding: 3px 8px; color: var(--p2-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .fl-thread { max-width: 1100px; }
 .fl-back { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 16px; padding: 0; border: 0; background: transparent; color: var(--p2-muted) !important; font-size: 13px; }
 .fl-back:hover { color: var(--p2-text) !important; }
@@ -230,3 +241,4 @@
 .fl-props .fl-chips { flex: 1; min-width: 0; }
 .fl-props .fl-inline.wide { flex: 1; }
 .fl-props dd { min-height: 34px; }
+.fl-composer .fl-primary { flex: none; white-space: nowrap; }

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Folder, History, Layers3, Pencil, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { Empty } from '../components';
 import type { FilaAction, FilaSection } from '../fila-contract';
-import { sendFilaAction, useFilaActions, useFilaBoard, useFilaRegistry, useFilaView, type FilaBoardDoc, type FilaViewDoc } from './api';
-import { ThreadCard, ThreadList } from './threads';
+import { sendFilaAction, useFilaActions, useFilaBoard, useFilaChildIndex, useFilaRegistry, useFilaView, type FilaBoardDoc, type FilaViewDoc } from './api';
+import { ChildrenContext, ThreadCard, ThreadList } from './threads';
 import { ThreadPage } from './ThreadPage';
 import { ConfirmDialog, Menu, NameDialog, QueryEditor, stateTone } from './ui';
 
@@ -43,6 +43,24 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
   const viewDoc = useFilaView(board?.id ?? null, view?.id ?? null);
   // A refusal belongs to the dialog that sent it; without one it goes to the banner.
   useEffect(() => { if (error && !dialog) { setNotice(error); clear(); } }, [error, dialog, clear]);
+  const childIndex = useFilaChildIndex(data?.projects.map(item => item.key) ?? []);
+
+  // The browser's Back and Forward walk through where you were in Fila (board, view, thread); Back from the first screen leaves Fila.
+  useEffect(() => {
+    const here = { board: boardId, view: viewId, thread: threadId };
+    const saved = (history.state as { fila?: typeof here } | null)?.fila;
+    if (saved && JSON.stringify(saved) === JSON.stringify(here)) return;
+    history.pushState({ fila: here }, '');
+  }, [boardId, viewId, threadId]);
+  useEffect(() => {
+    const walk = (event: PopStateEvent) => {
+      const target = (event.state as { fila?: { board: string | null; view: string | null; thread: string | null } } | null)?.fila;
+      if (!target) { onHome?.(); return; }
+      setBoardId(target.board); setViewId(target.view); setThreadId(target.thread);
+    };
+    window.addEventListener('popstate', walk);
+    return () => window.removeEventListener('popstate', walk);
+  }, [onHome]);
 
   if (!data) return <div className="fl-app"><div className="fl-workspace"><Empty>{registry.error || 'Ładowanie Fili…'}</Empty></div></div>;
   const project = data.projects.find(p => p.board === board?.id)?.key ?? boardDoc.data?.project ?? data.projects[0]?.key ?? '';
@@ -125,7 +143,7 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
     catch (failure) { return (failure as Error).message; }
   };
 
-  return <div className="fl-app">
+  return <ChildrenContext.Provider value={childIndex}><div className="fl-app">
     <aside className="fl-sidebar">
       <div className="fl-brand"><Layers3 size={21} aria-hidden="true" /> Fila</div>
       <div role="navigation" aria-label="Nawigacja Fili">
@@ -180,5 +198,5 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
       </>}
     </div>
     {dialogView()}
-  </div>;
+  </div></ChildrenContext.Provider>;
 }

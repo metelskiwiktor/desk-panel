@@ -80,6 +80,63 @@ export function useFilaGet<T>(url: string | null): { data: T | null; error: stri
 
 export const useFilaRegistry = () => useFilaGet<FilaRegistry>('/api/fila');
 export const useFilaBoard = (id: string | null) => useFilaGet<FilaBoardDoc>(id ? `/api/fila/boards/${id}` : null);
+/**
+ * Every subthread of the given projects by the parent's ID (one query per project, polled and refetched after a change):
+ * a board shows a thread's subthreads under it whatever its sections select. A subthread in another project than its parent is found with its own project.
+ */
+export function useFilaChildIndex(keys: string[]): Map<string, FilaThreadRow[]> {
+  const [index, setIndex] = useState<Map<string, FilaThreadRow[]>>(new Map());
+  const signature = keys.join(',');
+  const pollingEnabled = usePollingEnabled();
+  useEffect(() => {
+    if (!signature || !pollingEnabled) return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    const read = async () => {
+      clearTimeout(timer);
+      try {
+        const lists = await Promise.all(signature.split(',').map(async key => {
+          const response = await fetch(`/api/fila/query?q=${encodeURIComponent(`projekt = ${key} AND rodzic istnieje`)}&limit=5000`);
+          if (!response.ok) throw await failure(response);
+          return (await response.json() as { threads: FilaThreadRow[] }).threads;
+        }));
+        const next = new Map<string, FilaThreadRow[]>();
+        for (const thread of lists.flat()) if (thread.parent) next.set(thread.parent, [...(next.get(thread.parent) ?? []), thread]);
+        if (!stopped) setIndex(next);
+      } catch { /* the board still shows what its sections select */ }
+      finally { if (!stopped) timer = setTimeout(read, POLL_MS); }
+    };
+    void read();
+    window.addEventListener(CHANGED, read);
+    return () => { stopped = true; clearTimeout(timer); window.removeEventListener(CHANGED, read); };
+  }, [signature, pollingEnabled]);
+  return index;
+}
+
+/** The branch above a thread: its parent, the parent's parent and so on up to the root, root first (at most 12 levels). */
+export function useFilaAncestors(thread: Pick<FilaThreadDoc, 'id' | 'parent' | 'revision'> | null): { id: string; title: string }[] {
+  const [branch, setBranch] = useState<{ id: string; title: string }[]>([]);
+  const parent = thread?.parent ?? null, revision = thread?.revision;
+  useEffect(() => {
+    if (!parent) { setBranch([]); return; }
+    let stopped = false;
+    const read = async () => {
+      const chain: { id: string; title: string }[] = [];
+      for (let id: string | null = parent; id && chain.length < 12 && !chain.some(item => item.id === id);) {
+        const response = await fetch(`/api/fila/threads/${id}`).catch(() => null);
+        if (!response?.ok) break;
+        const doc = await response.json() as FilaThreadDoc;
+        chain.unshift({ id: doc.id, title: doc.title });
+        id = doc.parent;
+      }
+      if (!stopped) setBranch(chain);
+    };
+    void read();
+    window.addEventListener(CHANGED, read);
+    return () => { stopped = true; window.removeEventListener(CHANGED, read); };
+  }, [parent, revision]);
+  return branch;
+}
+
 export const useFilaThread = (id: string | null) => useFilaGet<FilaThreadDoc>(id ? `/api/fila/threads/${id}` : null);
 /** The Specyfikacja text: the newest revision, or a numbered one. Needs the thread to have the field (else 404, shown as no text). */
 export const useFilaSpec = (id: string | null, revision?: number) =>

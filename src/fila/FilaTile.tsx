@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ListChecks, Pencil } from 'lucide-react';
 import type { TileConfig } from '../tile-grid';
-import { checkFilaQuery, useFilaGet, useFilaRegistry, type FilaThreadRow } from './api';
-import { ThreadList } from './threads';
+import { checkFilaQuery, useFilaChildIndex, useFilaGet, useFilaRegistry, type FilaThreadRow } from './api';
+import { ChildrenContext, ThreadList } from './threads';
 import { FILA_OPEN } from './events';
 import { Menu } from './ui';
 
@@ -37,6 +37,7 @@ export function FilaTile({ config, setConfig, wide = true }: { config?: TileConf
   const registry = useFilaRegistry();
   const query = filaQueryOf(config);
   const result = useFilaGet<{ query: string; total: number; threads: FilaThreadRow[] }>(query ? `/api/fila/query?q=${encodeURIComponent(query)}` : null);
+  const index = useFilaChildIndex(registry.data?.projects.map(project => project.key) ?? []);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState('');
   const configure = !query || editing;
@@ -47,6 +48,7 @@ export function FilaTile({ config, setConfig, wide = true }: { config?: TileConf
       {query && !configure && <Menu label="Kafelek Zadania" entries={[{ label: 'Zmień zapytanie', icon: <Pencil size={15} />, onSelect: () => setEditing(true) }]} />}
     </div>
     {notice && <p className="fl-notice" role="alert">{notice}</p>}
+    <ChildrenContext.Provider value={index}>
     {configure
       ? <div className="fl-tile-empty">
         {!query && <p className="p2-empty">Kafelek nie ma zapytania. Wpisz je, żeby zobaczyć wątki.</p>}
@@ -56,5 +58,6 @@ export function FilaTile({ config, setConfig, wide = true }: { config?: TileConf
         : result.data && registry.data
           ? result.data.threads.length ? <ThreadList threads={result.data.threads} registry={registry.data} compact={!wide} showProject onError={setNotice} onOpen={id => window.dispatchEvent(new CustomEvent(FILA_OPEN, { detail: id }))} /> : <p className="p2-empty">Żaden wątek nie pasuje do zapytania.</p>
           : <p className="p2-empty">Ładowanie wątków…</p>}
+    </ChildrenContext.Provider>
   </section>;
 }

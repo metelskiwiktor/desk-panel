@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ChevronDown, FileText, FolderInput, GitBranch, Pencil, Plus, Send, Workflow, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, FileText, FolderInput, GitBranch, Pencil, Plus, Send, Workflow, X } from 'lucide-react';
 import { MarkdownText } from '../components/markdown-text';
 import type { FilaAction } from '../fila-contract';
 import {
-  useFilaActions, useFilaGet, useFilaSpec, useFilaThread,
+  useFilaActions, useFilaAncestors, useFilaGet, useFilaSpec, useFilaThread,
   type FilaFieldValue, type FilaRegistry, type FilaThreadDoc, type FilaThreadRow,
 } from './api';
 import { ThreadList } from './threads';
@@ -109,6 +109,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
   const [comment, setComment] = useState('');
   const [addingField, setAddingField] = useState(false);
   const [revision, setRevision] = useState<number | null>(null);
+  const branch = useFilaAncestors(thread);
   const children = useFilaGet<{ threads: FilaThreadRow[] }>(thread && thread.children.length ? `/api/fila/query?q=${encodeURIComponent(`projekt = ${thread.project} AND rodzic = ${thread.id}`)}` : null);
   const shown = revision ?? thread?.spec.revision ?? 0;
   const spec = useFilaSpec(thread && (thread.spec.enabled || shown > 0) && shown > 0 ? thread.id : null, shown || undefined);
@@ -162,13 +163,16 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
 
   return <div className={`fl-thread tone-${thread.type.key}${thread.closed ? ' closed' : ''}`}>
     <button type="button" className="fl-back" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> {boardName}</button>
+    {branch.length > 0 && <div className="fl-branch" role="navigation" aria-label="Gałąź wątku">
+      {branch.map(item => <span key={item.id} className="fl-branch-item"><button type="button" aria-label={`Rodzic ${item.id}: ${item.title}`} title={item.title} onClick={() => onOpen(item.id)}><b>{item.id}</b> {item.title}</button><ChevronRight size={13} aria-hidden="true" /></span>)}
+      <span className="fl-branch-here" aria-current="page">{thread.id}</span>
+    </div>}
     {notice && <p className="fl-notice" role="alert">{notice}<button type="button" aria-label="Zamknij komunikat" onClick={() => setNotice('')}><X size={13} aria-hidden="true" /></button></p>}
     {thread.archived && <p className="fl-banner" role="status">Wątek jest zarchiwizowany i nie pokazuje się w sekcjach.</p>}
     <header className="fl-thread-head">
       <div className="fl-kicker">
         <span className="fl-badge"><TypeIcon type={thread.type} size={15} />{thread.type.label}</span>
         <span className="fl-id">{thread.id}</span>
-        {thread.parent && <span className="fl-parent">podwątek <button type="button" className="fl-linkish" onClick={() => onOpen(thread.parent!)}>{thread.parent}</button></span>}
         <span className="fl-head-menu"><Menu label="Działania wątku" entries={[
           { label: 'Przenieś do projektu…', icon: <FolderInput size={15} />, onSelect: () => setDialog('project') },
           { label: 'Zmień workflow…', icon: <Workflow size={15} />, onSelect: () => setDialog('workflow') },
@@ -200,7 +204,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
 
         {kids.length > 0 && <section className="fl-block" aria-label="Podwątki">
           <header className="fl-block-head"><h2>Podwątki</h2><span className="fl-count">{closedKids}/{kids.length} zamknięte</span></header>
-          <ThreadList threads={kids} registry={registry} onError={setNotice} onOpen={onOpen} />
+          <ThreadList threads={kids} registry={registry} onError={setNotice} onOpen={onOpen} flat />
         </section>}
 
         <section className="fl-block" aria-label="Specyfikacja">

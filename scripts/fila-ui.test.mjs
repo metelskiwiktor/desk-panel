@@ -13,7 +13,8 @@ describe('Fila board and Zadania tile', () => {
   let fila, browser, page, cache;
   const api = async path => (await fetch(new URL(path, fila.url), close)).json();
   const section = name => page.getByRole('region', { name, exact: true });
-  const idsIn = async locator => locator.locator('.fl-id').allTextContents();
+  // The IDs of the threads a section/column selects, top level only (subthreads nest under their parent).
+  const idsIn = async locator => locator.locator('.fl-list > .fl-row > .fl-row-line > .fl-id, .fl-card-top > .fl-id').allTextContents();
   const queryIds = async q => (await api(`api/fila/query?q=${encodeURIComponent(q)}`)).threads.map(t => t.id);
   // The preview has a dependency cache of its own (a temporary directory): beside the other browser tests a shared one is
   // re-bundled under each of them (504 "Outdated Optimize Dep", two copies of React). A reload still covers the first bundling.
@@ -187,11 +188,10 @@ URL: ${page?.url()}`);
     await page.getByRole('tab', { name: 'Wszystko' }).click();
     const all = section('DeskPanel');
     await all.getByRole('button', { name: /Podwątki DESK-1: 1 z 4/ }).waitFor();
-    expect(await all.locator('.fl-subrows').count()).toBe(0);
-    await all.getByRole('button', { name: /Podwątki DESK-1/ }).click();
-    // In the order of the section's query (this view sorts by ID, descending).
-    const kids = (await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND rodzic = DESK-1 SORTUJ id malejąco'))).threads.map(t => t.id);
-    expect(await idsIn(all.locator('.fl-subrows'))).toEqual(kids);
+    await all.locator('.fl-subrows').waitFor();
+    // Subthreads come in ID order under their parent, whatever the section sorts by.
+    const kids = (await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND rodzic = DESK-1'))).threads.map(t => t.id);
+    expect(await all.locator('.fl-subrows .fl-id').allTextContents()).toEqual(kids);
     expect(kids).toHaveLength(4);
   });
 
@@ -202,10 +202,37 @@ URL: ${page?.url()}`);
   };
   const thread = id => api(`api/fila/threads/${id}`);
 
-  it('opens a thread from a board title and goes back to the board', async () => {
+  it('opens a thread by its ID, not its title; the browser Back and Forward walk through Fila', async () => {
     await page.getByRole('tab', { name: 'Przegląd' }).click();
-    await page.getByRole('button', { name: 'Wektor gubi kontekst po restarcie Hermesa' }).first().click();
+    expect(await page.getByRole('button', { name: 'Wektor gubi kontekst po restarcie Hermesa' }).count()).toBe(0);
+    await page.getByRole('button', { name: 'Otwórz DESK-11' }).first().click();
     await page.getByRole('heading', { level: 1, name: /Wektor gubi kontekst/ }).waitFor();
+    await page.goBack();
+    await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
+    await page.goForward();
+    await page.getByRole('heading', { level: 1, name: /Wektor gubi kontekst/ }).waitFor();
+    await page.getByRole('button', { name: 'DeskPanel', exact: true }).first().click();
+    await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
+  });
+
+  it('shows the subthreads of a thread on the board, in lists and on kanban cards, and a branch back to the parent', async () => {
+    await page.getByRole('tab', { name: 'Przegląd' }).click();
+    // DESK-1 is selected by a query that asks for threads without a parent: its subthreads still show under it.
+    const row = page.getByRole('region', { name: 'Do przejrzenia' }).locator('.fl-row', { has: page.getByRole('button', { name: 'Otwórz DESK-1', exact: true }) });
+    await expect.poll(() => row.locator('.fl-subrows .fl-id').allTextContents()).toEqual(['DESK-2', 'DESK-3', 'DESK-4', 'DESK-5']);
+    const card = page.getByRole('region', { name: 'Kolumna W realizacji' }).locator('.fl-card', { has: page.getByRole('button', { name: 'Otwórz DESK-1', exact: true }) });
+    await expect.poll(() => card.locator('.fl-card-subs .fl-id').allTextContents()).toEqual(['DESK-2', 'DESK-3', 'DESK-4', 'DESK-5']);
+    // Subthreads fold under the count, and their Stan changes there like anywhere.
+    await row.getByRole('button', { name: /Podwątki DESK-1/ }).click();
+    expect(await row.locator('.fl-subrows').count()).toBe(0);
+    await row.getByRole('button', { name: /Podwątki DESK-1/ }).click();
+    await row.locator('.fl-subrows').waitFor();
+    // From a subthread the branch leads back to the parent.
+    await row.getByRole('button', { name: 'Otwórz DESK-2' }).click();
+    const branch = page.getByRole('navigation', { name: 'Gałąź wątku' });
+    await branch.getByRole('button', { name: /^Rodzic DESK-1:/ }).click();
+    await page.getByRole('heading', { level: 1, name: /Fila: tablice/ }).waitFor();
+    expect(await page.getByRole('navigation', { name: 'Gałąź wątku' }).count()).toBe(0);
     await page.getByRole('button', { name: 'DeskPanel', exact: true }).first().click();
     await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
   });
@@ -379,12 +406,12 @@ URL: ${page?.url()}`);
     expect(await idsIn(tile)).toEqual(expected);
     await tab.reload();
     await tab.getByRole('region', { name: 'Zadania' }).locator('.fl-id').first().waitFor();
-    expect(await idsIn(tab.getByRole('region', { name: 'Zadania' }).locator('.fl-list'))).toEqual(expected);
+    expect(await idsIn(tab.getByRole('region', { name: 'Zadania' }))).toEqual(expected);
     await tab.getByRole('region', { name: 'Zadania' }).getByLabel('Stan DESK-8: Pomysł').click();
     await tab.getByRole('option', { name: 'Do sprawdzenia' }).click();
     await tab.getByLabel('Stan DESK-8: Do sprawdzenia').waitFor();
     // A title opens the thread page in Fila.
-    await tab.getByRole('region', { name: 'Zadania' }).getByRole('button', { name: 'Widget pogody' }).click();
+    await tab.getByRole('region', { name: 'Zadania' }).getByRole('button', { name: 'Otwórz DESK-8' }).click();
     await tab.getByRole('heading', { level: 1, name: 'Widget pogody' }).waitFor();
     await tab.close();
     expect((await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND stan = "Do sprawdzenia"'))).threads.map(t => t.id)).toContain('DESK-8');
