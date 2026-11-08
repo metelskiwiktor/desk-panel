@@ -22,6 +22,8 @@ export interface FilaThreadDoc {
   id: string; uid: string; project: string; type: { key: string; label: string }; workflow: { id: string; name: string };
   state: string; closed: boolean; title: string; description: string; parent: string | null; children: string[];
   module: string | null; fields: Record<string, FilaFieldValue>; spec: { enabled: boolean; revision: number };
+  /** The Cezar kit (1.4a): `enabled` false with empty values when it was never added; task and PR are links, not fields. */
+  cezar: { enabled: boolean; executor: 'cezar' | 'lokalnie' | 'rozmowa' | null; repo: 'desk-panel' | null; mode: 'analiza' | 'implementacja' | null; blocked: string | null; links: { kind: 'cezar' | 'pr'; id: string; title?: string; at: number }[] };
   archived: boolean; revision: number; createdAt: number; updatedAt: number; createdBy: string;
   history: { at: number; by: string; kind: string; text?: string; changes?: { field: string; from: string | null; to: string | null }[] }[];
 }
@@ -42,6 +44,8 @@ const POLL_MS = 5000;
 const CHANGED = 'fila-changed';
 /** Every reader refetches after any change, so a thread shown in several places is never stale in one of them. */
 const announce = () => window.dispatchEvent(new Event(CHANGED));
+/** For a change made outside an action (the Cezar dispatch, which the server writes as `panel`): every reader refetches. */
+export const announceFilaChange = announce;
 
 async function failure(response: Response): Promise<Error> {
   const reason = await response.json().then((body: { error?: unknown }) => typeof body.error === 'string' ? body.error : '', () => '');

@@ -276,3 +276,24 @@
 .fl-banner span { margin-right: auto; }
 .fl-text.danger { color: var(--quota-red) !important; }
 .fl-archive + .fl-settings-note, .fl-empty + .fl-settings-note { margin-top: 14px; }
+
+/* Cezar na stronie wątku (część 4) */
+.fl-cezar { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--p2-line); }
+.fl-cezar h2 { margin: 0 0 8px; color: var(--p2-cezar); font-size: 13px; letter-spacing: .04em; }
+.fl-cezar dl { display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 4px 10px; margin: 0; font-size: 13.5px; }
+.fl-cezar dt { color: var(--p2-muted); font-size: 12px; }
+.fl-cezar dd { margin: 0; }
+.fl-block-form { display: flex; gap: 6px; margin-top: 8px; }
+.fl-block-form input { flex: 1; min-width: 0; min-height: 30px; padding: 3px 8px; border: 1px solid var(--p2-line); border-radius: 7px; background: var(--fl-panel); color: var(--p2-text); font-size: 13px; }
+.fl-blocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--quota-yellow); font-size: 12.5px; }
+.fl-links { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.fl-links li { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--p2-muted); }
+.fl-link { color: var(--fl-accent) !important; text-decoration: none; }
+.fl-link:hover { text-decoration: underline; }
+.fl-missing { margin: 10px 0 0; padding-left: 18px; color: var(--p2-muted); font-size: 12.5px; line-height: 1.5; }
+.fl-ready { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; }
+.fl-ready.ok { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--quota-green); }
+.fl-warn { margin: 8px 0 0; color: var(--quota-yellow); font-size: 12.5px; }
+.fl-preview pre { max-height: 260px; margin: 6px 0 8px; padding: 8px 10px; overflow: auto; border: 1px solid var(--p2-line); border-radius: 8px; background: var(--p2-bg, #0b0f16); color: var(--p2-muted); font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+.fl-primary.wide { width: 100%; margin-top: 10px; }
+.fl-cezar > .fl-text { margin-top: 4px; }

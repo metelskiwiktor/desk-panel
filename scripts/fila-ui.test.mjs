@@ -501,6 +501,103 @@ URL: ${page?.url()}`);
     expect((await fetch(new URL('api/fila/threads/PRYW-2', fila.url), close)).status).toBe(404);
   });
 
+  // Part 4: Cezar on the thread page. The provider is the scenario's stand-in (`cezarCreateRun`): nothing leaves the machine.
+  const cezarPanel = () => page.getByRole('region', { name: 'Cezar', exact: true });
+  const asUser = (path, body) => fetch(new URL(path, fila.url), { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(fila.url).origin, connection: 'close' }, body: JSON.stringify(body) });
+
+  it('sets the Cezar kit, shows the gaps of readiness, and keeps the manual block', async () => {
+    await openThread('DESK-12');
+    expect((await thread('DESK-12')).cezar.enabled).toBe(false);
+    await cezarPanel().getByRole('button', { name: 'Dodaj zestaw Cezara' }).click();
+    await cezarPanel().getByLabel('Wykonawca').waitFor();
+    expect((await thread('DESK-12')).cezar.enabled).toBe(true);
+    await cezarPanel().getByRole('button', { name: 'Zdejmij zestaw Cezara' }).click();
+    await cezarPanel().getByRole('button', { name: 'Dodaj zestaw Cezara' }).waitFor();
+
+    await openThread('DESK-6');
+    const gaps = cezarPanel().getByRole('list', { name: 'Braki gotowości' });
+    await expect.poll(() => gaps.locator('li').count()).toBeGreaterThanOrEqual(3);
+    expect(await cezarPanel().getByRole('button', { name: /Zleć Cezarowi/ }).count()).toBe(0);
+    const before = await gaps.locator('li').count();
+    for (const [label, value, field] of [['Wykonawca', 'cezar', 'executor'], ['Repo', 'desk-panel', 'repo'], ['Tryb', 'implementacja', 'mode']]) {
+      await cezarPanel().getByLabel(label, { exact: true }).selectOption(value);
+      await page.waitForFunction(async ([f, v]) => (await (await fetch('/api/fila/threads/DESK-6')).json()).cezar[f] === v, [field, value]);
+    }
+    // Executor, repo and mode are filled: fewer gaps remain, the Stan and the Specyfikacja still are.
+    await expect.poll(() => gaps.locator('li').count()).toBeLessThan(before);
+    await cezarPanel().getByLabel('Powód blokady').fill('Czeka na decyzję');
+    await cezarPanel().getByRole('button', { name: 'Zablokuj' }).click();
+    await cezarPanel().getByText('Blokada: Czeka na decyzję').waitFor();
+    expect((await thread('DESK-6')).cezar.blocked).toBe('Czeka na decyzję');
+    await cezarPanel().getByRole('button', { name: 'Zdejmij blokadę' }).click();
+    await cezarPanel().getByLabel('Powód blokady').waitFor();
+    expect((await thread('DESK-6')).cezar.blocked).toBe(null);
+  });
+
+  it('shows the task and the PR of a thread as links, not as fields', async () => {
+    await openThread('DESK-9');
+    const links = cezarPanel().getByRole('list', { name: 'Powiązania' });
+    await links.getByText(/^Task /).waitFor();
+    const pr = links.getByRole('link', { name: /PR / });
+    expect(await pr.getAttribute('href')).toBe('https://github.com/metelskiwiktor/desk-panel/pull/37');
+    expect(await page.getByRole('region', { name: 'Cezar', exact: true }).locator('input[aria-label="Task"], input[aria-label="PR"]').count()).toBe(0);
+  });
+
+  it('dispatches a ready thread only on click: preview first, nothing twice, the kit voided by any change', async () => {
+    await openThread('DESK-7');
+    await cezarPanel().getByText(/Gotowe do zlecenia/).waitFor();
+    // The send button is disabled until the preview was looked at.
+    expect(await cezarPanel().getByRole('button', { name: 'Zleć Cezarowi' }).isDisabled()).toBe(true);
+    await cezarPanel().getByRole('button', { name: 'Pokaż podgląd' }).click();
+    const prompt = await cezarPanel().getByLabel('Podgląd promptu').textContent();
+    expect(prompt).toContain('DESK-7');
+    expect(prompt).toContain('Eksport zadań do pliku');
+    expect((await asUser('api/fila/threads/DESK-7/cezar-dispatch/register', {})).status).toBe(405);
+    expect((await (await fetch(new URL('api/fila/threads/DESK-7/cezar-dispatch/register', fila.url), close)).json()).dispatches).toEqual([]);
+    await cezarPanel().getByRole('button', { name: 'Zleć Cezarowi' }).click();
+    await cezarPanel().getByRole('status').getByText(/Zlecono Cezarowi/).waitFor();
+    const sent = await thread('DESK-7');
+    expect(sent.state).toBe('W realizacji');
+    expect(sent.cezar.links.filter(link => link.kind === 'cezar')).toHaveLength(1);
+    expect(sent.history.some(entry => entry.kind === 'comment' && entry.by === 'panel' && /Zlecono Cezarowi/.test(entry.text))).toBe(true);
+    const register = (await (await fetch(new URL('api/fila/threads/DESK-7/cezar-dispatch/register', fila.url), close)).json()).dispatches;
+    expect(register).toHaveLength(1);
+    // Nothing happens by itself and a repeat is refused: the thread is no longer ready, and the server says so too.
+    await cezarPanel().getByRole('list', { name: 'Braki gotowości' }).waitFor();
+    expect(await cezarPanel().getByRole('button', { name: /Zleć Cezarowi/ }).count()).toBe(0);
+    const again = await asUser('api/fila/threads/DESK-7/cezar-dispatch', { expected: { specRevision: 1, title: sent.title, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'W realizacji', blocked: null } });
+    expect(again.status).toBe(409);
+    expect((await (await fetch(new URL('api/fila/threads/DESK-7/cezar-dispatch/register', fila.url), close)).json()).dispatches).toHaveLength(1);
+  });
+
+  it('voids the consent of a preview when the data change, and works from the keyboard', async () => {
+    const id = (await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND stan = "Gotowe do realizacji" AND typ = funkcja'))).threads.find(t => t.title === 'Eksport zadań do CSV').id;
+    await openThread(id);
+    const show = cezarPanel().getByRole('button', { name: 'Pokaż podgląd' });
+    await show.focus();
+    await page.keyboard.press('Enter');
+    await cezarPanel().getByLabel('Podgląd promptu').waitFor();
+    const send = cezarPanel().getByRole('button', { name: 'Zleć Cezarowi' });
+    expect(await send.isDisabled()).toBe(false);
+    // Any change (here the mode) voids it: the warning shows and sending is off until the preview is refreshed.
+    await cezarPanel().getByLabel('Tryb', { exact: true }).selectOption('analiza');
+    await cezarPanel().getByText(/zmieniły się od podglądu/).waitFor();
+    expect(await send.isDisabled()).toBe(true);
+    const refresh = cezarPanel().getByRole('button', { name: 'Odśwież podgląd' });
+    await refresh.focus();
+    await page.keyboard.press('Enter');
+    await cezarPanel().getByText(/zmieniły się od podglądu/).waitFor({ state: 'detached' });
+    expect(await send.isDisabled()).toBe(false);
+    // The server compares with the preview too: a request made from the old one is refused, nothing is sent.
+    const stale = await asUser(`api/fila/threads/${id}/cezar-dispatch`, { expected: { specRevision: 1, title: 'Eksport zadań do CSV', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'Gotowe do realizacji', blocked: null } });
+    expect(stale.status).toBe(409);
+    expect((await (await fetch(new URL(`api/fila/threads/${id}/cezar-dispatch/register`, fila.url), close)).json()).dispatches).toEqual([]);
+    await send.focus();
+    await page.keyboard.press('Enter');
+    await cezarPanel().getByRole('status').getByText(/Zlecono Cezarowi/).waitFor();
+    expect((await thread(id)).cezar.links.filter(link => link.kind === 'cezar')).toHaveLength(1);
+  });
+
   it('the Zadania tile asks for a query, keeps it after reopening and changes Stan like the board', async () => {
     const tab = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     tab.setDefaultTimeout(90_000);

@@ -1834,7 +1834,7 @@
           "Bank",
           "Automaty"
         ],
-        "nextNumber": 18
+        "nextNumber": 19
       },
       {
         "key": "CEZA",
@@ -1893,7 +1893,7 @@
         ]
       },
       {
-        "id": "w-ce8df83c",
+        "id": "w-6edecd2e",
         "name": "Czytanie",
         "states": [
           {
@@ -1935,7 +1935,7 @@
     ],
     "threads": [
       {
-        "uid": "f-f59ba055",
+        "uid": "f-91c7eeba",
         "project": "DESK",
         "number": 1,
         "type": "funkcja",
@@ -2111,7 +2111,7 @@
         ]
       },
       {
-        "uid": "f-ac820ba2",
+        "uid": "f-206cf247",
         "project": "DESK",
         "number": 2,
         "type": "sprawa",
@@ -2119,7 +2119,7 @@
         "state": "W realizacji",
         "title": "Zbudować ekran tablicy",
         "description": "",
-        "parent": "f-f59ba055",
+        "parent": "f-91c7eeba",
         "module": "Fila",
         "fields": {
           "Tagi": [
@@ -2168,7 +2168,7 @@
         ]
       },
       {
-        "uid": "f-a40c363a",
+        "uid": "f-f025c929",
         "project": "DESK",
         "number": 3,
         "type": "sprawa",
@@ -2176,7 +2176,7 @@
         "state": "Do przygotowania",
         "title": "Kafelek Zadania na zapytaniu",
         "description": "",
-        "parent": "f-f59ba055",
+        "parent": "f-91c7eeba",
         "module": "Zadania",
         "fields": {
           "Tagi": []
@@ -2211,7 +2211,7 @@
         ]
       },
       {
-        "uid": "f-89fed487",
+        "uid": "f-7887e75a",
         "project": "DESK",
         "number": 4,
         "type": "sprawa",
@@ -2219,7 +2219,7 @@
         "state": "Pomysł",
         "title": "Strona wątku",
         "description": "",
-        "parent": "f-f59ba055",
+        "parent": "f-91c7eeba",
         "module": "Fila",
         "fields": {
           "Tagi": []
@@ -2242,7 +2242,7 @@
         ]
       },
       {
-        "uid": "f-84915ba1",
+        "uid": "f-dbce2e2e",
         "project": "DESK",
         "number": 5,
         "type": "sprawa",
@@ -2250,7 +2250,7 @@
         "state": "Zakończone",
         "title": "Projekt i archiwum",
         "description": "",
-        "parent": "f-f59ba055",
+        "parent": "f-91c7eeba",
         "module": "Fila",
         "fields": {
           "Tagi": []
@@ -2285,7 +2285,7 @@
         ]
       },
       {
-        "uid": "f-6a01ca98",
+        "uid": "f-d8e04f24",
         "project": "DESK",
         "number": 6,
         "type": "funkcja",
@@ -2305,9 +2305,9 @@
           "revisions": []
         },
         "archived": false,
-        "revision": 3,
+        "revision": 4,
         "createdAt": 1793521779000,
-        "updatedAt": 1793522206000,
+        "updatedAt": 1793530075000,
         "history": [
           {
             "at": 1793521901000,
@@ -2338,11 +2338,31 @@
                 "to": "pilne"
               }
             ]
+          },
+          {
+            "at": 1793530014000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Cezar",
+                "from": null,
+                "to": "zestaw pól"
+              }
+            ]
           }
-        ]
+        ],
+        "cezar": {
+          "enabled": true,
+          "executor": null,
+          "repo": null,
+          "mode": null,
+          "blocked": null,
+          "links": []
+        }
       },
       {
-        "uid": "f-e72d8532",
+        "uid": "f-4bd1650e",
         "project": "DESK",
         "number": 7,
         "type": "funkcja",
@@ -2357,12 +2377,19 @@
         },
         "spec": {
           "enabled": true,
-          "revisions": []
+          "revisions": [
+            {
+              "number": 1,
+              "text": "CEL:\nEksport zadań do pliku.\n\nZAKRES:\nPrzycisk i format CSV.\n\nPOZA ZAKRESEM:\nImport.\n\nWARUNKI ODBIORU:\nTest przeglądarkowy.",
+              "by": "codex",
+              "at": 1793528794000
+            }
+          ]
         },
         "archived": false,
-        "revision": 2,
+        "revision": 5,
         "createdAt": 1793522267000,
-        "updatedAt": 1793522572000,
+        "updatedAt": 1793529160000,
         "history": [
           {
             "at": 1793522389000,
@@ -2381,11 +2408,65 @@
                 "to": "Gotowe do realizacji"
               }
             ]
+          },
+          {
+            "at": 1793528855000,
+            "by": "codex",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Specyfikacja",
+                "from": null,
+                "to": "v1"
+              }
+            ]
+          },
+          {
+            "at": 1793528977000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Cezar",
+                "from": null,
+                "to": "zestaw pól"
+              }
+            ]
+          },
+          {
+            "at": 1793529099000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Wykonawca",
+                "from": null,
+                "to": "cezar"
+              },
+              {
+                "field": "Repo",
+                "from": null,
+                "to": "desk-panel"
+              },
+              {
+                "field": "Tryb",
+                "from": null,
+                "to": "implementacja"
+              }
+            ]
           }
-        ]
+        ],
+        "cezar": {
+          "enabled": true,
+          "executor": "cezar",
+          "repo": "desk-panel",
+          "mode": "implementacja",
+          "blocked": null,
+          "links": []
+        }
       },
       {
-        "uid": "f-1e29aa23",
+        "uid": "f-c468f91a",
         "project": "DESK",
         "number": 8,
         "type": "funkcja",
@@ -2416,7 +2497,7 @@
         ]
       },
       {
-        "uid": "f-acf296ef",
+        "uid": "f-6547e726",
         "project": "DESK",
         "number": 9,
         "type": "funkcja",
@@ -2434,9 +2515,9 @@
           "revisions": []
         },
         "archived": false,
-        "revision": 2,
+        "revision": 6,
         "createdAt": 1793522877000,
-        "updatedAt": 1793523182000,
+        "updatedAt": 1793530685000,
         "history": [
           {
             "at": 1793522999000,
@@ -2455,11 +2536,89 @@
                 "to": "Do sprawdzenia"
               }
             ]
+          },
+          {
+            "at": 1793530136000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Cezar",
+                "from": null,
+                "to": "zestaw pól"
+              }
+            ]
+          },
+          {
+            "at": 1793530258000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Wykonawca",
+                "from": null,
+                "to": "cezar"
+              },
+              {
+                "field": "Repo",
+                "from": null,
+                "to": "desk-panel"
+              },
+              {
+                "field": "Tryb",
+                "from": null,
+                "to": "implementacja"
+              }
+            ]
+          },
+          {
+            "at": 1793530441000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Task Cezara",
+                "from": null,
+                "to": "desk-panel/00000000-0000-4000-8000-0000000000aa"
+              }
+            ]
+          },
+          {
+            "at": 1793530624000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "PR",
+                "from": null,
+                "to": "https://github.com/metelskiwiktor/desk-panel/pull/37"
+              }
+            ]
           }
-        ]
+        ],
+        "cezar": {
+          "enabled": true,
+          "executor": "cezar",
+          "repo": "desk-panel",
+          "mode": "implementacja",
+          "blocked": null,
+          "links": [
+            {
+              "kind": "cezar",
+              "id": "desk-panel/00000000-0000-4000-8000-0000000000aa",
+              "title": "Automaty: edycja harmonogramu",
+              "at": 1793530380000
+            },
+            {
+              "kind": "pr",
+              "id": "https://github.com/metelskiwiktor/desk-panel/pull/37",
+              "at": 1793530563000
+            }
+          ]
+        }
       },
       {
-        "uid": "f-a97afe68",
+        "uid": "f-816fefd8",
         "project": "DESK",
         "number": 10,
         "type": "funkcja",
@@ -2502,7 +2661,7 @@
         ]
       },
       {
-        "uid": "f-5210e05a",
+        "uid": "f-330b742b",
         "project": "DESK",
         "number": 11,
         "type": "blad",
@@ -2547,7 +2706,7 @@
         ]
       },
       {
-        "uid": "f-e810e6a9",
+        "uid": "f-4d88d396",
         "project": "DESK",
         "number": 12,
         "type": "blad",
@@ -2590,7 +2749,7 @@
         ]
       },
       {
-        "uid": "f-d41a6ca8",
+        "uid": "f-85ad4a30",
         "project": "DESK",
         "number": 13,
         "type": "blad",
@@ -2633,7 +2792,7 @@
         ]
       },
       {
-        "uid": "f-b45c0dde",
+        "uid": "f-245f7e26",
         "project": "DESK",
         "number": 14,
         "type": "notatka",
@@ -2664,7 +2823,7 @@
         ]
       },
       {
-        "uid": "f-2ead9ee3",
+        "uid": "f-fffe11ec",
         "project": "DESK",
         "number": 15,
         "type": "spotkanie",
@@ -2707,7 +2866,7 @@
         ]
       },
       {
-        "uid": "f-9ef024a8",
+        "uid": "f-c4ebe51c",
         "project": "DESK",
         "number": 16,
         "type": "sprawa",
@@ -2743,7 +2902,7 @@
         ]
       },
       {
-        "uid": "f-29c9eb1d",
+        "uid": "f-96ef1d99",
         "project": "CEZA",
         "number": 1,
         "type": "funkcja",
@@ -2786,7 +2945,7 @@
         ]
       },
       {
-        "uid": "f-80e55679",
+        "uid": "f-55db40a1",
         "project": "CEZA",
         "number": 2,
         "type": "blad",
@@ -2817,7 +2976,7 @@
         ]
       },
       {
-        "uid": "f-44c744ce",
+        "uid": "f-daa29b39",
         "project": "TABU",
         "number": 1,
         "type": "sprawa",
@@ -2860,7 +3019,7 @@
         ]
       },
       {
-        "uid": "f-863cea1e",
+        "uid": "f-099317ea",
         "project": "TABU",
         "number": 2,
         "type": "notatka",
@@ -2891,7 +3050,7 @@
         ]
       },
       {
-        "uid": "f-ea58f0d0",
+        "uid": "f-8cac9308",
         "project": "DESK",
         "number": 17,
         "type": "sprawa",
@@ -2920,55 +3079,159 @@
             "text": "Sprawa"
           }
         ]
+      },
+      {
+        "uid": "f-44f3c65e",
+        "project": "DESK",
+        "number": 18,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Gotowe do realizacji",
+        "title": "Eksport zadań do CSV",
+        "description": "",
+        "parent": null,
+        "module": "Zadania",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": [
+            {
+              "number": 1,
+              "text": "CEL:\nEksport zadań do pliku.\n\nZAKRES:\nPrzycisk i format CSV.\n\nPOZA ZAKRESEM:\nImport.\n\nWARUNKI ODBIORU:\nTest przeglądarkowy.",
+              "by": "codex",
+              "at": 1793529587000
+            }
+          ]
+        },
+        "archived": false,
+        "revision": 5,
+        "createdAt": 1793529221000,
+        "updatedAt": 1793529953000,
+        "history": [
+          {
+            "at": 1793529343000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793529465000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Gotowe do realizacji"
+              }
+            ]
+          },
+          {
+            "at": 1793529648000,
+            "by": "codex",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Specyfikacja",
+                "from": null,
+                "to": "v1"
+              }
+            ]
+          },
+          {
+            "at": 1793529770000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Cezar",
+                "from": null,
+                "to": "zestaw pól"
+              }
+            ]
+          },
+          {
+            "at": 1793529892000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Wykonawca",
+                "from": null,
+                "to": "cezar"
+              },
+              {
+                "field": "Repo",
+                "from": null,
+                "to": "desk-panel"
+              },
+              {
+                "field": "Tryb",
+                "from": null,
+                "to": "implementacja"
+              }
+            ]
+          }
+        ],
+        "cezar": {
+          "enabled": true,
+          "executor": "cezar",
+          "repo": "desk-panel",
+          "mode": "implementacja",
+          "blocked": null,
+          "links": []
+        }
       }
     ],
     "boards": [
       {
-        "id": "b-4df86384",
+        "id": "b-da6493bc",
         "name": "DeskPanel",
         "createdAt": 1793519522000,
         "views": [
           {
-            "id": "v-b98ebcfd",
+            "id": "v-86ddeb90",
             "name": "Przegląd",
             "sections": [
               {
-                "id": "s-eceefa37",
+                "id": "s-96e73e22",
                 "name": "Do przejrzenia",
                 "kind": "list",
                 "query": "projekt = DESK AND otwarte AND rodzic brak SORTUJ stan, id",
                 "columns": []
               },
               {
-                "id": "s-0ea1e9e8",
+                "id": "s-7f1a1bb1",
                 "name": "Funkcje",
                 "kind": "kanban",
                 "query": "projekt = DESK AND typ = funkcja AND rodzic brak",
                 "columns": [
                   {
-                    "id": "c-5d1afbab",
+                    "id": "c-bf18ac7d",
                     "name": "Do przygotowania",
                     "query": "stan = \"Do przygotowania\""
                   },
                   {
-                    "id": "c-2b9e338b",
+                    "id": "c-badfee33",
                     "name": "Gotowe do realizacji",
                     "query": "stan = \"Gotowe do realizacji\""
                   },
                   {
-                    "id": "c-e8270850",
+                    "id": "c-a3fd0d76",
                     "name": "W realizacji",
                     "query": "stan = \"W realizacji\""
                   },
                   {
-                    "id": "c-f13b1b14",
+                    "id": "c-1ddb41c3",
                     "name": "Do sprawdzenia",
                     "query": "stan = \"Do sprawdzenia\""
                   }
                 ]
               },
               {
-                "id": "s-83d5193f",
+                "id": "s-2fb0467f",
                 "name": "Pilne",
                 "kind": "list",
                 "query": "projekt = DESK AND otwarte AND tag = \"pilne\"",
@@ -2977,11 +3240,11 @@
             ]
           },
           {
-            "id": "v-3fc29eac",
+            "id": "v-f89c53ac",
             "name": "Wszystko",
             "sections": [
               {
-                "id": "s-f338dcf4",
+                "id": "s-3eaff4f6",
                 "name": "DeskPanel",
                 "kind": "list",
                 "query": "projekt = DESK SORTUJ id malejąco",
@@ -3179,16 +3442,16 @@
         ]
       },
       {
-        "id": "b-1ea0de5c",
+        "id": "b-1a154f6d",
         "name": "Cezar",
         "createdAt": 1793519644000,
         "views": [
           {
-            "id": "v-7d6e0bf5",
+            "id": "v-86ca8297",
             "name": "Widok",
             "sections": [
               {
-                "id": "s-08ac6b8a",
+                "id": "s-4f973cc5",
                 "name": "Wszystkie wątki",
                 "kind": "list",
                 "query": "projekt = CEZA",
@@ -3230,16 +3493,16 @@
         ]
       },
       {
-        "id": "b-af1b5a2c",
+        "id": "b-33e5e846",
         "name": "Tabularium",
         "createdAt": 1793519766000,
         "views": [
           {
-            "id": "v-c4dfc85d",
+            "id": "v-ab877d24",
             "name": "Widok",
             "sections": [
               {
-                "id": "s-28181b5a",
+                "id": "s-e980d220",
                 "name": "Wszystkie wątki",
                 "kind": "list",
                 "query": "projekt = TABU",
@@ -3282,9 +3545,9 @@
       }
     ],
     "starterBoards": {
-      "DESK": "b-4df86384",
-      "CEZA": "b-1ea0de5c",
-      "TABU": "b-af1b5a2c"
+      "DESK": "b-da6493bc",
+      "CEZA": "b-1a154f6d",
+      "TABU": "b-33e5e846"
     }
   }
 }
