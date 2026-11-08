@@ -70,6 +70,7 @@ w pustych komórkach siatki zawsze (`MULTI_KINDS`), każdy kafelek ma `id` `todo
 ## Gotowość i prompt bez modelu
 
 `src/todo-dispatch.ts` (`getTodoDispatch`) składa z zadania pełny prompt executora bez udziału modelu i niczego nie zapisuje.
+Reguły liczy wspólny `evaluateDispatch`; te same, z identycznymi komunikatami, stosuje dla wątków Fili `getFilaDispatch` (docs/fila.md, „Cezar na wątku”).
 Zadanie jest gotowe, gdy ma stan `gotowe`, brak blokady, `executor=cezar`, `repo=desk-panel`, `mode` oraz niepustą
 specyfikację z niepustymi sekcjami `CEL:`, `ZAKRES:`, `POZA ZAKRESEM:` i `WARUNKI ODBIORU:`. Przy brakach wynik ma
 `prompt: null` i `workflow: null` oraz polskie komunikaty w kolejności: stan, blokada z powodem, executor, repo, mode,

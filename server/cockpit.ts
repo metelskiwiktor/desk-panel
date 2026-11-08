@@ -7,7 +7,7 @@ import {
   watchedTask, type CezarStatus, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
 import { stepOverridesSchema } from '../src/cezar-contract';
-import { todoDispatchRecordSchema, type TodoDispatchRecord } from '../src/todo-contract';
+import { todoDispatchRecordSchema, todoModeSchema, type TodoDispatchRecord } from '../src/todo-contract';
 import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { type AutomationOutcome, automationOutcomeSchema } from '../src/automation-contract';
 import { BankPlanError, planPreview } from './bank-plan';
@@ -38,10 +38,19 @@ const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
 /** One kept dispatch of a prepared to-do task: the key is to-do+revision+mode, and `at` is when it was started. */
 const todoDispatchSchema = todoDispatchRecordSchema.extend({ at: z.number() });
 export type TodoDispatchRun = z.infer<typeof todoDispatchSchema>;
+/** One kept dispatch from a Fila thread: keyed by the thread's permanent uid (the display ID changes on a move), `thread` is the ID at that time. */
+const threadDispatchSchema = z.object({
+  uid: z.string().regex(/^f-[0-9a-f]{8}$/), thread: z.string().max(40),
+  specRevision: z.number().int().nonnegative(), mode: todoModeSchema,
+  taskId: z.string().trim().min(1).max(200), url: z.string().trim().min(1).max(500), at: z.number(),
+});
+export type ThreadDispatchRun = z.infer<typeof threadDispatchSchema>;
 const storeSchema = z.object({
   version: z.literal(1),
   /** Successful dispatches from the to-do dialog, oldest first; the last one per key is what the screen sees. */
   todoDispatches: z.array(todoDispatchSchema).default([]),
+  /** The same for threads of Fila (1.4a), in the same file and with the same single writer. */
+  threadDispatches: z.array(threadDispatchSchema).default([]),
   chats: z.record(z.string(), z.object({
     /** Tasks dispatched from the conversation, oldest first: the last one is watched. */
     runs: z.array(z.string()).default([]),
@@ -126,6 +135,9 @@ export interface Cockpit {
   todoDispatches(): TodoDispatchRecord[];
   /** Keeps a successful dispatch in `cockpit.json`; this store is its only writer. */
   recordTodoDispatch(record: TodoDispatchRun): void;
+  /** The last successful dispatch per thread uid+revision+mode (without `at`): what the retry check and the thread screen read. */
+  threadDispatches(): Omit<ThreadDispatchRun, 'at'>[];
+  recordThreadDispatch(record: ThreadDispatchRun): void;
   /** Whether an automation turn for this task and state was already sent (or deliberately skipped). */
   automationReported(chatId: string, taskId: string, state: string): boolean;
   /** Keeps the fact in `cockpit.json`, so a restart never sends the same automation turn twice. */
@@ -155,7 +167,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
 }): Cockpit {
   const load = (): Store => {
     try { if (existsSync(file)) return storeSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* a broken file starts over */ }
-    return { version: 1, todoDispatches: [], chats: {} };
+    return { version: 1, todoDispatches: [], threadDispatches: [], chats: {} };
   };
   let store = load();
   const save = () => {
@@ -180,7 +192,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   async function linkPr(taskId: string, prUrl: string, title?: string) {
     if (!PR_URL.test(prUrl)) return;
     const todoId = todoIdOf(taskId);
-    if (!todoId) return;
+    if (!todoId) return linkThreadPr(taskId, prUrl, title);
     const key = `${todoId}|${taskId}|${prUrl}`;
     if (linkedPrs.has(key)) return;
     linkedPrs.add(key);
@@ -189,6 +201,22 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     } catch {
       // The task may be gone or already hold 20 links: the PR is still shown, linking is best-effort.
       console.warn(`todos: nie udało się powiązać PR ${prUrl} z ${todoId}.`);
+    }
+  }
+  /** The PR of a task dispatched from a thread goes to that thread, found by its uid, so it works after a restart and a move. */
+  async function linkThreadPr(taskId: string, prUrl: string, title?: string) {
+    const dispatch = store.threadDispatches.find(d => d.taskId === taskId);
+    if (!dispatch || !sources.fila) return;
+    const key = `${dispatch.uid}|${taskId}|${prUrl}`;
+    if (linkedPrs.has(key)) return;
+    linkedPrs.add(key);
+    try {
+      const thread = await sources.fila.idOfUid(dispatch.uid);
+      if (!thread) return;
+      await sources.fila.apply({ action: 'linkCezar', thread, kind: 'pr', id: prUrl, ...(title ? { title } : {}) }, 'panel');
+    } catch {
+      // The thread may be gone or hold 20 links: the PR is still shown, linking is best-effort.
+      console.warn(`fila: nie udało się powiązać PR ${prUrl} z wątkiem ${dispatch.thread}.`);
     }
   }
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();
@@ -306,6 +334,17 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
 
     recordTodoDispatch(record) {
       store.todoDispatches.push(record);
+      save();
+    },
+
+    threadDispatches() {
+      const last = new Map<string, ThreadDispatchRun>();
+      for (const dispatch of store.threadDispatches) last.set(`${dispatch.uid}|${dispatch.specRevision}|${dispatch.mode}`, dispatch);
+      return [...last.values()].map(({ at: _at, ...rest }) => rest);
+    },
+
+    recordThreadDispatch(record) {
+      store.threadDispatches.push(record);
       save();
     },
 

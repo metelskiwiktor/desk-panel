@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { TODO_STATUSES, todoIsDone } from '../src/todo-contract';
+import { TODO_LIMITS, TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
   filaActionSchema, filaDataSchema, isFilaBoardAction,
-  type FilaAction, type FilaActor, type FilaBoard, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
+  type FilaAction, type FilaBoardActor, type FilaBoard, type FilaCezar, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
 import { applyBoardAction, createStarterBoard, seedStarterBoards } from './fila-boards';
@@ -15,7 +15,9 @@ import { compileFilaQuery, narrowFilaQuery, selectFilaThreads } from './fila-que
 export { FilaError };
 
 export interface FilaThreadView {
-  id: string; project: string; number: number;
+  id: string;
+  /** The permanent internal id: a move changes `id`, never this (the dispatch register keys on it). */
+  uid: string; project: string; number: number;
   type: { key: string; label: string };
   workflow: { id: string; name: string };
   state: string;
@@ -27,6 +29,8 @@ export interface FilaThreadView {
   fields: Record<string, FilaFieldValue>;
   /** Specyfikacja: whether the field is on the thread and the newest revision number (0 = none yet). The text: `spec()`. */
   spec: { enabled: boolean; revision: number };
+  /** The Cezar kit (1.4a); `enabled: false` with empty values when it was never added. */
+  cezar: FilaCezar;
   archived: boolean; revision: number;
   createdAt: number; updatedAt: number; createdBy: string;
   history: FilaThread['history'];
@@ -71,7 +75,9 @@ export interface FilaStore {
   /** The Specyfikacja: the current text (needs the field on the thread) or one numbered revision (also after the field was removed). */
   spec(id: string, revision?: number): Promise<FilaSpecView>;
   /** The actor comes from the caller's authentication, never from the action. */
-  apply(action: FilaAction, actor: FilaActor): Promise<FilaResult>;
+  apply(action: FilaAction, actor: FilaBoardActor): Promise<FilaResult>;
+  /** The display ID a thread has now, from its permanent uid (null once deleted): how the register follows a move. */
+  idOfUid(uid: string): Promise<string | null>;
   /** Text for the caller when the stored file could not be used as it was. */
   notice(): Promise<string | undefined>;
   /** Resolves once every change made so far is on disk. */
@@ -95,6 +101,7 @@ export function defaultFilaData(): FilaData {
 }
 
 const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow', 'setSpec', 'addSpecField', 'removeSpecField']);
+const panelMay = new Set<FilaAction['action']>(['linkCezar', 'unlinkCezar', 'comment', 'updateThread']);
 const userOnly = new Set<FilaAction['action']>(['deleteThread']);
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
 const lower = (s: string) => s.toLocaleLowerCase('pl');
@@ -159,7 +166,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   const uid = () => {
     for (;;) { const candidate = `f-${randomUUID().slice(0, 8)}`; if (!byUid(candidate)) return candidate; }
   };
-  const record = (t: FilaThread, by: FilaActor, entry: Omit<FilaThread['history'][number], 'at' | 'by'>) => { t.history.push({ at: now(), by, ...entry }); t.updatedAt = now(); };
+  const record = (t: FilaThread, by: FilaBoardActor, entry: Omit<FilaThread['history'][number], 'at' | 'by'>) => { t.history.push({ at: now(), by, ...entry }); t.updatedAt = now(); };
   const expect = (t: FilaThread, revision: number | undefined) => {
     if (revision !== undefined && revision !== t.revision) throw new FilaError(409, `Konflikt: oczekiwana rewizja ${revision}, aktualna ${t.revision}. Przeczytaj wątek i spróbuj ponownie.`);
   };
@@ -194,7 +201,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     const workflow = workflowOf(t.workflow);
     const parent = t.parent ? byUid(t.parent) : undefined;
     return {
-      id: idOf(t), project: t.project, number: t.number,
+      id: idOf(t), uid: t.uid, project: t.project, number: t.number,
       type: { key: t.type, label: FILA_TYPES[t.type].label },
       workflow: { id: workflow.id, name: workflow.name },
       state: t.state, closed: workflow.states.find(s => s.name === t.state)?.closing ?? false,
@@ -203,6 +210,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       children: data.threads.filter(c => c.parent === t.uid).map(idOf),
       module: t.module, fields: structuredClone(t.fields),
       spec: { enabled: specOf(t).enabled, revision: latestSpec(t)?.number ?? 0 },
+      cezar: structuredClone(t.cezar ?? emptyFilaCezar()),
       archived: t.archived, revision: t.revision,
       createdAt: t.createdAt, updatedAt: t.updatedAt, createdBy: t.history[0]?.by ?? 'user',
       history: structuredClone(t.history),
@@ -218,8 +226,10 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   const clampLimit = (limit: number | undefined) => Math.min(Math.max(1, Math.trunc(limit ?? 500) || 500), FILA_LIMITS.results);
 
   /** Validates, then changes; a refusal is thrown before anything is touched (and memory is restored if one comes late). */
-  const mutate = (action: FilaAction, actor: FilaActor): FilaResult => {
+  const mutate = (action: FilaAction, actor: FilaBoardActor): FilaResult => {
     if (aiOnly.has(action.action) && actor === 'user') throw new FilaError(403, 'Definicje workflow i wartości Modułu zmienia tylko AI (D-033).');
+    // The panel itself (never reachable over HTTP) only bookkeeps a dispatch: links, a comment and the state.
+    if (actor === 'panel' && !panelMay.has(action.action)) throw new FilaError(403, 'Panel zapisuje tylko powiązania, komentarz i Stan po zleceniu.');
     if (userOnly.has(action.action) && actor !== 'user') throw new FilaError(403, 'Trwale usuwa wątek tylko użytkownik, z archiwum (D-038); AI może go zarchiwizować.');
     if (isFilaBoardAction(action)) return applyBoardAction(data, action, actor, now());
     const done = (t: FilaThread, extra: Partial<FilaResult> = {}): FilaResult => ({ ok: true, thread: { id: idOf(t), revision: t.revision }, ...extra });
@@ -356,6 +366,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         return done(t);
       }
       case 'setSpec': {
+        if (actor === 'panel') throw new FilaError(403, 'Specyfikację zapisuje tylko klient AI.');
         const t = threadOf(action.thread);
         if (!specOf(t).enabled) throw new FilaError(409, 'Wątek nie ma pola Specyfikacja: dodaj je (addSpecField).');
         const latest = latestSpec(t);
@@ -379,6 +390,59 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
           record(t, actor, { kind: 'changed', changes: [{ field: 'Specyfikacja', from: enable ? null : 'pole', to: enable ? 'pole' : null }] });
         }
         return done(t, { specRevision: latestSpec(t)?.number ?? 0 });
+      }
+      case 'addCezarKit': case 'removeCezarKit': {
+        const t = threadOf(action.thread);
+        const enable = action.action === 'addCezarKit';
+        const kit = t.cezar ?? emptyFilaCezar();
+        if (kit.enabled !== enable) {
+          t.cezar = { ...kit, enabled: enable };
+          t.revision += 1;
+          record(t, actor, { kind: 'changed', changes: [{ field: 'Cezar', from: enable ? null : 'zestaw pól', to: enable ? 'zestaw pól' : null }] });
+        }
+        return done(t);
+      }
+      case 'setCezar': {
+        const t = threadOf(action.thread);
+        expect(t, action.expectedRevision);
+        const kit = t.cezar ?? emptyFilaCezar();
+        if (!kit.enabled) throw new FilaError(409, 'Wątek nie ma zestawu pól Cezara: dodaj go (addCezarKit).');
+        const next: FilaCezar = { ...kit };
+        const changes: { field: string; from: string | null; to: string | null }[] = [];
+        const set = <K extends 'executor' | 'repo' | 'mode' | 'blocked'>(key: K, label: string, value: FilaCezar[K] | undefined) => {
+          if (value === undefined) return;
+          const clean = (key === 'blocked' && typeof value === 'string' && value.trim() === '' ? null : value) as FilaCezar[K];
+          if (kit[key] !== clean) { changes.push({ field: label, from: kit[key] === null ? null : cut(String(kit[key])), to: clean === null ? null : cut(String(clean)) }); next[key] = clean; }
+        };
+        set('executor', 'Wykonawca', action.executor);
+        set('repo', 'Repo', action.repo);
+        set('mode', 'Tryb', action.mode);
+        set('blocked', 'Blokada', action.blocked);
+        if (!changes.length) return done(t);
+        t.cezar = next;
+        t.revision += 1;
+        record(t, actor, { kind: 'changed', changes });
+        return done(t);
+      }
+      case 'linkCezar': case 'unlinkCezar': {
+        const t = threadOf(action.thread);
+        const kit = t.cezar ?? emptyFilaCezar();
+        if (!kit.enabled) throw new FilaError(409, 'Wątek nie ma zestawu pól Cezara: dodaj go (addCezarKit).');
+        const at = kit.links.findIndex(l => l.kind === action.kind && l.id === action.id);
+        const label = action.kind === 'cezar' ? 'Task Cezara' : 'PR';
+        if (action.action === 'unlinkCezar') {
+          if (at < 0) return done(t);
+          t.cezar = { ...kit, links: kit.links.filter((_, i) => i !== at) };
+          t.revision += 1;
+          record(t, actor, { kind: 'changed', changes: [{ field: label, from: cut(action.id), to: null }] });
+          return done(t);
+        }
+        if (at >= 0) return done(t);
+        if (kit.links.length >= TODO_LIMITS.links) throw new FilaError(409, `Wątek może mieć najwyżej ${TODO_LIMITS.links} powiązań z taskami i PR.`);
+        t.cezar = { ...kit, links: [...kit.links, { kind: action.kind, id: action.id, ...(action.title ? { title: action.title } : {}), at: now() }] };
+        t.revision += 1;
+        record(t, actor, { kind: 'changed', changes: [{ field: label, from: null, to: cut(action.id) }] });
+        return done(t);
       }
       case 'comment': {
         const t = threadOf(action.thread);
@@ -490,6 +554,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       tail = run.catch(() => undefined);
       return run;
     },
+    async idOfUid(id) { await tail; await load(); const t = byUid(id); return t ? idOf(t) : null; },
     async notice() { await tail; await load(); return message; },
     async drain() { await tail; },
   };

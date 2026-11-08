@@ -16,6 +16,7 @@ import { handleFilaRoute, type FilaTokens } from './fila-routes';
 import { todoActionSchema, todoDispatchRequestSchema, type TodoAction } from '../src/todo-contract';
 import { getTodoDispatch, todoDispatchKey, todoDispatchMatches } from '../src/todo-dispatch';
 import { TodoError } from './todos';
+import { handleFilaDispatchRoute } from './fila-dispatch';
 import { bankLabelActionSchema } from '../src/bank-labels-contract';
 import { bankShowQuerySchema } from '../src/bank-show-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
@@ -83,6 +84,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       return;
     }
     if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations)) return;
+    if (await handleFilaDispatchRoute(req, res, url, { ownOrigin, sources, cockpit: options.cockpit })) return;
     if (await handleFilaRoute(req, res, url, { ownOrigin, proxied, fila: sources.fila, tokens: options.filaTokens })) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
     if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [] }); return; }

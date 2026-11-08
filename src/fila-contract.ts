@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TODO_LIMITS, todoExecutorSchema, todoModeSchema, todoRepoSchema } from './todo-contract';
 
 /**
  * Fila: threads (sprawy, funkcje, błędy, notatki, spotkania) in projects. The panel's own data, kept by the server and
@@ -64,7 +65,7 @@ export const filaWorkflowSchema = z.object({
 export const filaFieldDefSchema = z.object({ name: fieldName, kind: filaFieldKindSchema });
 const changeSchema = z.object({ field: z.string().max(100), from: z.string().max(FILA_LIMITS.text).nullable(), to: z.string().max(FILA_LIMITS.text).nullable() });
 export const filaHistorySchema = z.object({
-  at: z.number().finite(), by: filaActorSchema,
+  at: z.number().finite(), by: z.enum([...filaActorSchema.options, 'panel']),
   kind: z.enum(['created', 'changed', 'comment', 'archived', 'restored', 'moved']),
   text: z.string().max(FILA_LIMITS.comment).optional(),
   changes: z.array(changeSchema).max(20).optional(),
@@ -74,6 +75,24 @@ export const filaSpecRevisionSchema = z.object({
   number: z.number().int().min(1), text: z.string().max(FILA_LIMITS.spec), by: filaActorSchema, at: z.number().finite(),
 });
 export type FilaSpecRevision = z.infer<typeof filaSpecRevisionSchema>;
+/**
+ * The Cezar kit of a thread (1.4a): executor, repo and mode with today's vocabulary and `null` = not chosen, the manual
+ * block reason, and the task / PR links (unique by kind+id, at most 20). Added to any type like the Specyfikacja; the data
+ * outlive removing the kit, so the links and the dispatch register keep their meaning.
+ */
+const filaCezarLinkKind = z.enum(['cezar', 'pr']);
+const filaCezarLinkId = z.string().trim().min(1).max(500);
+const validPrUrl = (link: { kind: string; id: string }) => link.kind !== 'pr' || /^https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.{1,2}\/)[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/.test(link.id);
+export const filaCezarLinkSchema = z.object({ kind: filaCezarLinkKind, id: filaCezarLinkId, title: z.string().trim().min(1).max(200).optional(), at: z.number().finite() }).refine(validPrUrl, 'Invalid GitHub pull request URL');
+export const filaCezarSchema = z.object({
+  enabled: z.boolean(),
+  executor: todoExecutorSchema.nullable(), repo: todoRepoSchema.nullable(), mode: todoModeSchema.nullable(),
+  blocked: z.string().max(TODO_LIMITS.blocked).nullable(),
+  links: z.array(filaCezarLinkSchema).max(TODO_LIMITS.links).refine(links => new Set(links.map(l => `${l.kind}:${l.id}`)).size === links.length, 'Duplicate link'),
+});
+export type FilaCezar = z.infer<typeof filaCezarSchema>;
+export const emptyFilaCezar = (): FilaCezar => ({ enabled: false, executor: null, repo: null, mode: null, blocked: null, links: [] });
+
 export const filaThreadSchema = z.object({
   /** Internal and permanent: parents point at it, so a move (a new display ID) keeps every relation. */
   uid: z.string().regex(/^f-[0-9a-f]{8}$/),
@@ -85,6 +104,8 @@ export const filaThreadSchema = z.object({
   fields: z.record(fieldName, filaFieldValueSchema),
   /** Specyfikacja: `enabled` = the field is on the thread now; revisions outlive removing the field. Absent = the type's template, no revisions. */
   spec: z.object({ enabled: z.boolean(), revisions: z.array(filaSpecRevisionSchema) }).optional(),
+  /** The Cezar kit; absent = not added. */
+  cezar: filaCezarSchema.optional(),
   archived: z.boolean(),
   revision: z.number().int().min(1),
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
@@ -183,6 +204,16 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('setSpec'), thread: threadId, text: z.string().max(FILA_LIMITS.spec), baseRevision: z.number().int().min(0) }).strict(),
   z.object({ action: z.literal('addSpecField'), thread: threadId }).strict(),
   z.object({ action: z.literal('removeSpecField'), thread: threadId }).strict(),
+  z.object({ action: z.literal('addCezarKit'), thread: threadId }).strict(),
+  z.object({ action: z.literal('removeCezarKit'), thread: threadId }).strict(),
+  z.object({
+    action: z.literal('setCezar'), thread: threadId, expectedRevision: z.number().int().min(1).optional(),
+    executor: todoExecutorSchema.nullable().optional(), repo: todoRepoSchema.nullable().optional(), mode: todoModeSchema.nullable().optional(),
+    blocked: z.string().trim().max(TODO_LIMITS.blocked).nullable().optional(),
+  }).strict().refine(a => ['executor', 'repo', 'mode', 'blocked'].some(key => (a as Record<string, unknown>)[key] !== undefined), { message: 'Nothing to change' }),
+  z.object({ action: z.literal('linkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId, title: z.string().trim().min(1).max(200).optional() }).strict()
+    .refine(validPrUrl, { message: 'Invalid GitHub pull request URL' }),
+  z.object({ action: z.literal('unlinkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId }).strict(),
   z.object({ action: z.literal('comment'), thread: threadId, text: z.string().trim().min(1).max(FILA_LIMITS.comment) }).strict(),
   z.object({ action: z.literal('archiveThread'), thread: threadId }).strict(),
   z.object({ action: z.literal('restoreThread'), thread: threadId }).strict(),

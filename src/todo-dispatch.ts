@@ -7,7 +7,7 @@ import { TODO_STATUSES, type TodoTask } from './todo-contract';
 const TODO_SPEC_SECTIONS = ['CEL', 'ZAKRES', 'POZA ZAKRESEM', 'DECYZJE', 'WARUNKI ODBIORU', 'WYKONAWCA', 'REPO', 'TRYB', 'ZAŁĄCZNIKI', 'TYP ZMIANY', 'ZRZUTY'] as const;
 const TODO_REQUIRED_SECTIONS = ['CEL', 'ZAKRES', 'POZA ZAKRESEM', 'WARUNKI ODBIORU'] as const;
 
-interface TodoDispatch {
+export interface TodoDispatch {
   missing: string[];
   prompt: string | null;
   workflow: 'analysis' | 'desk-panel-task' | null;
@@ -89,20 +89,28 @@ function readSections(spec: string): Map<string, string[][]> {
   return sections;
 }
 
+/** What C1 looks at, whichever store it comes from (a to-do task or a Fila thread): the same rules and messages for both. */
+export interface DispatchInput {
+  id: string; title: string; specRevision: number; spec: string;
+  /** Whether the state is „Gotowe do realizacji” of the workflow Praca, and how to name the state when it is not. */
+  ready: boolean; stateLabel: string;
+  blocked: string | null; executor: TodoTask['executor']; repo: TodoTask['repo']; mode: TodoTask['mode'];
+}
+
 /**
- * Whether the task can be handed to an executor, without a model in the path: the fields must be chosen, the status ready
+ * Whether the work can be handed to an executor, without a model in the path: the fields must be chosen, the state ready
  * and the Markdown must carry the required labelled sections. Nothing is written or started here; the prompt is only
  * composed when there is no lack.
  */
-export function getTodoDispatch(todo: TodoTask): TodoDispatch {
+export function evaluateDispatch(input: DispatchInput): TodoDispatch {
   const missing: string[] = [];
-  if (todo.status !== 'gotowe') missing.push(`Zadanie musi mieć stan „Gotowe do realizacji (gotowe)”, a ma „${TODO_STATUSES[todo.status]} (${todo.status})”.`);
-  if (todo.blocked !== null && todo.blocked !== '') missing.push(`Zadanie ma aktywną blokadę: ${todo.blocked}.`);
-  if (todo.executor !== 'cezar') missing.push(todo.executor === null ? 'Brak wykonawcy (executor = cezar).' : `Wykonawca (executor) to „${todo.executor}”, a gotowość wymaga „cezar”.`);
-  if (todo.repo !== 'desk-panel') missing.push(todo.repo === null ? 'Brak repozytorium (repo = desk-panel).' : `Repozytorium (repo) to „${todo.repo}”, a gotowość wymaga „desk-panel”.`);
-  if (todo.mode === null) missing.push('Brak trybu (mode = analiza albo implementacja).');
-  if (todo.spec.trim() === '') missing.push('Brak specyfikacji.');
-  const sections = readSections(todo.spec);
+  if (!input.ready) missing.push(`Zadanie musi mieć stan „Gotowe do realizacji (gotowe)”, a ma „${input.stateLabel}”.`);
+  if (input.blocked !== null && input.blocked !== '') missing.push(`Zadanie ma aktywną blokadę: ${input.blocked}.`);
+  if (input.executor !== 'cezar') missing.push(input.executor === null ? 'Brak wykonawcy (executor = cezar).' : `Wykonawca (executor) to „${input.executor}”, a gotowość wymaga „cezar”.`);
+  if (input.repo !== 'desk-panel') missing.push(input.repo === null ? 'Brak repozytorium (repo = desk-panel).' : `Repozytorium (repo) to „${input.repo}”, a gotowość wymaga „desk-panel”.`);
+  if (input.mode === null) missing.push('Brak trybu (mode = analiza albo implementacja).');
+  if (input.spec.trim() === '') missing.push('Brak specyfikacji.');
+  const sections = readSections(input.spec);
   for (const label of TODO_REQUIRED_SECTIONS) {
     const occurrences = sections.get(label) ?? [];
     if (occurrences.length === 0) missing.push(`Brak wymaganej sekcji ${label}:`);
@@ -110,9 +118,16 @@ export function getTodoDispatch(todo: TodoTask): TodoDispatch {
     else if (occurrences[0].join('\n').trim() === '') missing.push(`Pusta wymagana sekcja ${label}:`);
   }
   const ready = missing.length === 0;
-  const workflow = ready ? (todo.mode === 'analiza' ? 'analysis' : 'desk-panel-task') : null;
+  const workflow = ready ? (input.mode === 'analiza' ? 'analysis' : 'desk-panel-task') : null;
   const prompt = ready
-    ? ['Przygotowane zadanie Desk Panel', `Tytuł: ${todo.title}`, `Zadanie: ${todo.id}`, `Rewizja specyfikacji: ${todo.specRevision}`, '', todo.spec].join('\n')
+    ? ['Przygotowane zadanie Desk Panel', `Tytuł: ${input.title}`, `Zadanie: ${input.id}`, `Rewizja specyfikacji: ${input.specRevision}`, '', input.spec].join('\n')
     : null;
-  return { missing, prompt, workflow, project: 'desk-panel', specRevision: todo.specRevision };
+  return { missing, prompt, workflow, project: 'desk-panel', specRevision: input.specRevision };
 }
+
+/** C1 for a to-do task. */
+export const getTodoDispatch = (todo: TodoTask): TodoDispatch => evaluateDispatch({
+  id: todo.id, title: todo.title, specRevision: todo.specRevision, spec: todo.spec,
+  ready: todo.status === 'gotowe', stateLabel: `${TODO_STATUSES[todo.status]} (${todo.status})`,
+  blocked: todo.blocked ?? null, executor: todo.executor, repo: todo.repo, mode: todo.mode,
+});
