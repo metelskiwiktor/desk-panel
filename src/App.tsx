@@ -68,6 +68,8 @@ import type { UsageView } from './usage-meter';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
+/** Fila (1.5) is only in the isolated scenario preview until the switch (1.6); the service build drops it (`__DESIGNLAB__` is false there). */
+const FilaApp = __DESIGNLAB__ ? lazy(() => import('./fila/FilaApp').then(m => ({ default: m.FilaApp }))) : null;
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'automations' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -106,6 +108,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [layout, setLayout] = useState(readLayout);
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
+  const [fila, setFila] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   /** The kind of the tile a detail was opened from, when the click came from one (usage areas). */
   const [detailSource, setDetailSource] = useState<string>();
@@ -125,13 +128,14 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   }, [page, detail]);
   const open = (target: Detail) => { setDetailSource(sourceOfOpening(Date.now())); setDetail(target); };
   const navigate = (target: Page) => {
+    setFila(false);
     setDetail(null);
     setPage(target);
   };
   useEffect(() => {
     const jump = (event: Event) => {
       const target = (event as CustomEvent<string>).detail;
-      if (target in pageNames) { setDetail(null); setPage(target as Page); }
+      if (target in pageNames) { setFila(false); setDetail(null); setPage(target as Page); }
     };
     window.addEventListener(PANEL_NAVIGATE, jump);
     return () => window.removeEventListener(PANEL_NAVIGATE, jump);
@@ -408,7 +412,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     tasks: data.tasks.data, unreadMail: mail.source.status === 'connected' ? mail.source.total : null,
   })} />;
   return (
-    <div className={`app-shell ${page === 'home' && !detail ? 'is-home' : ''}`} data-night={dayNight.night}>
+    <div className={`app-shell ${page === 'home' && !detail && !fila ? 'is-home' : ''}`} data-night={dayNight.night}>
       {ambientView}
       <header className="top-bar">
         <div className="top-clock" data-usage-area="clock">
@@ -417,15 +421,16 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           <span className="today">{date(now)}</span>
         </div>
         <div className="top-right">
-          {page === 'home' && !detail && visible('insights') && (
+          {page === 'home' && !detail && !fila && visible('insights') && (
             <div className="events-slot">
               <ActivityFeed entries={activity.entries} open={open} dismiss={activity.dismiss}
                 restore={activity.restore} canUndo={activity.canUndo} storageError={activity.storageError} showRules={() => navigate('events')} />
             </div>
           )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} showPc={visible('system')} />
-          {(page !== 'home' || detail) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
-          {page === 'home' && !detail && <PulpitMenu pulpits={pulpits} />}
+          {FilaApp && !fila && <button className="top-button" aria-label="Otwórz Filę" onClick={() => { setDetail(null); setFila(true); }}><Layers3 size={20} /></button>}
+          {(page !== 'home' || detail || fila) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
+          {page === 'home' && !detail && !fila && <PulpitMenu pulpits={pulpits} />}
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
             {dayNight.night ? <Sun size={20} /> : <Moon size={20} />}
           </button>
@@ -442,6 +447,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             </button>
             {renderDetail()}
           </>
+        ) : fila && FilaApp ? (
+          <Suspense fallback={null}><FilaApp onHome={() => navigate('home')} /></Suspense>
         ) : (
           <>
             {page === 'home' ? (
@@ -514,7 +521,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
           </>
         )}
       </main>
-      {page !== 'home' && (
+      {page !== 'home' && !fila && (
         <footer className="app-footer">
           DESK PANEL <span>Limity AI bez wywołań modelu</span>
         </footer>

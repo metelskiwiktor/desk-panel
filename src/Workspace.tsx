@@ -11,6 +11,7 @@ import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SmartActionsTile } from './SmartActionsTile';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
+import { FilaTile } from './fila/FilaTile';
 import { GitHubPrTile } from './tiles/GitHubPrTile';
 import { OpenRouterUsageTile } from './tiles/OpenRouterUsageTile';
 import type { TodosState } from './useTodos';
@@ -185,6 +186,8 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     if (tile.kind === 'system') return <SystemTile data={data} now={now} open={openDetail} roomy={roomy} threshold={systemThreshold} />;
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'smart-actions') return <SmartActionsTile mail={mail} tasks={data.tasks} wide={tile.w > 1} tall={tile.h > 1} />;
+    // On threads (Fila 1.5) the Zadania tile shows one query; only in the isolated preview until the switch (1.6).
+    if (tile.kind === 'todo' && __DESIGNLAB__) return <FilaTile config={tile.config} wide={tile.w > 1} setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     if (tile.kind === 'todo') return <TodoTile snapshot={snapshot} todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     if (tile.kind === 'github-pr') return <GitHubPrTile wide={tile.w > 1} tall={tile.h > 1} />;

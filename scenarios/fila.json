@@ -1,5 +1,5 @@
 {
-  "description": "Fila: tablica DeskPanel, sekcja listy i kanban funkcji. Dane wyłącznie do makiety.",
+  "description": "Fila etapu 1: projekty DESK, CEZA, TABU z wątkami i tablicami (magazyn w pamięci), plus dane pulpitu. Zapisy nie trafiają do usługi.",
   "bank": {
     "live": true,
     "name": "PKO BP",
@@ -1819,5 +1819,1294 @@
         ]
       }
     ]
+  },
+  "fila": {
+    "projects": [
+      {
+        "key": "DESK",
+        "name": "DeskPanel",
+        "createdAt": 1793519461000,
+        "modules": [
+          "Wektor",
+          "Pulpit",
+          "Zadania",
+          "Fila",
+          "Bank",
+          "Automaty"
+        ],
+        "nextNumber": 17
+      },
+      {
+        "key": "CEZA",
+        "name": "Cezar",
+        "createdAt": 1793519583000,
+        "modules": [
+          "Executor",
+          "Workflow"
+        ],
+        "nextNumber": 3
+      },
+      {
+        "key": "TABU",
+        "name": "Tabularium",
+        "createdAt": 1793519705000,
+        "modules": [
+          "Skille",
+          "Concepta"
+        ],
+        "nextNumber": 3
+      }
+    ],
+    "workflows": [
+      {
+        "id": "w-praca",
+        "name": "Praca",
+        "states": [
+          {
+            "name": "Pomysł",
+            "closing": false
+          },
+          {
+            "name": "Do przygotowania",
+            "closing": false
+          },
+          {
+            "name": "Gotowe do realizacji",
+            "closing": false
+          },
+          {
+            "name": "W realizacji",
+            "closing": false
+          },
+          {
+            "name": "Do sprawdzenia",
+            "closing": false
+          },
+          {
+            "name": "Zakończone",
+            "closing": true
+          },
+          {
+            "name": "Porzucone",
+            "closing": true
+          }
+        ]
+      }
+    ],
+    "fieldDefs": [
+      {
+        "name": "Tagi",
+        "kind": "multi"
+      }
+    ],
+    "threads": [
+      {
+        "uid": "f-451cd57e",
+        "project": "DESK",
+        "number": 1,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "W realizacji",
+        "title": "Fila: tablice, sekcje i kafelek Zadania",
+        "description": "Wątki, projekty i tablice w zapytaniach. Etap 1 zastępuje listy zadań.",
+        "parent": null,
+        "module": "Fila",
+        "fields": {
+          "Tagi": [
+            "etap-1"
+          ]
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 3,
+        "createdAt": 1793519827000,
+        "updatedAt": 1793526964000,
+        "history": [
+          {
+            "at": 1793519949000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793520071000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "W realizacji"
+              }
+            ]
+          },
+          {
+            "at": 1793520193000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Tagi",
+                "from": "",
+                "to": "etap-1"
+              }
+            ]
+          },
+          {
+            "at": 1793526903000,
+            "by": "user",
+            "kind": "comment",
+            "text": "Zaczynam od tablicy i kafelka, potem strona wątku."
+          }
+        ]
+      },
+      {
+        "uid": "f-bc57f114",
+        "project": "DESK",
+        "number": 2,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "W realizacji",
+        "title": "Zbudować ekran tablicy",
+        "description": "",
+        "parent": "f-451cd57e",
+        "module": "Fila",
+        "fields": {
+          "Tagi": [
+            "interfejs"
+          ]
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 3,
+        "createdAt": 1793520315000,
+        "updatedAt": 1793520742000,
+        "history": [
+          {
+            "at": 1793520437000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          },
+          {
+            "at": 1793520559000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "W realizacji"
+              }
+            ]
+          },
+          {
+            "at": 1793520681000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Tagi",
+                "from": "",
+                "to": "interfejs"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-5a023dae",
+        "project": "DESK",
+        "number": 3,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "Do przygotowania",
+        "title": "Kafelek Zadania na zapytaniu",
+        "description": "",
+        "parent": "f-451cd57e",
+        "module": "Zadania",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793520803000,
+        "updatedAt": 1793521108000,
+        "history": [
+          {
+            "at": 1793520925000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          },
+          {
+            "at": 1793521047000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Do przygotowania"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-9d35d658",
+        "project": "DESK",
+        "number": 4,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Strona wątku",
+        "description": "",
+        "parent": "f-451cd57e",
+        "module": "Fila",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793521169000,
+        "updatedAt": 1793521352000,
+        "history": [
+          {
+            "at": 1793521291000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          }
+        ]
+      },
+      {
+        "uid": "f-3b734a0f",
+        "project": "DESK",
+        "number": 5,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "Zakończone",
+        "title": "Projekt i archiwum",
+        "description": "",
+        "parent": "f-451cd57e",
+        "module": "Fila",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793521413000,
+        "updatedAt": 1793521718000,
+        "history": [
+          {
+            "at": 1793521535000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          },
+          {
+            "at": 1793521657000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Zakończone"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-568e98b2",
+        "project": "DESK",
+        "number": 6,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Do przygotowania",
+        "title": "Wektor pamięta kontekst rozmowy między sesjami i potrafi wskazać, z której rozmowy pochodzi dana informacja, także gdy rozmowa była zarchiwizowana albo przeniesiona do innego projektu",
+        "description": "",
+        "parent": null,
+        "module": "Wektor",
+        "fields": {
+          "Tagi": [
+            "pilne"
+          ]
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 3,
+        "createdAt": 1793521779000,
+        "updatedAt": 1793522206000,
+        "history": [
+          {
+            "at": 1793521901000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793522023000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Do przygotowania"
+              }
+            ]
+          },
+          {
+            "at": 1793522145000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Tagi",
+                "from": "",
+                "to": "pilne"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-34f51570",
+        "project": "DESK",
+        "number": 7,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Gotowe do realizacji",
+        "title": "Kafelek Konto: odświeżanie salda raz na dobę",
+        "description": "",
+        "parent": null,
+        "module": "Bank",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793522267000,
+        "updatedAt": 1793522572000,
+        "history": [
+          {
+            "at": 1793522389000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793522511000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Gotowe do realizacji"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-f37b103d",
+        "project": "DESK",
+        "number": 8,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Widget pogody",
+        "description": "",
+        "parent": null,
+        "module": "Pulpit",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793522633000,
+        "updatedAt": 1793522816000,
+        "history": [
+          {
+            "at": 1793522755000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          }
+        ]
+      },
+      {
+        "uid": "f-dc09a385",
+        "project": "DESK",
+        "number": 9,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Do sprawdzenia",
+        "title": "Automaty: edycja harmonogramu",
+        "description": "",
+        "parent": null,
+        "module": "Automaty",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793522877000,
+        "updatedAt": 1793523182000,
+        "history": [
+          {
+            "at": 1793522999000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793523121000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Do sprawdzenia"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-5ccfd242",
+        "project": "DESK",
+        "number": 10,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Zakończone",
+        "title": "Pulpit nocny",
+        "description": "",
+        "parent": null,
+        "module": "Pulpit",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793523243000,
+        "updatedAt": 1793523548000,
+        "history": [
+          {
+            "at": 1793523365000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793523487000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Zakończone"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-57cbc017",
+        "project": "DESK",
+        "number": 11,
+        "type": "blad",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Wektor gubi kontekst po restarcie Hermesa",
+        "description": "",
+        "parent": null,
+        "module": "Wektor",
+        "fields": {
+          "Tagi": [
+            "pilne"
+          ]
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793523609000,
+        "updatedAt": 1793523914000,
+        "history": [
+          {
+            "at": 1793523731000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Błąd"
+          },
+          {
+            "at": 1793523853000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Tagi",
+                "from": "",
+                "to": "pilne"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-ef36091f",
+        "project": "DESK",
+        "number": 12,
+        "type": "blad",
+        "workflow": "w-praca",
+        "state": "W realizacji",
+        "title": "Kafelek Zadania nie odświeża się po zmianie listy",
+        "description": "",
+        "parent": null,
+        "module": "Zadania",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793523975000,
+        "updatedAt": 1793524280000,
+        "history": [
+          {
+            "at": 1793524097000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Błąd"
+          },
+          {
+            "at": 1793524219000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "W realizacji"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-87cc0aa3",
+        "project": "DESK",
+        "number": 13,
+        "type": "blad",
+        "workflow": "w-praca",
+        "state": "Zakończone",
+        "title": "Zegar ambient pokazuje zły dzień po północy",
+        "description": "",
+        "parent": null,
+        "module": "Pulpit",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793524341000,
+        "updatedAt": 1793524646000,
+        "history": [
+          {
+            "at": 1793524463000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Błąd"
+          },
+          {
+            "at": 1793524585000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Zakończone"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-2e6236e5",
+        "project": "DESK",
+        "number": 14,
+        "type": "notatka",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Pomysły na widgety Fili",
+        "description": "",
+        "parent": null,
+        "module": null,
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793524707000,
+        "updatedAt": 1793524890000,
+        "history": [
+          {
+            "at": 1793524829000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Notatka"
+          }
+        ]
+      },
+      {
+        "uid": "f-14cde5b9",
+        "project": "DESK",
+        "number": 15,
+        "type": "spotkanie",
+        "workflow": "w-praca",
+        "state": "Do przygotowania",
+        "title": "Przegląd etapu 1 Fili",
+        "description": "",
+        "parent": null,
+        "module": "Fila",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793524951000,
+        "updatedAt": 1793525256000,
+        "history": [
+          {
+            "at": 1793525073000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Spotkanie"
+          },
+          {
+            "at": 1793525195000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Do przygotowania"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-88cacdda",
+        "project": "DESK",
+        "number": 16,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Duplikat: zadania na pulpicie",
+        "description": "",
+        "parent": null,
+        "module": null,
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": true,
+        "revision": 2,
+        "createdAt": 1793525317000,
+        "updatedAt": 1793525622000,
+        "history": [
+          {
+            "at": 1793525439000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          },
+          {
+            "at": 1793525561000,
+            "by": "user",
+            "kind": "archived"
+          }
+        ]
+      },
+      {
+        "uid": "f-32d9594f",
+        "project": "CEZA",
+        "number": 1,
+        "type": "funkcja",
+        "workflow": "w-praca",
+        "state": "Do przygotowania",
+        "title": "Executor: ponowienie po błędzie dostawcy",
+        "description": "",
+        "parent": null,
+        "module": "Executor",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793525683000,
+        "updatedAt": 1793525988000,
+        "history": [
+          {
+            "at": 1793525805000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Funkcja"
+          },
+          {
+            "at": 1793525927000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "Do przygotowania"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-3ce3c435",
+        "project": "CEZA",
+        "number": 2,
+        "type": "blad",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Task bez PR po zakończeniu",
+        "description": "",
+        "parent": null,
+        "module": "Workflow",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": true,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793526049000,
+        "updatedAt": 1793526232000,
+        "history": [
+          {
+            "at": 1793526171000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Błąd"
+          }
+        ]
+      },
+      {
+        "uid": "f-2809bf40",
+        "project": "TABU",
+        "number": 1,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "W realizacji",
+        "title": "Uporządkować Disponendę",
+        "description": "",
+        "parent": null,
+        "module": "Concepta",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 2,
+        "createdAt": 1793526293000,
+        "updatedAt": 1793526598000,
+        "history": [
+          {
+            "at": 1793526415000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          },
+          {
+            "at": 1793526537000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Stan",
+                "from": "Pomysł",
+                "to": "W realizacji"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uid": "f-95316f33",
+        "project": "TABU",
+        "number": 2,
+        "type": "notatka",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Szkic skilla do recenzji kodu",
+        "description": "",
+        "parent": null,
+        "module": "Skille",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793526659000,
+        "updatedAt": 1793526842000,
+        "history": [
+          {
+            "at": 1793526781000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Notatka"
+          }
+        ]
+      }
+    ],
+    "boards": [
+      {
+        "id": "b-7fc325c6",
+        "name": "DeskPanel",
+        "createdAt": 1793519522000,
+        "views": [
+          {
+            "id": "v-0c351c38",
+            "name": "Przegląd",
+            "sections": [
+              {
+                "id": "s-a97898de",
+                "name": "Do przejrzenia",
+                "kind": "list",
+                "query": "projekt = DESK AND otwarte AND rodzic brak SORTUJ stan, id",
+                "columns": []
+              },
+              {
+                "id": "s-641e32d1",
+                "name": "Funkcje",
+                "kind": "kanban",
+                "query": "projekt = DESK AND typ = funkcja AND rodzic brak",
+                "columns": [
+                  {
+                    "id": "c-87a6f268",
+                    "name": "Do przygotowania",
+                    "query": "stan = \"Do przygotowania\""
+                  },
+                  {
+                    "id": "c-81b1a5ef",
+                    "name": "Gotowe do realizacji",
+                    "query": "stan = \"Gotowe do realizacji\""
+                  },
+                  {
+                    "id": "c-ce3c4770",
+                    "name": "W realizacji",
+                    "query": "stan = \"W realizacji\""
+                  },
+                  {
+                    "id": "c-0e28c16a",
+                    "name": "Do sprawdzenia",
+                    "query": "stan = \"Do sprawdzenia\""
+                  }
+                ]
+              },
+              {
+                "id": "s-972a0987",
+                "name": "Pilne",
+                "kind": "list",
+                "query": "projekt = DESK AND otwarte AND tag = \"pilne\"",
+                "columns": []
+              }
+            ]
+          },
+          {
+            "id": "v-c72b74ee",
+            "name": "Wszystko",
+            "sections": [
+              {
+                "id": "s-7f8516ab",
+                "name": "DeskPanel",
+                "kind": "list",
+                "query": "projekt = DESK SORTUJ id malejąco",
+                "columns": []
+              }
+            ]
+          }
+        ],
+        "history": [
+          {
+            "at": 1793519522000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "board",
+            "name": "DeskPanel"
+          },
+          {
+            "at": 1793519522000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "view",
+            "name": "Widok"
+          },
+          {
+            "at": 1793519522000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "Wszystkie wątki",
+            "in": "Widok",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = DESK"
+              }
+            ]
+          },
+          {
+            "at": 1793527025000,
+            "by": "claude-code",
+            "kind": "renamed",
+            "target": "view",
+            "name": "Przegląd",
+            "changes": [
+              {
+                "field": "Nazwa",
+                "from": "Widok",
+                "to": "Przegląd"
+              }
+            ]
+          },
+          {
+            "at": 1793527086000,
+            "by": "claude-code",
+            "kind": "renamed",
+            "target": "section",
+            "name": "Do przejrzenia",
+            "in": "Przegląd",
+            "changes": [
+              {
+                "field": "Nazwa",
+                "from": "Wszystkie wątki",
+                "to": "Do przejrzenia"
+              }
+            ]
+          },
+          {
+            "at": 1793527086000,
+            "by": "claude-code",
+            "kind": "changed",
+            "target": "section",
+            "name": "Do przejrzenia",
+            "in": "Przegląd",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": "projekt = DESK",
+                "to": "projekt = DESK AND otwarte AND rodzic brak SORTUJ stan, id"
+              }
+            ]
+          },
+          {
+            "at": 1793527147000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "Funkcje",
+            "in": "Przegląd",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = DESK AND typ = funkcja AND rodzic brak"
+              }
+            ]
+          },
+          {
+            "at": 1793527147000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "column",
+            "name": "Do przygotowania",
+            "in": "Funkcje",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "stan = \"Do przygotowania\""
+              }
+            ]
+          },
+          {
+            "at": 1793527147000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "column",
+            "name": "Gotowe do realizacji",
+            "in": "Funkcje",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "stan = \"Gotowe do realizacji\""
+              }
+            ]
+          },
+          {
+            "at": 1793527147000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "column",
+            "name": "W realizacji",
+            "in": "Funkcje",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "stan = \"W realizacji\""
+              }
+            ]
+          },
+          {
+            "at": 1793527147000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "column",
+            "name": "Do sprawdzenia",
+            "in": "Funkcje",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "stan = \"Do sprawdzenia\""
+              }
+            ]
+          },
+          {
+            "at": 1793527208000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "Pilne",
+            "in": "Przegląd",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = DESK AND otwarte AND tag = \"pilne\""
+              }
+            ]
+          },
+          {
+            "at": 1793527269000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "view",
+            "name": "Wszystko"
+          },
+          {
+            "at": 1793527269000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "DeskPanel",
+            "in": "Wszystko",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = DESK SORTUJ id malejąco"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "b-0c7a02b4",
+        "name": "Cezar",
+        "createdAt": 1793519644000,
+        "views": [
+          {
+            "id": "v-ee742132",
+            "name": "Widok",
+            "sections": [
+              {
+                "id": "s-3ecf8de2",
+                "name": "Wszystkie wątki",
+                "kind": "list",
+                "query": "projekt = CEZA",
+                "columns": []
+              }
+            ]
+          }
+        ],
+        "history": [
+          {
+            "at": 1793519644000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "board",
+            "name": "Cezar"
+          },
+          {
+            "at": 1793519644000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "view",
+            "name": "Widok"
+          },
+          {
+            "at": 1793519644000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "Wszystkie wątki",
+            "in": "Widok",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = CEZA"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "b-6ed04082",
+        "name": "Tabularium",
+        "createdAt": 1793519766000,
+        "views": [
+          {
+            "id": "v-ba14ad11",
+            "name": "Widok",
+            "sections": [
+              {
+                "id": "s-b8f96e1f",
+                "name": "Wszystkie wątki",
+                "kind": "list",
+                "query": "projekt = TABU",
+                "columns": []
+              }
+            ]
+          }
+        ],
+        "history": [
+          {
+            "at": 1793519766000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "board",
+            "name": "Tabularium"
+          },
+          {
+            "at": 1793519766000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "view",
+            "name": "Widok"
+          },
+          {
+            "at": 1793519766000,
+            "by": "claude-code",
+            "kind": "created",
+            "target": "section",
+            "name": "Wszystkie wątki",
+            "in": "Widok",
+            "changes": [
+              {
+                "field": "Zapytanie",
+                "from": null,
+                "to": "projekt = TABU"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "starterBoards": {
+      "DESK": "b-7fc325c6",
+      "CEZA": "b-0c7a02b4",
+      "TABU": "b-6ed04082"
+    }
   }
 }
