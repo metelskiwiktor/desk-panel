@@ -154,3 +154,7 @@
   .fl-row-line > .fl-id { display: none; }
   .fl-kanban { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* W kafelku tytuł dostaje szerokość: bez kolumny modułu, Stan zajmuje tyle, ile potrzebuje. */
+.fl-tile .fl-row-line, .fl-tile .fl-row.compact .fl-row-line { grid-template-columns: 16px 54px minmax(0, 1fr) auto; gap: 10px; }
+.fl-tile .fl-row-line > .fl-module { display: none; }
