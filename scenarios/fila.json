@@ -1,5 +1,5 @@
 {
-  "description": "Fila etapu 1: projekty DESK, CEZR, TABL z wątkami i tablicami (magazyn w pamięci), plus dane pulpitu. Zapisy nie trafiają do usługi.",
+  "description": "Fila etapu 1: projekty DESK, CEZA, TABU z wątkami i tablicami (magazyn w pamięci), plus dane pulpitu. Zapisy nie trafiają do usługi.",
   "bank": {
     "live": true,
     "name": "PKO BP",
@@ -1834,10 +1834,10 @@
           "Bank",
           "Automaty"
         ],
-        "nextNumber": 17
+        "nextNumber": 18
       },
       {
-        "key": "CEZR",
+        "key": "CEZA",
         "name": "Cezar",
         "createdAt": 1793519583000,
         "modules": [
@@ -1847,7 +1847,7 @@
         "nextNumber": 3
       },
       {
-        "key": "TABL",
+        "key": "TABU",
         "name": "Tabularium",
         "createdAt": 1793519705000,
         "modules": [
@@ -1891,39 +1891,90 @@
             "closing": true
           }
         ]
+      },
+      {
+        "id": "w-ce8df83c",
+        "name": "Czytanie",
+        "states": [
+          {
+            "name": "Do przeczytania",
+            "closing": false
+          },
+          {
+            "name": "W trakcie",
+            "closing": false
+          },
+          {
+            "name": "Przeczytane",
+            "closing": true
+          }
+        ]
       }
     ],
     "fieldDefs": [
       {
         "name": "Tagi",
         "kind": "multi"
+      },
+      {
+        "name": "Koszt",
+        "kind": "number"
+      },
+      {
+        "name": "Kontakt",
+        "kind": "text"
+      },
+      {
+        "name": "Termin zewnętrzny",
+        "kind": "date"
+      },
+      {
+        "name": "Wymaga przeglądu",
+        "kind": "bool"
       }
     ],
     "threads": [
       {
-        "uid": "f-451cd57e",
+        "uid": "f-f59ba055",
         "project": "DESK",
         "number": 1,
         "type": "funkcja",
         "workflow": "w-praca",
         "state": "W realizacji",
         "title": "Fila: tablice, sekcje i kafelek Zadania",
-        "description": "Wątki, projekty i tablice w zapytaniach. Etap 1 zastępuje listy zadań.",
+        "description": "Wątki, projekty i tablice w zapytaniach. **Etap 1** zastępuje listy zadań.\n\n- tablica i kafelek Zadania\n- strona wątku\n- projekt i archiwum\n\nKoncept: Mea/Fila, kontrakty: docs/fila.md.",
         "parent": null,
         "module": "Fila",
         "fields": {
           "Tagi": [
             "etap-1"
-          ]
+          ],
+          "Koszt": 3,
+          "Kontakt": "Wiktor",
+          "Termin zewnętrzny": "2026-11-20",
+          "Wymaga przeglądu": true
         },
         "spec": {
           "enabled": true,
-          "revisions": []
+          "revisions": [
+            {
+              "number": 1,
+              "text": "CEL:\nTablice i kafelek.\n\nZAKRES:\nLista i kanban.\n\nPOZA ZAKRESEM:\nCzas.\n\nWARUNKI ODBIORU:\nTest przeglądarkowy.",
+              "by": "codex",
+              "at": 1793527940000
+            },
+            {
+              "number": 2,
+              "text": "CEL:\nTablice, strona wątku i kafelek.\n\nZAKRES:\nLista, kanban i strona wątku.\n\nPOZA ZAKRESEM:\nCzas, przekrój.\n\nWARUNKI ODBIORU:\nTest przeglądarkowy każdej części.",
+              "by": "codex",
+              "at": 1793528123000
+            }
+          ]
         },
         "archived": false,
-        "revision": 3,
+        "revision": 10,
         "createdAt": 1793519827000,
-        "updatedAt": 1793526964000,
+        "updatedAt": 1793528489000,
         "history": [
           {
             "at": 1793519949000,
@@ -1960,11 +2011,107 @@
             "by": "user",
             "kind": "comment",
             "text": "Zaczynam od tablicy i kafelka, potem strona wątku."
+          },
+          {
+            "at": 1793527330000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Opis",
+                "from": "Wątki, projekty i tablice w zapytaniach. Etap 1 zastępuje listy zadań.",
+                "to": "Wątki, projekty i tablice w zapytaniach. **Etap 1** zastępuje listy zadań.\n\n- tablica i kafelek Zadania\n- strona wątku\n- projekt i archiwum\n\nKoncept: Mea/Fila, kontrakty: docs/fila.md."
+              }
+            ]
+          },
+          {
+            "at": 1793527452000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Koszt",
+                "from": null,
+                "to": "3"
+              }
+            ]
+          },
+          {
+            "at": 1793527574000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Kontakt",
+                "from": null,
+                "to": "Wiktor"
+              }
+            ]
+          },
+          {
+            "at": 1793527696000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Termin zewnętrzny",
+                "from": null,
+                "to": "2026-11-20"
+              }
+            ]
+          },
+          {
+            "at": 1793527818000,
+            "by": "user",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Wymaga przeglądu",
+                "from": null,
+                "to": "true"
+              }
+            ]
+          },
+          {
+            "at": 1793528001000,
+            "by": "codex",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Specyfikacja",
+                "from": null,
+                "to": "v1"
+              }
+            ]
+          },
+          {
+            "at": 1793528184000,
+            "by": "codex",
+            "kind": "changed",
+            "changes": [
+              {
+                "field": "Specyfikacja",
+                "from": "v1",
+                "to": "v2"
+              }
+            ]
+          },
+          {
+            "at": 1793528306000,
+            "by": "user",
+            "kind": "comment",
+            "text": "Część 1 przyjęta, zaczynam stronę wątku."
+          },
+          {
+            "at": 1793528428000,
+            "by": "claude-code",
+            "kind": "comment",
+            "text": "Przegląd rybki v2: bez uwag blokujących."
           }
         ]
       },
       {
-        "uid": "f-bc57f114",
+        "uid": "f-ac820ba2",
         "project": "DESK",
         "number": 2,
         "type": "sprawa",
@@ -1972,7 +2119,7 @@
         "state": "W realizacji",
         "title": "Zbudować ekran tablicy",
         "description": "",
-        "parent": "f-451cd57e",
+        "parent": "f-f59ba055",
         "module": "Fila",
         "fields": {
           "Tagi": [
@@ -2021,7 +2168,7 @@
         ]
       },
       {
-        "uid": "f-5a023dae",
+        "uid": "f-a40c363a",
         "project": "DESK",
         "number": 3,
         "type": "sprawa",
@@ -2029,7 +2176,7 @@
         "state": "Do przygotowania",
         "title": "Kafelek Zadania na zapytaniu",
         "description": "",
-        "parent": "f-451cd57e",
+        "parent": "f-f59ba055",
         "module": "Zadania",
         "fields": {
           "Tagi": []
@@ -2064,7 +2211,7 @@
         ]
       },
       {
-        "uid": "f-9d35d658",
+        "uid": "f-89fed487",
         "project": "DESK",
         "number": 4,
         "type": "sprawa",
@@ -2072,7 +2219,7 @@
         "state": "Pomysł",
         "title": "Strona wątku",
         "description": "",
-        "parent": "f-451cd57e",
+        "parent": "f-f59ba055",
         "module": "Fila",
         "fields": {
           "Tagi": []
@@ -2095,7 +2242,7 @@
         ]
       },
       {
-        "uid": "f-3b734a0f",
+        "uid": "f-84915ba1",
         "project": "DESK",
         "number": 5,
         "type": "sprawa",
@@ -2103,7 +2250,7 @@
         "state": "Zakończone",
         "title": "Projekt i archiwum",
         "description": "",
-        "parent": "f-451cd57e",
+        "parent": "f-f59ba055",
         "module": "Fila",
         "fields": {
           "Tagi": []
@@ -2138,7 +2285,7 @@
         ]
       },
       {
-        "uid": "f-568e98b2",
+        "uid": "f-6a01ca98",
         "project": "DESK",
         "number": 6,
         "type": "funkcja",
@@ -2195,7 +2342,7 @@
         ]
       },
       {
-        "uid": "f-34f51570",
+        "uid": "f-e72d8532",
         "project": "DESK",
         "number": 7,
         "type": "funkcja",
@@ -2238,7 +2385,7 @@
         ]
       },
       {
-        "uid": "f-f37b103d",
+        "uid": "f-1e29aa23",
         "project": "DESK",
         "number": 8,
         "type": "funkcja",
@@ -2269,7 +2416,7 @@
         ]
       },
       {
-        "uid": "f-dc09a385",
+        "uid": "f-acf296ef",
         "project": "DESK",
         "number": 9,
         "type": "funkcja",
@@ -2312,7 +2459,7 @@
         ]
       },
       {
-        "uid": "f-5ccfd242",
+        "uid": "f-a97afe68",
         "project": "DESK",
         "number": 10,
         "type": "funkcja",
@@ -2355,7 +2502,7 @@
         ]
       },
       {
-        "uid": "f-57cbc017",
+        "uid": "f-5210e05a",
         "project": "DESK",
         "number": 11,
         "type": "blad",
@@ -2400,7 +2547,7 @@
         ]
       },
       {
-        "uid": "f-ef36091f",
+        "uid": "f-e810e6a9",
         "project": "DESK",
         "number": 12,
         "type": "blad",
@@ -2443,7 +2590,7 @@
         ]
       },
       {
-        "uid": "f-87cc0aa3",
+        "uid": "f-d41a6ca8",
         "project": "DESK",
         "number": 13,
         "type": "blad",
@@ -2486,7 +2633,7 @@
         ]
       },
       {
-        "uid": "f-2e6236e5",
+        "uid": "f-b45c0dde",
         "project": "DESK",
         "number": 14,
         "type": "notatka",
@@ -2517,7 +2664,7 @@
         ]
       },
       {
-        "uid": "f-14cde5b9",
+        "uid": "f-2ead9ee3",
         "project": "DESK",
         "number": 15,
         "type": "spotkanie",
@@ -2560,7 +2707,7 @@
         ]
       },
       {
-        "uid": "f-88cacdda",
+        "uid": "f-9ef024a8",
         "project": "DESK",
         "number": 16,
         "type": "sprawa",
@@ -2596,8 +2743,8 @@
         ]
       },
       {
-        "uid": "f-32d9594f",
-        "project": "CEZR",
+        "uid": "f-29c9eb1d",
+        "project": "CEZA",
         "number": 1,
         "type": "funkcja",
         "workflow": "w-praca",
@@ -2639,8 +2786,8 @@
         ]
       },
       {
-        "uid": "f-3ce3c435",
-        "project": "CEZR",
+        "uid": "f-80e55679",
+        "project": "CEZA",
         "number": 2,
         "type": "blad",
         "workflow": "w-praca",
@@ -2670,8 +2817,8 @@
         ]
       },
       {
-        "uid": "f-2809bf40",
-        "project": "TABL",
+        "uid": "f-44c744ce",
+        "project": "TABU",
         "number": 1,
         "type": "sprawa",
         "workflow": "w-praca",
@@ -2713,8 +2860,8 @@
         ]
       },
       {
-        "uid": "f-95316f33",
-        "project": "TABL",
+        "uid": "f-863cea1e",
+        "project": "TABU",
         "number": 2,
         "type": "notatka",
         "workflow": "w-praca",
@@ -2742,55 +2889,86 @@
             "text": "Notatka"
           }
         ]
+      },
+      {
+        "uid": "f-ea58f0d0",
+        "project": "DESK",
+        "number": 17,
+        "type": "sprawa",
+        "workflow": "w-praca",
+        "state": "Pomysł",
+        "title": "Notatki z przeglądu Fili do przeczytania",
+        "description": "",
+        "parent": null,
+        "module": "Fila",
+        "fields": {
+          "Tagi": []
+        },
+        "spec": {
+          "enabled": false,
+          "revisions": []
+        },
+        "archived": false,
+        "revision": 1,
+        "createdAt": 1793528550000,
+        "updatedAt": 1793528733000,
+        "history": [
+          {
+            "at": 1793528672000,
+            "by": "claude-code",
+            "kind": "created",
+            "text": "Sprawa"
+          }
+        ]
       }
     ],
     "boards": [
       {
-        "id": "b-7fc325c6",
+        "id": "b-4df86384",
         "name": "DeskPanel",
         "createdAt": 1793519522000,
         "views": [
           {
-            "id": "v-0c351c38",
+            "id": "v-b98ebcfd",
             "name": "Przegląd",
             "sections": [
               {
-                "id": "s-a97898de",
+                "id": "s-eceefa37",
                 "name": "Do przejrzenia",
                 "kind": "list",
                 "query": "projekt = DESK AND otwarte AND rodzic brak SORTUJ stan, id",
                 "columns": []
               },
               {
-                "id": "s-641e32d1",
+                "id": "s-0ea1e9e8",
                 "name": "Funkcje",
                 "kind": "kanban",
                 "query": "projekt = DESK AND typ = funkcja AND rodzic brak",
                 "columns": [
                   {
-                    "id": "c-87a6f268",
+                    "id": "c-5d1afbab",
                     "name": "Do przygotowania",
                     "query": "stan = \"Do przygotowania\""
                   },
                   {
-                    "id": "c-81b1a5ef",
+                    "id": "c-2b9e338b",
                     "name": "Gotowe do realizacji",
                     "query": "stan = \"Gotowe do realizacji\""
                   },
                   {
-                    "id": "c-ce3c4770",
+                    "id": "c-e8270850",
                     "name": "W realizacji",
                     "query": "stan = \"W realizacji\""
                   },
                   {
-                    "id": "c-0e28c16a",
+                    "id": "c-f13b1b14",
                     "name": "Do sprawdzenia",
                     "query": "stan = \"Do sprawdzenia\""
                   }
                 ]
               },
               {
-                "id": "s-972a0987",
+                "id": "s-83d5193f",
                 "name": "Pilne",
                 "kind": "list",
                 "query": "projekt = DESK AND otwarte AND tag = \"pilne\"",
@@ -2799,11 +2977,11 @@
             ]
           },
           {
-            "id": "v-c72b74ee",
+            "id": "v-3fc29eac",
             "name": "Wszystko",
             "sections": [
               {
-                "id": "s-7f8516ab",
+                "id": "s-f338dcf4",
                 "name": "DeskPanel",
                 "kind": "list",
                 "query": "projekt = DESK SORTUJ id malejąco",
@@ -3001,19 +3179,19 @@
         ]
       },
       {
-        "id": "b-0c7a02b4",
+        "id": "b-1ea0de5c",
         "name": "Cezar",
         "createdAt": 1793519644000,
         "views": [
           {
-            "id": "v-ee742132",
+            "id": "v-7d6e0bf5",
             "name": "Widok",
             "sections": [
               {
-                "id": "s-3ecf8de2",
+                "id": "s-08ac6b8a",
                 "name": "Wszystkie wątki",
                 "kind": "list",
-                "query": "projekt = CEZR",
+                "query": "projekt = CEZA",
                 "columns": []
               }
             ]
@@ -3045,26 +3223,26 @@
               {
                 "field": "Zapytanie",
                 "from": null,
-                "to": "projekt = CEZR"
+                "to": "projekt = CEZA"
               }
             ]
           }
         ]
       },
       {
-        "id": "b-6ed04082",
+        "id": "b-af1b5a2c",
         "name": "Tabularium",
         "createdAt": 1793519766000,
         "views": [
           {
-            "id": "v-ba14ad11",
+            "id": "v-c4dfc85d",
             "name": "Widok",
             "sections": [
               {
-                "id": "s-b8f96e1f",
+                "id": "s-28181b5a",
                 "name": "Wszystkie wątki",
                 "kind": "list",
-                "query": "projekt = TABL",
+                "query": "projekt = TABU",
                 "columns": []
               }
             ]
@@ -3096,7 +3274,7 @@
               {
                 "field": "Zapytanie",
                 "from": null,
-                "to": "projekt = TABL"
+                "to": "projekt = TABU"
               }
             ]
           }
@@ -3104,9 +3282,9 @@
       }
     ],
     "starterBoards": {
-      "DESK": "b-7fc325c6",
-      "CEZR": "b-0c7a02b4",
-      "TABL": "b-6ed04082"
+      "DESK": "b-4df86384",
+      "CEZA": "b-1ea0de5c",
+      "TABU": "b-af1b5a2c"
     }
   }
 }

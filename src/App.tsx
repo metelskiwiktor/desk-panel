@@ -62,6 +62,7 @@ import { usePulpits } from './pulpits';
 import './chat.css';
 import { useChatPresentation } from './useChatPresentation';
 import { PANEL_NAVIGATE } from './panel-nav';
+import { FILA_OPEN } from './fila/events';
 import { useUsageMeter } from './useUsageMeter';
 import { sourceOfOpening } from './usage-dom';
 import type { UsageView } from './usage-meter';
@@ -109,6 +110,8 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const [storageError, setStorageError] = useState(false);
   const [page, setPage] = useState<Page>('home');
   const [fila, setFila] = useState(false);
+  /** The thread Fila opens on (asked by the Zadania tile); a new one remounts the page. */
+  const [filaThread, setFilaThread] = useState<string | undefined>();
   const [detail, setDetail] = useState<Detail | null>(null);
   /** The kind of the tile a detail was opened from, when the click came from one (usage areas). */
   const [detailSource, setDetailSource] = useState<string>();
@@ -127,8 +130,15 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
     window.scrollTo?.(0, 0);
   }, [page, detail]);
   const open = (target: Detail) => { setDetailSource(sourceOfOpening(Date.now())); setDetail(target); };
+  useEffect(() => {
+    if (!FilaApp) return;
+    const open = (event: Event) => { setDetail(null); setFilaThread((event as CustomEvent<string>).detail); setFila(true); };
+    window.addEventListener(FILA_OPEN, open);
+    return () => window.removeEventListener(FILA_OPEN, open);
+  }, []);
   const navigate = (target: Page) => {
     setFila(false);
+    setFilaThread(undefined);
     setDetail(null);
     setPage(target);
   };
@@ -428,7 +438,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             </div>
           )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} showPc={visible('system')} />
-          {FilaApp && !fila && <button className="top-button" aria-label="Otwórz Filę" onClick={() => { setDetail(null); setFila(true); }}><Layers3 size={20} /></button>}
+          {FilaApp && !fila && <button className="top-button" aria-label="Otwórz Filę" onClick={() => { setDetail(null); setFilaThread(undefined); setFila(true); }}><Layers3 size={20} /></button>}
           {(page !== 'home' || detail || fila) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
           {page === 'home' && !detail && !fila && <PulpitMenu pulpits={pulpits} />}
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
@@ -448,7 +458,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             {renderDetail()}
           </>
         ) : fila && FilaApp ? (
-          <Suspense fallback={null}><FilaApp onHome={() => navigate('home')} /></Suspense>
+          <Suspense fallback={null}><FilaApp key={filaThread ?? ''} thread={filaThread} onHome={() => navigate('home')} /></Suspense>
         ) : (
           <>
             {page === 'home' ? (

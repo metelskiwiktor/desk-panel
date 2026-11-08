@@ -12,9 +12,20 @@ export interface FilaRegistry {
   projects: { key: string; name: string; modules: string[]; counts: { open: number; closed: number; archived: number }; board: string | null }[];
   boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
+  fieldDefs: { name: string; kind: 'text' | 'number' | 'date' | 'bool' | 'multi' }[];
   types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean }[];
   notice?: string;
 }
+/** One thread in full (GET /api/fila/threads/ID). */
+export type FilaFieldValue = string | number | boolean | string[];
+export interface FilaThreadDoc {
+  id: string; uid: string; project: string; type: { key: string; label: string }; workflow: { id: string; name: string };
+  state: string; closed: boolean; title: string; description: string; parent: string | null; children: string[];
+  module: string | null; fields: Record<string, FilaFieldValue>; spec: { enabled: boolean; revision: number };
+  archived: boolean; revision: number; createdAt: number; updatedAt: number; createdBy: string;
+  history: { at: number; by: string; kind: string; text?: string; changes?: { field: string; from: string | null; to: string | null }[] }[];
+}
+export interface FilaSpecDoc { thread: string; enabled: boolean; revision: number; text: string | null; by: string | null; at: number | null; latest: number }
 export interface FilaBoardDoc {
   id: string; name: string; project: string | null;
   views: { id: string; name: string; sections: FilaSection[] }[];
@@ -69,6 +80,10 @@ export function useFilaGet<T>(url: string | null): { data: T | null; error: stri
 
 export const useFilaRegistry = () => useFilaGet<FilaRegistry>('/api/fila');
 export const useFilaBoard = (id: string | null) => useFilaGet<FilaBoardDoc>(id ? `/api/fila/boards/${id}` : null);
+export const useFilaThread = (id: string | null) => useFilaGet<FilaThreadDoc>(id ? `/api/fila/threads/${id}` : null);
+/** The Specyfikacja text: the newest revision, or a numbered one. Needs the thread to have the field (else 404, shown as no text). */
+export const useFilaSpec = (id: string | null, revision?: number) =>
+  useFilaGet<FilaSpecDoc>(id ? `/api/fila/threads/${id}/spec${revision ? `/${revision}` : ''}` : null);
 export const useFilaView = (board: string | null, view: string | null) =>
   useFilaGet<FilaViewDoc>(board && view ? `/api/fila/boards/${board}/views/${view}` : null);
 

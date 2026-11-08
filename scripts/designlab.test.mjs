@@ -1,3 +1,5 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { launchChromium, startScenario } from './scenario-runtime.ts';
@@ -7,9 +9,11 @@ const close = { headers: { connection: 'close' } };
 
 describe('DesignLab preview', () => {
   let preview, browser;
-  afterAll(async () => { await browser?.close(); await preview?.stop(); }, 60_000);
+  // A dependency cache of its own: beside the other browser tests a shared one is re-bundled under each of them (504 "Outdated Optimize Dep").
+  const cache = mkdtempSync(join(tmpdir(), 'designlab-vite-'));
+  afterAll(async () => { await browser?.close(); await preview?.stop(); rmSync(cache, { recursive: true, force: true }); }, 60_000);
   it('is switched on by the scenario preview and reads scenario sources', async () => {
-    preview = await startScenario(join(process.cwd(), 'scenarios', 'standard.json'), 'down');
+    preview = await startScenario(join(process.cwd(), 'scenarios', 'standard.json'), 'down', undefined, undefined, cache);
     const env = await (await fetch(new URL('@vite/env', preview.url), close)).text();
     expect(env).toMatch(/__DESIGNLAB__["']?\s*[:=]\s*true/);
     const cezar = await (await fetch(new URL('api/cezar', preview.url), close)).json();
@@ -19,7 +23,7 @@ describe('DesignLab preview', () => {
   }, 120_000);
 
   it('moves between the Fila views without reloading the document', async () => {
-    const fila = await startScenario(join(process.cwd(), 'scenarios', 'fila.json'), 'down');
+    const fila = await startScenario(join(process.cwd(), 'scenarios', 'fila.json'), 'down', undefined, undefined, cache);
     try {
       browser = await launchChromium();
       const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

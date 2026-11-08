@@ -195,6 +195,170 @@ URL: ${page?.url()}`);
     expect(kids).toHaveLength(4);
   });
 
+  // Part 2: the thread page. The window event is what the tile uses to ask Fila to open a thread.
+  const openThread = async id => {
+    await page.evaluate(thread => window.dispatchEvent(new CustomEvent('fila-open-thread', { detail: thread })), id);
+    await page.getByLabel(new RegExp(`^Stan ${id}: `)).first().waitFor();
+  };
+  const thread = id => api(`api/fila/threads/${id}`);
+
+  it('opens a thread from a board title and goes back to the board', async () => {
+    await page.getByRole('tab', { name: 'Przegląd' }).click();
+    await page.getByRole('button', { name: 'Wektor gubi kontekst po restarcie Hermesa' }).first().click();
+    await page.getByRole('heading', { level: 1, name: /Wektor gubi kontekst/ }).waitFor();
+    await page.getByRole('button', { name: 'DeskPanel', exact: true }).first().click();
+    await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
+  });
+
+  it('edits title and description with the keyboard and keeps them in the history', async () => {
+    await openThread('DESK-1');
+    const editTitle = page.getByRole('button', { name: /^Zmień tytuł:/ });
+    await editTitle.focus();
+    await page.keyboard.press('Enter');
+    await page.getByLabel('Tytuł wątku').fill('Fila: tablice, wątek i kafelek Zadania');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: /^Zmień tytuł: Fila: tablice, wątek/ }).waitFor();
+    expect((await thread('DESK-1')).title).toBe('Fila: tablice, wątek i kafelek Zadania');
+    await page.getByLabel('Zmień opis').click();
+    await page.getByLabel('Opis wątku').fill('Nowy opis **pogrubiony**.');
+    await page.getByRole('button', { name: 'Zapisz opis' }).click();
+    await page.getByRole('region', { name: 'Opis' }).locator('strong').waitFor();
+    expect((await thread('DESK-1')).description).toBe('Nowy opis **pogrubiony**.');
+    await page.getByRole('region', { name: 'Aktywność' }).getByText(/Tytuł: Fila: tablice, sekcje i kafelek Zadania → Fila: tablice, wątek/).waitFor();
+    // Escape gives the edit up and changes nothing.
+    await page.getByRole('button', { name: /^Zmień tytuł:/ }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByLabel('Tytuł wątku').fill('Nie zapisuj');
+    await page.keyboard.press('Escape');
+    expect((await thread('DESK-1')).title).toBe('Fila: tablice, wątek i kafelek Zadania');
+  });
+
+  it('changes Stan and Moduł, edits, adds and removes fields', async () => {
+    await openThread('DESK-1');
+    await page.getByLabel('Stan DESK-1: W realizacji').click();
+    await page.getByRole('option', { name: 'Do sprawdzenia' }).click();
+    await page.getByLabel('Stan DESK-1: Do sprawdzenia').first().waitFor();
+    // Each edit waits for its result: an action sent at once would carry the old thread revision and be refused (409).
+    await page.getByLabel('Moduł', { exact: true }).selectOption('Bank');
+    await page.getByLabel('Moduł', { exact: true }).evaluate(el => el.value === 'Bank');
+    await page.waitForFunction(async () => (await (await fetch('/api/fila/threads/DESK-1')).json()).module === 'Bank');
+    await page.getByLabel('Koszt', { exact: true }).fill('5');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(async () => (await (await fetch('/api/fila/threads/DESK-1')).json()).fields.Koszt === 5);
+    await page.getByLabel('Dodaj do pola Tagi').fill('#nowy');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Usuń nowy z pola Tagi' }).waitFor();
+    await page.getByRole('button', { name: 'Usuń pole Kontakt' }).click();
+    await page.getByRole('button', { name: 'Usuń pole Kontakt' }).waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: 'Pole', exact: true }).click();
+    await page.getByLabel('Nazwa pola').fill('Priorytet');
+    await page.getByLabel('Wartość', { exact: true }).fill('wysoki');
+    await page.getByRole('button', { name: 'Dodaj pole' }).click();
+    await page.getByLabel('Priorytet', { exact: true }).waitFor();
+    await page.waitForFunction(async () => (await (await fetch('/api/fila/threads/DESK-1')).json()).fields.Koszt === 5);
+    const { state, module, fields } = await thread('DESK-1');
+    expect([state, module, fields.Koszt, fields.Priorytet, 'Kontakt' in fields, fields.Tagi]).toEqual(['Do sprawdzenia', 'Bank', 5, 'wysoki', false, ['etap-1', 'nowy']]);
+    // A name that exists keeps its kind everywhere: Koszt is a number, so text is refused by the server and the page says so.
+    await page.getByRole('button', { name: 'Pole', exact: true }).click();
+    await page.getByLabel('Nazwa pola').fill('Koszt');
+    await page.getByLabel('Wartość', { exact: true }).fill('abc');
+    await page.getByRole('button', { name: 'Dodaj pole' }).click();
+    await page.getByRole('alert').first().waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByLabel('Moduł', { exact: true }).selectOption('Fila');
+    await page.getByLabel('Stan DESK-1: Do sprawdzenia').click();
+    await page.getByRole('option', { name: 'W realizacji' }).click();
+    await page.getByLabel('Stan DESK-1: W realizacji').first().waitFor();
+  });
+
+  it('sets and clears a parent; one level of subthreads is listed', async () => {
+    await openThread('DESK-1');
+    const subthreads = page.getByRole('region', { name: 'Podwątki' });
+    await expect.poll(() => idsIn(subthreads)).toHaveLength(4);
+    await openThread('DESK-7');
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Zmień rodzica…' }).click();
+    await page.getByLabel('ID wątku-rodzica').fill('DESK-7');
+    await page.getByRole('button', { name: 'Zapisz' }).click();
+    await page.getByRole('dialog').getByRole('alert').waitFor();
+    expect((await thread('DESK-7')).parent).toBe(null);
+    await page.getByLabel('ID wątku-rodzica').fill('DESK-1');
+    await page.getByRole('button', { name: 'Zapisz' }).click();
+    await page.getByRole('button', { name: 'DESK-1', exact: true }).first().waitFor();
+    expect((await thread('DESK-7')).parent).toBe('DESK-1');
+    await openThread('DESK-1');
+    await expect.poll(() => idsIn(subthreads)).toHaveLength(5);
+    await openThread('DESK-7');
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Zmień rodzica…' }).click();
+    await page.getByRole('button', { name: 'Usuń rodzica' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    expect((await thread('DESK-7')).parent).toBe(null);
+  });
+
+  it('moves a thread: a fitting Stan and Moduł stay, a Moduł that does not fit needs an explicit choice', async () => {
+    // DESK-14 is a Notatka with no Moduł: nothing to choose.
+    await openThread('DESK-14');
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Przenieś do projektu…' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('select').first().selectOption('CEZA');
+    await dialog.getByText(/pasują i zostają/).waitFor();
+    await dialog.getByRole('button', { name: 'Zapisz' }).click();
+    await page.getByLabel(/^Stan CEZA-3: Pomysł/).first().waitFor();
+    expect((await thread('CEZA-3')).fields['Dawne ID']).toEqual(['DESK-14']);
+    expect((await fetch(new URL('api/fila/threads/DESK-14', fila.url), close)).status).toBe(404);
+    // DESK-17 has the Moduł Fila, which TABU does not have: the dialog cannot save until a choice is made.
+    await openThread('DESK-17');
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Przenieś do projektu…' }).click();
+    await dialog.locator('select').first().selectOption('TABU');
+    await dialog.getByText(/Moduł „Fila” nie jest w projekcie/).waitFor();
+    expect(await dialog.getByRole('button', { name: 'Zapisz' }).isDisabled()).toBe(true);
+    await dialog.locator('select').nth(1).selectOption('__none__');
+    await dialog.getByRole('button', { name: 'Zapisz' }).click();
+    await page.getByLabel(/^Stan TABU-3: /).first().waitFor();
+    const moved = await thread('TABU-3');
+    expect([moved.module, moved.fields['Dawne ID']]).toEqual([null, ['DESK-17']]);
+    // Escape closes the dialog and gives focus back to the menu button that opened it.
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Zmień rodzica…' }).click();
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Działania wątku');
+  });
+
+  it('assigns another existing workflow, asking for a Stan when it does not fit', async () => {
+    await openThread('CEZA-3');
+    await page.getByLabel('Działania wątku').click();
+    await page.getByRole('menuitem', { name: 'Zmień workflow…' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('select').first().selectOption({ label: 'Czytanie' });
+    await dialog.getByText(/Stan „Pomysł” nie istnieje w workflow „Czytanie”/).waitFor();
+    expect(await dialog.getByRole('button', { name: 'Zapisz' }).isDisabled()).toBe(true);
+    await dialog.locator('select').nth(1).selectOption('Do przeczytania');
+    await dialog.getByRole('button', { name: 'Zapisz' }).click();
+    await page.getByLabel('Stan CEZA-3: Do przeczytania').first().waitFor();
+    const changed = await thread('CEZA-3');
+    expect([changed.workflow.name, changed.state]).toEqual(['Czytanie', 'Do przeczytania']);
+    // Definitions are the AI's: the page has no control to edit a workflow, its Stany or the Moduł list.
+    expect(await page.getByRole('button', { name: /edytuj workflow|dodaj stan|dodaj moduł/i }).count()).toBe(0);
+  });
+
+  it('adds a comment, shows the history, and reads the Specyfikacja by revision without editing it', async () => {
+    await openThread('DESK-1');
+    await page.getByLabel('Komentarz', { exact: true }).fill('Strona wątku działa.');
+    await page.getByRole('button', { name: 'Dodaj komentarz' }).click();
+    await page.getByRole('region', { name: 'Aktywność' }).getByText('Strona wątku działa.').waitFor();
+    expect((await thread('DESK-1')).history.at(-1)).toMatchObject({ kind: 'comment', text: 'Strona wątku działa.', by: 'user' });
+    const spec = page.getByRole('region', { name: 'Specyfikacja' });
+    await spec.getByText('Test przeglądarkowy każdej części.').waitFor();
+    await spec.getByLabel('Rewizja specyfikacji').selectOption('1');
+    await spec.getByText(/Tablice i kafelek./).waitFor();
+    expect(await spec.locator('textarea, input').count()).toBe(0);
+    expect(await spec.getByText(/tylko do odczytu/).isVisible()).toBe(true);
+  });
+
   it('the Zadania tile asks for a query, keeps it after reopening and changes Stan like the board', async () => {
     const tab = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     tab.setDefaultTimeout(90_000);
@@ -216,11 +380,12 @@ URL: ${page?.url()}`);
     await tab.reload();
     await tab.getByRole('region', { name: 'Zadania' }).locator('.fl-id').first().waitFor();
     expect(await idsIn(tab.getByRole('region', { name: 'Zadania' }).locator('.fl-list'))).toEqual(expected);
-    // No thread opens from here before the thread page (part 2).
-    expect(await tab.getByRole('region', { name: 'Zadania' }).getByRole('link').count()).toBe(0);
     await tab.getByRole('region', { name: 'Zadania' }).getByLabel('Stan DESK-8: Pomysł').click();
     await tab.getByRole('option', { name: 'Do sprawdzenia' }).click();
     await tab.getByLabel('Stan DESK-8: Do sprawdzenia').waitFor();
+    // A title opens the thread page in Fila.
+    await tab.getByRole('region', { name: 'Zadania' }).getByRole('button', { name: 'Widget pogody' }).click();
+    await tab.getByRole('heading', { level: 1, name: 'Widget pogody' }).waitFor();
     await tab.close();
     expect((await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND stan = "Do sprawdzenia"'))).threads.map(t => t.id)).toContain('DESK-8');
   });

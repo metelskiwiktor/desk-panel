@@ -4,6 +4,7 @@ import { Empty } from '../components';
 import type { FilaAction, FilaSection } from '../fila-contract';
 import { sendFilaAction, useFilaActions, useFilaBoard, useFilaRegistry, useFilaView, type FilaBoardDoc, type FilaViewDoc } from './api';
 import { ThreadCard, ThreadList } from './threads';
+import { ThreadPage } from './ThreadPage';
 import { ConfirmDialog, Menu, NameDialog, QueryEditor, stateTone } from './ui';
 
 type Section = FilaViewDoc['sections'][number];
@@ -25,13 +26,14 @@ const sentence = (entry: FilaBoardDoc['history'][number]) => {
 };
 
 /** The Fila page (part 1): navigation of boards and projects, a board's views as tabs, its sections, and the board's history. */
-export function FilaApp({ onHome }: { onHome?: () => void }) {
+export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; /** A thread to open first (from the Zadania tile). */ thread?: string }) {
   const registry = useFilaRegistry();
   const [boardId, setBoardId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialogs | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(firstThread ?? null);
   const [notice, setNotice] = useState('');
   const { act, error, clear } = useFilaActions();
   const data = registry.data;
@@ -97,7 +99,7 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
       <QueryEditor id={section.id} text={def.query} onSave={text => saveSection(section.id, text)} />
       {section.error && <p className="fl-error" role="alert">{section.error}</p>}
       {section.kind === 'list'
-        ? section.threads.length ? <ThreadList threads={section.threads} registry={data} showProject={data.projects.length > 1 && !def.query.includes(`projekt = ${project}`)} onError={setNotice} /> : <p className="fl-empty">Żaden wątek nie pasuje do zapytania.</p>
+        ? section.threads.length ? <ThreadList threads={section.threads} registry={data} showProject={data.projects.length > 1 && !def.query.includes(`projekt = ${project}`)} onError={setNotice} onOpen={setThreadId} /> : <p className="fl-empty">Żaden wątek nie pasuje do zapytania.</p>
         : <div className="fl-kanban" style={{ '--fl-columns': Math.max(1, section.columns.length) } as React.CSSProperties}>
           {section.columns.map((column, at) => <section key={column.id} className="fl-column" aria-label={`Kolumna ${column.name}`}>
             <header><i className={`fl-dot fl-st-${stateTone(column.name, data.workflows.some(w => w.states.some(s => s.name === column.name && s.closing)))}`} aria-hidden="true" /><h3>{column.name}</h3><span className="fl-count">{column.total}</span>
@@ -110,7 +112,7 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
               ]} />
             </header>
             <QueryEditor id={column.id} column compact control={{ open: editingColumn === column.id, setOpen: open => setEditingColumn(open ? column.id : null) }} text={def.columns.find(c => c.id === column.id)?.query ?? column.query} onSave={text => saveColumn(column.id, text)} />
-            {column.threads.length ? <ul className="fl-cards">{column.threads.map(thread => <ThreadCard key={thread.id} thread={thread} registry={data} onError={setNotice} />)}</ul> : <p className="fl-empty">Brak wątków</p>}
+            {column.threads.length ? <ul className="fl-cards">{column.threads.map(thread => <ThreadCard key={thread.id} thread={thread} registry={data} onError={setNotice} onOpen={setThreadId} />)}</ul> : <p className="fl-empty">Brak wątków</p>}
           </section>)}
           {section.columns.length === 0 && <p className="fl-empty">Kanban nie ma jeszcze kolumn.</p>}
         </div>}
@@ -128,17 +130,18 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
       <div className="fl-brand"><Layers3 size={21} aria-hidden="true" /> Fila</div>
       <div role="navigation" aria-label="Nawigacja Fili">
         <div className="fl-nav-head"><h2>Tablice</h2><button type="button" className="fl-icon small" aria-label="Nowa tablica" onClick={() => setDialog({ kind: 'newBoard' })}><Plus size={15} aria-hidden="true" /></button></div>
-        {data.boards.map(item => <button key={item.id} type="button" className={`fl-nav-item${item.id === board?.id ? ' active' : ''}`} aria-current={item.id === board?.id ? 'page' : undefined} onClick={() => { setBoardId(item.id); setViewId(null); setDrawer(false); }}>
+        {data.boards.map(item => <button key={item.id} type="button" className={`fl-nav-item${item.id === board?.id ? ' active' : ''}`} aria-current={item.id === board?.id ? 'page' : undefined} onClick={() => { setBoardId(item.id); setViewId(null); setDrawer(false); setThreadId(null); }}>
           <Layers3 size={16} aria-hidden="true" /><span>{item.name}</span></button>)}
         <div className="fl-nav-head"><h2>Projekty</h2></div>
-        {data.projects.map(item => <button key={item.key} type="button" className="fl-nav-item" disabled={!item.board} onClick={() => { if (item.board) { setBoardId(item.board); setViewId(null); } }}>
+        {data.projects.map(item => <button key={item.key} type="button" className="fl-nav-item" disabled={!item.board} onClick={() => { if (item.board) { setBoardId(item.board); setViewId(null); setThreadId(null); } }}>
           <Folder size={16} aria-hidden="true" /><span>{item.name}</span><em>{item.counts.open}</em></button>)}
       </div>
       {onHome && <button type="button" className="fl-text back" onClick={onHome}><ArrowLeft size={15} aria-hidden="true" /> Pulpit</button>}
     </aside>
     <div className="fl-workspace">
       {notice && <p className="fl-notice" role="alert">{notice}<button type="button" aria-label="Zamknij komunikat" onClick={() => setNotice('')}><X size={13} aria-hidden="true" /></button></p>}
-      {!board ? <Empty>Nie ma jeszcze żadnej tablicy. Dodaj ją plusem w nawigacji.</Empty> : <>
+      {threadId ? <ThreadPage key={threadId} id={threadId} registry={data} boardName={board?.name ?? 'Tablica'} onOpen={setThreadId} onBack={() => setThreadId(null)} />
+        : !board ? <Empty>Nie ma jeszcze żadnej tablicy. Dodaj ją plusem w nawigacji.</Empty> : <>
         <header className="fl-head">
           <div><p className="fl-eyebrow">Tablica</p><h1>{board.name}</h1></div>
           <div className="fl-head-actions">

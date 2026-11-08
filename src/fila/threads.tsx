@@ -24,7 +24,12 @@ function Progress({ children, open, toggle, id }: { children: FilaThreadRow[]; o
   </button>;
 }
 
-export function ThreadList({ threads, registry, showProject = false, onError, compact = false }: { threads: FilaThreadRow[]; registry: FilaRegistry; showProject?: boolean; onError: (message: string) => void; compact?: boolean }) {
+/** The title of a thread: a button that opens it where a page for it exists, plain text where it does not (the tile before the page is reachable from it). */
+function Title({ thread, onOpen }: { thread: FilaThreadRow; onOpen?: (id: string) => void }) {
+  return onOpen ? <button type="button" className="fl-title open" onClick={() => onOpen(thread.id)}>{thread.title}</button> : <span className="fl-title">{thread.title}</span>;
+}
+
+export function ThreadList({ threads, registry, showProject = false, onError, compact = false, onOpen }: { threads: FilaThreadRow[]; registry: FilaRegistry; showProject?: boolean; onError: (message: string) => void; compact?: boolean; onOpen?: (id: string) => void }) {
   const { top, children } = nestChildren(threads);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const row = (thread: FilaThreadRow, nested = false) => {
@@ -34,7 +39,7 @@ export function ThreadList({ threads, registry, showProject = false, onError, co
         <TypeIcon type={thread.type} />
         <span className="fl-id">{thread.id}</span>
         <div className="fl-row-main">
-          <span className="fl-title">{thread.title}</span>
+          <Title thread={thread} onOpen={onOpen} />
           {!nested && kids.length > 0 && <Progress id={thread.id} children={kids} open={!!open[thread.id]} toggle={() => setOpen(previous => ({ ...previous, [thread.id]: !previous[thread.id] }))} />}
           {tagsOf(thread).map(tag => <span key={tag} className="fl-tag">#{tag}</span>)}
         </div>
@@ -47,13 +52,13 @@ export function ThreadList({ threads, registry, showProject = false, onError, co
   return <ul className="fl-list">{top.map(thread => row(thread))}</ul>;
 }
 
-export function ThreadCard({ thread, registry, onError }: { thread: FilaThreadRow; registry: FilaRegistry; onError: (message: string) => void }) {
+export function ThreadCard({ thread, registry, onError, onOpen }: { thread: FilaThreadRow; registry: FilaRegistry; onError: (message: string) => void; onOpen?: (id: string) => void }) {
   return <li className={`fl-card${thread.closed ? ' closed' : ''}`}>
     <div className="fl-card-top">
       <TypeIcon type={thread.type} size={15} /><span className="fl-id">{thread.id}</span><span className="fl-module">{thread.module}</span>
       <StatePicker thread={thread} registry={registry} onError={onError} compact />
     </div>
-    <span className="fl-title">{thread.title}</span>
+    <Title thread={thread} onOpen={onOpen} />
     {tagsOf(thread).length > 0 && <div className="fl-card-meta">{tagsOf(thread).map(tag => <span key={tag} className="fl-tag">#{tag}</span>)}</div>}
   </li>;
 }

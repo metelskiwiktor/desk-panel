@@ -3,6 +3,7 @@ import { ListChecks, Pencil } from 'lucide-react';
 import type { TileConfig } from '../tile-grid';
 import { checkFilaQuery, useFilaGet, useFilaRegistry, type FilaThreadRow } from './api';
 import { ThreadList } from './threads';
+import { FILA_OPEN } from './events';
 import { Menu } from './ui';
 
 /** What one Zadania tile on Fila remembers: the one query it shows, as text (D-063). Without it the tile asks to be configured. */
@@ -53,7 +54,7 @@ export function FilaTile({ config, setConfig, wide = true }: { config?: TileConf
       </div>
       : result.error ? <p className="p2-note warn" role="alert">{result.error}</p>
         : result.data && registry.data
-          ? result.data.threads.length ? <ThreadList threads={result.data.threads} registry={registry.data} compact={!wide} showProject onError={setNotice} /> : <p className="p2-empty">Żaden wątek nie pasuje do zapytania.</p>
+          ? result.data.threads.length ? <ThreadList threads={result.data.threads} registry={registry.data} compact={!wide} showProject onError={setNotice} onOpen={id => window.dispatchEvent(new CustomEvent(FILA_OPEN, { detail: id }))} /> : <p className="p2-empty">Żaden wątek nie pasuje do zapytania.</p>
           : <p className="p2-empty">Ładowanie wątków…</p>}
   </section>;
 }

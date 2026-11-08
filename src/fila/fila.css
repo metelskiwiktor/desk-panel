@@ -161,3 +161,72 @@
 /* W kafelku tytuł dostaje szerokość: bez kolumny modułu, Stan zajmuje tyle, ile potrzebuje. */
 .fl-tile .fl-row-line, .fl-tile .fl-row.compact .fl-row-line { grid-template-columns: 16px 54px minmax(0, 1fr) auto; gap: 10px; }
 .fl-tile .fl-row-line > .fl-module { display: none; }
+
+/* Strona wątku (część 2) */
+.fl-title.open { padding: 0; border: 0; background: transparent; color: var(--p2-text) !important; text-align: left; }
+.fl-title.open:hover { color: var(--fl-accent) !important; }
+.fl-row.closed .fl-title.open { color: var(--p2-muted) !important; }
+.fl-thread { max-width: 1100px; }
+.fl-back { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 16px; padding: 0; border: 0; background: transparent; color: var(--p2-muted) !important; font-size: 13px; }
+.fl-back:hover { color: var(--p2-text) !important; }
+.fl-banner { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--amber) 12%, transparent); color: var(--amber); font-size: 13px; }
+.fl-thread-head { margin-bottom: 18px; }
+.fl-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; }
+.fl-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--tone); }
+.fl-linkish { padding: 0; border: 0; background: transparent; color: var(--p2-text) !important; font-size: inherit; }
+.fl-linkish:hover { color: var(--fl-accent) !important; }
+.fl-parent { color: var(--p2-muted); }
+.fl-head-menu { margin-left: auto; }
+.fl-thread-head h1 { margin: 8px 0 0; font-size: 25px; line-height: 1.35; }
+.fl-editable { display: inline; padding: 0; border: 0; background: transparent; font: inherit !important; color: var(--p2-text) !important; text-align: left; overflow-wrap: anywhere; }
+.fl-editable svg { margin-left: 8px; vertical-align: -1px; color: var(--p2-faint); opacity: 0; }
+.fl-editable:hover svg, .fl-editable:focus-visible svg { opacity: 1; }
+.fl-edit { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.fl-edit textarea, .fl-composer textarea { width: 100%; resize: vertical; padding: 8px 10px; border: 1px solid var(--p2-line); border-radius: 8px; background: var(--fl-panel); color: var(--p2-text); font: inherit; }
+.fl-edit textarea[name="title"] { font-size: 22px; font-weight: 600; line-height: 1.35; }
+.fl-thread-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 36px; }
+.fl-thread-main { min-width: 0; }
+.fl-block { padding: 18px 0; border-top: 1px solid var(--p2-line); }
+.fl-block:first-child { border-top: 0; padding-top: 0; }
+.fl-block-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--p2-muted); }
+.fl-block-head h2 { margin: 0; color: var(--p2-text); font-size: 15px; }
+.fl-description { position: relative; padding-right: 40px; font-size: 14.5px; line-height: 1.7; }
+.fl-description > .fl-icon { position: absolute; top: -4px; right: 0; opacity: .6; }
+.fl-description:hover > .fl-icon { opacity: 1; }
+.fl-revision { position: relative; display: flex; align-items: center; margin-left: auto; color: var(--fl-accent); }
+.fl-revision select { appearance: none; padding: 6px 20px 6px 8px; border: 0; background: transparent; color: var(--fl-accent); font-size: 12.5px; }
+.fl-revision svg { position: absolute; right: 4px; pointer-events: none; }
+.fl-byline { margin: -6px 0 10px; color: var(--p2-muted); font-size: 12px; }
+.fl-timeline > li.comment { margin: 6px 0; padding: 10px 12px; border-radius: 10px; background: var(--fl-panel); }
+.fl-timeline > li.comment::before { display: none; }
+.fl-timeline > li.comment p { margin: 4px 0 0; white-space: pre-wrap; }
+.fl-comment-head { display: flex; align-items: baseline; gap: 10px; }
+.fl-comment-head time { display: inline; }
+.fl-composer { display: flex; align-items: flex-end; gap: 8px; margin-top: 10px; }
+.fl-props { align-self: start; padding-left: 22px; border-left: 1px solid var(--p2-line); }
+.fl-props dl { display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 6px 10px; margin: 0; font-size: 13.5px; }
+.fl-props dt { color: var(--p2-muted); font-size: 12px; }
+.fl-props dd { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; min-height: 32px; margin: 0; }
+.fl-field { display: contents; }
+.fl-props .fl-state { margin-left: -8px; max-width: none; }
+.fl-props .fl-state span { white-space: normal; text-align: left; }
+.fl-select, .fl-dialog select, .fl-field-form select, .fl-field-form input { min-height: 30px; padding: 3px 6px; border: 1px solid var(--p2-line); border-radius: 7px; background: var(--fl-panel); color: var(--p2-text); font-size: 13.5px; }
+.fl-select { max-width: 100%; margin-left: -6px; border-color: transparent; background: transparent; }
+.fl-select:hover { border-color: var(--p2-line); background: var(--fl-panel); }
+.fl-dialog select { min-height: 38px; font-size: 14px; }
+.fl-type-value { color: var(--tone); }
+.fl-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fl-chip { display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 8px; border-radius: 999px; background: var(--fl-panel); font-size: 12px; }
+.fl-chip button, .fl-remove { display: inline-flex; padding: 2px; border: 0; border-radius: 50%; background: transparent; color: var(--p2-faint) !important; }
+.fl-chip button:hover, .fl-remove:hover { color: var(--quota-red) !important; }
+.fl-remove { margin-left: auto; opacity: 0; }
+.fl-props dd:hover .fl-remove, .fl-remove:focus-visible { opacity: 1; }
+.fl-inline { width: 90px; padding: 2px 8px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--p2-text); font-size: 13.5px; }
+.fl-inline.wide { width: 100%; min-width: 0; margin-left: -6px; }
+.fl-inline:hover, .fl-inline:focus { border-color: var(--p2-line); background: var(--fl-panel); }
+.fl-field-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.fl-props-note { margin: 14px 0 0; font-size: 12px; }
+@media (max-width: 900px) { .fl-thread-grid { grid-template-columns: minmax(0, 1fr); } .fl-props { grid-row: 1; padding-left: 0; border-left: 0; } }
+.fl-props .fl-chips { flex: 1; min-width: 0; }
+.fl-props .fl-inline.wide { flex: 1; }
+.fl-props dd { min-height: 34px; }
