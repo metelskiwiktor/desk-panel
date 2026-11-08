@@ -16,15 +16,27 @@ describe('DesignLab preview', () => {
     expect(cezar.tasks.length).toBeGreaterThan(0);
     const mockup = await fetch(new URL('src/designlab/mockups/demo.tsx', preview.url), close);
     expect(mockup.status).toBe(200);
-  }, 60_000);
+  }, 120_000);
 
   it('moves between the Fila views without reloading the document', async () => {
     const fila = await startScenario(join(process.cwd(), 'scenarios', 'fila.json'), 'down');
     try {
       browser = await launchChromium();
       const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      // A cold Vite (module transforms, dependency optimization) needs ~12 s alone but 30 s and more while just check types,
+      // scans and builds beside it (measured: page.goto and later clicks hit Playwright's 30 s default). A hang is still caught.
+      page.setDefaultTimeout(90_000);
+      // Rarely (about 1 in 12 runs) the board never appeared within 90 s; the cause was not caught, so a repeat names it.
+      const seen = [], pending = new Set();
+      page.on('pageerror', error => seen.push(`pageerror ${error.message.slice(0, 200)}`));
+      page.on('response', response => { if (response.status() >= 400) seen.push(`http ${response.status()} ${response.url()}`); });
+      page.on('request', request => pending.add(request.url()));
+      page.on('requestfinished', request => pending.delete(request.url()));
+      page.on('requestfailed', request => { pending.delete(request.url()); seen.push(`failed ${request.url()}`); });
       await page.goto(new URL('?designlab=fila', fila.url).href);
-      await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
+      await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor().catch(error => {
+        throw new Error(`${error.message}\nBoard missing. Page problems: ${seen.join(' | ') || 'none'}. Requests still pending: ${[...pending].join(' | ') || 'none'}.`);
+      });
       await page.evaluate(() => { window.__survives = true; });
       const alive = () => page.evaluate(() => window.__survives === true);
       const sections = () => page.locator('section.fila-section').evaluateAll(list => list.map(s => s.getAttribute('aria-label')));
@@ -62,5 +74,5 @@ describe('DesignLab preview', () => {
       await direct.goto(new URL('?designlab=fila&thread=DESK-32', fila.url).href);
       await direct.getByRole('heading', { name: /Wektor gubi kontekst wskazanego wątku/ }).waitFor();
     } finally { await fila.stop(); }
-  }, 90_000);
+  }, 240_000);
 });

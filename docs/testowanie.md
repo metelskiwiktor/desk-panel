@@ -128,6 +128,11 @@ miewał timeouty, a ta sama wersja przechodziła pełny zestaw z ograniczeniem `
 `$env:VITEST_MAX_WORKERS='4'; just check` (tylko w bieżącej powłoce; usunięcie: `Remove-Item Env:VITEST_MAX_WORKERS`).
 Nie podnoś automatycznie timeoutów i nie uznawaj każdego błędu za problem obciążenia — porównaj konkretne błędy i wyniki.
 
+`scripts/designlab.test.mjs` (przeglądarka na żywym Vite) padał w `just update` na `locator.click`/`page.goto` po 30 s
+(domyślny limit akcji Playwrighta). Pomiar 8.11.2026: sam test ok. 12 s, ale zimny Vite renderuje pierwszą planszę w 7 s
+bez obciążenia, a 24–32 s, gdy `just check` jednocześnie sprawdza typy, knip i buduje. Test ma więc limit akcji 90 s
+i całości 240 s (pierwszy test 120 s): wyliczony z tego pomiaru, nie ślepo; zawieszenie dalej kończy się błędem.
+
 CI (`.github/workflows/check.yml`) przy każdym PR i pushu do `main` uruchamia
 `npm ci` i `scripts/check.mjs` na Ubuntu i Windows (tylko tam działa test DPAPI).
 
