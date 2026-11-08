@@ -1,3 +1,5 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { launchChromium, startScenario } from './scenario-runtime.ts';
@@ -7,28 +9,49 @@ const close = { headers: { connection: 'close' } };
 
 describe('Fila board and Zadania tile', () => {
   // Each step drives a real browser against a cold Vite; the 5 s default is for unit tests.
-  vi.setConfig({ testTimeout: 120_000 });
-  let fila, browser, page;
+  vi.setConfig({ testTimeout: 240_000 });
+  let fila, browser, page, cache;
   const api = async path => (await fetch(new URL(path, fila.url), close)).json();
   const section = name => page.getByRole('region', { name, exact: true });
   const idsIn = async locator => locator.locator('.fl-id').allTextContents();
   const queryIds = async q => (await api(`api/fila/query?q=${encodeURIComponent(q)}`)).threads.map(t => t.id);
+  // The preview has a dependency cache of its own (a temporary directory): beside the other browser tests a shared one is
+  // re-bundled under each of them (504 "Outdated Optimize Dep", two copies of React). A reload still covers the first bundling.
   const openFila = async () => {
     await page.goto(fila.url);
-    await page.getByRole('button', { name: 'Otwórz Filę' }).click();
+    const button = page.getByRole('button', { name: 'Otwórz Filę' });
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (await button.waitFor({ timeout: 30_000 }).then(() => true, () => false)) break;
+      await page.reload();
+    }
+    await button.click();
     await page.getByRole('heading', { name: 'Do przejrzenia' }).waitFor();
   };
 
   beforeAll(async () => {
-    fila = await startScenario(join(process.cwd(), 'scenarios', 'fila.json'), 'down');
-    browser = await launchChromium();
-    page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    // A cold Vite needs ~12 s alone and far more beside just check (see designlab.test.mjs); a hang is still caught.
-    page.setDefaultTimeout(90_000);
-    await openFila();
-    page.setDefaultTimeout(20_000); // cold start is over: a step that waits longer is a failure, not a slow machine
-  }, 180_000);
-  afterAll(async () => { await browser?.close(); await fila?.stop(); }, 60_000);
+    // A failing hook shows no detail in the check report, so say where it stopped.
+    const seen = [];
+    try {
+      cache = mkdtempSync(join(tmpdir(), 'fila-ui-vite-'));
+      fila = await startScenario(join(process.cwd(), 'scenarios', 'fila.json'), 'down', undefined, undefined, cache);
+      browser = await launchChromium();
+      page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      // A cold Vite needs ~12 s alone and far more beside just check (see designlab.test.mjs); a hang is still caught.
+      page.on('pageerror', e => seen.push(`pageerror ${e.message.slice(0, 300)}`));
+      page.on('console', m => { if (m.type() === 'error') seen.push(`console ${m.text().slice(0, 300)}`); });
+      page.on('response', r => { if (r.status() >= 400) seen.push(`http ${r.status()} ${r.url()}`); });
+      page.setDefaultTimeout(60_000); // beside just check (tests, types, build) a cold Vite needs minutes
+      await openFila();
+      page.setDefaultTimeout(45_000); // cold start is over: a step that waits longer is a failure
+    } catch (error) {
+      const body = await page?.evaluate(() => document.body.innerText.slice(0, 400)).catch(() => 'n/a');
+      throw new Error(`Fila preview did not start: ${error?.message}
+Page problems: ${seen.join(' | ') || 'none'}
+Page text: ${body}
+URL: ${page?.url()}`);
+    }
+  }, 360_000);
+  afterAll(async () => { await browser?.close(); await fila?.stop(); if (cache) rmSync(cache, { recursive: true, force: true }); }, 60_000);
 
   it('shows the API results in the API order, a thread in every section that selects it', async () => {
     const review = await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK AND otwarte AND rodzic brak SORTUJ stan, id'));
@@ -174,7 +197,7 @@ describe('Fila board and Zadania tile', () => {
 
   it('the Zadania tile asks for a query, keeps it after reopening and changes Stan like the board', async () => {
     const tab = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    tab.setDefaultTimeout(30_000);
+    tab.setDefaultTimeout(90_000);
     await tab.addInitScript(() => { if (localStorage.getItem('desk-panel.workspace') === null) localStorage.setItem('desk-panel.workspace', JSON.stringify({ version: 1, tiles: [{ id: 'todo#1', kind: 'todo', c: 0, r: 0, w: 2, h: 2 }] })); });
     await tab.goto(fila.url);
     const tile = tab.getByRole('region', { name: 'Zadania' });

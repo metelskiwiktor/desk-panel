@@ -5,7 +5,7 @@ Test retry kasowania sesji Hermesa przesuwa sztucznym zegarem tylko opóźnienie
 Scenariusze czatu tymczasowego Hermesa są rozdzielone na instrukcje i usunięcie, sprzątanie po restarcie oraz zachowanie rozmowy: każdy ma własny limit i wskazuje osobno, co zawiodło.
 Testy domyślnego układu pulpitu czekają na kafelki limitów i poczty przed sprawdzeniem lub zmianą układu: te dane przychodzą niezależnie.
 
-`scripts/fila-ui.test.mjs` prowadzi prawdziwą przeglądarkę po Fili (tablica, Stan, zapytania, widoki i sekcje, kafelek) na izolowanym magazynie scenariusza `fila`, porównując ID i kolejność z API. Zimny start Vite potrafi rzadko przekroczyć 90 s (jak w `designlab.test.mjs`): powtórz bieg.
+`scripts/fila-ui.test.mjs` prowadzi prawdziwą przeglądarkę po Fili (tablica, Stan, zapytania, widoki i sekcje, kafelek) na izolowanym magazynie scenariusza `fila`, porównując ID i kolejność z API. Gdy obok działają inne testy przeglądarkowe, Vite odpowiada 504 „Outdated Optimize Dep” (współdzielony cache zależności) i strona sama się nie podnosi, więc test przeładowuje ją i pyta ponownie; to nie jest flaka do powtarzania.
 
 ## Scenariusze i zrzuty ekranu
 
