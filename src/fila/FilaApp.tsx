@@ -38,7 +38,8 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
   const boardDoc = useFilaBoard(board?.id ?? null);
   const view = board?.views.find(v => v.id === viewId) ?? board?.views[0];
   const viewDoc = useFilaView(board?.id ?? null, view?.id ?? null);
-  useEffect(() => { if (error) { setNotice(error); clear(); } }, [error, clear]);
+  // A refusal belongs to the dialog that sent it; without one it goes to the banner.
+  useEffect(() => { if (error && !dialog) { setNotice(error); clear(); } }, [error, dialog, clear]);
 
   if (!data) return <div className="fl-app"><div className="fl-workspace"><Empty>{registry.error || 'Ładowanie Fili…'}</Empty></div></div>;
   const project = data.projects.find(p => p.board === board?.id)?.key ?? boardDoc.data?.project ?? data.projects[0]?.key ?? '';

@@ -1,6 +1,6 @@
 # Fila: rdzeń wątków, zapytania i tablice
 
-Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a–1.4b etapu 1**: trwały rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice, MCP z czterema narzędziami (klienci i Wektor), Cezara na wątku oraz migrator offline. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); działająca Fila ich nie czyta ani nie zmienia. Warsztat słonia i rybek (1.3b) opisuje sekcja „Warsztat specyfikacji (1.3b)”. Nie ma jeszcze interfejsu (1.5) ani przełączenia (1.6).
+Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a–1.4b etapu 1**: trwały rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice, MCP z czterema narzędziami (klienci i Wektor), Cezara na wątku oraz migrator offline. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); działająca Fila ich nie czyta ani nie zmienia. Warsztat słonia i rybek (1.3b) opisuje sekcja „Warsztat specyfikacji (1.3b)”. Interfejs 1.5 powstaje częściami w odizolowanym podglądzie (sekcja „Interfejs (1.5)”); przełączenia (1.6) jeszcze nie ma.
 
 ## Gdzie co jest
 
@@ -20,6 +20,7 @@ Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projekt
 | dane usługi | `~/.desk-panel/fila.json` (poza Gitem) |
 | tokeny klientów | `~/.desk-panel/fila-tokens.json` (poza Gitem) |
 | scenariusz | klucz `fila` w `scenarios/*.json` (ten sam schemat co dane), tylko w pamięci |
+| interfejs 1.5 (część 1: tablica i kafelek) | `src/fila/` (`api.ts` odczyt i akcje, `ui.tsx` wybór Stanu, menu, okna i edytor zapytania, `threads.tsx` wiersze i karty, `FilaApp.tsx` ekran, `FilaTile.tsx` kafelek, `fila.css`); test `scripts/fila-ui.test.mjs` |
 
 `PanelSources.fila` jest opcjonalne: `real-sources.ts` daje magazyn w pliku, `scenario.ts` magazyn w pamięci zasiany ze scenariusza (bez klucza: workflow Praca i zero projektów). Scenariusz, podgląd i testy nigdy nie zapisują danych usługi.
 
@@ -243,6 +244,14 @@ Słoń, rybki i lokalny wykonawca pracują na Specyfikacji wątku przez ten sam 
 - **Wykonawca lokalny** (faber) czyta pełny wątek (`fila_get` albo `GET /api/fila/threads/ID` i `…/spec`) po ID. Executor Cezara dostaje serwerowy prompt (1.4a) i nie czyta API sam.
 - **Ścieżka przejściowa (do 1.6)**: runner przyjmuje także `t-…` dla list zadań, a instrukcje (AGENTS.md, zadania.md, czat.md, hermes.md, zaimplementuj-zadanie.md w repo; Zadania.md, socius-desk-panel i adiutor w Tabularium) oznaczają odwołania do `/api/agent/todos`, `/api/todos/action`, `panel_todos` i `t-…` słowami „do 1.6”. Codzienna praca zostaje na listach, bo Fila nie ma jeszcze zmigrowanych danych (1.4b). Wątki do prób zakłada się w izolowanym panelu (`just fila-trial`), nie w danych usługi. Przełączenie instrukcji i usunięcie oznaczeń to 1.6.
 - **Próba rybek (1.3b)**: sztuczna Specyfikacja (PRBA-1, rewizja 2 po zapisie z bazą 1; zapis z nieaktualną bazą dał 409, powtórzenie tej samej treści nic nie zmieniło), `just rybka PRBA-1` z `DESK_PANEL_URL` izolowanego panelu: oba modele (Sonnet 5.5, Gemini 3.8 Flash) zwróciły pełne raporty z nagłówkiem `PRBA-1`, `v2` i swoim modelem; komentarze opublikowane akcją `comment` i odczytane z wątku odtworzyły oba raporty bez różnic, także syntetyczny raport w czterech częściach z białymi znakami na końcach, cudzysłowami, ukośnikami i emoji.
+
+## Interfejs (1.5)
+
+Budowany z użytkownikiem (pictor) w produkcie, na wdrożonym API. **Dostępny tylko w odizolowanym podglądzie** `just scenario fila` (http://127.0.0.1:5175): bramką jest ta sama flaga co DesignLab (`__DESIGNLAB__`, `src/App.tsx`, `src/Workspace.tsx`), więc usługa, `just dev` i build produkcyjny go nie zawierają, a produkcyjne listy zostają do 1.6. Magazyn podglądu jest w pamięci (dane z klucza `fila` scenariusza), nic nie trafia do usługi i nie ma dispatchu. Zmiany w `scenarios/fila.json` wczytuje dopiero restart podglądu (magazyn Fili tworzy się raz).
+
+**Część 1: tablica i kafelek.** Wejście: ikona warstw w górnym pasku pulpitu. Lewa nawigacja: Tablice (z „+”) i Projekty (otwierają tablicę startową projektu; ekran projektu to część 3). Widoki tablicy to zakładki, każdy z menu „⋯” (nazwa, kolejność, usunięcie); sekcje listy i kanbanu mają menu „⋯” (nazwa, kolejność, usunięcie, w kanbanie dodanie kolumny), kolumny własne menu, a „Dodaj sekcję” stoi pod ostatnią sekcją. Pigułki zapytania rozwijają jego tekst pod sekcją albo kolumną; serwer sprawdza go przy pisaniu (`/api/fila/query/check`), jego zdanie jest widoczne, a zapis odrzuconego tekstu jest zablokowany. Stan zmienia się z wiersza, karty kanbanu i kafelka wyborem z workflow (wartości zamykające osobno), bez checkboxa (D-070); po każdej akcji wszystkie czytniki odświeżają się (`announce` w `src/fila/api.ts`), więc wątek w kilku sekcjach nie rozjeżdża się. Odmowa serwera pojawia się w oknie, które ją wysłało, a bez okna w pasku komunikatu. Historia tablicy jest w panelu bocznym. Jeden poziom podwątków pod rodzicem z licznikiem zamkniętych (D-051). Tytuł wątku nie jest linkiem do czasu strony wątku (część 2).
+
+**Kafelek Zadania** w podglądzie to jedno zapytanie wpisane jako tekst w konfiguracji kafelka (`config.query`); bez niego prosi o konfigurację i nie ma zapytania domyślnego. Zapytania dawnych kafelków ustala plan 1.4b.
 
 ## Magazyn
 
