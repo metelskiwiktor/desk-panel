@@ -85,7 +85,7 @@ describe('offline migration integrity', () => {
     expect(cockpit.threadDispatches()).toHaveLength(1);
     expect(cockpit.threadDispatches()[0].taskId).toBe('latest-run');
     await store.apply({ action: 'updateThread', thread: 'DESK-1', project: 'CEZA', module: null }, 'codex');
-    await cockpit.linkPrs([{ id: 'latest-run', pullRequestUrl: 'https://github.com/a/b/pull/2' }, { id: 'card-run', pullRequestUrl: 'https://github.com/a/b/pull/3' }]); 
+    await cockpit.linkPrs([{ id: 'latest-run', pullRequestUrl: 'https://github.com/a/b/pull/2' }, { id: 'card-run', pullRequestUrl: 'https://github.com/a/b/pull/3' }]);
     expect((await store.thread('CEZA-1')).cezar.links.some(l => l.id.endsWith('/2'))).toBe(true);
     expect((await store.thread('TABU-2')).cezar.links.some(l => l.id.endsWith('/3'))).toBe(true);
     expect((await store.thread('CEZA-1')).uid).toBe('f-00000001');

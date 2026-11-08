@@ -12,7 +12,11 @@ const inside = (root: string, file: string) => { const r = relative(root, file);
 async function workspace(directory: string) {
   const root = await realpath(resolve(directory));
   const repo = await realpath(fileURLToPath(new URL('..', import.meta.url)));
-  const service = join(await realpath(homedir()), '.desk-panel');
+  const servicePath = join(await realpath(homedir()), '.desk-panel');
+  const service = await realpath(servicePath).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return servicePath;
+    throw error;
+  });
   if (inside(repo, root) || (inside(service, root) && !inside(join(service, 'fila-migration'), root))) throw new Error('Wybierz osobny katalog poza repo i magazynem usługi.');
   const marker = await json(join(root, 'offline.json'));
   if (marker.kind !== 'fila-migration-copy' || marker.version !== 1) throw new Error('Brak znacznika kopii offline.json.');
