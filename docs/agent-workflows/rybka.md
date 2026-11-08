@@ -11,17 +11,28 @@ Nie uruchamiaj go w runie wykonawcy Cezara.
 just rybka SPEC [--runner claude|agy|opencode|both]
 ```
 
-- `SPEC`: id zadania z panelu (`t-…`, np. `just rybka t-00c6c30f`) lub ścieżka do pliku Markdown (`.ai/spec.md`).
-  Gdy podano id zadania, skrypt sam pobiera bieżącą rewizję pola `spec` z `GET /api/agent/todos?zadanie=…`.
+- `SPEC`: ID wątku Fili (`just rybka DESK-32`), id zadania z listy panelu (`t-…`, **do 1.6**, np. `just rybka t-00c6c30f`)
+  albo ścieżka do pliku Markdown (`.ai/spec.md`).
+  - **Wątek Fili** (ID: cztery wielkie litery, myślnik, numer): skrypt jednokrotnie czyta bieżącą Specyfikację przez
+  `GET /api/fila/threads/ID/spec` ([docs/fila.md](../fila.md), „Specyfikacja i rewizje”) i **zamraża** ten tekst oraz numer
+  rewizji dla obu recenzentów; rewizja zapisana potem nie trafia tylko do jednego z nich, a nagłówek raportu podaje
+  przeczytaną rewizję. CLI przyjmuje samo ID, numeru nie podaje się. Wątek bez pola Specyfikacja (404), bez rewizji
+  (`revision: 0`), z pustą treścią, błąd HTTP, odpowiedź niebędąca JSON-em i niedostępny panel przerywają wykonanie
+  czytelnym błędem przed uruchomieniem jakiegokolwiek modelu.
+  - **Zadanie z listy** (`t-…`, **do 1.6**): bieżąca rewizja pola `spec` z `GET /api/agent/todos?zadanie=…`, jak dotąd.
   Pusty stan („Brak specyfikacji”) przerywa wykonanie czytelnym błędem. Eksport do pliku pozostaje alternatywą,
   gdy zadanie nie ma jeszcze wpisu w panelu.
+  - **Adres panelu**: `DESK_PANEL_URL` (domyślnie `http://127.0.0.1:5174`, panel usługi). Próbę na sztucznej specyfikacji
+  wykonuje się na izolowanym panelu (`just fila-trial`, adres w jego wyjściu), nigdy na danych usługi.
+  Runner sam niczego nie zapisuje w Fili ani na liście; komentarze z raportem publikuje słoń (niżej).
 - `--runner both` (domyślnie): uruchamia Claude + agy równolegle w osobnych podprocesach.
 - `--runner claude`: uruchamia tylko recenzenta Sonnet.
 - `--runner opencode`: zachowana opcja recenzenta DeepSeek; nie należy do domyślnej pary.
 - `--runner agy`: uruchamia tylko recenzenta Gemini.
 
 Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model rybki.
-Przy sukcesie runner zapisuje też `report-comments.json`: gotowe teksty komentarzy (limity 2000 znaków i 4096 bajtów JSON z `by: codex`), których jawne markery chronią wszystkie białe znaki raportu przed `trim` API; przy zapisie i porównywaniu zachowaj markery, a po odczycie sklej treści między nimi — runner sam nie publikuje komentarzy.
+Przy sukcesie runner zapisuje też `report-comments.json`: gotowe teksty komentarzy (limity 2000 znaków i 4096 bajtów JSON z `by: codex`; to limity list zadań, a komentarz wątku Fili ma limit 5000 znaków, więc te same części mieszczą się w obu), których jawne markery chronią wszystkie białe znaki raportu przed `trim` API; przy zapisie i porównywaniu zachowaj markery, a po odczycie sklej treści między nimi — runner sam nie publikuje komentarzy.
+Publikacja w wątku Fili: każda część jako osobna akcja `comment` (`{action:"comment", thread:"ID", text}`, autor z tokenu klienta, instrukcja w Zadaniach DeskPanelu (`C:\Tabularium\AI\DeskPanel\Zadania.md`)); odczyt `GET /api/fila/threads/ID` (`history`, wpisy `kind: comment`) albo `fila_get` oddaje pełny tekst każdego komentarza, więc raport odtwarza się z komentarzy bez różnic (sprawdzone próbą, wynik w zadaniu 1.3b).
 
 ## Modele i sesje
 

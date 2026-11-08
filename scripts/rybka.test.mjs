@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-  reviewMaterials, runRybka, fetchTaskSpec, isTaskId, parseRybkaArgs,
+  reviewMaterials, runRybka, fetchTaskSpec, fetchFilaSpec, isTaskId, isFilaId, parseRybkaArgs,
   validReport, formatReportHeader, splitReportComments, AGY_MODEL, CLAUDE_MODEL, MODEL,
 } from './rybka.mjs';
 
@@ -474,6 +474,70 @@ it('handles task ID in runRybka, writing task ID and revision in report headers'
   expect(saved).toContain('- Rewizja: v2');
   expect(saved).toContain(`- Model: ${MODEL}`);
   expect(saved).toContain('brak uwag');
+});
+
+const filaSpecResponse = (body, status = 200) => ({ ok: status < 400, status, statusText: 'x', text: async () => JSON.stringify(body) });
+
+it('reads a Fila thread specification by ID and refuses every failure instead of reviewing something else', async () => {
+  expect(isFilaId('DESK-32')).toBe(true);
+  expect(['desk-32', 'DESK-0', 'DESK32', 'DESKS-1', 't-00c6c30f', 'spec.md'].some(isFilaId)).toBe(false);
+  expect(parseRybkaArgs(['DESK-32'])).toEqual({ specPath: 'DESK-32', runner: 'both' });
+
+  const urls = [];
+  const ok = await fetchFilaSpec('DESK-32', { baseUrl: 'http://panel.test/', fetchImpl: async url => { urls.push(url); return filaSpecResponse({ thread: 'DESK-32', enabled: true, revision: 3, text: '\nCEL:\nTreść.\n', latest: true }); } });
+  expect(urls).toEqual(['http://panel.test/api/fila/threads/DESK-32/spec']);
+  expect(ok).toEqual({ taskId: 'DESK-32', revision: 3, spec: 'CEL:\nTreść.' });
+
+  const fails = [
+    [filaSpecResponse({ thread: 'DESK-32', enabled: true, revision: 0, text: null, latest: true }), /nie ma specyfikacji/],
+    [filaSpecResponse({ thread: 'DESK-32', enabled: true, revision: 2, text: '  \n', latest: true }), /nie ma specyfikacji/],
+    [filaSpecResponse({ error: 'Wątek DESK-32 nie ma pola Specyfikacja.' }, 404), /\(404\).*nie ma pola Specyfikacja/],
+    [filaSpecResponse({ error: 'boom' }, 500), /\(500\).*boom/],
+    [{ ok: true, text: async () => '<html>' }, /nie jest JSON/],
+  ];
+  for (const [response, message] of fails) await expect(fetchFilaSpec('DESK-32', { fetchImpl: async () => response })).rejects.toThrow(message);
+  await expect(fetchFilaSpec('DESK-32', { fetchImpl: async () => { throw new Error('ECONNREFUSED'); } })).rejects.toThrow(/Nie udało się pobrać wątku DESK-32: ECONNREFUSED/);
+});
+
+it('freezes one Fila revision for both reviewers even when a newer one is saved meanwhile', async () => {
+  const cwd = fixture();
+  const children = [], inputs = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter(); child.pid = 8000 + children.length;
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
+    const index = children.length; inputs[index] = '';
+    child.stdin.on('data', chunk => { inputs[index] += chunk.toString(); });
+    children.push(child); return child;
+  };
+  const saved = [{ revision: 2, text: 'CEL:\nStara.\nZAŁĄCZNIKI:\n`AGENTS.md`' }];
+  const fetchImpl = vi.fn(async () => filaSpecResponse({ thread: 'DESK-32', enabled: true, ...saved.at(-1), latest: true }));
+  const done = runRybka({ specPath: 'DESK-32', runner: 'both', cwd, rolePath: join(cwd, 'role.md'), log: () => {}, fetchImpl, spawnImpl,
+    killTree: child => child.emit('close', null) });
+  await vi.waitFor(() => expect(children).toHaveLength(2));
+  saved.push({ revision: 3, text: 'CEL:\nNowa.' }); // a newer revision lands after the read
+  const [claudeChild, agyChild] = children;
+  event(claudeChild, { type: 'result', subtype: 'success', result: goodReport }); claudeChild.emit('close', 0);
+  agyChild.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: goodReport, usage: { total_tokens: 1 } } }) + '\n');
+  agyChild.emit('close', 0);
+  const result = await done;
+  expect(result.ok).toBe(true);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  for (const res of result.results) {
+    const report = readFileSync(res.reportPath, 'utf8');
+    expect(report).toContain('# Przegląd specyfikacji: DESK-32');
+    expect(report).toContain('- Rewizja: v2');
+    expect(readFileSync(join(res.dir, 'spec.md'), 'utf8')).toContain('Stara.');
+  }
+  expect(inputs[0]).toContain('Stara.');
+  expect(inputs[0]).not.toContain('Nowa.');
+});
+
+it('does not start any model when the Fila thread cannot be read', async () => {
+  const cwd = fixture();
+  const spawnImpl = vi.fn();
+  await expect(runRybka({ specPath: 'DESK-99', runner: 'both', cwd, rolePath: join(cwd, 'role.md'), log: () => {}, spawnImpl,
+    fetchImpl: async () => filaSpecResponse({ error: 'Nie ma takiego wątku.' }, 404) })).rejects.toThrow(/\(404\)/);
+  expect(spawnImpl).not.toHaveBeenCalled();
 });
 
 it('validReport accepts reports with headers and rejects incomplete reports', () => {

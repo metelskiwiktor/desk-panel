@@ -51,8 +51,42 @@ function readRole(path) {
   return role;
 }
 
+/** Id of a to-do list task (the transitional path, until Fila 1.6). */
 export function isTaskId(value) {
   return typeof value === 'string' && /^t-[0-9a-f]{8}$/i.test(value.trim());
+}
+
+/** Id of a Fila thread: a four-letter project key, a dash and the number (DESK-32). */
+export function isFilaId(value) {
+  return typeof value === 'string' && /^[A-Z]{4}-[1-9]\d*$/.test(value.trim());
+}
+
+/**
+ * Reads the current Specyfikacja of a Fila thread (`GET /api/fila/threads/ID/spec`) once. The caller freezes the returned
+ * text and number for every reviewer, so a newer revision saved meanwhile never reaches only one of them.
+ */
+export async function fetchFilaSpec(threadId, { baseUrl = process.env.DESK_PANEL_URL || 'http://127.0.0.1:5174', fetchImpl = globalThis.fetch } = {}) {
+  const id = threadId.trim();
+  const url = `${baseUrl.replace(/\/+$/, '')}/api/fila/threads/${encodeURIComponent(id)}/spec`;
+  let response;
+  try {
+    response = await fetchImpl(url);
+  } catch (error) {
+    throw Error(`Nie udało się pobrać wątku ${id}: ${error.message}`);
+  }
+  const raw = await response.text().catch(() => '');
+  if (!response.ok) {
+    let reason = raw.trim();
+    try { reason = JSON.parse(raw).error || reason; } catch { /* plain text */ }
+    throw Error(`Błąd pobierania wątku ${id} (${response.status}): ${reason || response.statusText}`);
+  }
+  let body;
+  try { body = JSON.parse(raw); } catch { throw Error(`Wątek ${id}: odpowiedź nie jest JSON-em.`); }
+  const none = () => Error(`Wątek ${id} nie ma specyfikacji („Brak specyfikacji”).`);
+  if (!Number.isInteger(body?.revision) || body.revision < 1 || typeof body.text !== 'string') throw none();
+  const spec = body.text.trim();
+  if (!spec) throw none();
+  return { taskId: typeof body.thread === 'string' && body.thread ? body.thread : id, revision: body.revision, spec };
 }
 
 /** Fetches current specification revision from desk-panel agent API. */
@@ -555,8 +589,8 @@ export async function runRybka(options = {}) {
   let taskId = null;
   let revision = null;
 
-  if (isTaskId(specPath)) {
-    const fetched = await fetchTaskSpec(specPath, { baseUrl, fetchImpl });
+  if (isTaskId(specPath) || isFilaId(specPath)) {
+    const fetched = await (isFilaId(specPath) ? fetchFilaSpec : fetchTaskSpec)(specPath, { baseUrl, fetchImpl });
     taskId = fetched.taskId;
     revision = fetched.revision;
     spec = fetched.spec;
@@ -627,7 +661,7 @@ export function parseRybkaArgs(argv) {
       specPath = arg;
     }
   }
-  if (!specPath) throw Error('Wymagany argument SPEC (ścieżka pliku lub id zadania t-…).');
+  if (!specPath) throw Error('Wymagany argument SPEC (ścieżka pliku, ID wątku Fili, np. DESK-32, albo id zadania t-… do 1.6).');
   return { specPath, runner };
 }
 
@@ -636,7 +670,7 @@ if (process.argv[1] && import.meta.url.toLowerCase() === pathToFileURL(resolve(p
     const parsed = parseRybkaArgs(process.argv.slice(2));
     if (parsed.help) {
       console.log('Użycie: just rybka SPEC [--runner claude|agy|opencode|both]');
-      console.log('  SPEC: id zadania t-… lub ścieżka pliku w repo');
+      console.log('  SPEC: ID wątku Fili (DESK-32), id zadania t-… (do 1.6) lub ścieżka pliku w repo');
       console.log('  --runner: claude (Sonnet 5.5 medium), agy (Gemini 3.8 Flash high), opencode (DeepSeek), both (domyślnie claude + agy)');
       process.exitCode = 0;
     } else {

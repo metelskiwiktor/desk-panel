@@ -171,9 +171,9 @@ Bezpośrednio przed restartem sprawdź `running` w `GET /api/chats`, harmonogram
 | `panel_cezar` | opcjonalny `id` (`projekt/uuid`): bez argumentów lista zadań, z `id` szczegóły, kroki i błędy zadania; z `id` i `krok` (np. `verify`) wynik kroku: dla sprawdzeń linie błędów bez stosu i przechodzących testów, z ostrzeżeniem, gdy Cezar uciął wyjście (zapisuje tylko jego początek); dla kroku agenta (np. `analysis`) cały jego raport z `.ai/cezar/runs/<id>.ndjson` (do 24 tys. znaków), bo `summary` przebiegu trzyma tylko ostatnie 4000 |
 | `panel_quotas`, `panel_system`, `panel_time` | bez argumentów |
 | `panel_mail` | `limit` 1–50 |
-| `panel_todos` | `list`, `ukonczone`, `stan` (id stanu); stan PL, blokada, powiązania i ostatnie 3 komentarze |
+| `panel_todos` (do 1.6) | `list`, `ukonczone`, `stan` (id stanu); stan PL, blokada, powiązania i ostatnie 3 komentarze |
 | `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
-| `panel_todo_action` | jedna akcja list zadań (`todoActionSchema`), w tym setStatus, setBlocked, addComment, link i unlink; `by` wymuszone na `agent` ([zadania.md](zadania.md)) |
+| `panel_todo_action` (do 1.6) | jedna akcja list zadań (`todoActionSchema`), w tym setStatus, setBlocked, addComment, link i unlink; `by` wymuszone na `agent` ([zadania.md](zadania.md)) |
 | `fila_search`, `fila_get`, `fila_apply`, `fila_query_check` | tylko gdy `DESK_WEKTOR_FILA=1` (przed przełączeniem 1.6 nie ma ich na liście); zastępują `panel_todos` i `panel_todo_action`; autor `wektor` ([fila.md](fila.md)) |
 | `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
 | `panel_recon_report` | `files` (ścieżka, notatka, `new` dla pliku do utworzenia), `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu; plików, których nie ma w repo (bez `new`), nie przyjmuje; wynik podaje `recon` (r-…, pamiętany 6 h, do restartu panelu) |

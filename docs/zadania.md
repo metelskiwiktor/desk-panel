@@ -1,5 +1,7 @@
 # Listy zadań
 
+> **Ścieżka przejściowa (do 1.6).** Cały ten dokument opisuje listy zadań (`t-…`, `/api/todos/action`, `/api/agent/todos`, `panel_todos`), które do końcowego przełączenia (1.6) pozostają produkcyjnym źródłem. Wątki, Specyfikacje z rewizjami i narzędzia `fila_*` są w [fila.md](fila.md); po 1.6 stają się jedyną aktywną ścieżką, a ten dokument i odwołania do niego usuwa to przełączenie.
+
 Własne dane panelu (nie dostawcy): **listy** zadań do zrobienia, np. „Do poprawy - Chat Agy” albo „Dom”. W interfejsie pokazuje je widget
 **Zadania**, który można postawić na siatce wiele razy (każdy kafelek ma wybraną listę i własne „Ukryj ukończone”, zob.
 [docs/desk-panel.md](desk-panel.md), „Widget i kafelek”). Ten dokument opisuje widget, dane, API i dostęp agenta czatu.
@@ -87,7 +89,7 @@ rewizji.
 
 ## Zlecenie na Cezarze z okna zadania
 
-Wektor (także `@Zaimplementuj zadanie`) najpierw czyta pełne `panel_todos zadanie=<t-…>` i korzysta z gotowości C1.
+Wektor (także `@Zaimplementuj zadanie`) najpierw czyta pełne `panel_todos zadanie=<t-…>` (do 1.6; po przełączeniu `fila_get` na wątku, [fila.md](fila.md)) i korzysta z gotowości C1.
 Gotowe zadanie kieruje do jego okna: „Pokaż podgląd”, potem „Zleć na Cezarze”; przy niegotowym wymienia braki C1.
 Nie robi rekonesansu, nie przepisuje specyfikacji ani nie pokazuje karty dispatch z czatu dla zadania z listy.
 Dotychczasowa karta pozostaje dla szybkich próśb spoza list, bez `todoId`; historyczne powiązania kart nadal działają.
@@ -190,7 +192,7 @@ chwili wskazania (lista odświeża się co 5 s). Kafelek bez listy wskazuje się
 
 ## Agent czatu
 
-Wektor na Hermesie czyta `panel_todos`, adapter widoku `GET /api/agent/todos` (`?list=<id lub fragment nazwy>`, `&ukonczone=1`, `&stan=<id stanu>`).
+Wektor na Hermesie czyta `panel_todos` (do 1.6; z `DESK_WEKTOR_FILA=1` zastępują go narzędzia `fila_*`, [fila.md](fila.md)), adapter widoku `GET /api/agent/todos` (`?list=<id lub fragment nazwy>`, `&ukonczone=1`, `&stan=<id stanu>`).
 Widok list bez parametru `zadanie` pozostaje skrótem: stan z polską etykietą, blokada, powiązania, skrót specyfikacji (`Specyfikacja: vN` lub `Specyfikacja: brak`), notatka do 300 znaków i ostatnie 3 komentarze. Ukończone domyślnie tylko liczy; jawny filtr `stan`
 wybiera również terminalne bez `ukonczone=1`. Nieznany stan to 400.
 
