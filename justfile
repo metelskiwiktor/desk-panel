@@ -33,6 +33,11 @@ wektor-ui case="all" *args:
     node scripts/ensure-deps.mjs
     npx tsx scripts/wektor-ui.ts {{case}} {{args}}
 
+# An isolated panel on a free port with a throw-away Fila store and client configs, to try Fila's MCP with a real client (docs/fila.md). Never touches the service's data.
+fila-trial:
+    node scripts/ensure-deps.mjs
+    npx tsx scripts/fila-trial.ts
+
 # Usage measurement of a period as JSON (dates YYYY-MM-DD, default: last 7 days), read from the running service.
 usage-export *args:
     node scripts/usage-export.mjs {{args}}

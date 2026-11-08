@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { PANEL_GUIDES } from '../src/chat-contract';
+import { filaGuide, PANEL_GUIDES } from '../src/chat-contract';
 import { bankPlanSchema } from '../src/bank-plan-contract';
 import { bankAssignSchema } from '../src/bank-assign-contract';
 import { smartRulePlanOf } from '../src/smart-rules-contract';
@@ -44,15 +44,25 @@ export function cockpitRules(): string[] {
 }
 
 /** The preamble's lines about the guides: that they exist and when to read one; the guides themselves come from `panel_guide`. */
-export function guideRules(): string[] {
+export function guideRules(fila = false): string[] {
+  const guides = Object.entries(PANEL_GUIDES).map(([topic, guide]) => [topic, fila && topic === 'zadania' ? filaGuide() : guide] as const);
   return [
     'Przewodniki dziedzin: zasady rozmowy o danej dziedzinie czytasz narzędziem panel_guide (z tematem), a nie masz ich tutaj. Gdy rozmowa dochodzi do dziedziny z listy, wywołaj panel_guide z jej tematem, zanim użyjesz innych narzędzi tej dziedziny, i stosuj go do końca rozmowy; raz na rozmowę wystarczy.',
-    ...Object.entries(PANEL_GUIDES).map(([topic, guide]) => `- ${topic}: ${guide.when}. Istota: ${guide.core}.`),
+    ...guides.map(([topic, guide]) => `- ${topic}: ${guide.when}. Istota: ${guide.core}.`),
   ];
 }
 
-export function hermesPreamble(): string {
-  return [
+/** The sentences of the preamble that name the to-do tools, as they read when Wektor works on Fila (1.3a). */
+const FILA_SWAPS: [string, string][] = [
+  ['panel_system, panel_todos, panel_bank, panel_time.', 'panel_system, panel_bank, panel_time; wątki użytkownika (Fila) czytasz fila_search i fila_get.'],
+  ['Słowo „zadanie” bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara.', 'Słowo „zadanie” bez dopowiedzenia oznacza wątek użytkownika w Fili, nie zadanie Cezara.'],
+  ['Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.', 'Wątek wskazany w bloku [Kontekst] podaje swoje ID (KLUCZ-numer): używaj go wprost w fila_get i fila_apply.'],
+  ['Stan zadania i komentarze zmieniaj na prośbę użytkownika; przy propozycji Cezara z zadania podaj todoId — panel sam podepnie i ustawi W realizacji po kliknięciu karty.', 'Stan wątku i komentarze zmieniaj na prośbę użytkownika przez fila_apply; zlecenia Cezara z wątku robi użytkownik w oknie wątku, nie Ty.'],
+  ['dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action', 'dwoma narzędziami: fila_apply (wątki użytkownika w Fili, autora ustala serwer) i panel_cezar_action'],
+  ['zaproponuj, co zapisać jako zadanie na liście.', 'zaproponuj, co zapisać jako wątek typu Notatka.'],
+];
+export function hermesPreamble(options: { fila?: boolean } = {}): string {
+  const text = [
     'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
     'Odpowiadasz po polsku, zwięźle i konkretnie.',
     'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to podpowiedź, o co pyta, a nie wszystko, co możesz wiedzieć. Gdy pytanie wymaga danych, których tam nie ma, pobierz je sam i nie proś użytkownika o ich podanie.',
@@ -69,10 +79,11 @@ export function hermesPreamble(): string {
     'Wyjątek: we własnej trwającej turze runu automatu możesz wykonać panel_automation_act tylko dla calendarEvent, smartAction i notify zatwierdzonych wcześniej na karcie tworzenia lub zmiany automatu; token i runId pochodzą z tej tury, parametry zgody wygrywają. Najpierw akcje, potem panel_automation_report done. Poza runem nie ma tego uprawnienia. Nie zapisuj przez powłokę ani przeglądarkę.',
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
     ...cockpitRules(),
-    ...guideRules(),
+    ...guideRules(options.fila),
     'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” albo „[Automatyka · Obserwator]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
   ].join('\n');
+  return options.fila ? FILA_SWAPS.reduce((out, [from, to]) => out.replace(from, to), text) : text;
 }
 
 /**
@@ -122,6 +133,8 @@ interface Live {
 interface History { at: number; groups?: { user: string; parts: ChatPart[] }[]; error?: string }
 
 export interface HermesChatOptions {
+  /** Wektor works on Fila instead of the to-do lists (1.3a, `DESK_WEKTOR_FILA=1`): the preamble and the guide name the fila_ tools. */
+  fila?: boolean;
   onAutomationTurn?: (turn: { chatId: string; turnId: string; runId: string; ended: boolean }) => void;
   client: HermesClient;
   namer?: ChatNamer;
@@ -339,7 +352,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const silenceMs = options.silenceMs ?? 6 * 60_000;
   const retryMs = options.retryMs ?? 1000;
   const cancelGraceMs = options.cancelGraceMs ?? 10_000;
-  const intro = hermesPreamble();
+  const intro = hermesPreamble({ fila: options.fila });
   const chatsDir = path.join(dir, 'hermes-chats');
   const records = new Map<string, Stored>();
   const lives = new Map<string, Live>();

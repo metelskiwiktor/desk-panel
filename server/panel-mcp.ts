@@ -25,6 +25,8 @@ import { AppointmentError } from './znanylekarz';
 import { SMART_CATEGORIES, SMART_LIMITS, SMART_PRIORITIES, SMART_SUGGESTION, smartRulePlanSchema, smartRuleSchema, type SmartRule, type SmartRulePreview } from '../src/smart-rules-contract';
 import { linksOf, mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } from './smart-rules';
 import { AutomationError, type Automations } from './automations';
+import { callFilaTool, FILA_TOOLS } from './fila-mcp';
+import { filaGuide } from '../src/chat-contract';
 import { observerKinds, OBSERVER_KIND_LABELS } from '../src/observers-contract';
 import {
   describeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationActSchema, automationPlanSchema, automationReportSchema, automationUpdateSchema,
@@ -50,7 +52,7 @@ interface Tool {
   input: z.ZodType<Record<string, unknown>>;
   /** JSON Schema of the arguments as MCP lists it. */
   schema: Record<string, unknown>;
-  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; automations?: Automations; activeChats?: () => string[] }): Promise<string>;
+  run(args: Record<string, any>, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: number; cezarUrl: string; automations?: Automations; activeChats?: () => string[]; filaMode?: boolean }): Promise<string>;
 }
 
 const view = (name: string, params: (args: Record<string, any>) => Record<string, string | undefined>) =>
@@ -231,9 +233,11 @@ export const PANEL_TOOLS: Record<string, Tool> = {
     description: `Zasady rozmowy o jednej dziedzinie panelu (jak odpowiadać, co pokazywać, czego nie robić). Wywołaj raz na początku rozmowy o tej dziedzinie, przed jej innymi narzędziami, i stosuj do końca rozmowy. Tematy: ${Object.entries(PANEL_GUIDES).map(([topic, g]) => `${topic} (${g.when})`).join('; ')}.`,
     input: z.object({ topic: z.enum(GUIDE_TOPICS) }).strict(),
     schema: schema({ topic: { type: 'string', enum: [...GUIDE_TOPICS], description: 'Dziedzina, o której rozmawiasz' } }, ['topic']),
-    async run(args) {
+    async run(args, { filaMode }) {
       const guide = PANEL_GUIDES[args.topic as keyof typeof PANEL_GUIDES];
-      return `Przewodnik „${args.topic}”: obowiązuje do końca tej rozmowy.\n${guide.lines.join('\n')}`;
+      // With Wektor on Fila the guide about to-dos is the one about threads (same topic, so the preamble and the tool agree).
+      const lines = filaMode && args.topic === 'zadania' ? filaGuide().lines : guide.lines;
+      return `Przewodnik „${args.topic}”: obowiązuje do końca tej rozmowy.\n${lines.join('\n')}`;
     },
   },
   panel_calendar: {
@@ -687,7 +691,14 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<unknown | null> {
+/** With Wektor on Fila (1.3a, `DESK_WEKTOR_FILA=1`) the four fila_ tools replace the to-do list tools; otherwise nothing changes. */
+const LIST_TOOLS = new Set(['panel_todos', 'panel_todo_action']);
+const listedTools = (filaMode: boolean) => [
+  ...Object.entries(PANEL_TOOLS).filter(([name]) => !filaMode || !LIST_TOOLS.has(name)).map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.schema })),
+  ...(filaMode ? Object.entries(FILA_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.schema })) : []),
+];
+
+export async function answerRpc(message: Rpc, ctx: { views: Record<string, AgentView>; sources: PanelSources; now: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[]; filaMode?: boolean }): Promise<unknown | null> {
   if (!message || typeof message !== 'object' || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return rpcError(message?.id, -32600, 'Invalid Request');
   const notification = message.id === undefined;
   if (notification) return null;
@@ -699,20 +710,21 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_observe, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action (w trybie Fili: fila_apply) i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_observe, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };
     case 'tools/list':
-      return { jsonrpc: '2.0', id: message.id, result: { tools: Object.entries(PANEL_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.schema })) } };
+      return { jsonrpc: '2.0', id: message.id, result: { tools: listedTools(!!ctx.filaMode) } };
     case 'tools/call': {
       const name = String(params.name ?? '');
-      const tool = Object.hasOwn(PANEL_TOOLS, name) ? PANEL_TOOLS[name] : undefined;
+      if (ctx.filaMode && Object.hasOwn(FILA_TOOLS, name)) return { jsonrpc: '2.0', id: message.id, result: await callFilaTool(name, params.arguments, { fila: ctx.sources.fila, actor: 'wektor' }) };
+      const tool = Object.hasOwn(PANEL_TOOLS, name) && !(ctx.filaMode && LIST_TOOLS.has(name)) ? PANEL_TOOLS[name] : undefined;
       if (!tool) return rpcError(message.id, -32602, `Unknown tool: ${name.slice(0, 60)}`);
       const args = tool.input.safeParse(params.arguments ?? {});
       if (!args.success) return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text', text: `Niepoprawne argumenty: ${args.error.issues.map(i => `${i.path.join('.') || 'argumenty'}: ${i.message}`).join(', ')}` }] } };
       try {
-        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', automations: ctx.automations, activeChats: ctx.activeChats });
+        const out = await tool.run(args.data, { views: ctx.views, sources: ctx.sources, now: ctx.now(), cezarUrl: ctx.cezarUrl ?? 'http://127.0.0.1:4321/', automations: ctx.automations, activeChats: ctx.activeChats, filaMode: ctx.filaMode });
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: out }] } };
       } catch (error) {
         const reason = error instanceof AgentViewError || error instanceof TodoError || error instanceof SmartRuleError || error instanceof AutomationError ? error.message
@@ -731,7 +743,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[] }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[]; filaMode?: boolean }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -743,7 +755,7 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
-  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, activeChats: ctx.activeChats };
+  const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, activeChats: ctx.activeChats, filaMode: ctx.filaMode };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);
   if (!answers.length) { res.writeHead(202).end(); return; }

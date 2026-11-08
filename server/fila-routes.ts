@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { FILA_CLIENTS, type FilaActor } from '../src/fila-contract';
 import { FilaError, type FilaStore } from './fila';
+import { handleFilaMcp } from './fila-mcp';
 
 /** One token per client of D-057, in `<dir>/fila-tokens.json` (outside Git, made on first start, never logged or sent to a browser). */
 export type FilaTokens = Partial<Record<(typeof FILA_CLIENTS)[number], string>>;
@@ -49,6 +50,13 @@ export async function handleFilaRoute(req: IncomingMessage, res: ServerResponse,
     if (!client) { res.writeHead(401, { 'WWW-Authenticate': 'Bearer' }).end(); return true; }
   }
   if (!ctx.fila) { json(res, 503, { error: 'Fila jest niedostępna.' }); return true; }
+  // The MCP door (1.3a) is for the clients only: their token, loopback, never a browser (an Origin) or the user's page.
+  if (url.pathname === '/api/fila/mcp') {
+    if (!client) { res.writeHead(401, { 'WWW-Authenticate': 'Bearer' }).end(); return true; }
+    if (req.headers.origin) { res.writeHead(403).end(); return true; }
+    await handleFilaMcp(req, res, { fila: ctx.fila, actor: client });
+    return true;
+  }
   try {
     if (req.method === 'GET' && url.pathname === '/api/fila') { json(res, 200, { ...await ctx.fila.registries(), notice: await ctx.fila.notice() }); return true; }
     const thread = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)$/.exec(url.pathname);

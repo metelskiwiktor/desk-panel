@@ -148,6 +148,11 @@ export const filaDataSchema = z.object({
   boards: z.array(filaBoardSchema).max(FILA_LIMITS.boards).default([]),
   /** Project → the board it got at the start. A record of its own, so a deleted starter board is not made again (D-019). */
   starterBoards: z.record(projectKey, boardId).default({}),
+  /** Idempotency keys of batches already applied (1.3a): a retry with the same key and batch answers again without writing. */
+  idempotency: z.array(z.object({
+    actor: filaActorSchema, key: z.string().min(1).max(100), hash: z.string().max(64), at: z.number().finite(),
+    outcome: z.object({ results: z.array(z.record(z.string(), z.unknown())), threads: z.array(z.record(z.string(), z.unknown())) }),
+  })).max(200).optional(),
 });
 export type FilaData = z.infer<typeof filaDataSchema>;
 export type FilaProject = z.infer<typeof filaProjectSchema>;

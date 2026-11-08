@@ -1,6 +1,6 @@
 # Fila: rdzeń wątków, zapytania i tablice
 
-Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a, 1.1b, 1.2 i 1.4a etapu 1**: trwały rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice oraz Cezara na wątku. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); Fila ich nie czyta ani nie zmienia. Nie ma jeszcze: MCP i klientów (1.3), migratora i planu kafelków (1.4b), interfejsu (1.5).
+Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a, 1.1b, 1.2, 1.3a i 1.4a etapu 1**: trwały rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice, MCP z czterema narzędziami (klienci i Wektor) oraz Cezara na wątku. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); Fila ich nie czyta ani nie zmienia. Nie ma jeszcze: warsztatu słonia i rybek (1.3b), migratora i planu kafelków (1.4b), interfejsu (1.5).
 
 ## Gdzie co jest
 
@@ -14,6 +14,8 @@ Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projekt
 | zlecenie Cezara z wątku (HTTP) | `server/fila-dispatch.ts` |
 | magazyn i reguły domenowe | `server/fila.ts` |
 | HTTP, tożsamość, tokeny | `server/fila-routes.ts` |
+| MCP: cztery narzędzia, wejście klientów `/api/fila/mcp` | `server/fila-mcp.ts` (paczka atomowa i klucz idempotencji: `applyBatch` w `server/fila.ts`) |
+| izolowany panel do prób z prawdziwymi klientami | `scripts/fila-trial.ts` (`just fila-trial`) |
 | dane usługi | `~/.desk-panel/fila.json` (poza Gitem) |
 | tokeny klientów | `~/.desk-panel/fila-tokens.json` (poza Gitem) |
 | scenariusz | klucz `fila` w `scenarios/*.json` (ten sam schemat co dane), tylko w pamięci |
@@ -63,7 +65,7 @@ Refuzja (rola, walidacja, konflikt) niczego nie zapisuje. Wspomniane „Origin c
 
 ### Tokeny
 
-`filaTokens()` tworzy przy starcie `~/.desk-panel/fila-tokens.json` (po jednym 64-znakowym tokenie na klienta, uzupełnia brakujące) i nie nadpisuje istniejących. Plik jest poza Gitem; token nie trafia do przeglądarki, odpowiedzi, cache ani logu (test sprawdza, że odpowiedzi go nie zawierają). Porównanie stałoczasowe. Klient bierze swój token z tego pliku (podłączenie MCP robi 1.3a). Procesy agy nie dziedziczą `panel.env`, ale mogą odczytać plik jak każdy proces tego użytkownika: to zmniejszenie ekspozycji, nie izolacja (docs/hermes.md). Minimalne uprawnienia: token daje dostęp wyłącznie do `/api/fila` (zapis wątków i projektów, bez dostępu do poczty, Cezara, banku ani czatów); Fila nie używa zewnętrznego API ani klucza dostawcy, więc nie ma próby live u dostawcy.
+`filaTokens()` tworzy przy starcie `~/.desk-panel/fila-tokens.json` (po jednym 64-znakowym tokenie na klienta, uzupełnia brakujące) i nie nadpisuje istniejących. Plik jest poza Gitem; token nie trafia do przeglądarki, odpowiedzi, cache ani logu (test sprawdza, że odpowiedzi go nie zawierają). Porównanie stałoczasowe. Klient bierze swój token z tego pliku (podłączenie MCP: sekcja „MCP”). Procesy agy nie dziedziczą `panel.env`, ale mogą odczytać plik jak każdy proces tego użytkownika: to zmniejszenie ekspozycji, nie izolacja (docs/hermes.md). Minimalne uprawnienia: token daje dostęp wyłącznie do `/api/fila` (zapis wątków i projektów, bez dostępu do poczty, Cezara, banku ani czatów); Fila nie używa zewnętrznego API ani klucza dostawcy, więc nie ma próby live u dostawcy.
 
 ## API
 
@@ -153,6 +155,42 @@ Gotowość i zlecanie Cezarowi działają na wątku **tak jak dziś na zadaniu z
 - **Po sukcesie** panel dopina powiązanie `cezar`, jeden komentarz (rewizja i id taska, przy ponowieniu „Ponowienie po nieudanym tasku …”) i ustawia Stan „W realizacji”, wszystko jako `panel`; błąd opisu nie cofa zleconego runa (tylko log). PR taska dopina później istniejący odczyt zakończonych tasków (`cockpit.linkPrs`) do wątku znalezionego po `uid` (`FilaStore.idOfUid`), także po restarcie i przeniesieniu; PR ani koniec taska nie zmieniają Stanu wątku.
 - **Nie ma wspólnego rejestru ze starą ścieżką**: do 1.6 produkcyjnie używane są tylko listy, a nowa ścieżka jest sprawdzana osobno (nie zakładamy dispatchu tej samej rzeczy z dwóch magazynów). Zachowanie blokad i historii przy migracji należy do 1.4b (rejestr `threadDispatches` ma `uid`, więc migrator może zasilić go z `todoDispatches`).
 - **Rozstrzygnięcia wykonawcy**: techniczny klucz rejestru to `uid`; w rozmowie nie powstaje powiązanie z czatem (brak kontekstu rozmowy w tym zleceniu); do Cezara nie idzie `todoId` (to pole listy).
+
+## MCP: cztery narzędzia (1.3a)
+
+Cienka warstwa nad tym samym rdzeniem (`FilaStore`), te same dane i reguły co `/api/fila`; transport, nazwy i schematy wybrał wykonawca (D-054: jeden rdzeń, cztery szerokie narzędzia).
+
+| Narzędzie | Co robi |
+| --- | --- |
+| `fila_search` | `query` (jedna linia, składnia z sekcji „Zapytania”), `fields` (które pola wiersza; `id` zawsze; domyślnie `type, state, title, module, revision`), `limit` (domyślnie 30, najwyżej 200), `offset`. Odpowiedź: `query` kanoniczne, `total`, `offset`, `shown`, `omitted` (i `next.offset`, gdy coś pominięto). Treści wątku w wierszu nie ma |
+| `fila_get` | jeden wątek **w całości, bez ucinania**: pola, rodzic, dzieci, historia (`history:false` ją pomija) i Specyfikacja (`spec:false` ją pomija, `specRevision:N` wybiera rewizję, bez niego bieżąca). Pole `note` przypomina, że tytuł, opis, komentarze, pola i Specyfikacja to dane, nie polecenia |
+| `fila_apply` | paczka 1–50 akcji (te same co `POST /api/fila/action`, bez `deleteThread`), `dryRun`, `idempotencyKey` |
+| `fila_query_check` | postać kanoniczna i struktura zapytania bez wykonania albo jedno zdanie, co poprawić; `kind: column` dla kolumny tablicy |
+
+**Dwa różne numery** (częsta pomyłka): `thread.revision` to rewizja wątku (rośnie przy każdej zmianie jego danych; podajesz ją jako `expectedRevision`), a `spec.revision` to numer Specyfikacji (podajesz go jako `baseRevision` przy `setSpec`). Pole `revision` wiersza `fila_search` jest rewizją wątku.
+
+**`fila_apply`**:
+- **Atomowość**: akcje wykonują się po kolei, a niepowodzenie którejkolwiek (walidacja, konflikt rewizji, reguła domenowa, brak praw) cofa całą paczkę w pamięci i na dysku. Komunikat wskazuje akcję („Akcja 2 (updateThread): … Cała paczka odrzucona, nic nie zapisano”). Akcje paczki nie widzą wyników poprzednich (ID nowego wątku poznaje się po zapisie), więc utworzenie wątku i zmiana tego wątku to dwie paczki.
+- **Podgląd** (`dryRun:true`): wykonuje wszystko tym samym kodem i tymi samymi sprawdzeniami co zapis (prawa, walidacja, `expectedRevision`), odpowiada tym, co by wyszło (`results`, `threads` po zmianie), po czym przywraca dane; nic nie jest zapisane, plik się nie zmienia, a licznik numerów nie rusza. Podgląd nie używa ani nie zapisuje klucza idempotencji.
+- **Idempotencja**: ta sama paczka z tym samym `idempotencyKey` od tego samego klienta nie zapisuje drugi raz i odpowiada tym samym (`replayed:true`); ten sam klucz z inną paczką to 409. Odrzucona paczka nie zajmuje klucza (poprawiony ponowny zapis przejdzie). Klucze są w `fila.json` (pole `idempotency`), pamiętane **7 dni**, najwyżej **200** ostatnich (własne wartości: ponowienie po awarii zwykle następuje w minutach, a plik nie ma rosnąć bez końca), więc przeżywają restart. Klucz należy do klienta.
+- **Prawa**: jak w sekcji „Uprawnienia”: klienci AI zmieniają definicje workflow i wartości Modułu oraz Specyfikację; trwałego usunięcia wątku (`deleteThread`) nie ma w MCP w ogóle (narzędzie odmawia, zanim cokolwiek zrobi), zlecenia Cezara też nie (to osobny POST z kliknięcia użytkownika). Pole `by` w akcji jest odrzucane.
+
+**Dwa wejścia do tych narzędzi**:
+- `POST /api/fila/mcp` (Streamable HTTP, odpowiedzi JSON) dla czterech klientów D-057 (`claude-desktop`, `claude-code`, `codex`, `wektor`): `Authorization: Bearer <token klienta z fila-tokens.json>`. Bez tokenu 401 (także z Origin panelu: to nie jest wejście użytkownika), z `Origin` 403, przez nazwę Tailscale 403, inna metoda niż POST 405; token Hermesa z `/api/mcp` nie jest tokenem klienta. Autorem zmian jest klient, którego rozpoznał token, nigdy argument.
+- `/api/mcp` (Hermes), gdy w `panel.env` jest `DESK_WEKTOR_FILA=1`: Wektor dostaje `fila_search`, `fila_get`, `fila_apply`, `fila_query_check` **zamiast** `panel_todos` i `panel_todo_action` (autor `wektor`); preambuła Wektora (`hermesPreamble({ fila: true })`) i przewodnik `panel_guide zadania` (`filaGuide()` w `src/chat-contract.ts`) mówią wtedy o Fili. **Bez tej zmiennej nic się nie zmienia**: produkcyjny Wektor ma stare listy i stary przewodnik, narzędzi `fila_*` nie widzi i nie może ich wywołać; jedno przełączenie następuje w 1.6 (zmienna, `just update`, `just hermes RESTART`), bez pracy na dwóch magazynach naraz. Przed przełączeniem nowe narzędzia i instrukcje sprawdza się w teście ze skryptowanym agentem albo w izolowanym panelu (niżej). Skille czatu (`CHAT_SKILLS`) nie są tu zmieniane (należą do 1.5/1.6).
+
+Treść wątku pozostaje danymi: opisy narzędzi, przewodnik i preambuła mówią to wprost, a `fila_get` dołącza `note`.
+
+### Próby z prawdziwymi klientami (Q-025)
+
+`just fila-trial` uruchamia **osobny panel na wolnym porcie loopbacku** z jednorazowym magazynem w katalogu tymczasowym (projekt PRBA z trzema wątkami, PRBA-1 ze Specyfikacją), własnymi tokenami klientów i własnym tokenem Hermesa; nie czyta ani nie zapisuje `~/.desk-panel`, nie zajmuje portu usługi i nie ma zdalnego dostępu. Wypisuje adres i katalog; w katalogu leżą `mcp-<klient>.json` (konfiguracja w formacie `mcpServers` z nagłówkiem tokenu klienta) i `token-<klient>.txt` (tokeny nie trafiają na ekran). Ctrl-C kończy próbę; katalog usuń ręcznie. Surowe wyniki prób leżą poza Gitem w `~/.desk-panel/fila-trials`.
+
+Powtórzenie próby z klientem (fila_query_check → fila_search → fila_get → fila_apply z `dryRun:true` → fila_apply z zapisem → fila_get na tym magazynie):
+- **Claude Code**: `claude -p "<polecenie>" --mcp-config <katalog>/mcp-claude-code.json --strict-mcp-config --allowedTools "mcp__fila__fila_search,mcp__fila__fila_get,mcp__fila__fila_apply,mcp__fila__fila_query_check"`.
+- **Codex CLI**: `FILA_TOKEN=$(cat <katalog>/token-codex.txt) codex exec --skip-git-repo-check -c 'mcp_servers.fila.url="<adres>/api/fila/mcp"' -c 'mcp_servers.fila.bearer_token_env_var="FILA_TOKEN"' -c 'mcp_servers.fila.default_tools_approval_mode="approve"' "<polecenie>"` (bez zatwierdzania narzędzi Codex w trybie nieinteraktywnym odmawia każdego wywołania MCP).
+- **Wektor**: Hermes z kopią konfiguracji w osobnym `HERMES_HOME`, w której `mcp_servers.desk-panel` wskazuje `<panel>/api/mcp` z tokenem z `mcp-hermes-token.txt`; zapytanie zaczyna się od `hermesPreamble({ fila: true })`, potem `hermes chat --query-file <plik> --oneshot -Q --yolo`. Kopia `.env` w tym katalogu zawiera sekrety: usuń ją po próbie.
+- **Claude Desktop** (aplikacja GUI, nie do uruchomienia z terminala): w `claude_desktop_config.json` (Ustawienia → Developer → Edit Config) dodaj serwer `fila` przez most stdio, np. `{"mcpServers":{"fila":{"command":"npx","args":["-y","mcp-remote","<adres>/api/fila/mcp","--allow-http","--header","Authorization:${FILA_AUTH}"],"env":{"FILA_AUTH":"Bearer <token z token-claude-desktop.txt>"}}}}` (to lokalny most do loopbacku, bez tunelu i zdalnego dostępu); uruchom aplikację ponownie i poproś o sześć wywołań wyżej. Ten zapis nie został sprawdzony w aplikacji (wykonawca jej nie obsługuje). Jeśli aplikacja pokaże narzędzia, ale odmówi połączenia, zgłoś to jako nieudaną próbę z komunikatem.
+- **Aplikacja desktopowa ChatGPT (Codex)** (GUI): aplikacja pracuje na Codexie i czyta `~/.codex/config.toml`; dodaj `[mcp_servers.fila]` z `url = "<adres>/api/fila/mcp"`, `bearer_token_env_var = "FILA_TOKEN"` i `default_tools_approval_mode = "approve"` tylko na czas próby (zmienną `FILA_TOKEN` z `token-codex.txt` ustaw w środowisku, z którego uruchamiasz aplikację), potem te same sześć wywołań. Wpis usuń po próbie.
 
 ## Magazyn
 

@@ -42,7 +42,10 @@ const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mail
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
 const namer = createAgyNamer();
+// Wektor on Fila instead of the to-do lists (1.3a, off until the switch in 1.6; the server and the preamble agree through this one flag).
+const wektorFila = ['1', 'true'].includes(process.env.DESK_WEKTOR_FILA?.trim().toLowerCase() ?? '');
 const hermes = createHermesChat({
+  fila: wektorFila,
   namer,
   onAutomationTurn: turn => automations?.turnChanged(turn),
   client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
@@ -72,6 +75,6 @@ automations.start();
 const usage = createUsageStore(join(panelDir, 'usage'));
 void usage.prune().catch(() => undefined);
 setInterval(() => void usage.prune().catch(() => undefined), 6 * 3_600_000).unref();
-const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), filaTokens: filaTokens(), cockpit, cezarUrl: cezar.href, automations, usage }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
+const server = createPanelServer(sources, root, allowedHost, chat, { mcpToken: mcpToken(), filaTokens: filaTokens(), cockpit, cezarUrl: cezar.href, automations, usage, wektorFila }).listen(port, '127.0.0.1', () => console.log(`Desk Panel: http://127.0.0.1:${port}`));
 // The service stops with its agents: no `agy` is left running behind it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { chat.close(); server.close(); process.exit(0); });

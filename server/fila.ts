@@ -1,11 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { TODO_LIMITS, TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
   filaActionSchema, filaDataSchema, isFilaBoardAction,
-  type FilaAction, type FilaBoardActor, type FilaBoard, type FilaCezar, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
+  type FilaAction, type FilaActor, type FilaBoardActor, type FilaBoard, type FilaCezar, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
 import { applyBoardAction, createStarterBoard, seedStarterBoards } from './fila-boards';
@@ -62,6 +62,10 @@ export interface FilaBoardResult {
     columns: (FilaSection['columns'][number] & { total: number; threads: FilaThreadSummary[] })[];
   })[];
 }
+/** What a batch answers: one result per action, and the threads it touched as they are (or would be, for a preview) afterwards. */
+export interface FilaBatchResult { dryRun: boolean; replayed: boolean; results: FilaResult[]; threads: FilaThreadSummary[] }
+export const FILA_BATCH_MAX = 50;
+const IDEMPOTENCY_TTL_MS = 7 * 24 * 3_600_000;
 export interface FilaStore {
   registries(): Promise<FilaRegistries>;
   /** Checks a query text without running or storing it: the canonical text and the parsed query, or a 400. */
@@ -76,6 +80,12 @@ export interface FilaStore {
   spec(id: string, revision?: number): Promise<FilaSpecView>;
   /** The actor comes from the caller's authentication, never from the action. */
   apply(action: FilaAction, actor: FilaBoardActor): Promise<FilaResult>;
+  /**
+   * Several actions as one change (1.3a): all are applied in order or none (a refusal, a conflict or a right the actor lacks
+   * undoes the whole batch, memory and disk). `dryRun` runs every check and the changes, answers what would result and
+   * restores the data; `key` makes a retry of the same batch answer again without writing (the same key with another batch is a 409).
+   */
+  applyBatch(actions: unknown[], actor: FilaBoardActor, options?: { dryRun?: boolean; key?: string }): Promise<FilaBatchResult>;
   /** The display ID a thread has now, from its permanent uid (null once deleted): how the register follows a move. */
   idOfUid(uid: string): Promise<string | null>;
   /** Text for the caller when the stored file could not be used as it was. */
@@ -547,6 +557,44 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
           return result;
         } catch (error) {
           // Memory must not get ahead of the disk: whatever was changed is taken back.
+          data = before;
+          throw error;
+        }
+      });
+      tail = run.catch(() => undefined);
+      return run;
+    },
+    applyBatch(actions, actor, options = {}) {
+      const run = tail.then(async (): Promise<FilaBatchResult> => {
+        await load();
+        if (!actions.length || actions.length > FILA_BATCH_MAX) throw new FilaError(400, `Paczka ma od 1 do ${FILA_BATCH_MAX} akcji.`);
+        const hash = createHash('sha256').update(JSON.stringify(actions)).digest('hex');
+        const key = options.dryRun ? undefined : options.key;
+        const seen = key ? data.idempotency?.find(e => e.actor === actor && e.key === key && now() - e.at < IDEMPOTENCY_TTL_MS) : undefined;
+        if (seen) {
+          if (seen.hash !== hash) throw new FilaError(409, 'Ten klucz idempotencji został użyty z inną paczką akcji. Użyj nowego klucza.');
+          return { dryRun: false, replayed: true, ...(seen.outcome as unknown as { results: FilaResult[]; threads: FilaThreadSummary[] }) };
+        }
+        const before = structuredClone(data);
+        try {
+          const results = actions.map((raw, i) => {
+            const parsed = filaActionSchema.safeParse(raw);
+            if (!parsed.success) {
+              const issue = parsed.error.issues[0];
+              throw new FilaError(400, `Akcja ${i + 1}: niepoprawna${issue ? ` (${issue.path.join('.') || 'akcja'}: ${issue.message})` : ''}. Cała paczka odrzucona.`);
+            }
+            try { return mutate(parsed.data, actor); }
+            catch (error) { if (error instanceof FilaError) throw new FilaError(error.status, `Akcja ${i + 1} (${parsed.data.action}): ${error.message} Cała paczka odrzucona, nic nie zapisano.`); throw error; }
+          });
+          const ids = [...new Set(results.flatMap(r => r.thread ? [r.thread.id] : []))];
+          const threads = ids.flatMap(id => { const t = find(id); return t ? [summary(t)] : []; });
+          if (options.dryRun) { data = before; return { dryRun: true, replayed: false, results, threads }; }
+          if (key) {
+            data.idempotency = [...(data.idempotency ?? []).filter(e => now() - e.at < IDEMPOTENCY_TTL_MS), { actor: actor as FilaActor, key, hash, at: now(), outcome: { results, threads } as never }].slice(-200);
+          }
+          await persist();
+          return { dryRun: false, replayed: false, results, threads };
+        } catch (error) {
           data = before;
           throw error;
         }
