@@ -40,6 +40,34 @@ export function readPulpits(): PulpitState {
   try { return parsePulpits(localStorage.getItem(PULPITS_KEY)); } catch { return defaultPulpits(); }
 }
 
+/** Download only desktop configuration; preserve the original strings for the offline migration inventory. */
+export function downloadPulpits() {
+  const pulpits = localStorage.getItem(PULPITS_KEY);
+  const keys = new Set(parsePulpits(pulpits).items.map(p => workspaceKey(p.id)));
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key === WORKSPACE_KEY || key?.startsWith(`${WORKSPACE_KEY}.`)) keys.add(key);
+  }
+  const exportedAt = new Date().toISOString();
+  const entries = [...keys].sort().map(key => ({ key, raw: localStorage.getItem(key) }));
+  const data = {
+    version: 1, kind: 'desk-panel-pulpits', exportedAt, origin: location.origin, pulpits,
+    workspaces: entries.filter((entry): entry is { key: string; raw: string } => entry.raw !== null)
+      .map(({ key, raw }) => ({ key, source: `${location.origin} ${key}`, raw })),
+    missingWorkspaces: entries.filter(entry => entry.raw === null).map(entry => entry.key),
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `desk-panel-pulpity-${exportedAt.replace(/[:.]/g, '-')}.json`;
+  document.body.append(link);
+  try { link.click(); } finally {
+    link.remove();
+    // Give the browser time to start reading the download before releasing the URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
 export function savePulpits(state: PulpitState): boolean {
   try { localStorage.setItem(PULPITS_KEY, JSON.stringify({ version: 1, ...state })); return true; } catch { return false; }
 }

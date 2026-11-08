@@ -8,6 +8,7 @@ import { QuotaVisibilitySettings, WarmupHistoryCard, WarmupSettingsCard, useWarm
 import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
 import { resetWorkspace } from './tile-grid';
+import { downloadPulpits } from './pulpits';
 
 export function SettingsView({
   layout,
@@ -33,6 +34,7 @@ export function SettingsView({
 }) {
   const warmup = useWarmupStatus();
   const [arrangement, setArrangement] = useState<'kept' | 'reset' | 'failed'>('kept');
+  const [exportError, setExportError] = useState(false);
   return (
     <div className="settings-stack">
       <Card title="Połączenia" icon={<Layers3 />} area="settings-connections">
@@ -91,6 +93,11 @@ export function SettingsView({
         {arrangement !== 'kept' && <p className={arrangement === 'failed' ? 'warning' : 'meta'} role="status">
           {arrangement === 'failed' ? 'Nie udało się przywrócić układu.' : 'Układ kafelków wróci do domyślnego po powrocie na Pulpit.'}
         </p>}
+        <p className="card-intro">Pobierz jeden plik z nazwami wszystkich pulpitów oraz zapisanym układem i ustawieniami ich kafelków w tej przeglądarce.</p>
+        <button className="button" onClick={() => {
+          try { downloadPulpits(); setExportError(false); } catch { setExportError(true); }
+        }}>Eksportuj konfigurację pulpitów</button>
+        {exportError && <p className="warning" role="alert">Nie udało się wyeksportować konfiguracji pulpitów. Sprawdź dostęp przeglądarki do zapisanych ustawień i spróbuj ponownie.</p>}
       </Card>
       <Card title="Źródła danych" icon={<Layers3 />} area="settings-sources">
         <p className="card-intro">

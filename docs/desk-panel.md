@@ -38,6 +38,17 @@ Na wąskim ekranie kafelki obszaru roboczego stoją jeden pod drugim, a długie 
 
 ## Interfejs
 
+Ustawienia → Pulpit → **Eksportuj konfigurację pulpitów** pobiera lokalny plik `desk-panel-pulpity-<czas>.json`
+ze wszystkich pulpitów tej przeglądarki i tego adresu panelu, bez zmiany ustawień ani wysyłania danych do serwera.
+Format v1 (`kind: desk-panel-pulpits`) zawiera czas eksportu, `origin`, oryginalny tekst `desk-panel.pulpits`
+w `pulpits` (null, gdy brak zapisu), oraz `workspaces`: `{key, source, raw}` dla wszystkich zapisanych kluczy
+`desk-panel.workspace` i `desk-panel.workspace.*`, także spoza bieżącej listy pulpitów. `raw` zachowuje dokładny
+tekst z localStorage, bez normalizacji. `missingWorkspaces` wskazuje pulpity bez zapisanego układu — brak nie jest
+pustą siatką, może oznaczać układ automatyczny. Błąd odczytu przerywa eksport i jest widoczny w ustawieniach.
+Plik nie zawiera treści zadań, rozmów ani danych dostawców. Eksport z kiosku obejmuje jego własny profil Chrome;
+inne urządzenia, profile i adresy wymagają osobnego eksportu. Przy przygotowaniu [planu migracji Fili](fila.md#wejście-i-plan)
+oznacza się urządzenie/profil w `source` i przenosi pary `{source, raw}` do wejścia migratora, a braki jawnie wyjaśnia.
+
 Pulpit mieści się na poziomym ekranie (1280×720 CSS) bez przewijania. Pod paskiem z zegarem są trzy strefy jedna
 pod drugą, a układ nie zależy od urządzenia:
 
