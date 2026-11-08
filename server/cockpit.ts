@@ -28,7 +28,7 @@ export { PR_URL, type GhRunner, runGh, checkState, prFromGh };
  */
 
 const outcomeSchema = z.discriminatedUnion('decision', [
-  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), todoId: z.string().optional(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
+  z.object({ decision: z.literal('dispatched'), taskId: z.string(), prompt: z.string(), url: z.string(), at: z.number(), todoId: z.string().optional(), threadUid: z.string().regex(/^f-[0-9a-f]{8}$/).optional(), runner: z.string().optional(), model: z.string().optional(), steps: stepOverridesSchema.optional() }),
   z.object({ decision: z.literal('rejected'), at: z.number() }),
 ]);
 const bankPlanOutcomeSchema = z.discriminatedUnion('decision', [
@@ -65,6 +65,35 @@ const storeSchema = z.object({
   })),
 });
 type Store = z.infer<typeof storeSchema>;
+
+/** Offline transformation owned by the cockpit. Never opens or writes a store; caller supplies a copy. */
+export function migrateCockpitCopy(input: unknown, mapping: Record<string, { uid: string; thread: string }>) {
+  const parsed = storeSchema.parse(input);
+  // Preserve even unknown properties: migration is not an excuse to strip unrelated card data.
+  const copy = structuredClone(input) as Record<string, any>;
+  copy.threadDispatches ??= [];
+  const missing: string[] = [];
+  for (const record of parsed.todoDispatches) {
+    const target = mapping[record.todoId];
+    if (!target) { missing.push(record.todoId); continue; }
+    const { todoId: _old, ...rest } = record;
+    const next = { ...target, ...rest };
+    const existing = copy.threadDispatches.find((d: ThreadDispatchRun) => d.uid === next.uid && d.taskId === next.taskId && d.specRevision === next.specRevision && d.mode === next.mode && d.at === next.at);
+    if (existing && Object.entries(next).some(([key, value]) => existing[key] !== value)) throw new Error('Konflikt rejestru wątku.');
+    if (!existing) copy.threadDispatches.push(next);
+  }
+  for (const chat of Object.values(copy.chats) as Store['chats'][string][]) {
+    for (const outcome of Object.values(chat.dispatches ?? {})) {
+      if (outcome.decision !== 'dispatched' || !outcome.todoId) continue;
+      const target = mapping[outcome.todoId];
+      if (!target) { missing.push(outcome.todoId); continue; }
+      if (outcome.threadUid && outcome.threadUid !== target.uid) throw new Error('Konflikt powiązania karty.');
+      outcome.threadUid = target.uid;
+    }
+  }
+  storeSchema.parse(copy);
+  return { cockpit: copy, missing: [...new Set(missing)] };
+}
 const MAX_CHATS = 500;
 
 // ── Cezar run → the task as the cockpit shows it ──
@@ -191,6 +220,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   };
   async function linkPr(taskId: string, prUrl: string, title?: string) {
     if (!PR_URL.test(prUrl)) return;
+    if (threadUidOf(taskId)) return linkThreadPr(taskId, prUrl, title);
     const todoId = todoIdOf(taskId);
     if (!todoId) return linkThreadPr(taskId, prUrl, title);
     const key = `${todoId}|${taskId}|${prUrl}`;
@@ -204,19 +234,26 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     }
   }
   /** The PR of a task dispatched from a thread goes to that thread, found by its uid, so it works after a restart and a move. */
+  function threadUidOf(taskId: string) {
+    const registered = store.threadDispatches.find(d => d.taskId === taskId)?.uid;
+    if (registered) return registered;
+    for (const chat of Object.values(store.chats)) for (const outcome of Object.values(chat.dispatches))
+      if (outcome.decision === 'dispatched' && outcome.taskId === taskId && outcome.threadUid) return outcome.threadUid;
+    return undefined;
+  }
   async function linkThreadPr(taskId: string, prUrl: string, title?: string) {
-    const dispatch = store.threadDispatches.find(d => d.taskId === taskId);
-    if (!dispatch || !sources.fila) return;
-    const key = `${dispatch.uid}|${taskId}|${prUrl}`;
+    const uid = threadUidOf(taskId);
+    if (!uid || !sources.fila) return;
+    const key = `${uid}|${taskId}|${prUrl}`;
     if (linkedPrs.has(key)) return;
     linkedPrs.add(key);
     try {
-      const thread = await sources.fila.idOfUid(dispatch.uid);
+      const thread = await sources.fila.idOfUid(uid);
       if (!thread) return;
       await sources.fila.apply({ action: 'linkCezar', thread, kind: 'pr', id: prUrl, ...(title ? { title } : {}) }, 'panel');
     } catch {
       // The thread may be gone or hold 20 links: the PR is still shown, linking is best-effort.
-      console.warn(`fila: nie udało się powiązać PR ${prUrl} z wątkiem ${dispatch.thread}.`);
+      console.warn(`fila: nie udało się powiązać PR ${prUrl} z wątkiem ${uid}.`);
     }
   }
   const pendingDispatches = new Map<string, Promise<DispatchOutcome>>();

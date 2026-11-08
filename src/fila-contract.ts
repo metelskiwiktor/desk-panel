@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TODO_LIMITS, todoExecutorSchema, todoModeSchema, todoRepoSchema } from './todo-contract';
+import { TODO_LIMITS, todoExecutorSchema, todoModeSchema, todoRepoSchema, todoTaskSchema } from './todo-contract';
 
 /**
  * Fila: threads (sprawy, funkcje, błędy, notatki, spotkania) in projects. The panel's own data, kept by the server and
@@ -72,7 +72,7 @@ export const filaHistorySchema = z.object({
 });
 /** One revision of the Specyfikacja (D-061): the whole text, who wrote it (a client, D-006) and when. Numbers start at 1 and never repeat. */
 export const filaSpecRevisionSchema = z.object({
-  number: z.number().int().min(1), text: z.string().max(FILA_LIMITS.spec), by: filaActorSchema, at: z.number().finite(),
+  number: z.number().int().min(1), text: z.string().max(FILA_LIMITS.spec), by: z.enum([...filaActorSchema.options, 'panel']), at: z.number().finite(),
 });
 export type FilaSpecRevision = z.infer<typeof filaSpecRevisionSchema>;
 /**
@@ -110,6 +110,8 @@ export const filaThreadSchema = z.object({
   revision: z.number().int().min(1),
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
   history: z.array(filaHistorySchema),
+  /** Read-only provenance of migration 1.4b; preserves data without a native Fila counterpart and original authors. */
+  migratedTodo: z.object({ list: z.string(), listName: z.string(), original: todoTaskSchema }).optional(),
 });
 
 const boardId = z.string().regex(/^b-[0-9a-f]{8}$/);

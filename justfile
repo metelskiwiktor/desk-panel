@@ -38,6 +38,10 @@ fila-trial:
     node scripts/ensure-deps.mjs
     npx tsx scripts/fila-trial.ts
 
+# Offline rehearsal only; explicit marked copy directory outside Git (docs/fila.md).
+fila-migrate command directory:
+    npx tsx scripts/fila-migrate.ts {{command}} "{{directory}}"
+
 # Usage measurement of a period as JSON (dates YYYY-MM-DD, default: last 7 days), read from the running service.
 usage-export *args:
     node scripts/usage-export.mjs {{args}}

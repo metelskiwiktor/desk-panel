@@ -34,6 +34,7 @@ export interface FilaThreadView {
   archived: boolean; revision: number;
   createdAt: number; updatedAt: number; createdBy: string;
   history: FilaThread['history'];
+  migratedTodo?: FilaThread['migratedTodo'];
 }
 export interface FilaSpecView {
   thread: string; enabled: boolean;
@@ -224,6 +225,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       archived: t.archived, revision: t.revision,
       createdAt: t.createdAt, updatedAt: t.updatedAt, createdBy: t.history[0]?.by ?? 'user',
       history: structuredClone(t.history),
+      ...(t.migratedTodo ? { migratedTodo: structuredClone(t.migratedTodo) } : {}),
     };
   };
 
