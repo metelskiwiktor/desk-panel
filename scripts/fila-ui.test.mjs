@@ -93,7 +93,8 @@ describe('Fila board and Zadania tile', () => {
     expect(await idsIn(section('Pilne'))).toEqual(await queryIds('projekt = DESK AND otwarte AND tag = "pilne" SORTUJ id malejąco'));
     // A column query is checked like a section query.
     const column = page.getByRole('region', { name: 'Kolumna W realizacji' });
-    await column.getByRole('button', { name: /^Zapytanie:/ }).click();
+    await column.getByLabel('Kolumna W realizacji', { exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Zapytanie kolumny' }).click();
     await column.getByLabel('Tekst zapytania').fill('stan = ');
     await column.getByRole('alert').waitFor();
     await page.keyboard.press('Escape');

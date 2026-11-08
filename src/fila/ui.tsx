@@ -15,7 +15,7 @@ export const TypeIcon = ({ type, size = 16 }: { type: FilaThreadRow['type']; siz
 /** The workflow that holds the state; with one workflow (stage 1) it is that one. */
 export const workflowOf = (registry: FilaRegistry, state: string) =>
   registry.workflows.find(w => w.states.some(s => s.name === state)) ?? registry.workflows[0];
-const stateTone = (state: string, closing: boolean) => closing ? 'closed' : ({ 'Pomysł': 'idea', 'Do przygotowania': 'prep', 'Gotowe do realizacji': 'ready', 'W realizacji': 'doing', 'Do sprawdzenia': 'review' } as Record<string, string>)[state] ?? 'idea';
+export const stateTone = (state: string, closing: boolean) => closing ? 'closed' : ({ 'Pomysł': 'idea', 'Do przygotowania': 'prep', 'Gotowe do realizacji': 'ready', 'W realizacji': 'doing', 'Do sprawdzenia': 'review' } as Record<string, string>)[state] ?? 'idea';
 
 /**
  * A button that opens a list of choices: arrows move, Enter chooses, Escape closes and gives focus back to the button.
@@ -137,8 +137,13 @@ export function pillsOf(text: string): string[] {
  * Pills of a section or a column; a press opens the query text right below them (D-067). The text is checked by the
  * server while it is typed and the server's sentence is shown; saving a refused text keeps the editor open.
  */
-export function QueryEditor({ id, text, column = false, compact = false, onSave }: { id: string; text: string; column?: boolean; compact?: boolean; onSave: (text: string) => Promise<string | null> }) {
-  const [open, setOpen] = useState(false);
+export function QueryEditor({ id, text, column = false, compact = false, onSave, control }: {
+  id: string; text: string; column?: boolean; compact?: boolean; onSave: (text: string) => Promise<string | null>;
+  /** Opened from outside (a column's menu): no pills are drawn, only the editor while it is open. */
+  control?: { open: boolean; setOpen: (open: boolean) => void };
+}) {
+  const [own, setOwn] = useState(false);
+  const open = control ? control.open : own, setOpen = control ? control.setOpen : setOwn;
   const [draft, setDraft] = useState(text);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -160,9 +165,9 @@ export function QueryEditor({ id, text, column = false, compact = false, onSave 
     if (failure) setProblem(failure); else { setOpen(false); toggle.current?.focus(); }
   };
   return <>
-    <button type="button" ref={toggle} className={`fl-pills${compact ? ' compact' : ''}`} aria-expanded={open} aria-controls={area} aria-label={`Zapytanie: ${text}`} onClick={() => open ? close() : setOpen(true)}>
+    {!control && <button type="button" ref={toggle} className={`fl-pills${compact ? ' compact' : ''}`} aria-expanded={open} aria-controls={area} aria-label={`Zapytanie: ${text}`} onClick={() => open ? close() : setOpen(true)}>
       {pillsOf(text).map((pill, index) => <span key={index} className="fl-pill">{pill}</span>)}<SlidersHorizontal size={13} aria-hidden="true" />
-    </button>
+    </button>}
     {open && <form className="fl-query" id={area} onSubmit={save} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } }}>
       <textarea aria-label="Tekst zapytania" autoFocus aria-invalid={!!problem} value={draft} spellCheck={false} rows={Math.min(6, Math.max(2, draft.split('\n').length))} onChange={event => setDraft(event.target.value)} />
       {problem && <p className="fl-error" role="alert">{problem}</p>}

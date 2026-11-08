@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Folder, History, Layers3, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Folder, History, Layers3, Pencil, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { Empty } from '../components';
 import type { FilaAction, FilaSection } from '../fila-contract';
 import { sendFilaAction, useFilaActions, useFilaBoard, useFilaRegistry, useFilaView, type FilaBoardDoc, type FilaViewDoc } from './api';
 import { ThreadCard, ThreadList } from './threads';
-import { ConfirmDialog, Menu, NameDialog, QueryEditor } from './ui';
+import { ConfirmDialog, Menu, NameDialog, QueryEditor, stateTone } from './ui';
 
 type Section = FilaViewDoc['sections'][number];
 type Dialogs =
@@ -31,6 +31,7 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
   const [viewId, setViewId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialogs | null>(null);
   const [drawer, setDrawer] = useState(false);
+  const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const { act, error, clear } = useFilaActions();
   const data = registry.data;
@@ -99,15 +100,16 @@ export function FilaApp({ onHome }: { onHome?: () => void }) {
         ? section.threads.length ? <ThreadList threads={section.threads} registry={data} showProject={data.projects.length > 1 && !def.query.includes(`projekt = ${project}`)} onError={setNotice} /> : <p className="fl-empty">Żaden wątek nie pasuje do zapytania.</p>
         : <div className="fl-kanban" style={{ '--fl-columns': Math.max(1, section.columns.length) } as React.CSSProperties}>
           {section.columns.map((column, at) => <section key={column.id} className="fl-column" aria-label={`Kolumna ${column.name}`}>
-            <header><h3>{column.name}</h3><span className="fl-count">{column.total}</span>
+            <header><i className={`fl-dot fl-st-${stateTone(column.name, data.workflows.some(w => w.states.some(s => s.name === column.name && s.closing)))}`} aria-hidden="true" /><h3>{column.name}</h3><span className="fl-count">{column.total}</span>
               <Menu label={`Kolumna ${column.name}`} entries={[
                 { label: 'Zmień nazwę', icon: <Pencil size={15} />, onSelect: () => setDialog({ kind: 'renameColumn', column: column.id, name: column.name }) },
+                { label: 'Zapytanie kolumny', icon: <SlidersHorizontal size={15} />, onSelect: () => setEditingColumn(column.id) },
                 { label: 'Przesuń w lewo', icon: <ArrowLeft size={15} />, disabled: at === 0, onSelect: () => void send({ action: 'moveColumn', column: column.id, position: at - 1 }) },
                 { label: 'Przesuń w prawo', icon: <ArrowRight size={15} />, disabled: at === section.columns.length - 1, onSelect: () => void send({ action: 'moveColumn', column: column.id, position: at + 1 }) },
                 { label: 'Usuń kolumnę', icon: <Trash2 size={15} />, danger: true, onSelect: () => setDialog({ kind: 'deleteColumn', column: column.id, name: column.name }) },
               ]} />
             </header>
-            <QueryEditor id={column.id} column compact text={def.columns.find(c => c.id === column.id)?.query ?? column.query} onSave={text => saveColumn(column.id, text)} />
+            <QueryEditor id={column.id} column compact control={{ open: editingColumn === column.id, setOpen: open => setEditingColumn(open ? column.id : null) }} text={def.columns.find(c => c.id === column.id)?.query ?? column.query} onSave={text => saveColumn(column.id, text)} />
             {column.threads.length ? <ul className="fl-cards">{column.threads.map(thread => <ThreadCard key={thread.id} thread={thread} registry={data} onError={setNotice} />)}</ul> : <p className="fl-empty">Brak wątków</p>}
           </section>)}
           {section.columns.length === 0 && <p className="fl-empty">Kanban nie ma jeszcze kolumn.</p>}
