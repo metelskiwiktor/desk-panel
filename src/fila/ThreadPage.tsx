@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, FileText, FolderInput, GitBranch, Pencil, Plus, Send, Workflow, X } from 'lucide-react';
+import { Archive, ArrowLeft, ChevronDown, ChevronRight, FileText, FolderInput, GitBranch, Pencil, Plus, Send, Trash2, Workflow, X } from 'lucide-react';
 import { MarkdownText } from '../components/markdown-text';
 import type { FilaAction } from '../fila-contract';
 import {
@@ -7,7 +7,7 @@ import {
   type FilaFieldValue, type FilaRegistry, type FilaThreadDoc, type FilaThreadRow,
 } from './api';
 import { ThreadList } from './threads';
-import { Dialog, Menu, StatePicker, TypeIcon } from './ui';
+import { ConfirmDialog, Dialog, Menu, StatePicker, TypeIcon } from './ui';
 
 const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor' };
@@ -105,7 +105,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
   const { act, error, clear } = useFilaActions();
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<'title' | 'description' | null>(null);
-  const [dialog, setDialog] = useState<'project' | 'workflow' | 'parent' | null>(null);
+  const [dialog, setDialog] = useState<'project' | 'workflow' | 'parent' | 'delete' | null>(null);
   const [comment, setComment] = useState('');
   const [addingField, setAddingField] = useState(false);
   const [revision, setRevision] = useState<number | null>(null);
@@ -168,7 +168,9 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
       <span className="fl-branch-here" aria-current="page">{thread.id}</span>
     </div>}
     {notice && <p className="fl-notice" role="alert">{notice}<button type="button" aria-label="Zamknij komunikat" onClick={() => setNotice('')}><X size={13} aria-hidden="true" /></button></p>}
-    {thread.archived && <p className="fl-banner" role="status">Wątek jest zarchiwizowany i nie pokazuje się w sekcjach.</p>}
+    {thread.archived && <div className="fl-banner" role="status"><span>Wątek jest zarchiwizowany i nie pokazuje się w sekcjach. Jego Stan się nie zmienił.</span>
+      <button type="button" className="fl-text" onClick={() => void send({ action: 'restoreThread', thread: thread.id })}>Przywróć</button>
+      <button type="button" className="fl-text danger" onClick={() => setDialog('delete')}>Usuń trwale</button></div>}
     <header className="fl-thread-head">
       <div className="fl-kicker">
         <span className="fl-badge"><TypeIcon type={thread.type} size={15} />{thread.type.label}</span>
@@ -177,6 +179,10 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
           { label: 'Przenieś do projektu…', icon: <FolderInput size={15} />, onSelect: () => setDialog('project') },
           { label: 'Zmień workflow…', icon: <Workflow size={15} />, onSelect: () => setDialog('workflow') },
           { label: 'Zmień rodzica…', icon: <GitBranch size={15} />, onSelect: () => setDialog('parent') },
+          thread.archived
+            ? { label: 'Przywróć z archiwum', icon: <Archive size={15} />, onSelect: () => void send({ action: 'restoreThread', thread: thread.id }) }
+            : { label: 'Archiwizuj', icon: <Archive size={15} />, onSelect: () => void send({ action: 'archiveThread', thread: thread.id }) },
+          ...(thread.archived ? [{ label: 'Usuń trwale…', icon: <Trash2 size={15} />, danger: true, onSelect: () => setDialog('delete') }] : []),
         ]} /></span>
       </div>
       {editing === 'title'
@@ -269,6 +275,8 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
     </div>
 
     {(dialog === 'project' || dialog === 'workflow') && <ReassignDialog mode={dialog} thread={thread} registry={registry} error={error} onClose={closeDialog} onSave={change => void reassign(change)} />}
+    {dialog === 'delete' && <ConfirmDialog title={`Usunąć ${thread.id} na zawsze?`} text="Wątek zniknie razem z historią i rewizjami specyfikacji. Tego nie da się cofnąć." confirm="Usuń na zawsze" error={error} onClose={closeDialog}
+      onConfirm={() => void send({ action: 'deleteThread', thread: thread.id }).then(result => { if (result) { setDialog(null); onBack(); } })} />}
     {dialog === 'parent' && <ParentDialog thread={thread} error={error} onClose={closeDialog} onSave={async parent => { if (await update({ parent })) setDialog(null); }} />}
   </div>;
 }

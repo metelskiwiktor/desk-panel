@@ -386,6 +386,121 @@ URL: ${page?.url()}`);
     expect(await spec.getByText(/tylko do odczytu/).isVisible()).toBe(true);
   });
 
+  // Part 3: the project screen, new project and thread, the archive.
+  const projectNav = name => page.getByRole('navigation', { name: 'Nawigacja Fili' }).getByRole('button', { name: new RegExp(`^${name} \\d+$`) });
+
+  it('a board creates no thread; the project screen does, and opens on Pola i workflow with the archive beside it', async () => {
+    await page.getByRole('button', { name: 'Tablica', exact: true }).waitFor().catch(() => {});
+    await projectNav('DeskPanel').click();
+    await page.getByRole('heading', { level: 1, name: /DeskPanel\s*DESK/ }).waitFor();
+    // The first tab is Pola i workflow (D-077), read-only.
+    expect(await page.getByRole('tab', { name: 'Pola i workflow' }).getAttribute('aria-selected')).toBe('true');
+    const panel = page.getByRole('tabpanel', { name: 'Pola i workflow' });
+    await panel.getByText('Praca', { exact: true }).waitFor();
+    await panel.getByText('Czytanie', { exact: true }).waitFor();
+    await panel.getByText('Koszt', { exact: true }).waitFor();
+    for (const module of ['Wektor', 'Bank', 'Fila']) await panel.getByText(module, { exact: true }).waitFor();
+    expect(await panel.locator('input, textarea, select, button').count()).toBe(0);
+    const counts = (await api('api/fila')).projects.find(p => p.key === 'DESK').counts;
+    const stats = await page.locator('.fl-stats dd').allTextContents();
+    expect(stats.map(Number)).toEqual([counts.open, counts.closed, counts.archived]);
+    // The board of the project has sections but no way to make a thread (D-072).
+    await page.getByRole('button', { name: /^Tablica DeskPanel$/ }).click();
+    await page.getByRole('heading', { name: 'DeskPanel', level: 1 }).waitFor();
+    expect(await page.getByRole('button', { name: /Nowy wątek/ }).count()).toBe(0);
+    await projectNav('DeskPanel').click();
+    await page.getByRole('tab', { name: 'Archiwum' }).click();
+    const archive = page.getByRole('tabpanel', { name: 'Archiwum' });
+    await archive.getByText('Duplikat: zadania na pulpicie').waitFor();
+    await archive.getByText('Stan zostaje: Pomysł').waitFor();
+  });
+
+  it('creates a project with a unique four-letter key and a thread with a type and a parent', async () => {
+    await page.getByRole('button', { name: 'Nowy projekt' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Nazwa', { exact: true }).fill('Prywatne');
+    await dialog.getByLabel('Klucz projektu').fill('pry');
+    expect(await dialog.getByLabel('Klucz projektu').inputValue()).toBe('PRY');
+    expect(await dialog.getByRole('button', { name: 'Załóż projekt' }).isDisabled()).toBe(true);
+    await dialog.getByLabel('Klucz projektu').fill('DESK');
+    await dialog.getByRole('button', { name: 'Załóż projekt' }).click();
+    await dialog.getByRole('alert').getByText(/DESK/).waitFor();
+    await dialog.getByLabel('Klucz projektu').fill('PRYW');
+    await dialog.getByRole('button', { name: 'Załóż projekt' }).click();
+    await page.getByRole('heading', { level: 1, name: /Prywatne\s*PRYW/ }).waitFor();
+    const created = (await api('api/fila')).projects.find(p => p.key === 'PRYW');
+    expect([created.name, created.board !== null, created.counts]).toEqual(['Prywatne', true, { open: 0, closed: 0, archived: 0 }]);
+    await projectNav('Prywatne').waitFor();
+
+    await page.getByRole('button', { name: 'Nowy wątek' }).click();
+    await dialog.getByLabel('Tytuł').fill('Wymienić filtr');
+    await dialog.getByLabel('Typ', { exact: true }).selectOption('blad');
+    await dialog.getByRole('button', { name: 'Utwórz' }).click();
+    await page.getByLabel(/^Stan PRYW-1: /).first().waitFor();
+    expect((await thread('PRYW-1')).type.key).toBe('blad');
+    // A second one, a subthread of the first, made from the project screen of another project.
+    await projectNav('Prywatne').click();
+    await page.getByRole('button', { name: 'Nowy wątek' }).click();
+    await dialog.getByLabel('Tytuł').fill('Kupić filtr');
+    await dialog.getByLabel('Rodzic', { exact: true }).fill('PRYW-1');
+    await dialog.getByRole('button', { name: 'Utwórz' }).click();
+    await page.getByLabel(/^Stan PRYW-2: /).first().waitFor();
+    expect((await thread('PRYW-2')).parent).toBe('PRYW-1');
+    // A thread can be made for another project than the screen's; a refused parent keeps the dialog open.
+    await projectNav('Prywatne').click();
+    await page.getByRole('button', { name: 'Nowy wątek' }).click();
+    await dialog.getByLabel('Tytuł').fill('Z projektu prywatnego do DeskPanelu');
+    await dialog.getByLabel('Projekt', { exact: true }).selectOption('DESK');
+    await dialog.getByLabel('Rodzic', { exact: true }).fill('DESK-999');
+    await dialog.getByRole('button', { name: 'Utwórz' }).click();
+    await dialog.getByRole('alert').waitFor();
+    await dialog.getByLabel('Rodzic', { exact: true }).fill('');
+    await dialog.getByRole('button', { name: 'Utwórz' }).click();
+    await page.getByLabel(/^Stan DESK-\d+: /).first().waitFor();
+    const made = (await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK SORTUJ id malejąco'))).threads[0];
+    expect([made.title, made.project]).toEqual(['Z projektu prywatnego do DeskPanelu', 'DESK']);
+  });
+
+  it('archives a thread without changing its Stan, restores it, and deletes for good only from the archive', async () => {
+    await openThread('DESK-12');
+    await page.getByLabel('Działania wątku').click();
+    expect(await page.getByRole('menuitem', { name: /Usuń trwale/ }).count()).toBe(0);
+    await page.getByRole('menuitem', { name: 'Archiwizuj' }).click();
+    await page.getByRole('status').getByText(/zarchiwizowany/).waitFor();
+    const archived = await thread('DESK-12');
+    expect([archived.archived, archived.state]).toEqual([true, 'W realizacji']);
+    expect((await api('api/fila/query?q=' + encodeURIComponent('projekt = DESK'))).threads.map(t => t.id)).not.toContain('DESK-12');
+    // It left the sections but sits in the archive of its project, with its Stan.
+    await page.getByRole('button', { name: 'DeskPanel', exact: true }).first().click();
+    await projectNav('DeskPanel').click();
+    await page.getByRole('tab', { name: 'Archiwum' }).click();
+    const archive = page.getByRole('tabpanel', { name: 'Archiwum' });
+    await archive.getByText('Kafelek Zadania nie odświeża się po zmianie listy').waitFor();
+    await archive.getByRole('button', { name: 'Przywróć DESK-12' }).click();
+    await archive.getByText('Kafelek Zadania nie odświeża się po zmianie listy').waitFor({ state: 'detached' });
+    const restored = await thread('DESK-12');
+    expect([restored.archived, restored.state]).toEqual([false, 'W realizacji']);
+
+    // Permanent deletion: from the archive of a project (with a confirmation) and from the page of an archived thread.
+    for (const id of ['PRYW-1', 'PRYW-2']) { await openThread(id); await page.getByLabel('Działania wątku').click(); await page.getByRole('menuitem', { name: 'Archiwizuj' }).click(); await page.getByRole('status').waitFor(); }
+    await projectNav('Prywatne').click();
+    await page.getByRole('tab', { name: 'Archiwum' }).click();
+    const own = page.getByRole('tabpanel', { name: 'Archiwum' });
+    await own.getByRole('button', { name: 'Usuń trwale PRYW-1' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Anuluj' }).click();
+    expect((await fetch(new URL('api/fila/threads/PRYW-1', fila.url), close)).status).toBe(200);
+    await own.getByRole('button', { name: 'Usuń trwale PRYW-1' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Usuń na zawsze' }).click();
+    await own.getByText('PRYW-1', { exact: true }).waitFor({ state: 'detached' });
+    expect((await fetch(new URL('api/fila/threads/PRYW-1', fila.url), close)).status).toBe(404);
+    await own.getByRole('button', { name: 'Otwórz PRYW-2' }).click();
+    await page.getByLabel(/^Stan PRYW-2: /).first().waitFor();
+    await page.getByRole('status').getByRole('button', { name: 'Usuń trwale' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Usuń na zawsze' }).click();
+    await page.getByRole('heading', { level: 1, name: /Prywatne\s*PRYW/ }).waitFor();
+    expect((await fetch(new URL('api/fila/threads/PRYW-2', fila.url), close)).status).toBe(404);
+  });
+
   it('the Zadania tile asks for a query, keeps it after reopening and changes Stan like the board', async () => {
     const tab = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     tab.setDefaultTimeout(90_000);

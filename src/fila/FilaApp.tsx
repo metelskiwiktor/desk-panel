@@ -4,6 +4,7 @@ import { Empty } from '../components';
 import type { FilaAction, FilaSection } from '../fila-contract';
 import { sendFilaAction, useFilaActions, useFilaBoard, useFilaChildIndex, useFilaRegistry, useFilaView, type FilaBoardDoc, type FilaViewDoc } from './api';
 import { ChildrenContext, ThreadCard, ThreadList } from './threads';
+import { NewProjectDialog, ProjectPage } from './ProjectPage';
 import { ThreadPage } from './ThreadPage';
 import { ConfirmDialog, Menu, NameDialog, QueryEditor, stateTone } from './ui';
 
@@ -34,6 +35,9 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
   const [drawer, setDrawer] = useState(false);
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(firstThread ?? null);
+  const [projectKey, setProjectKey] = useState<string | null>(null);
+  const [projectTab, setProjectTab] = useState<'pola' | 'archiwum'>('pola');
+  const [newProject, setNewProject] = useState(false);
   const [notice, setNotice] = useState('');
   const { act, error, clear } = useFilaActions();
   const data = registry.data;
@@ -47,16 +51,16 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
 
   // The browser's Back and Forward walk through where you were in Fila (board, view, thread); Back from the first screen leaves Fila.
   useEffect(() => {
-    const here = { board: boardId, view: viewId, thread: threadId };
+    const here = { board: boardId, view: viewId, thread: threadId, project: projectKey, tab: projectTab };
     const saved = (history.state as { fila?: typeof here } | null)?.fila;
     if (saved && JSON.stringify(saved) === JSON.stringify(here)) return;
     history.pushState({ fila: here }, '');
-  }, [boardId, viewId, threadId]);
+  }, [boardId, viewId, threadId, projectKey, projectTab]);
   useEffect(() => {
     const walk = (event: PopStateEvent) => {
-      const target = (event.state as { fila?: { board: string | null; view: string | null; thread: string | null } } | null)?.fila;
+      const target = (event.state as { fila?: { board: string | null; view: string | null; thread: string | null; project: string | null; tab: 'pola' | 'archiwum' } } | null)?.fila;
       if (!target) { onHome?.(); return; }
-      setBoardId(target.board); setViewId(target.view); setThreadId(target.thread);
+      setBoardId(target.board); setViewId(target.view); setThreadId(target.thread); setProjectKey(target.project); setProjectTab(target.tab);
     };
     window.addEventListener('popstate', walk);
     return () => window.removeEventListener('popstate', walk);
@@ -148,17 +152,18 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
       <div className="fl-brand"><Layers3 size={21} aria-hidden="true" /> Fila</div>
       <div role="navigation" aria-label="Nawigacja Fili">
         <div className="fl-nav-head"><h2>Tablice</h2><button type="button" className="fl-icon small" aria-label="Nowa tablica" onClick={() => setDialog({ kind: 'newBoard' })}><Plus size={15} aria-hidden="true" /></button></div>
-        {data.boards.map(item => <button key={item.id} type="button" className={`fl-nav-item${item.id === board?.id ? ' active' : ''}`} aria-current={item.id === board?.id ? 'page' : undefined} onClick={() => { setBoardId(item.id); setViewId(null); setDrawer(false); setThreadId(null); }}>
+        {data.boards.map(item => <button key={item.id} type="button" className={`fl-nav-item${item.id === board?.id && !projectKey ? ' active' : ''}`} aria-current={item.id === board?.id && !projectKey ? 'page' : undefined} onClick={() => { setBoardId(item.id); setViewId(null); setDrawer(false); setThreadId(null); setProjectKey(null); }}>
           <Layers3 size={16} aria-hidden="true" /><span>{item.name}</span></button>)}
-        <div className="fl-nav-head"><h2>Projekty</h2></div>
-        {data.projects.map(item => <button key={item.key} type="button" className="fl-nav-item" disabled={!item.board} onClick={() => { if (item.board) { setBoardId(item.board); setViewId(null); setThreadId(null); } }}>
+        <div className="fl-nav-head"><h2>Projekty</h2><button type="button" className="fl-icon small" aria-label="Nowy projekt" onClick={() => setNewProject(true)}><Plus size={15} aria-hidden="true" /></button></div>
+        {data.projects.map(item => <button key={item.key} type="button" className={`fl-nav-item${item.key === projectKey && !threadId ? ' active' : ''}`} aria-current={item.key === projectKey && !threadId ? 'page' : undefined} onClick={() => { setProjectKey(item.key); setProjectTab('pola'); setThreadId(null); }}>
           <Folder size={16} aria-hidden="true" /><span>{item.name}</span><em>{item.counts.open}</em></button>)}
       </div>
       {onHome && <button type="button" className="fl-text back" onClick={onHome}><ArrowLeft size={15} aria-hidden="true" /> Pulpit</button>}
     </aside>
     <div className="fl-workspace">
       {notice && <p className="fl-notice" role="alert">{notice}<button type="button" aria-label="Zamknij komunikat" onClick={() => setNotice('')}><X size={13} aria-hidden="true" /></button></p>}
-      {threadId ? <ThreadPage key={threadId} id={threadId} registry={data} boardName={board?.name ?? 'Tablica'} onOpen={setThreadId} onBack={() => setThreadId(null)} />
+      {threadId ? <ThreadPage key={threadId} id={threadId} registry={data} boardName={projectKey ? data.projects.find(item => item.key === projectKey)?.name ?? 'Projekt' : board?.name ?? 'Tablica'} onOpen={setThreadId} onBack={() => setThreadId(null)} />
+        : projectKey ? <ProjectPage registry={data} projectKey={projectKey} tab={projectTab} onTab={setProjectTab} onOpen={setThreadId} onBoard={id => { setBoardId(id); setViewId(null); setProjectKey(null); }} />
         : !board ? <Empty>Nie ma jeszcze żadnej tablicy. Dodaj ją plusem w nawigacji.</Empty> : <>
         <header className="fl-head">
           <div><p className="fl-eyebrow">Tablica</p><h1>{board.name}</h1></div>
@@ -198,5 +203,6 @@ export function FilaApp({ onHome, thread: firstThread }: { onHome?: () => void; 
       </>}
     </div>
     {dialogView()}
+    {newProject && <NewProjectDialog onClose={() => setNewProject(false)} onCreated={key => { setNewProject(false); setProjectKey(key); setProjectTab('pola'); setThreadId(null); }} />}
   </div></ChildrenContext.Provider>;
 }
