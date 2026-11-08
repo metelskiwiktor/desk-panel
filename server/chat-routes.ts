@@ -85,7 +85,7 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations): Promise<boolean> {
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations, filaActive = false): Promise<boolean> {
   // The bytes of one attached file, only under the conversation that sent it.
   const fileMatch = /^\/api\/chats\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})\/?$/.exec(url.pathname);
   const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|automation|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
@@ -202,6 +202,11 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         const legacy = resolveLegacyDecisions(conversation, view.dispatches);
         if (legacy.dispatches[input.toolCallId]) return json(res, 200, legacy.dispatches[input.toolCallId]), true;
         if (legacy.unresolved) throw new ChatError(409, 'Nie można jednoznacznie przypisać wcześniejszej decyzji do karty. Potrzebna jest diagnostyka tej rozmowy przed zleceniem.');
+        if (filaActive) {
+          let args: unknown;
+          try { args = JSON.parse(card.input); } catch { throw new ChatError(409, 'Nie można odczytać dawnej karty.'); }
+          if (args && typeof args === 'object' && 'todoId' in args) throw new ChatError(409, 'Dawne zadanie zleć w oknie jego wątku Fili.');
+        }
       }
       return json(res, 200, await cockpit.dispatch(id, input)), true;
     } else if (action === 'bank-plan' && req.method === 'POST') {

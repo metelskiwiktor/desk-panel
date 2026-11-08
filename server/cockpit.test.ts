@@ -209,6 +209,13 @@ describe('the cockpit of a conversation', () => {
     expect(created).toHaveBeenCalledWith({ task: PROMPT, title: 'Paski', todoId: 't-0000a001' });
   });
 
+  it('refuses a new dispatch from an old list card in Fila mode before contacting Cezar', async () => {
+    const { created, sources, file } = setup();
+    const cockpit = createCockpit({ sources, file, cezarUrl: CEZAR, filaActive: true });
+    await expect(cockpit.dispatch(CHAT, { toolCallId: 'old', decision: 'dispatch', title: 'x', prompt: PROMPT, todoId: 't-0000a001' })).rejects.toMatchObject({ status: 409 });
+    expect(created).not.toHaveBeenCalled();
+  });
+
   it('links the dispatched run and chat once, starts the todo, and never completes it from Cezar or PR state', async () => {
     const { cockpit, todos, created } = setup();
     const list = (await todos.apply({ action: 'createList', name: 'L' })).list!.id;

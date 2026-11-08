@@ -10,7 +10,7 @@ const POLL_MS = 5000;
  * The to-do lists, shared by every Zadania tile (each shows one list). Actions go to the server one by one; a tick is
  * shown at once (`optimistic`) and the server's answer replaces it on the next read.
  */
-export function useTodos() {
+export function useTodos(enabled = true) {
   const [source, setSource] = useState<TodoSource>({ live: true, name: 'Zadania', status: 'loading', observedAt: null, data: null });
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
@@ -18,7 +18,7 @@ export function useTodos() {
   const inFlight = useRef(0);
   const pollingEnabled = usePollingEnabled();
   useEffect(() => {
-    if (!pollingEnabled) return;
+    if (!pollingEnabled || !enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -39,7 +39,7 @@ export function useTodos() {
     }
     void read();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [reload, pollingEnabled]);
+  }, [reload, pollingEnabled, enabled]);
 
   const act = useCallback(async (action: TodoAction, optimistic?: (data: TodoData) => TodoData): Promise<TodoResult | null> => {
     setError('');

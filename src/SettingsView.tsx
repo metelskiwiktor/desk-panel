@@ -9,6 +9,7 @@ import type { QuotaAccount } from './model';
 import type { useQuotaVisibility } from './quota-visibility';
 import { resetWorkspace } from './tile-grid';
 import { downloadPulpits } from './pulpits';
+import { KioskCutover } from './fila/KioskCutover';
 
 export function SettingsView({
   layout,
@@ -20,6 +21,7 @@ export function SettingsView({
   quotaAccounts,
   quotaVisibility,
   resetArrangement = resetWorkspace,
+  cutoverLocked = false,
 }: {
   layout: Layout;
   configure: (next: Layout) => void;
@@ -31,6 +33,7 @@ export function SettingsView({
   quotaVisibility?:ReturnType<typeof useQuotaVisibility>;
   /** Forgets the arrangement of the open virtual desktop; false when it could not be saved. */
   resetArrangement?: () => boolean;
+  cutoverLocked?: boolean;
 }) {
   const warmup = useWarmupStatus();
   const [arrangement, setArrangement] = useState<'kept' | 'reset' | 'failed'>('kept');
@@ -55,6 +58,7 @@ export function SettingsView({
       </Card>
       <GoogleAccounts />
       <Card title="Pulpit" icon={<Settings2 />} area="settings-desktop">
+        {cutoverLocked && <KioskCutover />}
         <p className="card-intro">
           Co może pokazać Pulpit. Kafelki obszaru roboczego (limity, Cezar, poczta, komputer) wybierasz i rozmieszczasz na Pulpicie, przyciskiem układu w pasku u góry; tutaj wyłączasz to, czego nie chcesz tam widzieć. Zapis dotyczy tylko tej przeglądarki.
         </p>

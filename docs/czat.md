@@ -1,5 +1,7 @@
 # Czat z agentem
 
+Źródło zadań ustala `GET /api/fila-mode` ([fila.md](fila.md)): w legacy obowiązują opisane niżej listy; w trybie Fili używane są wątki i narzędzia `fila_*`, a dawne wskazania są rozwiązywane bez przepisywania historii. Przy `locked: true` silniki czatu nie są konstruowane i nowe tury są odmawiane. Istniejąca sesja Hermesa w trybie Fili dostaje aktualną preambułę również w kolejnych turach.
+
 Mapa frontendu, zasady zmian GUI i powtarzalne przepływy przeglądarkowe: [wektor-ui.md](wektor-ui.md).
 
 Wektor ma też kartę wyboru dnia i godziny wizyty ZnanyLekarz oraz kartę zgody na nowe wydarzenie Google Calendar.

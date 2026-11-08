@@ -1,6 +1,14 @@
 # Fila: rdzeń wątków, zapytania i tablice
 
-Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Ten dokument opisuje **części 1.1a–1.4b etapu 1**: trwały rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice, MCP z czterema narzędziami (klienci i Wektor), Cezara na wątku oraz migrator offline. Obecne listy zadań (docs/zadania.md) działają bez zmian aż do końcowego przełączenia (1.6); działająca Fila ich nie czyta ani nie zmienia. Warsztat słonia i rybek (1.3b) opisuje sekcja „Warsztat specyfikacji (1.3b)”. Interfejs 1.5 powstaje częściami w odizolowanym podglądzie (sekcja „Interfejs (1.5)”); przełączenia (1.6) jeszcze nie ma.
+## Przygotowane przełączenie 1.6
+
+`GET /api/fila-mode` zwraca `{ fila, locked }`. Bez pliku `~/.desk-panel/fila-cutover.json` działa tryb list (`fila: false`); sam restart go nie zmienia. Oznaczony i sprawdzony stan `locked` uruchamia odczyt Fili bez zapisów, tur, automatów i projekcji. Niepoprawny znacznik, niepełna instalacja lub różne skróty Fili/kokpitu zatrzymują start. Stan `active` przełącza UI, narzędzia i preambuły na Filę; stare trasy list zwracają 404, a magazyn list nie jest tworzony. Po otwarciu zapisów marker jest trwałą granicą naprawy w przód. `DESK_WEKTOR_FILA` jest osobną wcześniejszą opcją testowania Wektora, nie przełącza panelu ani danych.
+
+Instalator `scripts/fila-cutover.ts` wymaga zamkniętych właścicieli, identyfikowanego świeżego planu, zgody na operację oraz eksportu kiosku. Przed zapisem właściciele magazynów walidują wynik ponownej próby; kopia i manifest powstają przed znacznikiem, `prepared` pozwala odstąpić bez nadpisania późniejszej zmiany, a `installing` blokuje start po przerwaniu. Odtworzenie przed otwarciem porównuje skróty i używa wyłącznie kopii/manifestu. Otwarcie wymaga osobnego odbioru w `acceptance.json`; nie wolno wykonywać go bez ustalonego okna i kompletnych dowodów. Szczegółowe polecenia i warunki przełączenia pozostają w lokalnej procedurze operacji poza Gitem.
+
+Kiosk w trybie odbioru pobiera plan z zablokowanej usługi. Przy zastosowaniu porównuje origin, nazwy pulpitów i surowe układy, zachowuje kopię w tej przeglądarce, a przerwany zapis odzyskuje z dziennika przed uruchomieniem UI. Powtórzenie i odtworzenie wymagają zgodnych danych. Dawne wskazania list/zadań tłumaczy `server/fila-context.ts` przy wysłaniu wiadomości; historia nie jest przepisywana, a `GET /api/fila/threads/t-…` i `fila_get` z dawnym ID nadal są odrzucane.
+
+Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projektach. Koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Fila` (Model, Decyzje; numery D-… niżej pochodzą stąd). Dokument opisuje rdzeń, HTTP API, Specyfikacje z rewizjami, zapytania i tablice, MCP, Cezara na wątku, migrator oraz interfejs. W trybie legacy listy ([zadania.md](zadania.md)) pozostają źródłem; przełączenie na Filę wymaga osobnego okna i wykonania procedury 1.6. Warsztat słonia i rybek opisuje sekcja „Warsztat specyfikacji (1.3b)”.
 
 ## Gdzie co jest
 

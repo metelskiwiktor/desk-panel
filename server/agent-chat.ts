@@ -9,7 +9,7 @@ import { createChatLog, type ChatLog, type TurnSummary, type TurnTool } from './
 import {
   automationPrompt, titleFrom, withContext,
   type ChatApproval, type ChatAutomation, type ChatAutomationInput, type ChatDetail, type ChatEngine, type ChatEvent, type ChatMessage, type ChatPart, type ChatSend, type ChatSummary, type ChatUsage,
-  type EngineStatus,
+  type EngineStatus, type ContextItem,
 } from '../src/chat-contract';
 
 /** A failure the HTTP layer answers with this status. */
@@ -23,8 +23,8 @@ export const DEFAULT_PANEL_URL = 'http://127.0.0.1:5174';
  * What the agent is told once, when a conversation starts. The dashboard elements the user points at come with each
  * message; what they do not cover the agent reads itself from the panel's own read-only API at `panelUrl`.
  */
-export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
-  return [
+export function preamble(panelUrl: string = DEFAULT_PANEL_URL, fila = false): string {
+  const lines = [
     'Jesteś agentem wbudowanym w Desk Panel: osobisty pulpit użytkownika z pocztą Gmail, kalendarzem Google, zadaniami Cezara, treningami Garmin, kontem bankowym, limitami AI i stanem komputera.',
     'Odpowiadasz po polsku, zwięźle i konkretnie.',
     'Użytkownik może wskazać elementy pulpitu. Dostajesz je w bloku [Kontekst] przed wiadomością: to podpowiedź, o co pyta, a nie wszystko, co możesz wiedzieć. Gdy pytanie wymaga danych, których tam nie ma (np. wydarzeń z przyszłego tygodnia), pobierz je sam i nie proś użytkownika o ich podanie.',
@@ -46,6 +46,13 @@ export function preamble(panelUrl: string = DEFAULT_PANEL_URL): string {
     'Gdy w [Kontekst] jest „Skill: Zaimplementuj zadanie”, działasz jako dyspozytor: zrób szybki rekonesans tylko do odczytu w repozytorium C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel, wypisz krótki plan (3–6 punktów) oraz gotowy blok Executor Prompt po angielsku i zapytaj „Zlecić na Cezarze?”. Dopiero po potwierdzeniu („zleć”, „ok”, „tak”) wyślij POST /api/cezar/runs i podaj link z pola url.',
     'Katalog roboczy jest pusty i służy tylko tej rozmowie. Nie zmieniaj plików poza nim, jeśli użytkownik nie poprosi o to wprost. Gdy użytkownik poprosi o wdrożenie zmian lub restart panelu, uruchom `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "servy\\desk-panel.ps1" -Action RESTART`: skrypt automatycznie oddeleguje budowanie frontendu i restart do odpiętego procesu w tle, dzięki czemu tura czatu zakończy się czysto bez nagłego zerwania procesu.',
     'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” albo „[Automatyka · Obserwator]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
+  ];
+  if (!fila) return lines.join('\n');
+  const old = ['/api/agent/todos', 'Słowo „zadanie” bez dopowiedzenia', 'Wskazana w bloku [Kontekst] „Lista zadań”', 'Do panelu wysyłaj tylko zapytania GET', 'Dodając zadanie bez wskazanej listy', 'Notatek panel jeszcze nie ma', 'Gdy w [Kontekst] jest „Skill: Zaimplementuj zadanie”', 'Katalog roboczy jest pusty'];
+  return [...lines.filter(line => !old.some(fragment => line.includes(fragment))),
+    `Zadanie użytkownika to wątek Fili; czytaj ${panelUrl}/api/fila i /api/fila/threads/ID, szukaj /api/fila/query?q=... . Dawne ID t-… wyszukaj w polu „Dawne ID” projektów, a potem odczytaj kanoniczne ID. Nie używaj dawnych list ani ich API.`,
+    `Zmiany Fili wykonuj tylko na prośbę użytkownika przez POST ${panelUrl}/api/fila/action z tokenem klienta wektor z ~/.desk-panel/fila-tokens.json. Tokenu nie wypisuj ani nie zapisuj do logu. Autor wynika z tokenu; specyfikacja wymaga baseRevision. Trwałe usuwanie i zlecanie Cezara należą użytkownikowi w GUI.`,
+    'Nie restartuj usług ani nie zmieniaj infrastruktury. Inne zapisy użytkownika wymagają właściwej karty zgody; nie wysyłaj sam zleceń Cezara.',
   ].join('\n');
 }
 
@@ -199,6 +206,8 @@ export interface ChatOptions {
   namer?: ChatNamer;
   /** Where the agent reads the panel's API from (the service's own loopback address); `DEFAULT_PANEL_URL` by default. */
   panelUrl?: string;
+  fila?: boolean;
+  resolveContext?: (context: ContextItem[]) => Promise<ContextItem[]>;
   /** Where raw events and per-turn summaries go for later analysis; `<dir>/chat-logs` by default. */
   log?: ChatLog;
   now?: () => number;
@@ -225,7 +234,7 @@ const asRecord = (value: unknown): Record<string, any> => (value && typeof value
 export function createAgentChat(options: ChatOptions = {}): ChatService {
   const dir = options.dir ?? path.join(homedir(), '.desk-panel');
   const launch = options.launch ?? agyLauncher();
-  const intro = preamble(options.panelUrl);
+  const intro = preamble(options.panelUrl, options.fila);
   const now = options.now ?? Date.now;
   const log = options.log ?? createChatLog(dir, now);
   const idleMs = options.idleMs ?? 10 * 60_000;
@@ -443,6 +452,7 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     if (sessions.get(id)?.agent) throw new ChatError(409, 'Agent jeszcze odpowiada.');
     const at = now();
     const context = input.context ?? [];
+    const promptContext = options.resolveContext ? await options.resolveContext(context) : context;
     const user: ChatMessage = { id: randomUUID(), role: 'user', at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}) };
     const agent: ChatMessage = { id: randomUUID(), role: 'agent', at, parts: [], status: 'streaming' };
     chat.items.push(user, agent);
@@ -456,8 +466,8 @@ export function createAgentChat(options: ChatOptions = {}): ChatService {
     save(chat);
     touch(chat, user);
     touch(chat, agent, true);
-    const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, context);
-    const content = chat.agy ? prompt : `${intro}\n\n${prompt}`;
+    const prompt = withContext(automation ? automationPrompt(input.text, automation) : input.text, promptContext);
+    const content = chat.agy && !options.fila ? prompt : `${intro}\n\n${prompt}`;
     session.turn = { number: chat.items.filter(m => m.role === 'user').length, startedAt: at, ask: input.text.replace(/\s+/g, ' ').slice(0, 200), context: context.map(c => c.kind), lastStep: null, result: null, outputChars: new Map(), toolErrors: new Map(), denied: [] };
     log.trace(id, { turn: session.turn.number, src: 'panel', kind: 'sent', chars: content.length, preamble: !chat.agy, contextItems: context.length, ask: session.turn.ask, ...(automation ? { automation: automation.source } : {}) });
     session.proc.write(`${JSON.stringify({ event: 'user', message: { content } })}\n`);

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Archive, ArrowLeft, ChevronDown, ChevronRight, FileText, FolderInput, GitBranch, Pencil, Plus, Send, Trash2, Workflow, X } from 'lucide-react';
 import { MarkdownText } from '../components/markdown-text';
+import { ctx } from '../chat-context';
 import type { FilaAction } from '../fila-contract';
 import {
   useFilaActions, useFilaAncestors, useFilaGet, useFilaSpec, useFilaThread,
@@ -162,7 +163,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
   const kids = children.data?.threads ?? [];
   const closedKids = kids.filter(kid => kid.closed).length;
 
-  return <div className={`fl-thread tone-${thread.type.key}${thread.closed ? ' closed' : ''}`}>
+  return <div {...ctx('filaThread', thread.id, thread.title, `ID: ${thread.id}\nStan: ${thread.state}\nPełny wątek: fila_get.`)} className={`fl-thread tone-${thread.type.key}${thread.closed ? ' closed' : ''}`}>
     <button type="button" className="fl-back" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> {boardName}</button>
     {branch.length > 0 && <div className="fl-branch" role="navigation" aria-label="Gałąź wątku">
       {branch.map(item => <span key={item.id} className="fl-branch-item"><button type="button" aria-label={`Rodzic ${item.id}: ${item.title}`} title={item.title} onClick={() => onOpen(item.id)}><b>{item.id}</b> {item.title}</button><ChevronRight size={13} aria-hidden="true" /></span>)}

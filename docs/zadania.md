@@ -1,6 +1,6 @@
 # Listy zadań
 
-> **Ścieżka przejściowa (do 1.6).** Cały ten dokument opisuje listy zadań (`t-…`, `/api/todos/action`, `/api/agent/todos`, `panel_todos`), które do końcowego przełączenia (1.6) pozostają produkcyjnym źródłem. Wątki, Specyfikacje z rewizjami i narzędzia `fila_*` są w [fila.md](fila.md); po 1.6 stają się jedyną aktywną ścieżką, a ten dokument i odwołania do niego usuwa to przełączenie.
+> **Dokument list, tylko tryb legacy.** `GET /api/fila-mode` podaje źródło: `fila: false` oznacza listy opisane poniżej, `fila: true` — wyłącznie [Filę](fila.md). Przy `locked: true` trwa odbiór i zapisy są zablokowane. Brak trasy (404) oznacza starszy serwer list; inny błąd nie rozstrzyga trybu. Po przełączeniu opis poniżej jest dokumentacją zachowanej kopii, nie instrukcją pracy na danych usługi.
 
 Własne dane panelu (nie dostawcy): **listy** zadań do zrobienia, np. „Do poprawy - Chat Agy” albo „Dom”. W interfejsie pokazuje je widget
 **Zadania**, który można postawić na siatce wiele razy (każdy kafelek ma wybraną listę i własne „Ukryj ukończone”, zob.

@@ -8,6 +8,14 @@ import { CHAT_SKILLS, chatSendSchema, skillItem, type ChatEvent, type ContextIte
 import { agyExecutable, agyModelArgs, agyPermissionArgs, createAgentChat, DEFAULT_AGY_MODEL, preamble, DEFAULT_PANEL_URL, type AgentProcess, type ChatService, type Launcher } from './agent-chat';
 import { handleChatRoute } from './chat-routes';
 
+it('uses Fila and no retired list API in the active agy preamble', () => {
+  const text = preamble(undefined, true);
+  expect(text).toContain('/api/fila/action');
+  expect(text).not.toContain('/api/agent/todos');
+  expect(text).not.toContain('/api/todos/action');
+  expect(text).not.toContain('restart panelu');
+});
+
 /** Stands in for `agy`: the test says what the agent prints and when it exits. Events below are the shapes agy 1.4.7 prints. */
 class FakeAgent implements AgentProcess {
   written: string[] = [];

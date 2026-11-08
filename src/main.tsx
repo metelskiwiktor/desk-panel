@@ -10,14 +10,18 @@ import './pulpit.css';
 import './chat.css';
 import './pulpits.css';
 import './cockpit/cockpit.css';
+import { recoverKiosk } from './fila/kiosk-migration';
 
 // Replaced by scripts/scenario-runtime.ts only; the service, `just dev` and the production build get false and ignore ?designlab (docs/designlab.md).
 const labName = __DESIGNLAB__ ? designLabName(true, window.location.search) : null;
 const DesignLab = __DESIGNLAB__ && labName !== null ? lazy(() => import('./designlab/DesignLab')) : null;
 
+let kioskError = false;
+try { recoverKiosk(localStorage); } catch { kioskError = true; }
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {DesignLab ? <Suspense fallback={null}><DesignLab name={labName!} /></Suspense>
+    {kioskError ? <p role="alert">Nie można bezpiecznie odtworzyć konfiguracji kiosku. Zachowaj dane przeglądarki i sprawdź procedurę przełączenia.</p>
+      : DesignLab ? <Suspense fallback={null}><DesignLab name={labName!} /></Suspense>
       : <UsageSinkContext.Provider value={createUsageSink()}><TabletPreview /></UsageSinkContext.Provider>}
   </React.StrictMode>,
 );

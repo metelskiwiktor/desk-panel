@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { migrationHash, previewMigration, type MigrationInput, type MigrationPlan } from './fila-migration';
@@ -7,6 +7,12 @@ import { todoTaskSchema, TODO_STATUSES } from '../src/todo-contract';
 import { createFilaStore } from './fila';
 import { migrateCockpitCopy, createCockpit } from './cockpit';
 import { runMigration } from '../scripts/fila-migrate';
+import { installCutoverCopy, openCutoverCopy, restoreCutoverCopy } from './fila-cutover-install';
+import { readCutoverMode } from './fila-cutover-gate';
+import { resolveFilaContext, resolveLegacyThread } from './fila-context';
+import { callFilaTool } from './fila-mcp';
+import { captureCutoverSnapshot } from './fila-snapshot';
+import { refreshFilaCopy } from '../scripts/fila-refresh';
 import type { PanelSources } from './sources';
 
 function fixture() {
@@ -37,6 +43,165 @@ function fixture() {
 }
 
 describe('offline migration integrity', () => {
+  it('refreshes from a snapshot without guessing mappings for new or changed records', async () => {
+    const fixtureData = fixture();
+    const input = structuredClone(fixtureData.input), plan = structuredClone(fixtureData.plan);
+    const origin = 'http://127.0.0.1:5174', key = 'desk-panel.workspace';
+    const source = `kiosk / Chrome kiosk-chrome / ${origin} / ${key}`;
+    input.workspaces[0].source = source; plan.tiles[0].source = source; plan.sourceHash = migrationHash(input);
+    const freshTodos = structuredClone(input.todos) as { lists: { tasks: unknown[] }[] };
+    freshTodos.lists[0].tasks.push(todoTaskSchema.parse({ ...(freshTodos.lists[0].tasks[0] as object), id: 't-99999999', title: 'Nowe' }));
+    const root = await mkdtemp(join(tmpdir(), 'fila-refresh-'));
+    const sourceDir = join(root, 'source'), operation = join(root, 'operation'), previous = join(root, 'previous');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(sourceDir); await mkdir(operation); await mkdir(previous);
+    await writeFile(join(previous, 'input.json'), JSON.stringify(input));
+    await writeFile(join(previous, 'plan.json'), JSON.stringify(plan));
+    await writeFile(join(sourceDir, 'todos.json'), JSON.stringify(freshTodos));
+    await writeFile(join(sourceDir, 'cockpit.json'), JSON.stringify(input.cockpit));
+    await writeFile(join(sourceDir, 'kiosk.json'), JSON.stringify({ origin, workspaces: [{ key, raw: input.workspaces[0].raw }] }));
+    await captureCutoverSnapshot(operation, { 'panel/todos.json': join(sourceDir, 'todos.json'), 'panel/cockpit.json': join(sourceDir, 'cockpit.json'), 'kiosk/kiosk-export.json': join(sourceDir, 'kiosk.json') }, async () => {});
+    const result = await refreshFilaCopy(operation, previous, migrationHash(plan));
+    expect(result.added).toBe(1);
+    const next = JSON.parse(await readFile(join(operation, 'plan.json'), 'utf8'));
+    expect(next.records).toEqual(plan.records);
+    expect(next.records.some((record: { oldId: string }) => record.oldId === 't-99999999')).toBe(false);
+    expect(next.unresolved.join(' ')).toContain('t-99999999');
+    expect(JSON.parse(await readFile(join(previous, 'plan.json'), 'utf8'))).toEqual(plan);
+  });
+  it('installs only a matching rehearsal and refuses startup after interrupted installation', async () => {
+    const { input, plan } = fixture();
+    const result = previewMigration(input, plan);
+    const output = { fila: result.fila, cockpit: result.cockpit };
+    const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+    const operation = join(root, 'operation'), target = join(root, 'target');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(operation); await mkdir(target);
+    for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+      'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+      await writeFile(join(operation, name), JSON.stringify(value));
+    await writeFile(join(target, 'todos.json'), JSON.stringify(input.todos));
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+    let checks = 0;
+    await expect(installCutoverCopy(target, operation, migrationHash(plan), async () => { if (++checks === 4) throw new Error('przerwano'); })).rejects.toThrow('przerwano');
+    expect(() => readCutoverMode(target)).toThrow();
+    expect(JSON.parse(await readFile(join(target, 'fila-cutover.json'), 'utf8')).state).toBe('installing');
+    expect(JSON.parse(await readFile(join(operation, 'install-backup', 'todos.json'), 'utf8'))).toEqual(input.todos);
+    await writeFile(join(target, 'cockpit.json'), '{}');
+    await expect(restoreCutoverCopy(target, operation, async () => {})).rejects.toThrow('nieznane zmiany');
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(output.cockpit, null, 2));
+    await restoreCutoverCopy(target, operation, async () => {});
+    expect(readCutoverMode(target)).toBe('legacy');
+  });
+  it('installs the compared result and validates both files before opening the read-only gate', async () => {
+    const { input, plan } = fixture();
+    const result = previewMigration(input, plan);
+    const output = { fila: result.fila, cockpit: result.cockpit };
+    const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+    const operation = join(root, 'operation'), target = join(root, 'target');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(operation); await mkdir(target);
+    for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+      'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+      await writeFile(join(operation, name), JSON.stringify(value));
+    await writeFile(join(target, 'todos.json'), JSON.stringify(input.todos));
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+    await installCutoverCopy(target, operation, migrationHash(plan), async () => {});
+    expect(readCutoverMode(target)).toBe('locked');
+    expect(JSON.parse(await readFile(join(target, 'fila.json'), 'utf8'))).toEqual(output.fila);
+    expect(JSON.parse(await readFile(join(target, 'cockpit.json'), 'utf8'))).toEqual(output.cockpit);
+    for (const name of ['input.json', 'plan.json', 'trial.json', 'result.json']) await unlink(join(operation, name));
+    await restoreCutoverCopy(target, operation, async () => {});
+    expect(readCutoverMode(target)).toBe('legacy');
+    expect(JSON.parse(await readFile(join(target, 'cockpit.json'), 'utf8'))).toEqual(input.cockpit);
+    await expect(readFile(join(target, 'fila.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('rejects an installation when the source has changed', async () => {
+    const { input, plan } = fixture();
+    const result = previewMigration(input, plan);
+    const output = { fila: result.fila, cockpit: result.cockpit };
+    const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+    const operation = join(root, 'operation'), target = join(root, 'target');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(operation); await mkdir(target);
+    for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+      'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+      await writeFile(join(operation, name), JSON.stringify(value));
+    await writeFile(join(target, 'todos.json'), '{}');
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+    await expect(installCutoverCopy(target, operation, migrationHash(plan), async () => {})).rejects.toThrow('zmienił');
+    expect(readCutoverMode(target)).toBe('legacy');
+    expect(await readFile(join(target, 'todos.json'), 'utf8')).toBe('{}');
+  });
+  it('keeps the previous system usable before the marker and can restore after the marker', async () => {
+    for (const failAt of [2, 3]) {
+      const { input, plan } = fixture();
+      const result = previewMigration(input, plan), output = { fila: result.fila, cockpit: result.cockpit };
+      const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+      const operation = join(root, 'operation'), target = join(root, 'target');
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(operation); await mkdir(target);
+      for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+        'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+        await writeFile(join(operation, name), JSON.stringify(value));
+      await writeFile(join(target, 'todos.json'), JSON.stringify(input.todos));
+      await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+      let checks = 0;
+      await expect(installCutoverCopy(target, operation, migrationHash(plan), async () => { if (++checks === failAt) throw new Error('przerwano'); })).rejects.toThrow('przerwano');
+      if (failAt === 2) expect(readCutoverMode(target)).toBe('legacy');
+      else {
+        expect(() => readCutoverMode(target)).toThrow();
+        await restoreCutoverCopy(target, operation, async () => {});
+        expect(readCutoverMode(target)).toBe('legacy');
+      }
+      expect(JSON.parse(await readFile(join(target, 'cockpit.json'), 'utf8'))).toEqual(input.cockpit);
+      await expect(readFile(join(target, 'fila.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+  it('preserves an external change noticed after the prepared marker', async () => {
+    const { input, plan } = fixture();
+    const result = previewMigration(input, plan), output = { fila: result.fila, cockpit: result.cockpit };
+    const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+    const operation = join(root, 'operation'), target = join(root, 'target');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(operation); await mkdir(target);
+    for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+      'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+      await writeFile(join(operation, name), JSON.stringify(value));
+    await writeFile(join(target, 'todos.json'), JSON.stringify(input.todos));
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+    let checks = 0;
+    await expect(installCutoverCopy(target, operation, migrationHash(plan), async () => {
+      if (++checks === 3) await writeFile(join(target, 'cockpit.json'), '{"new":true}');
+    })).rejects.toThrow('zmienił');
+    await restoreCutoverCopy(target, operation, async () => {});
+    expect(await readFile(join(target, 'cockpit.json'), 'utf8')).toBe('{"new":true}');
+    expect(readCutoverMode(target)).toBe('legacy');
+  });
+  it('opens only after all acceptance checks and forbids restoration after the boundary', async () => {
+    const { input, plan } = fixture();
+    const result = previewMigration(input, plan), output = { fila: result.fila, cockpit: result.cockpit };
+    const root = await mkdtemp(join(tmpdir(), 'fila-install-'));
+    const operation = join(root, 'operation'), target = join(root, 'target');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(operation); await mkdir(target);
+    for (const [name, value] of Object.entries({ 'input.json': input, 'plan.json': plan, 'result.json': output,
+      'trial.json': { planHash: migrationHash(plan), sourceHash: plan.sourceHash, resultHash: migrationHash(output) } }))
+      await writeFile(join(operation, name), JSON.stringify(value));
+    await writeFile(join(target, 'todos.json'), JSON.stringify(input.todos));
+    await writeFile(join(target, 'cockpit.json'), JSON.stringify(input.cockpit));
+    const kiosk = { snapshot: { origin: 'test' }, rows: [] };
+    await installCutoverCopy(target, operation, migrationHash(plan), async () => {}, kiosk);
+    await writeFile(join(operation, 'acceptance.json'), JSON.stringify({ planHash: migrationHash(plan), kioskHash: migrationHash(kiosk.snapshot), checks: {} }));
+    await expect(openCutoverCopy(target, operation, migrationHash(plan), async () => {})).rejects.toThrow('Odbiór');
+    const checks = Object.fromEntries(['data', 'legacyIds', 'kiosk', 'clients', 'cezar', 'oldApi', 'gate'].map(name => [name, true]));
+    await writeFile(join(operation, 'acceptance.json'), JSON.stringify({ planHash: migrationHash(plan), kioskHash: migrationHash(kiosk.snapshot), checks }));
+    await openCutoverCopy(target, operation, migrationHash(plan), async () => {});
+    expect(readCutoverMode(target)).toBe('active');
+    await expect(restoreCutoverCopy(target, operation, async () => {})).rejects.toThrow('Brak zamkniętej bramki');
+    await unlink(join(target, 'fila.json'));
+    expect(() => readCutoverMode(target)).toThrow();
+  });
   it('preserves every record, authors, timestamps, complete retained revisions, links and contexts through native reads and moves', async () => {
     const { input, plan, todos } = fixture();
     const original = migrationHash(input);
@@ -46,6 +211,15 @@ describe('offline migration integrity', () => {
     expect(result.report.warnings).toHaveLength(todos.length);
     expect(result.report.cutoverAllowed).toBe(false);
     const store = createFilaStore({ initial: result.fila.data });
+    expect(await resolveLegacyThread(todos[0].id, store)).toBe(plan.records[0].newId);
+    const pointed = await resolveFilaContext([
+      { kind: 'todo', id: todos[0].id, title: 'stary', text: 'stary opis' },
+      { kind: 'todoList', id: 'l-00000001', title: 'lista', text: 'stare wiersze' },
+    ], store);
+    expect(pointed[0]).toMatchObject({ kind: 'filaThread', id: plan.records[0].newId });
+    expect(pointed[1].text).toContain('pole("Dawna lista")');
+    const oldGet = await callFilaTool('fila_get', { thread: todos[0].id }, { fila: store, actor: 'codex' });
+    expect(oldGet).toMatchObject({ isError: true });
     for (const [i, todo] of todos.entries()) {
       const id = plan.records[i].newId;
       const thread = await store.thread(id);

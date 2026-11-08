@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
-  reviewMaterials, runRybka, fetchTaskSpec, fetchFilaSpec, isTaskId, isFilaId, parseRybkaArgs,
+  reviewMaterials, runRybka, fetchTaskSpec, fetchTaskOrFilaSpec, fetchFilaSpec, isTaskId, isFilaId, parseRybkaArgs,
   validReport, formatReportHeader, splitReportComments, AGY_MODEL, CLAUDE_MODEL, MODEL,
 } from './rybka.mjs';
 
@@ -445,10 +445,9 @@ it('handles task ID in runRybka, writing task ID and revision in report headers'
     'ZAŁĄCZNIKI: AGENTS.md',
   ].join('\n');
 
-  const fetchImpl = vi.fn().mockResolvedValue({
-    ok: true,
-    text: async () => mockTaskView,
-  });
+  const fetchImpl = vi.fn(async url => url.endsWith('/api/fila-mode')
+    ? { status: 404, ok: false }
+    : { ok: true, text: async () => mockTaskView });
 
   const done = runRybka({
     specPath: 't-00c6c30f',
@@ -477,6 +476,19 @@ it('handles task ID in runRybka, writing task ID and revision in report headers'
 });
 
 const filaSpecResponse = (body, status = 200) => ({ ok: status < 400, status, statusText: 'x', text: async () => JSON.stringify(body) });
+
+it('resolves a legacy ID in active Fila without requesting the old API', async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(url);
+    if (url.endsWith('/api/fila-mode')) return { ok: true, json: async () => ({ fila: true, locked: false }) };
+    if (url.endsWith('/api/fila')) return { ok: true, json: async () => ({ projects: [{ key: 'DESK' }] }) };
+    if (url.includes('/api/fila/query?')) return { ok: true, json: async () => ({ total: 1, threads: [{ id: 'DESK-32' }] }) };
+    return filaSpecResponse({ thread: 'DESK-32', revision: 3, text: 'CEL:\nTreść.' });
+  };
+  expect(await fetchTaskOrFilaSpec('t-12345678', { fetchImpl })).toMatchObject({ taskId: 'DESK-32', revision: 3 });
+  expect(calls.every(url => !url.includes('/api/agent/todos'))).toBe(true);
+});
 
 it('reads a Fila thread specification by ID and refuses every failure instead of reviewing something else', async () => {
   expect(isFilaId('DESK-32')).toBe(true);

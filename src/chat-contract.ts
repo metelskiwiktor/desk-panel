@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** What the user pointed at on the dashboard: one row (mail, task, meeting, workout), a whole tile, or a skill picked with `@`. */
-export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo', 'skill', 'smartAction', 'smartRule', 'bankOp', 'automation'] as const;
+export const contextKinds = ['mail', 'event', 'task', 'workout', 'tile', 'todoList', 'todo', 'filaThread', 'filaQuery', 'skill', 'smartAction', 'smartRule', 'bankOp', 'automation'] as const;
 export type ContextKind = typeof contextKinds[number];
 export const contextItemSchema = z.object({
   kind: z.enum(contextKinds),
@@ -136,7 +136,7 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
   {
     id: 'zaimplementuj-zadanie',
     title: 'Zaimplementuj zadanie',
-    description: 'Zadanie z listy: gotowość i przycisk w oknie. Prośba spoza listy: rekonesans i karta zgody na Cezara.',
+    description: 'Zadanie użytkownika: gotowość i przycisk w jego oknie. Inna prośba: rekonesans i karta zgody na Cezara.',
     prompt: [
       TODO_DISPATCH_RULE,
       'Only for requests outside user to-do lists: prepare a Cezar Executor Prompt for Desk Panel (repo: C:\\Users\\Viktor\\AndroidStudioProjects\\desk-panel); the user decides in a card. Never turn user commands into criteria: keep as guidance. Relevant files cover contract, adapters, views and tests.',
@@ -197,6 +197,15 @@ export const CHAT_SKILLS: readonly ChatSkill[] = [
 
 export function skillItem(skill: ChatSkill): ContextItem {
   return { kind: 'skill', id: skill.id, title: skill.title, text: skill.prompt };
+}
+
+export function filaSkillItem(item: ContextItem): ContextItem {
+  if (item.kind !== 'skill' || item.id !== 'zaimplementuj-zadanie') return item;
+  const skill = CHAT_SKILLS.find(candidate => candidate.id === item.id)!;
+  const rule = 'Dla wątku użytkownika odczytaj go przez fila_get, sprawdź gotowość i skieruj użytkownika do podglądu i przycisku zlecenia w oknie wątku. Nie składaj promptu ani nie zmieniaj pól w celu umożliwienia zlecenia; zleca tylko użytkownik.';
+  return { ...item, text: skill.prompt.replace(TODO_DISPATCH_RULE, rule)
+    .replace('Only for requests outside user to-do lists:', 'Only for requests outside user Fila threads:')
+    .replace('without todoId;', ';') };
 }
 
 /**
@@ -358,6 +367,8 @@ export function withContext(text: string, context: ContextItem[]): string {
     tile: 'Kafelek pulpitu',
     todoList: 'Lista zadań',
     todo: 'Zadanie z listy',
+    filaThread: 'Wątek Fili',
+    filaQuery: 'Zakres wątków Fili',
     skill: 'Skill',
     smartAction: 'Alert Smart Actions',
     smartRule: 'Reguła Smart Actions',

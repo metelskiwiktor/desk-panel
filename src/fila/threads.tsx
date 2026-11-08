@@ -2,6 +2,7 @@ import { createContext, useContext, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FilaRegistry, FilaThreadRow } from './api';
 import { StatePicker, TypeIcon } from './ui';
+import { ctx } from '../chat-context';
 
 /**
  * One engine for lists, kanban cards and the tile (D-053): a thread row/card with its Stan picker. The ID is what opens
@@ -47,7 +48,7 @@ export function ThreadList({ threads, registry, showProject = false, onError, co
   const row = (thread: FilaThreadRow, nested = false) => {
     const kids = nested ? [] : kidsOf(thread);
     const open = !collapsed[thread.id];
-    return <li key={thread.id} className={`fl-row${thread.closed ? ' closed' : ''}${nested ? ' nested' : ''}${compact ? ' compact' : ''}`}>
+    return <li key={thread.id} {...ctx('filaThread', thread.id, thread.title, `ID: ${thread.id}\nStan: ${thread.state}\nPełny wątek: fila_get.`)} className={`fl-row${thread.closed ? ' closed' : ''}${nested ? ' nested' : ''}${compact ? ' compact' : ''}`}>
       <div className="fl-row-line">
         <TypeIcon type={thread.type} />
         <ThreadId id={thread.id} onOpen={onOpen} />
@@ -68,7 +69,7 @@ export function ThreadList({ threads, registry, showProject = false, onError, co
 export function ThreadCard({ thread, registry, onError, onOpen }: { thread: FilaThreadRow; registry: FilaRegistry; onError: (message: string) => void; onOpen?: (id: string) => void }) {
   const kids = useContext(ChildrenContext).get(thread.id) ?? [];
   const [collapsed, setCollapsed] = useState(false);
-  return <li className={`fl-card${thread.closed ? ' closed' : ''}`}>
+  return <li {...ctx('filaThread', thread.id, thread.title, `ID: ${thread.id}\nStan: ${thread.state}\nPełny wątek: fila_get.`)} className={`fl-card${thread.closed ? ' closed' : ''}`}>
     <div className="fl-card-top">
       <TypeIcon type={thread.type} size={15} /><ThreadId id={thread.id} onOpen={onOpen} /><span className="fl-module">{thread.module}</span>
       <StatePicker thread={thread} registry={registry} onError={onError} compact />

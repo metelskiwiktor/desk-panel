@@ -11,8 +11,7 @@ import { getQuotaCards, type QuotaCardItem } from './quota-cards';
 import { SmartActionsTile } from './SmartActionsTile';
 import { SystemTile } from './SystemTile';
 import { TodoTile, todoConfigOf } from './TodoTile';
-// Only the isolated Fila preview loads it (and its styles); the service build drops it with `__DESIGNLAB__`.
-const FilaTile = __DESIGNLAB__ ? lazy(() => import('./fila/FilaTile').then(m => ({ default: m.FilaTile }))) : null;
+const FilaTile = lazy(() => import('./fila/FilaTile').then(m => ({ default: m.FilaTile })));
 import { GitHubPrTile } from './tiles/GitHubPrTile';
 import { OpenRouterUsageTile } from './tiles/OpenRouterUsageTile';
 import type { TodosState } from './useTodos';
@@ -95,11 +94,12 @@ function EmptyCell({ cell, kinds, cards, pick }: { cell: { c: number; r: number 
  * stretch it, and the X in its corner switches it off. A tile that grows over others asks them to move to free cells,
  * and only stops where they have nowhere to go. The arrangement is kept in the browser.
  */
-export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main' }: {
+export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank, showTasks, showBreakdown, available, systemThreshold, pulpit = 'main', filaMode = false }: {
   data: DashboardData; now: number; open?: ((d: Detail) => void) | string; cezar?: CezarState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; bank: BankHook;
   showTasks: () => void; showBreakdown?: () => void; available: (kind: string) => boolean; systemThreshold: number;
   /** The virtual desktop whose arrangement this is (pulpits.ts); each one is kept under its own key. */
   pulpit?: string;
+  filaMode?: boolean | null;
 }) {
   const openDetail = typeof open === 'function' ? open : () => {};
   const [stored, setStored] = useState(() => readWorkspace(workspaceKey(pulpit)));
@@ -188,7 +188,8 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
     if (tile.kind === 'bank') return <BankTile bank={bank} now={now} wide={tile.w > 1} tall={tile.h > 1} />;
     if (tile.kind === 'smart-actions') return <SmartActionsTile mail={mail} tasks={data.tasks} wide={tile.w > 1} tall={tile.h > 1} />;
     // On threads (Fila 1.5) the Zadania tile shows one query; only in the isolated preview until the switch (1.6).
-    if (tile.kind === 'todo' && FilaTile) return <Suspense fallback={null}><FilaTile config={tile.config} wide={tile.w > 1} setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} /></Suspense>;
+    if (tile.kind === 'todo' && filaMode === null) return null;
+    if (tile.kind === 'todo' && filaMode) return <Suspense fallback={null}><FilaTile config={tile.config} wide={tile.w > 1} setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} /></Suspense>;
     if (tile.kind === 'todo') return <TodoTile snapshot={snapshot} todos={todos} config={tile.config} wide={tile.w > 1} tall={tile.h > 1}
       setConfig={patch => commit(configure(tilesRef.current, tile.id, patch))} />;
     if (tile.kind === 'github-pr') return <GitHubPrTile wide={tile.w > 1} tall={tile.h > 1} />;
@@ -210,6 +211,7 @@ export function Workspace({ data, now, open, cezar, snapshot, mail, todos, bank,
   };
   // A to-do tile is pointed at as the list it shows (with its tasks and ids), not as an anonymous tile.
   const pointAt = (tile: Tile, title: string) => {
+    if (filaMode && tile.kind === 'todo') return ctx('filaQuery', tile.id, title, `Zapytanie: ${typeof tile.config?.query === 'string' ? tile.config.query : 'brak'}`);
     const named = todoListOf(tile);
     if (!named) return ctx('tile', tile.id, title);
     const c = listContext(named);

@@ -42,6 +42,14 @@ fila-trial:
 fila-migrate command directory:
     npx tsx scripts/fila-migrate.ts {{command}} "{{directory}}"
 
+# Controlled cutover only: snapshot/install/restore/open after the service is stopped (docs/fila.md).
+fila-cutover command directory hash="":
+    npx tsx scripts/fila-cutover.ts {{command}} "{{directory}}" {{hash}}
+
+# Refresh input and propose only previously approved mappings; unresolved changes require a decision.
+fila-refresh directory previous hash:
+    npx tsx scripts/fila-refresh.ts "{{directory}}" "{{previous}}" {{hash}}
+
 # Usage measurement of a period as JSON (dates YYYY-MM-DD, default: last 7 days), read from the running service.
 usage-export *args:
     node scripts/usage-export.mjs {{args}}

@@ -39,7 +39,7 @@ function mailError(what: string, error: unknown): SourceError {
   return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
 }
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[]) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation> }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; cutoverLocked?: boolean; filaActive?: boolean; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[]) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation> }): PanelSources {
   const { calendarId, env } = options;
   const dir = join(homedir(), '.desk-panel');
   const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
@@ -75,8 +75,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
   // The user's marks on its operations, from the kept reading only: marking never makes the bank be read.
   const bankLabels = createBankLabelStore({ operations: () => bank.cached(), persistence: privateFile(join(dir, 'bank-labels.dpapi'), { read: readPrivate, write: writePrivate }) });
   const readSystem = createSystemReader();
-  const todoStore = createTodoStore({ file: join(dir, 'todos.json') });
-  const fila = createFilaStore({ file: join(dir, 'fila.json') });
+  const todoStore = options.filaActive ? undefined : createTodoStore({ file: join(dir, 'todos.json') });
+  const fila = createFilaStore({ file: join(dir, 'fila.json'), readOnly: options.cutoverLocked });
   const smartRules = createSmartRuleStore(join(dir, 'smart-rules.json'));
   const readQuotas = createQuotaReader(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
   const warmup=createWarmupClient(env.DESK_ADAPTER_ENV_FILE || fileURLToPath(new URL('../../cezar-adapter/.env', import.meta.url)));
@@ -161,8 +161,8 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     googleAccounts: () => Promise.all(accounts.map(a => a.status())),
     system: async () => readSystem(),
     quotas: () => readQuotas(),
-    todos: () => todoStore.read(),
-    todoAction: action => todoStore.apply(action),
+    todos: () => todoStore ? todoStore.read() : Promise.reject(new SourceError(404)),
+    todoAction: action => todoStore ? todoStore.apply(action) : Promise.reject(new SourceError(404)),
     fila,
     bank: () => bank.read(),
     bankLabels: () => bankLabels.read(),

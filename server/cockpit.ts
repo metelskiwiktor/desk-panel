@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { rename, writeFile } from 'node:fs/promises';
 import type { SmartRuleOutcome, SmartRulePlan, SmartRulePreview } from '../src/smart-rules-contract';
 import { previewPlan, SmartRuleError } from './smart-rules';
 import { dirname } from 'node:path';
@@ -65,6 +66,15 @@ const storeSchema = z.object({
   })),
 });
 type Store = z.infer<typeof storeSchema>;
+export const validateCockpitSnapshot = (value: unknown) => storeSchema.parse(value);
+
+/** Offline installation by the cockpit owner; the process owning the store must be stopped. */
+export async function installCockpitSnapshot(file: string, raw: Buffer, suffix = 'cutover-tmp') {
+  validateCockpitSnapshot(JSON.parse(raw.toString('utf8')));
+  const temp = `${file}.${suffix}`;
+  await writeFile(temp, raw, { flag: 'wx', mode: 0o600 });
+  await rename(temp, file);
+}
 
 /** Offline transformation owned by the cockpit. Never opens or writes a store; caller supplies a copy. */
 export function migrateCockpitCopy(input: unknown, mapping: Record<string, { uid: string; thread: string }>) {
@@ -191,8 +201,8 @@ export interface Cockpit {
   kept(chatId: string, toolCallId: string): CockpitView['bankPlans'][string] | AutomationOutcome | undefined;
 }
 
-export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader }: {
-  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number; reader?: PrReader;
+export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.now, reader: injectedReader, filaActive = false }: {
+  sources: PanelSources; file: string; cezarUrl: string; gh?: GhRunner; now?: () => number; reader?: PrReader; filaActive?: boolean;
 }): Cockpit {
   const load = (): Store => {
     try { if (existsSync(file)) return storeSchema.parse(JSON.parse(readFileSync(file, 'utf8'))); } catch { /* a broken file starts over */ }
@@ -308,6 +318,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       // The same answer twice (a double click, a retry after a timeout) dispatches once.
       const known = chat.dispatches[input.toolCallId];
       if (known) return known;
+      if (filaActive && input.todoId) throw new SourceError(409, 'Zlecenie z dawnego zadania wykonaj w oknie jego wątku Fili.');
       const key = `${chatId}:${input.toolCallId}`;
       const pending = pendingDispatches.get(key);
       if (pending) return pending;

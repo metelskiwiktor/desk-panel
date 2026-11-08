@@ -119,6 +119,33 @@ export async function fetchTaskSpec(taskId, { baseUrl = process.env.DESK_PANEL_U
   return { taskId, revision, spec };
 }
 
+/** In Fila mode resolve an old task ID through the public query API, never call the retired list API. */
+export async function fetchTaskOrFilaSpec(taskId, { baseUrl = process.env.DESK_PANEL_URL || 'http://127.0.0.1:5174', fetchImpl = globalThis.fetch } = {}) {
+  const base = baseUrl.replace(/\/+$/, '');
+  const mode = await fetchImpl(`${base}/api/fila-mode`);
+  if (mode.status === 404) return fetchTaskSpec(taskId, { baseUrl, fetchImpl });
+  if (!mode.ok) throw Error('Nie udało się ustalić źródła zadań.');
+  const state = await mode.json();
+  if (typeof state?.fila !== 'boolean' || state.locked) throw Error('Źródło zadań niedostępne albo przełączenie Fili trwa.');
+  if (!state.fila) return fetchTaskSpec(taskId, { baseUrl, fetchImpl });
+  const registry = await fetchImpl(`${base}/api/fila`);
+  if (!registry.ok) throw Error('Nie udało się odczytać projektów Fili.');
+  const data = await registry.json();
+  if (!Array.isArray(data.projects)) throw Error('Niepoprawny rejestr projektów Fili.');
+  const matches = [];
+  for (const project of data.projects) {
+    if (!/^[A-Z]{4}$/.test(project.key)) throw Error('Niepoprawny projekt Fili.');
+    const query = `projekt = ${project.key} AND pole("Dawne ID") = ${JSON.stringify(taskId)} AND archiwum = włącz`;
+    const response = await fetchImpl(`${base}/api/fila/query?q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw Error('Nie udało się rozwiązać dawnego ID.');
+    const result = await response.json();
+    if (!Array.isArray(result.threads) || result.total !== result.threads.length) throw Error('Niepełny wynik dawnego ID.');
+    matches.push(...result.threads);
+  }
+  if (matches.length !== 1 || !isFilaId(matches[0].id)) throw Error(`Dawne ID ${taskId} nie wskazuje jednego wątku.`);
+  return fetchFilaSpec(matches[0].id, { baseUrl, fetchImpl });
+}
+
 /** Locate the agy executable locally. */
 export function agyExecutable(env = process.env, home = homedir()) {
   if (env.DESK_AGY_BIN) return env.DESK_AGY_BIN;
@@ -590,7 +617,7 @@ export async function runRybka(options = {}) {
   let revision = null;
 
   if (isTaskId(specPath) || isFilaId(specPath)) {
-    const fetched = await (isFilaId(specPath) ? fetchFilaSpec : fetchTaskSpec)(specPath, { baseUrl, fetchImpl });
+    const fetched = await (isFilaId(specPath) ? fetchFilaSpec : fetchTaskOrFilaSpec)(specPath, { baseUrl, fetchImpl });
     taskId = fetched.taskId;
     revision = fetched.revision;
     spec = fetched.spec;

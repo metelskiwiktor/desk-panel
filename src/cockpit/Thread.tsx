@@ -38,6 +38,8 @@ const KINDS: Record<ContextKind, { label: string; icon: LucideIcon }> = {
   tile: { label: 'Kafelek', icon: LayoutGrid },
   todoList: { label: 'Lista', icon: ListChecks },
   todo: { label: 'Zadanie', icon: SquareCheck },
+  filaThread: { label: 'Wątek', icon: SquareCheck },
+  filaQuery: { label: 'Zakres', icon: ListChecks },
   skill: { label: 'Skill', icon: Wrench },
   smartAction: { label: 'Alert', icon: Zap },
   smartRule: { label: 'Reguła', icon: Zap },

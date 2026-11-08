@@ -83,7 +83,7 @@ export function StatusChips({ data, mail, now, open, navigate, showPc = true }: 
  * two leave; see Workspace. Bottom: the days ahead as chips, cards or a month. A tap on a day selects it; the sizes of the
  * top and bottom zones are one step each way and are remembered.
  */
-export function Dashboard({ data, training, snapshot, cezar, mail, todos, bank, now, open, showTasks, showCalendar, showBreakdown, visible, quotaHidden, resetSignal = false, pulpit = 'main' }: {
+export function Dashboard({ data, training, snapshot, cezar, mail, todos, bank, now, open, showTasks, showCalendar, showBreakdown, visible, quotaHidden, resetSignal = false, pulpit = 'main', filaMode = false }: {
   /** Finished tasks and the actions on them; without it only the active tasks show. */
   cezar?: CezarState;
   data: DashboardData; training: TrainingState; snapshot: CezarSnapshot | null; mail: MailState; todos: TodosState; bank: BankHook; now: number;
@@ -94,6 +94,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, todos, bank, 
   resetSignal?: boolean;
   /** The virtual desktop whose tiles the work area shows (see pulpits.ts). */
   pulpit?: string;
+  filaMode?: boolean | null;
 }) {
   const calendarOn = visible('calendar'), trainingOn = visible('training');
   const { zones, view, setTop, setBottom, previewTop, previewBottom } = useZones(resetSignal);
@@ -133,7 +134,7 @@ export function Dashboard({ data, training, snapshot, cezar, mail, todos, bank, 
       next={next} yesterday={yesterday} notice={notice} known={known}
       cycle={() => setTop(cycleSize(TOP_CYCLE, zones.top))} resize={setTop} preview={previewTop} open={open} showCalendar={showCalendar} />}
     {work && <div className="p3-work" aria-hidden={folded || undefined} inert={folded}>
-      <Workspace key={pulpit} pulpit={pulpit} data={data} now={now} open={open} cezar={cezar} snapshot={snapshot} mail={mail} todos={todos} bank={bank} showTasks={showTasks}
+      <Workspace key={pulpit} filaMode={filaMode} pulpit={pulpit} data={data} now={now} open={open} cezar={cezar} snapshot={snapshot} mail={mail} todos={todos} bank={bank} showTasks={showTasks}
         showBreakdown={visible('breakdown') ? showBreakdown : undefined} available={kind => kindAvailable(kind, visible, quotaHidden)}
         systemThreshold={SYSTEM_ALERT_PERCENT} />
     </div>}

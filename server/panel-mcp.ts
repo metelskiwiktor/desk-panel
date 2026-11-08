@@ -694,7 +694,14 @@ const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '
 /** With Wektor on Fila (1.3a, `DESK_WEKTOR_FILA=1`) the four fila_ tools replace the to-do list tools; otherwise nothing changes. */
 const LIST_TOOLS = new Set(['panel_todos', 'panel_todo_action']);
 const listedTools = (filaMode: boolean) => [
-  ...Object.entries(PANEL_TOOLS).filter(([name]) => !filaMode || !LIST_TOOLS.has(name)).map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.schema })),
+  ...Object.entries(PANEL_TOOLS).filter(([name]) => !filaMode || !LIST_TOOLS.has(name)).map(([name, tool]) => {
+    if (filaMode && name === 'panel_cezar_propose') {
+      const properties = { ...(tool.schema.properties as Record<string, unknown>) };
+      delete properties.todoId;
+      return { name, description: tool.description, inputSchema: { ...tool.schema, properties } };
+    }
+    return { name, description: tool.description, inputSchema: tool.schema };
+  }),
   ...(filaMode ? Object.entries(FILA_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.schema })) : []),
 ];
 
@@ -710,7 +717,7 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
         protocolVersion: (MCP_PROTOCOLS as readonly string[]).includes(asked) ? asked : MCP_PROTOCOLS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'desk-panel', version: '1.0.0' },
-        instructions: 'Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza panel_todo_action (w trybie Fili: fila_apply) i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_observe, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.',
+        instructions: `Dane Desk Panelu użytkownika: krótki tekst po polsku z czasem lokalnym. Tylko odczyt, poza ${ctx.filaMode ? 'fila_apply' : 'panel_todo_action'} i panel_cezar_action. Przed rozmową o dziedzinie z przewodnikiem (np. bank) czytaj panel_guide. Narzędzia kokpitu (panel_recon_report, panel_cezar_propose, panel_cezar_watch, panel_show, panel_bank_propose, panel_bank_assign, panel_mail_show, panel_smart_rule_propose, panel_observe, panel_cockpit_clear) mówią w opisie, kiedy ich używać i co się po nich dzieje.`,
       } };
     }
     case 'ping': return { jsonrpc: '2.0', id: message.id, result: {} };
@@ -718,6 +725,8 @@ export async function answerRpc(message: Rpc, ctx: { views: Record<string, Agent
       return { jsonrpc: '2.0', id: message.id, result: { tools: listedTools(!!ctx.filaMode) } };
     case 'tools/call': {
       const name = String(params.name ?? '');
+      if (ctx.filaMode && name === 'panel_cezar_propose' && params.arguments && Object.hasOwn(params.arguments, 'todoId'))
+        return rpcError(message.id, -32602, 'Zlecenie z wątku jest dostępne w jego oknie Fili.');
       if (ctx.filaMode && Object.hasOwn(FILA_TOOLS, name)) return { jsonrpc: '2.0', id: message.id, result: await callFilaTool(name, params.arguments, { fila: ctx.sources.fila, actor: 'wektor' }) };
       const tool = Object.hasOwn(PANEL_TOOLS, name) && !(ctx.filaMode && LIST_TOOLS.has(name)) ? PANEL_TOOLS[name] : undefined;
       if (!tool) return rpcError(message.id, -32602, `Unknown tool: ${name.slice(0, 60)}`);
@@ -743,7 +752,7 @@ const sameToken = (given: string, expected: string) => {
 };
 
 /** `/api/mcp`. `loopback` is false for a request that came through the Tailscale name: refused. */
-export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[]; filaMode?: boolean }): Promise<void> {
+export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, ctx: { views: Record<string, AgentView>; sources: PanelSources; token?: string; loopback: boolean; now?: () => number; cezarUrl?: string; automations?: Automations; activeChats?: () => string[]; filaMode?: boolean; cutoverLocked?: boolean }): Promise<void> {
   res.setHeader('Cache-Control', 'no-store');
   if (!ctx.loopback || req.headers.origin) { res.writeHead(403).end(); return; }
   if (!ctx.token) { res.writeHead(503).end(); return; }
@@ -755,6 +764,9 @@ export async function handleMcpRoute(req: IncomingMessage, res: ServerResponse, 
   for await (const chunk of req) { body += chunk; if (body.length > MAX_BODY) { res.writeHead(413).end(); return; } }
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify(rpcError(null, -32700, 'Parse error'))); return; }
+  if (ctx.cutoverLocked && (Array.isArray(parsed) ? parsed : [parsed]).some(m => !m || typeof m !== 'object' || !['initialize', 'ping', 'tools/list'].includes((m as Rpc).method as string))) {
+    res.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Przełączenie Fili trwa; wywołania narzędzi są zablokowane.' })); return;
+  }
   const run = { views: ctx.views, sources: ctx.sources, now: ctx.now ?? Date.now, cezarUrl: ctx.cezarUrl, automations: ctx.automations, activeChats: ctx.activeChats, filaMode: ctx.filaMode };
   const batch = Array.isArray(parsed);
   const answers = (await Promise.all((batch ? parsed as Rpc[] : [parsed as Rpc]).map(m => answerRpc(m, run)))).filter(a => a !== null);

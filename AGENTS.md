@@ -29,6 +29,8 @@ rule changes) in the same commit; documentation is part of the change, not a fol
 
 ## Working with the user
 
+- Before working with the user's tasks, read `GET /api/fila-mode`: `fila: false` (or 404 from a pre-1.6 server) means the list instructions below; `fila: true` means Fila and the instructions in `docs/fila.md`. When `locked: true`, do not write or start work on user data. A failed or malformed response is not evidence of either mode. List-specific instructions in this file apply only in legacy mode; in Fila mode use the four `fila_*` tools, canonical thread IDs and the thread's Cezar button.
+
 - In this checkout (Claude Code, Codex): commit everything in the tree and push straight to `main` once `just check`
   passes; no branches, no pull requests. Cezar's executor works in its own worktree: its agent steps never commit, push,
   dispatch or open PRs; Cezar's check nodes prepare the worktree, verify with `just check`, review, then commit the

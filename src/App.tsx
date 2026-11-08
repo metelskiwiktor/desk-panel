@@ -69,8 +69,8 @@ import type { UsageView } from './usage-meter';
 
 /** The chat (assistant-ui, its own bundle) loads the first time it opens, not with the dashboard. */
 const ChatWindow = lazy(() => import('./ChatWindow').then(m => ({ default: m.ChatWindow })));
-/** Fila (1.5) is only in the isolated scenario preview until the switch (1.6); the service build drops it (`__DESIGNLAB__` is false there). */
-const FilaApp = __DESIGNLAB__ ? lazy(() => import('./fila/FilaApp').then(m => ({ default: m.FilaApp }))) : null;
+/** Loaded only when the server reports the Fila cutover, or in the isolated DesignLab preview. */
+const FilaApp = lazy(() => import('./fila/FilaApp').then(m => ({ default: m.FilaApp })));
 
 type Page = 'home' | 'tasks' | 'calendar' | 'system' | 'events' | 'automations' | 'settings';
 const pageNames: Record<Page, string> = {
@@ -100,7 +100,11 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const usageBreakdown = useUsageBreakdown();
   const quotaVisibility=useQuotaVisibility();
   const mail = useMail();
-  const todos = useTodos();
+  const [filaMode, setFilaMode] = useState<boolean | null>(__DESIGNLAB__ ? true : null);
+  const [cutoverLocked, setCutoverLocked] = useState(false);
+  const [filaModeError, setFilaModeError] = useState(false);
+  const [filaModeAttempt, setFilaModeAttempt] = useState(0);
+  const todos = useTodos(filaMode === false);
   const bank = useBank();
   const training = useTraining();
   const [clockNow, setNow] = useState(Date.now);
@@ -120,6 +124,21 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   const pulpits = usePulpits();
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
+    if (__DESIGNLAB__ || !pollingEnabled) return;
+    const controller = new AbortController();
+    setFilaModeError(false);
+    void fetch('/api/fila-mode', { signal: controller.signal }).then(async response => {
+      // A build may be served briefly by the pre-1.6 backend during a deployment swap.
+      if (response.status === 404) { setFilaMode(false); return; }
+      if (!response.ok) throw new Error('offline');
+      const value: unknown = await response.json();
+      if (!value || typeof value !== 'object' || typeof (value as { fila?: unknown }).fila !== 'boolean') throw new Error('invalid mode');
+      setFilaMode((value as { fila: boolean }).fila);
+      setCutoverLocked((value as { locked?: unknown }).locked === true);
+    }).catch(() => { if (!controller.signal.aborted) setFilaModeError(true); });
+    return () => controller.abort();
+  }, [filaModeAttempt, pollingEnabled]);
+  useEffect(() => {
     if (!pollingEnabled) return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -131,11 +150,11 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   }, [page, detail]);
   const open = (target: Detail) => { setDetailSource(sourceOfOpening(Date.now())); setDetail(target); };
   useEffect(() => {
-    if (!FilaApp) return;
+    if (!filaMode) return;
     const open = (event: Event) => { setDetail(null); setFilaThread((event as CustomEvent<string>).detail); setFila(true); };
     window.addEventListener(FILA_OPEN, open);
     return () => window.removeEventListener(FILA_OPEN, open);
-  }, []);
+  }, [filaMode]);
   const navigate = (target: Page) => {
     setFila(false);
     setFilaThread(undefined);
@@ -423,6 +442,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
   })} />;
   return (
     <div className={`app-shell ${page === 'home' && !detail && !fila ? 'is-home' : ''}`} data-night={dayNight.night}>
+      {filaModeError && <div role="alert">Nie udało się ustalić źródła zadań. <button className="button" onClick={() => setFilaModeAttempt(value => value + 1)}>Spróbuj ponownie</button></div>}
       {ambientView}
       <header className="top-bar">
         <div className="top-clock" data-usage-area="clock">
@@ -438,7 +458,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             </div>
           )}
           <StatusChips data={data} mail={mail} now={now} open={open} navigate={navigate} showPc={visible('system')} />
-          {FilaApp && !fila && <button className="top-button" aria-label="Otwórz Filę" onClick={() => { setDetail(null); setFilaThread(undefined); setFila(true); }}><Layers3 size={20} /></button>}
+          {filaMode && !fila && <button className="top-button" aria-label="Otwórz Filę" onClick={() => { setDetail(null); setFilaThread(undefined); setFila(true); }}><Layers3 size={20} /></button>}
           {(page !== 'home' || detail || fila) && <button className="top-button" aria-label="Przejdź do pulpitu" onClick={() => navigate('home')}><House size={20} /></button>}
           {page === 'home' && !detail && !fila && <PulpitMenu pulpits={pulpits} />}
           <button className="top-button" aria-label={dayNight.night ? 'Przełącz na tryb dzienny' : 'Przełącz na tryb nocny'} aria-pressed={dayNight.night} onClick={dayNight.toggle}>
@@ -457,13 +477,13 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
             </button>
             {renderDetail()}
           </>
-        ) : fila && FilaApp ? (
+        ) : fila && filaMode ? (
           <Suspense fallback={null}><FilaApp key={filaThread ?? ''} thread={filaThread} onHome={() => navigate('home')} /></Suspense>
         ) : (
           <>
             {page === 'home' ? (
               <>
-                <Dashboard data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} todos={todos} bank={bank} now={now} open={open}
+                <Dashboard filaMode={filaMode} data={data} training={training} snapshot={cezar.snapshot} cezar={cezar} mail={mail} todos={todos} bank={bank} now={now} open={open}
                   showTasks={() => navigate('tasks')} showCalendar={() => navigate('calendar')} showBreakdown={() => open({ kind: 'breakdown' })} visible={visible} quotaHidden={quotaVisibility.value} resetSignal={ambient.ambient} pulpit={pulpits.active} />
               </>
             ) : (
@@ -515,6 +535,7 @@ export function App({ tabletPreview = false, onTabletPreviewChange }: { tabletPr
                 {page === 'automations' && <AutomationsView />}
                 {page === 'settings' && (
                   <SettingsView
+                    cutoverLocked={cutoverLocked}
                     quotaAccounts={quotas.data}
                     quotaVisibility={quotaVisibility}
                     tabletPreview={tabletPreview}

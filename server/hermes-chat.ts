@@ -28,19 +28,20 @@ import {
  * The cockpit contract for Hermes: the boundaries stay here, each tool's purpose/when/effect stays in its MCP
  * description (both come from `COCKPIT_TOOLS`). Repeating the whole table doubled every session's prompt.
  */
-export function cockpitRules(): string[] {
+export function cockpitRules(fila = false): string[] {
   const names = Object.keys(COCKPIT_TOOLS) as (keyof typeof COCKPIT_TOOLS)[];
   const runOnly: (keyof typeof COCKPIT_TOOLS)[] = ['panel_automation_act', 'panel_automation_report'];
   const hasCard = (name: keyof typeof COCKPIT_TOOLS) => !!(COCKPIT_TOOLS[name] as CockpitTool).card;
   const cards = names.filter(hasCard);
   const noCard = names.filter(name => !hasCard(name) && !runOnly.includes(name));
-  return [
+  const rules = [
     'Obok czatu jest kokpit: pokazuje task Cezara, który obserwuje ta rozmowa (status, kroki, PR, checki CI). Kokpit niczego nie zgaduje: obserwuje task tylko po zleceniu z karty albo po Twoim panel_cezar_watch, a przestaje po panel_cockpit_clear. Każde narzędzie kokpitu mówi w swoim opisie, kiedy je wywołać i co się po nim dzieje; tu tylko nazwy i granice:',
     `- karty w rozmowie: ${cards.join(', ')}.`,
     `- bez karty: ${noCard.join(', ')}.`,
     `- tylko we własnej trwającej turze automatu: ${runOnly.join(', ')}.`,
     'Granice: nie zlecasz i nie zapisujesz niczego sam — bez dispatchu, bez tworzenia danych w miejsce karty; poza tymi wywołaniami nie zmieniasz kokpitu i nie piszesz, że coś w nim ustawiłeś; dane użytkownika zmienia tylko karta, którą użytkownik kliknął, albo akcja zatwierdzona na karcie automatu podczas jego runu. Kartę pokazujesz po zgodzie użytkownika albo przy jego wyraźnej prośbie, nie w tej samej odpowiedzi, w której dopiero proponujesz zmianę; nie mów, że już coś zapisałeś, i po karcie zakończ odpowiedź jednym–dwoma zdaniami, bez powtarzania parametrów i bez tekstowego „Zlecić?”. Nie naprawiasz własnej infrastruktury (usług, konfiguracji, plików stanu) i nie restartujesz jej: błąd narzędzia albo karty zgłoś użytkownikowi. Stan zadania z listy jest niezależny od Cezara i PR-a: zakończenie Cezara nie kończy zadania; przy propozycji z zadania podaj todoId. Skill „Zaimplementuj zadanie” (workflow: "analysis" i "desk-panel-task"): najpierw panel_cezar o wcześniejszą analizę, potem rekonesans, panel_recon_report sam (po wynikach wyszukiwań), krótki plan, panel_cezar_propose z recon z jego wyniku i koniec odpowiedzi.',
   ];
+  return fila ? rules.map(rule => rule.replace('Stan zadania z listy jest niezależny od Cezara i PR-a: zakończenie Cezara nie kończy zadania; przy propozycji z zadania podaj todoId.', 'Stan wątku jest niezależny od Cezara i PR-a; zlecenie z wątku uruchamia użytkownik w jego oknie.')) : rules;
 }
 
 /** The preamble's lines about the guides: that they exist and when to read one; the guides themselves come from `panel_guide`. */
@@ -78,7 +79,7 @@ export function hermesPreamble(options: { fila?: boolean } = {}): string {
     'W zwykłej rozmowie bezpośrednie zmiany są możliwe tylko dwoma narzędziami: panel_todo_action (listy zadań użytkownika; przy addTask zawsze "by":"agent") i panel_cezar_action (archive, unarchive, read, unread zakończonego zadania Cezara, na prośbę użytkownika). Trzecie wywołanie, panel_observe, jest bez karty, ale zapisuje tylko jednorazowy obserwator tej rozmowy (task Cezara, PR albo moment), nie dane użytkownika: po jego zadziałaniu wrócisz do tej rozmowy jedną turą automatyki z poleceniem zapisanym przy tworzeniu. Usuwaj i archiwizuj tylko na wyraźną prośbę i napisz potem, co zmieniłeś. Pozostałe obsługiwane zmiany tylko proponujesz kartami z tabeli narzędzi: oznaczenia banku, reguły Smart Actions, zlecenie Cezara i utworzenie wydarzenia Google (panel_calendar_propose albo potwierdzenie wizyty z panel_znanylekarz). Wykonuje je panel po kliknięciu użytkownika. Nie zapisujesz kalendarza ani rezerwacji sam, nie wysyłasz maili i nie ustawiasz przypomnień. Nie proponuj operacji, których narzędzia nie dają.',
     'Wyjątek: we własnej trwającej turze runu automatu możesz wykonać panel_automation_act tylko dla calendarEvent, smartAction i notify zatwierdzonych wcześniej na karcie tworzenia lub zmiany automatu; token i runId pochodzą z tej tury, parametry zgody wygrywają. Najpierw akcje, potem panel_automation_report done. Poza runem nie ma tego uprawnienia. Nie zapisuj przez powłokę ani przeglądarkę.',
     'Jeśli narzędzia panelu nie są dostępne albo karta działa nieprawidłowo, powiedz co się nie udało i zaproponuj diagnostykę. Nie naprawiaj własnej infrastruktury, nie zmieniaj plików stanu ani konfiguracji i nie restartuj usług. Nigdy nie twierdź, że operacja się powiodła, bez potwierdzenia jej wynikiem; po błędzie lub niejednoznacznym wyniku opisz niepewność.',
-    ...cockpitRules(),
+    ...cockpitRules(options.fila),
     ...guideRules(options.fila),
     'Tura automatyki: gdy wiadomość zaczyna się od „[Automatyka · Cezar]” albo „[Automatyka · Obserwator]” z powodem, to panel doniósł fakt, a nie użytkownik. Przejrzyj wynik i krótko go podsumuj, potem zaproponuj jeden następny krok. Niczego nie zlecaj, nie zapisuj ani nie zatwierdzaj sam: zlecenie Cezara i zmiany idą tylko kartą zgody po kliknięciu użytkownika.',
     'Notatek panel jeszcze nie ma: gdy użytkownik o nie prosi, powiedz to wprost i zaproponuj, co zapisać jako zadanie na liście.',
@@ -135,6 +136,7 @@ interface History { at: number; groups?: { user: string; parts: ChatPart[] }[]; 
 export interface HermesChatOptions {
   /** Wektor works on Fila instead of the to-do lists (1.3a, `DESK_WEKTOR_FILA=1`): the preamble and the guide name the fila_ tools. */
   fila?: boolean;
+  resolveContext?: (context: ContextItem[]) => Promise<ContextItem[]>;
   onAutomationTurn?: (turn: { chatId: string; turnId: string; runId: string; ended: boolean }) => void;
   client: HermesClient;
   namer?: ChatNamer;
@@ -856,12 +858,14 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     const at = now();
     const uploads = 'files' in input ? input.files ?? [] : [];
     const context = input.context ?? [];
+    const promptContext = options.resolveContext ? await options.resolveContext(context) : context;
     const turn: Turn = { id: nonce ?? randomUUID(), agent: randomUUID(), at, text: input.text, ...(automation ? { automation } : {}), ...(context.length ? { context } : {}), ...(nonce ? { nonce } : {}), run: null, status: 'streaming' };
     const live = begin(record, turn); // holds the chat: a second message waits for this one (409)
     const first = !record.turns.some(t => t.run);
-    const prompt = withTextFiles(withContext(automation ? automationPrompt(input.text, automation) : input.text, context), uploads);
+    const prompt = withTextFiles(withContext(automation ? automationPrompt(input.text, automation) : input.text, promptContext), uploads);
     let started: { run: string; session?: string };
-    turn.request = { input: `${record.temporary ? '[Rozmowa tymczasowa] Nie zapisuj niczego z tej rozmowy do pamięci długotrwałej, profilu użytkownika ani notatek.\n\n' : ''}${first ? `${intro}\n\n${prompt}` : prompt}`, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
+    // Existing Hermes sessions retain their old first-turn preamble. Supply the current rules on subsequent turns too.
+    turn.request = { input: `${record.temporary ? '[Rozmowa tymczasowa] Nie zapisuj niczego z tej rozmowy do pamięci długotrwałej, profilu użytkownika ani notatek.\n\n' : ''}${first || options.fila ? `${intro}\n\n${prompt}` : prompt}`, session: record.session, ...(nonce ? { idempotencyKey: nonce } : {}) };
     let persisted = false;
     try {
       turn.files = await saveChatFiles(dir, id, uploads);

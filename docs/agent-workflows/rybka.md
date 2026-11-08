@@ -11,7 +11,7 @@ Nie uruchamiaj go w runie wykonawcy Cezara.
 just rybka SPEC [--runner claude|agy|opencode|both]
 ```
 
-- `SPEC`: ID wątku Fili (`just rybka DESK-32`), id zadania z listy panelu (`t-…`, **do 1.6**, np. `just rybka t-00c6c30f`)
+- `SPEC`: ID wątku Fili (`just rybka DESK-32`) albo dawne ID zadania (`t-…`); w trybie Fili runner szuka go w polu „Dawne ID” i czyta kanoniczny wątek,
   albo ścieżka do pliku Markdown (`.ai/spec.md`).
   - **Wątek Fili** (ID: cztery wielkie litery, myślnik, numer): skrypt jednokrotnie czyta bieżącą Specyfikację przez
   `GET /api/fila/threads/ID/spec` ([docs/fila.md](../fila.md), „Specyfikacja i rewizje”) i **zamraża** ten tekst oraz numer
@@ -19,7 +19,7 @@ just rybka SPEC [--runner claude|agy|opencode|both]
   przeczytaną rewizję. CLI przyjmuje samo ID, numeru nie podaje się. Wątek bez pola Specyfikacja (404), bez rewizji
   (`revision: 0`), z pustą treścią, błąd HTTP, odpowiedź niebędąca JSON-em i niedostępny panel przerywają wykonanie
   czytelnym błędem przed uruchomieniem jakiegokolwiek modelu.
-  - **Zadanie z listy** (`t-…`, **do 1.6**): bieżąca rewizja pola `spec` z `GET /api/agent/todos?zadanie=…`, jak dotąd.
+  - **Zadanie z listy** (`t-…`, tylko tryb legacy): bieżąca rewizja pola `spec` z `GET /api/agent/todos?zadanie=…`, jak dotąd.
   Pusty stan („Brak specyfikacji”) przerywa wykonanie czytelnym błędem. Eksport do pliku pozostaje alternatywą,
   gdy zadanie nie ma jeszcze wpisu w panelu.
   - **Adres panelu**: `DESK_PANEL_URL` (domyślnie `http://127.0.0.1:5174`, panel usługi). Próbę na sztucznej specyfikacji

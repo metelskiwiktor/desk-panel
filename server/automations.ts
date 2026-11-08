@@ -94,6 +94,15 @@ const storeSchema = z.object({
 });
 type Store = z.infer<typeof storeSchema>;
 
+/** Read-only operation-window inspection; never returns instructions, tokens or message contents. */
+export function inspectAutomationStore(value: unknown) {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as { automations?: unknown }).automations) ||
+      !Array.isArray((value as { pending?: unknown }).pending) || !Array.isArray((value as { outbox?: unknown }).outbox)) throw new Error('Niepełny odczyt automatów.');
+  const store = storeSchema.parse(value);
+  return { automations: store.automations.map(item => ({ id: item.id, status: item.status, ...(item.nextRunAt === undefined ? {} : { nextRunAt: item.nextRunAt }) })),
+    pendingCount: store.pending.length, executionCount: store.execution ? 1 : 0, outboxCount: store.outbox.length };
+}
+
 /** The old `observers.json` as far as one-time migration needs it. */
 const oldObserverSchema = z.object({
   id: z.string(), chatId: z.string(), kind: z.enum(['cezar', 'pr', 'time']), target: z.string(), instruction: z.string(),

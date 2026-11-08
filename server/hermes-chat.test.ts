@@ -359,6 +359,21 @@ describe('Hermes chat', () => {
     expect((runs()[1].body as { input: string; session_id: string })).toEqual({ input: 'Dzięki', session_id: `desk-panel-${id}` });
   });
 
+  it('gives an existing session the Fila rules and resolved context without rewriting its history', async () => {
+    const original = hermes();
+    const { id } = await original.create({ text: 'Pierwsza' });
+    await finishedChat(original, id); await original.drain(); original.close();
+    const legacy: ContextItem = { kind: 'todo', id: 't-12345678', title: 'Dawne', text: 'Dawne dane' };
+    const current = hermes({ fila: true, resolveContext: async () => [{ kind: 'filaThread', id: 'DESK-1', title: 'Nowe', text: 'ID: DESK-1' }] });
+    await current.send(id, { text: 'Sprawdź', context: [legacy] });
+    await finishedChat(current, id);
+    const sent = (runs().at(-1)!.body as { input: string }).input;
+    expect(sent).toContain(hermesPreamble({ fila: true }));
+    expect(sent).toContain('Wątek Fili: Nowe');
+    expect(sent).not.toContain('Zadanie z listy: Dawne');
+    expect((await current.get(id)).items.at(-2)?.context).toEqual([legacy]);
+  });
+
   it('keeps only the mapping on disk; after a restart the answers come back from the Hermes session', async () => {
     const first = hermes();
     const { id } = await first.create({ text: 'Co tu jest?', context: [tile] });

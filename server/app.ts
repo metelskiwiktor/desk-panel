@@ -63,7 +63,7 @@ const connectSchema = z.object({ email: z.string() }).strict();
 const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 /** Loopback-only panel API (and built frontend from `root`) over any PanelSources. */
-export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; filaTokens?: FilaTokens; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations; usage?: UsageStore; wektorFila?: boolean } = {}) {
+export function createPanelServer(sources: PanelSources, root: string, allowedHost?: string, chat?: ChatService, options: { mcpToken?: string; filaTokens?: FilaTokens; cockpit?: Cockpit; cezarUrl?: string; automations?: Automations; usage?: UsageStore; wektorFila?: boolean; cutoverLocked?: boolean; filaMode?: boolean; cutoverKiosk?: unknown; inspectLockedChats?: () => Promise<unknown>; inspectLockedAutomations?: () => Promise<unknown> } = {}) {
   const routes = jsonRoutes(sources);
   const agent = agentViews(sources);
   return createServer(async (req, res) => {
@@ -74,6 +74,35 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
     const ownOrigin = `${proxied ? 'https' : 'http'}://${host}`;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const url = new URL(req.url || '/', `http://${host}`);
+    // Even MCP uses POST for reads: refuse it in full until the operation is opened. HTTP reads remain available.
+    if (options.cutoverLocked && req.method !== 'GET' && req.method !== 'HEAD' && !(req.method === 'POST' && url.pathname === '/api/mcp')) {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'Przełączenie Fili trwa; zapisy i uruchamianie tur są zablokowane.' }));
+      return;
+    }
+    // OAuth callbacks are GET requests that write credentials.
+    if (options.cutoverLocked && (url.pathname === '/api/calendar/callback' || url.pathname === '/api/bank/callback')) {
+      res.writeHead(503).end(); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/fila-mode') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ fila: !!options.filaMode, locked: !!options.cutoverLocked })); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/fila-cutover/kiosk' && options.cutoverLocked) {
+      res.writeHead(options.cutoverKiosk ? 200 : 503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(options.cutoverKiosk ?? { error: 'Brak zatwierdzonej konfiguracji kiosku.' })); return;
+    }
+    if (req.method === 'GET' && options.cutoverLocked && (url.pathname === '/api/chats' || url.pathname === '/api/automations')) {
+      const inspect = url.pathname === '/api/chats' ? options.inspectLockedChats : options.inspectLockedAutomations;
+      try {
+        if (!inspect) throw new Error('Brak odczytu.');
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(await inspect()));
+      } catch { res.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Niepełny odczyt stanu; restart jest zablokowany.' })); }
+      return;
+    }
+    if (options.cutoverLocked && url.pathname.startsWith('/api/') && url.pathname !== '/api/system' && url.pathname !== '/api/mcp' && url.pathname !== '/api/fila' && !url.pathname.startsWith('/api/fila/')) {
+      res.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Odczyt niedostępny podczas odbioru Fili.' })); return;
+    }
+    if (options.filaMode && (url.pathname === '/api/todos' || url.pathname.startsWith('/api/todos/') || url.pathname === '/api/agent/todos')) {
+      res.writeHead(404).end(); return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/cezar/dispatch-defaults') {
       const workflow = url.searchParams.get('workflow') || 'desk-panel-task';
       const runner = url.searchParams.get('runner') || undefined;
@@ -83,11 +112,11 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
       return;
     }
-    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations)) return;
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations, options.filaMode)) return;
     if (await handleFilaDispatchRoute(req, res, url, { ownOrigin, sources, cockpit: options.cockpit })) return;
     if (await handleFilaRoute(req, res, url, { ownOrigin, proxied, fila: sources.fila, tokens: options.filaTokens })) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
-    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [], filaMode: options.wektorFila }); return; }
+    if (url.pathname === '/api/mcp') { await handleMcpRoute(req, res, { views: agent, sources, token: options.mcpToken, loopback: !proxied, cezarUrl: options.cezarUrl, automations: options.automations, activeChats: () => chat?.activeTurns?.() ?? [], filaMode: options.wektorFila, cutoverLocked: options.cutoverLocked }); return; }
     if(req.method==='POST' && url.pathname.startsWith('/api/quotas/warmup/')) {
       if(req.headers.origin!==ownOrigin){res.writeHead(403).end();return;}
       res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
@@ -185,6 +214,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
         } else if (url.pathname === '/api/cezar/runs') {
           if (!sources.cezarCreateRun) throw new SourceError(503);
           const input = await readJson(req, cezarCreateRunSchema, 65_536);
+          if (options.filaMode && input.todoId) throw new SourceError(409);
           res.writeHead(201).end(JSON.stringify(await sources.cezarCreateRun(input)));
         } else if (url.pathname === '/api/cezar/action') {
           const { id, action } = await readJson(req, cezarActionSchema);

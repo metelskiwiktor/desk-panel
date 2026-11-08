@@ -4,11 +4,11 @@
 > why each rule is there (the incidents, with dates), and keeps the templates and examples for people. A rule changes in the
 > code first; then add here why.
 
-For a task from the panel's to-do list, first read the full `panel_todos zadanie=<t-…>` answer (transitional, until Fila 1.6; after it the thread is read with `fila_get`, docs/fila.md). Use the current readiness
+For a user task, first check the panel mode: in legacy mode read the full `panel_todos zadanie=<t-…>` answer; in Fila mode read the canonical thread with `fila_get` (docs/fila.md). Use the current readiness
 and missing list supplied by C1. If ready, direct the user to the task window: “Pokaż podgląd”, then “Zleć na Cezarze”.
 If unready, list C1's gaps and direct the user to complete them in that window. Do not recon, compose/copy a prompt,
 show a recon/dispatch card, or change the task to make it dispatchable. The server builds the literal prompt through
-`getTodoDispatch`; Wektor never calls the dispatch endpoint itself.
+`getTodoDispatch` in legacy mode or `getFilaDispatch` in Fila mode; Wektor never calls the dispatch endpoint itself.
 
 **2026-11-02: karty Wektora gubiły DECYZJE, WARUNKI ODBIORU i pliki.** This is why prepared list tasks now use the
 C1/C2a path instead of model-written cards. The C2b instruction was implemented on 2026-11-03 after C2a merged.

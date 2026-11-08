@@ -95,10 +95,22 @@ export interface FilaStore {
   drain(): Promise<void>;
 }
 export interface FilaStoreOptions {
+  /** Inspect a cutover snapshot without backfills or corrupt-file recovery writes. */
+  readOnly?: boolean;
   /** Where the data live (`~/.desk-panel/fila.json`); without it they live in memory only, starting from `initial`. */
   file?: string;
   initial?: FilaData;
   now?: () => number;
+}
+
+/** Offline installation by the Fila owner; the process owning the store must be stopped. */
+export async function installFilaSnapshot(file: string, raw: Buffer, suffix = 'cutover-tmp') {
+  const value: unknown = JSON.parse(raw.toString('utf8'));
+  if (!value || typeof value !== 'object' || (value as { version?: unknown }).version !== 1) throw new Error('Niepoprawny snapshot Fili.');
+  filaDataSchema.parse((value as { data?: unknown }).data);
+  const temp = `${file}.${suffix}`;
+  await writeFile(temp, raw, { flag: 'wx', mode: 0o600 });
+  await rename(temp, file);
 }
 
 /** The workflow "Praca": today's states of the to-do lists (D-005); the closing ones are Zakończone and Porzucone. */
@@ -127,6 +139,7 @@ const idOf = (t: Pick<FilaThread, 'project' | 'number'>) => `${t.project}-${t.nu
  */
 export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   const now = options.now ?? Date.now;
+  const readOnly = options.readOnly;
   let data: FilaData = defaultFilaData();
   let message: string | undefined;
   let loaded: Promise<void> | undefined;
@@ -139,6 +152,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     let raw: string;
     try { raw = await readFile(file, 'utf8'); }
     catch (error) {
+      if (options.readOnly) throw new Error('Nie można odczytać snapshotu Fili.');
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { unsafeFile = true; message = 'Nie udało się odczytać pliku Fili.'; }
       return;
     }
@@ -147,16 +161,21 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     if (parsed?.success) {
       data = parsed.data;
       // Projects from before 1.2 get their starter board once; the record in starterBoards keeps it from coming back.
-      if (seedStarterBoards(data, now())) await persist().catch(() => undefined);
+      if (seedStarterBoards(data, now())) {
+        if (options.readOnly) throw new Error('Snapshot Fili wymaga zapisu tablic startowych.');
+        await persist().catch(() => undefined);
+      }
       return;
     }
     // Never write over what cannot be read: keep it aside and start again, and say so.
+    if (options.readOnly) throw new Error('Niepoprawny snapshot Fili.');
     const aside = `${file}.corrupt-${now()}`;
     await rename(file, aside).catch(() => { unsafeFile = true; });
     message = `Plik Fili był uszkodzony (zachowany jako ${path.basename(aside)}); zaczynasz od pustej Fili.`;
   })();
 
   const persist = async () => {
+    if (options.readOnly) throw new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.');
     const { file } = options;
     if (!file) return;
     if (unsafeFile) throw new FilaError(500, 'Nie można bezpiecznie zastąpić pliku Fili.');
@@ -545,6 +564,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return shown(found);
     },
     apply(action, actor) {
+      if (options.readOnly) return Promise.reject(new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.'));
       const run = tail.then(async () => {
         await load();
         const before = structuredClone(data);
@@ -567,6 +587,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return run;
     },
     applyBatch(actions, actor, options = {}) {
+      if (readOnly) return Promise.reject(new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.'));
       const run = tail.then(async (): Promise<FilaBatchResult> => {
         await load();
         if (!actions.length || actions.length > FILA_BATCH_MAX) throw new FilaError(400, `Paczka ma od 1 do ${FILA_BATCH_MAX} akcji.`);
