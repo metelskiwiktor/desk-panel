@@ -12,7 +12,7 @@ import { ThreadList } from './threads';
 import { ConfirmDialog, Dialog, Menu, StatePicker, TypeIcon } from './ui';
 
 const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor' };
+const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor', antigravity: 'Antigravity' };
 const ACTION: Record<string, string> = { created: 'utworzył wątek', archived: 'zarchiwizował wątek', restored: 'przywrócił wątek', moved: 'przeniósł wątek' };
 const KINDS = { text: 'tekst', number: 'liczba', date: 'data', bool: 'tak/nie', multi: 'wiele wartości' } as const;
 type Kind = keyof typeof KINDS;

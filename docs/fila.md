@@ -57,7 +57,7 @@ Autor zmiany **nigdy nie pochodzi z akcji** (pole `by` jest odrzucane jako niezn
 
 | Wywołanie | Autor |
 | --- | --- |
-| `Authorization: Bearer <token klienta>` z loopbacku | ten klient: `claude-desktop`, `claude-code`, `codex`, `wektor` (D-057); rola AI, także gdy żądanie ma Origin panelu |
+| `Authorization: Bearer <token klienta>` z loopbacku | ten klient: `claude-desktop`, `claude-code`, `codex`, `wektor`, `antigravity` (D-057); rola AI, także gdy żądanie ma Origin panelu |
 | bez tokenu, `Origin` = adres panelu | `user` (GUI bez loginu, jak inne akcje panelu) |
 | bez tokenu i bez Origin panelu, inny Origin | 403 |
 | token niepoprawny | 401, także przy odczycie; nic się nie zapisuje |
@@ -226,7 +226,7 @@ Cienka warstwa nad tym samym rdzeniem (`FilaStore`), te same dane i reguły co `
 - **Prawa**: jak w sekcji „Uprawnienia”: klienci AI zmieniają definicje workflow i wartości Modułu oraz Specyfikację; trwałego usunięcia wątku (`deleteThread`) nie ma w MCP w ogóle (narzędzie odmawia, zanim cokolwiek zrobi), zlecenia Cezara też nie (to osobny POST z kliknięcia użytkownika). Pole `by` w akcji jest odrzucane.
 
 **Dwa wejścia do tych narzędzi**:
-- `POST /api/fila/mcp` (Streamable HTTP, odpowiedzi JSON) dla czterech klientów D-057 (`claude-desktop`, `claude-code`, `codex`, `wektor`): `Authorization: Bearer <token klienta z fila-tokens.json>`. Bez tokenu 401 (także z Origin panelu: to nie jest wejście użytkownika), z `Origin` 403, przez nazwę Tailscale 403, inna metoda niż POST 405; token Hermesa z `/api/mcp` nie jest tokenem klienta. Autorem zmian jest klient, którego rozpoznał token, nigdy argument.
+- `POST /api/fila/mcp` (Streamable HTTP, odpowiedzi JSON) dla klientów D-057 (`claude-desktop`, `claude-code`, `codex`, `wektor`, `antigravity`): `Authorization: Bearer <token klienta z fila-tokens.json>`. Bez tokenu 401 (także z Origin panelu: to nie jest wejście użytkownika), z `Origin` 403, przez nazwę Tailscale 403, inna metoda niż POST 405; token Hermesa z `/api/mcp` nie jest tokenem klienta. Autorem zmian jest klient, którego rozpoznał token, nigdy argument.
 - `/api/mcp` (Hermes), gdy w `panel.env` jest `DESK_WEKTOR_FILA=1`: Wektor dostaje `fila_search`, `fila_get`, `fila_apply`, `fila_query_check` **zamiast** `panel_todos` i `panel_todo_action` (autor `wektor`); preambuła Wektora (`hermesPreamble({ fila: true })`) i przewodnik `panel_guide zadania` (`filaGuide()` w `src/chat-contract.ts`) mówią wtedy o Fili. **Bez tej zmiennej nic się nie zmienia**: produkcyjny Wektor ma stare listy i stary przewodnik, narzędzi `fila_*` nie widzi i nie może ich wywołać; jedno przełączenie następuje w 1.6 (zmienna, `just update`, `just hermes RESTART`), bez pracy na dwóch magazynach naraz. Przed przełączeniem nowe narzędzia i instrukcje sprawdza się w teście ze skryptowanym agentem albo w izolowanym panelu (niżej). Skille czatu (`CHAT_SKILLS`) nie są tu zmieniane (należą do 1.5/1.6).
 
 Treść wątku pozostaje danymi: opisy narzędzi, przewodnik i preambuła mówią to wprost, a `fila_get` dołącza `note`.
@@ -241,6 +241,7 @@ Powtórzenie próby z klientem (fila_query_check → fila_search → fila_get �
 - **Wektor**: Hermes z kopią konfiguracji w osobnym `HERMES_HOME`, w której `mcp_servers.desk-panel` wskazuje `<panel>/api/mcp` z tokenem z `mcp-hermes-token.txt`; zapytanie zaczyna się od `hermesPreamble({ fila: true })`, potem `hermes chat --query-file <plik> --oneshot -Q --yolo`. Kopia `.env` w tym katalogu zawiera sekrety: usuń ją po próbie.
 - **Claude Desktop** (aplikacja GUI, nie do uruchomienia z terminala): w `claude_desktop_config.json` (Ustawienia → Developer → Edit Config) dodaj serwer `fila` przez most stdio, np. `{"mcpServers":{"fila":{"command":"npx","args":["-y","mcp-remote","<adres>/api/fila/mcp","--allow-http","--header","Authorization:${FILA_AUTH}"],"env":{"FILA_AUTH":"Bearer <token z token-claude-desktop.txt>"}}}}` (to lokalny most do loopbacku, bez tunelu i zdalnego dostępu); uruchom aplikację ponownie i poproś o sześć wywołań wyżej. Ten zapis nie został sprawdzony w aplikacji (wykonawca jej nie obsługuje). Jeśli aplikacja pokaże narzędzia, ale odmówi połączenia, zgłoś to jako nieudaną próbę z komunikatem.
 - **Aplikacja desktopowa ChatGPT (Codex)** (GUI): aplikacja pracuje na Codexie i czyta `~/.codex/config.toml`; dodaj `[mcp_servers.fila]` z `url = "<adres>/api/fila/mcp"`, `bearer_token_env_var = "FILA_TOKEN"` i `default_tools_approval_mode = "approve"` tylko na czas próby (zmienną `FILA_TOKEN` z `token-codex.txt` ustaw w środowisku, z którego uruchamiasz aplikację), potem te same sześć wywołań. Wpis usuń po próbie.
+- **Antigravity**: w `~/.gemini/config/mcp_config.json` dodaj serwer `fila`: `{"mcpServers":{"fila":{"url":"<adres>/api/fila/mcp","headers":{"Authorization":"Bearer <token z token-antigravity.txt>"}}}}`. Narzędzia MCP (`fila_search`, `fila_get`, `fila_apply`, `fila_query_check`) są wtedy dostępne bezpośrednio w agencie.
 
 ## Warsztat specyfikacji (1.3b)
 

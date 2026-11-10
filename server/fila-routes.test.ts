@@ -99,8 +99,8 @@ it('does not accept a token through the Tailscale name, and keeps the token file
   expect(await through('/api/fila', {})).toBe(200);
   const everything = JSON.stringify([await (await get(base, '/api/fila')).json(), await (await post(base, { action: 'createProject', key: 'DESK', name: 'x' }, { token: tokens.codex })).json()]);
   for (const token of Object.values(tokens)) expect(everything).not.toContain(token);
-  expect(Object.keys(tokens).sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'wektor']);
-  expect(new Set(Object.values(tokens)).size).toBe(4);
+  expect(Object.keys(tokens).sort()).toEqual(['antigravity', 'claude-code', 'claude-desktop', 'codex', 'wektor']);
+  expect(new Set(Object.values(tokens)).size).toBe(5);
   expect(filaTokens(join(dir, 'home'))).toEqual(tokens); // stable across restarts
 });
 

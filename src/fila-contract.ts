@@ -13,7 +13,7 @@ export const FILA_LIMITS = {
 } as const;
 
 /** The clients of D-057. Each has its own token on the backend; none of them is ever the user (D-006). */
-export const FILA_CLIENTS = ['claude-desktop', 'claude-code', 'codex', 'wektor'] as const;
+export const FILA_CLIENTS = ['claude-desktop', 'claude-code', 'codex', 'wektor', 'antigravity'] as const;
 export const filaActorSchema = z.enum(['user', ...FILA_CLIENTS]);
 export type FilaActor = z.infer<typeof filaActorSchema>;
 
