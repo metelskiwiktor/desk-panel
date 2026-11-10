@@ -104,6 +104,10 @@ executor-prepare:
 executor-run brief *args:
     node scripts/executor-run.mjs --brief "{{brief}}" {{args}}
 
+# Freeze, validate, run, or recompute the isolated H2 Cezar model-evaluation pilot (docs/agent-workflows/cezar-evaluation.md).
+cezar-eval *args:
+    node scripts/cezar-eval.mjs {{args}}
+
 # Review a specification locally in fresh sessions (DeepSeek and/or Gemini via agy), with bounded materials and progress.
 rybka spec *args:
     node scripts/rybka.mjs "{{spec}}" {{args}}
