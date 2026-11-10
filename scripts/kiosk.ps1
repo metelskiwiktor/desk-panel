@@ -53,12 +53,32 @@ while ($true) {
 Write-KioskLog "Panel odpowiada pod $Url."
 
 # Monitor detection with retry (displays may wake up slightly later during sign-in).
+# A secondary kiosk display (e.g. P16) may wake up faster than the main monitor and temporarily
+# appear as Primary at (0,0) while the primary DisplayPort monitor completes handshake.
+# Wait until the target monitor is resolved and its topology settles (secondary kiosk is not Primary).
 $screenDeadline = (Get-Date).AddSeconds(30)
 $target = Resolve-DeskPanelScreen $Display
-while (-not $target -and (Get-Date) -le $screenDeadline) {
+$isSecondaryKiosk = ($Display -eq 'P16' -or ($target -and $target.FriendlyName -eq 'P16'))
+$loggedWait = $false
+
+while ((Get-Date) -le $screenDeadline) {
+  if ($target) {
+    if ($isSecondaryKiosk -and $target.Primary) {
+      if (-not $loggedWait) {
+        Write-KioskLog "Monitor '$Display' wykryty jako glowny (Primary=True w X=$($target.Bounds.X), Y=$($target.Bounds.Y)). Oczekiwanie na ustabilizowanie ukladu monitorow..."
+        $loggedWait = $true
+      }
+    } else {
+      break
+    }
+  }
   Start-Sleep -Seconds 1
   $target = Resolve-DeskPanelScreen $Display
+  if (-not $isSecondaryKiosk -and $target -and $target.FriendlyName -eq 'P16') {
+    $isSecondaryKiosk = $true
+  }
 }
+
 if (-not $target) {
   $displays = Get-DeskPanelDisplays
   $avail = ($displays | ForEach-Object { "$($_.DeviceName) ($($_.FriendlyName)) $($_.Bounds.Width)x$($_.Bounds.Height)" }) -join '; '
@@ -71,9 +91,14 @@ $screen = $target.Screen
 $b = $target.Bounds
 $dispName = if ($target.FriendlyName) { "$($target.FriendlyName) ($($target.DeviceName))" } else { $target.DeviceName }
 
+if ($isSecondaryKiosk -and $target.Primary) {
+  Write-KioskLog "Ostrzezenie: monitor '$dispName' pozostaje jako glowny po uplywie limitu oczekiwania. Kontynuacja startu."
+}
+
 # Hide the Windows taskbar on this monitor
 try {
-  & (Join-Path $PSScriptRoot 'kiosk-taskbar.ps1') -Action HIDE -Display $target.DeviceName | Out-Null
+  $dispArg = if ($target.FriendlyName) { $target.FriendlyName } else { $target.DeviceName }
+  & (Join-Path $PSScriptRoot 'kiosk-taskbar.ps1') -Action HIDE -Display $dispArg | Out-Null
   Write-KioskLog "Zadanie ukrycia paska zadan na monitorze $dispName wykonane."
 } catch {
   Write-KioskLog "Ostrzezenie: nie udalo sie ukryc paska zadan: $($_.Exception.Message)"

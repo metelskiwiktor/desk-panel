@@ -117,6 +117,14 @@ if (-not $target) {
 $screen = $target.Screen
 $b = $target.Bounds
 $dispName = if ($target.FriendlyName) { "$($target.FriendlyName) ($($target.DeviceName))" } else { $target.DeviceName }
+
+$isSecondaryKiosk = ($Display -eq 'P16' -or ($target.FriendlyName -eq 'P16'))
+$allScreens = [System.Windows.Forms.Screen]::AllScreens
+if ($Action -eq 'HIDE' -and $isSecondaryKiosk -and $screen.Primary -and $allScreens.Count -gt 1) {
+  Write-Host "Ostrzezenie: monitor '$dispName' ma flage Primary przy $($allScreens.Count) ekranach. Pominieto ukrycie glownego paska zadan (Shell_TrayWnd)."
+  return
+}
+
 $res = [DeskPanel.TaskbarManager]::ApplyAction($Action, $b.X, $b.Y, $b.Width, $b.Height, [bool]$screen.Primary)
 
 if ($res.Count -eq 0 -or $res[0] -eq 'NOT_FOUND') {
