@@ -59,6 +59,20 @@ export interface FilaRegistries {
 /** A thread as a query result: what a list row or a card needs, without the history. */
 export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'>;
 export interface FilaQueryResult { query: string; project: string; total: number; threads: FilaThreadSummary[] }
+/**
+ * A board as structure only (2.4): views, sections and kanban columns with their canonical queries and full counts, no
+ * threads. A list section counts its own query, a kanban section has no count of its own, a column counts the section's
+ * query AND its own (the `total` of the column in the view). A stored query that cannot be run gives `error` and `total: null`
+ * where it sits (a column under a broken section has `total: null`, the section says why); the rest still answers.
+ */
+export interface FilaBoardStructure {
+  id: string; name: string; project: string | null;
+  views: { id: string; name: string; sections: {
+    id: string; name: string; kind: FilaSection['kind']; query: string; total?: number | null; error?: string;
+    columns: { id: string; name: string; query: string; total: number | null; error?: string }[];
+  }[] }[];
+  history: FilaBoard['history'];
+}
 export interface FilaBoardResult {
   board: { id: string; name: string }; view: { id: string; name: string };
   sections: (Omit<FilaSection, 'columns'> & {
@@ -81,6 +95,8 @@ export interface FilaStore {
   board(id: string): Promise<FilaBoard & { project: string | null }>;
   /** A view with every section answered by its own query (columns narrow it, D-029). */
   boardView(board: string, view: string, limit?: number): Promise<FilaBoardResult>;
+  /** The structure of one board with counts instead of threads (what `fila_structure` reads). */
+  boardStructure(id: string): Promise<FilaBoardStructure>;
   thread(id: string): Promise<FilaThreadView>;
   /** The Specyfikacja: the current text (needs the field on the thread) or one numbered revision (also after the field was removed). */
   spec(id: string, revision?: number): Promise<FilaSpecView>;
@@ -625,6 +641,28 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         }
       };
       return { board: { id: b.id, name: b.name }, view: { id: v.id, name: v.name }, sections: v.sections.map(run) };
+    },
+    async boardStructure(id) {
+      await tail; await load();
+      const b = boardOf(id);
+      const attempt = <T>(make: () => T): { value?: T; error?: string } => {
+        try { return { value: make() }; }
+        catch (error) { if (!(error instanceof FilaError)) throw error; return { error: error.message }; }
+      };
+      const views = b.views.map(v => ({ id: v.id, name: v.name, sections: v.sections.map(section => {
+        const own = attempt(() => compileFilaQuery(section.query, data, 'section'));
+        const columns = section.columns.map(c => {
+          if (!own.value) return { id: c.id, name: c.name, query: c.query, total: null };
+          const narrowed = attempt(() => narrowFilaQuery(own.value!, compileFilaQuery(c.query, data, 'column')));
+          return { id: c.id, name: c.name, query: c.query, total: narrowed.value ? selectFilaThreads(data, narrowed.value).length : null, ...(narrowed.error ? { error: narrowed.error } : {}) };
+        });
+        return {
+          id: section.id, name: section.name, kind: section.kind, query: section.query,
+          ...(section.kind === 'list' ? { total: own.value ? selectFilaThreads(data, own.value).length : null } : {}),
+          ...(own.error ? { error: own.error } : {}), columns,
+        };
+      }) }));
+      return { id: b.id, name: b.name, project: Object.entries(data.starterBoards).find(([, board]) => board === b.id)?.[0] ?? null, views, history: structuredClone(b.history) };
     },
     async thread(id) { await tail; await load(); return view(threadOf(id)); },
     async spec(id, revision) {

@@ -174,7 +174,7 @@ Bezpośrednio przed restartem sprawdź `running` w `GET /api/chats`, harmonogram
 | `panel_todos` (do 1.6) | `list`, `ukonczone`, `stan` (id stanu); stan PL, blokada, powiązania i ostatnie 3 komentarze |
 | `panel_bank` | `from`, `to`, `ruch`, `kategoria`, `etykieta`, `strona`, `nieprzypisane` (numery zamaskowane, jak w widoku) |
 | `panel_todo_action` (do 1.6) | jedna akcja list zadań (`todoActionSchema`), w tym setStatus, setBlocked, addComment, link i unlink; `by` wymuszone na `agent` ([zadania.md](zadania.md)) |
-| `fila_search`, `fila_get`, `fila_apply`, `fila_query_check` | w aktywnym trybie Fili albo przy `DESK_WEKTOR_FILA=1`; zastępują narzędzia list, autor `wektor` ([fila.md](fila.md)) |
+| `fila_search`, `fila_get`, `fila_apply`, `fila_structure`, `fila_query_check` | w aktywnym trybie Fili albo przy `DESK_WEKTOR_FILA=1`; zastępują narzędzia list, autor `wektor` ([fila.md](fila.md)) |
 | `panel_cezar_action` | `archive`/`unarchive`/`read`/`unread` zakończonego zadania Cezara |
 | `panel_recon_report` | `files` (ścieżka, notatka, `new` dla pliku do utworzenia), `kind` (UI/non-UI), `scenario`, `prompt`: karta rekonesansu; plików, których nie ma w repo (bez `new`), nie przyjmuje; wynik podaje `recon` (r-…, pamiętany 6 h, do restartu panelu) |
 | `panel_cezar_propose` | `title`, `prompt`, `recon`, `workflow` oraz tylko w legacy `todoId`: karta „Zlecić na Cezarze?”, tylko z `recon` znanym panelowi i tym samym promptem co rekonesans; zleca panel po kliknięciu użytkownika, nie narzędzie |

@@ -55,7 +55,7 @@ export function guideRules(fila = false): string[] {
 
 /** The sentences of the preamble that name the to-do tools, as they read when Wektor works on Fila (1.3a). */
 const FILA_SWAPS: [string, string][] = [
-  ['panel_system, panel_todos, panel_bank, panel_time.', 'panel_system, panel_bank, panel_time; wątki użytkownika (Fila) czytasz fila_search i fila_get.'],
+  ['panel_system, panel_todos, panel_bank, panel_time.', 'panel_system, panel_bank, panel_time; wątki użytkownika (Fila) czytasz fila_search i fila_get, a strukturę Fili (projekty, tablice, workflow, typy, pola) fila_structure.'],
   ['Słowo „zadanie” bez dopowiedzenia oznacza zadanie z list zadań użytkownika, nie zadanie Cezara.', 'Słowo „zadanie” bez dopowiedzenia oznacza wątek użytkownika w Fili, nie zadanie Cezara.'],
   ['Wskazana w bloku [Kontekst] „Lista zadań” podaje id listy (l-…) i jej zadania z id (t-…), a „Zadanie z listy” id zadania i listy: używaj tych id wprost.', 'Wątek wskazany w bloku [Kontekst] podaje swoje ID (KLUCZ-numer): używaj go wprost w fila_get i fila_apply.'],
   ['Stan zadania i komentarze zmieniaj na prośbę użytkownika; przy propozycji Cezara z zadania podaj todoId — panel sam podepnie i ustawi W realizacji po kliknięciu karty.', 'Stan wątku i komentarze zmieniaj na prośbę użytkownika przez fila_apply; zlecenia Cezara z wątku robi użytkownik w oknie wątku, nie Ty.'],

@@ -691,7 +691,7 @@ export function mcpToken(env: NodeJS.ProcessEnv = process.env, dir = path.join(h
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
 const rpcError = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-/** With Wektor on Fila (1.3a, `DESK_WEKTOR_FILA=1`) the four fila_ tools replace the to-do list tools; otherwise nothing changes. */
+/** With Wektor on Fila (1.3a, `DESK_WEKTOR_FILA=1`) the five fila_ tools replace the to-do list tools; otherwise nothing changes. */
 const LIST_TOOLS = new Set(['panel_todos', 'panel_todo_action']);
 const listedTools = (filaMode: boolean) => [
   ...Object.entries(PANEL_TOOLS).filter(([name]) => !filaMode || !LIST_TOOLS.has(name)).map(([name, tool]) => {

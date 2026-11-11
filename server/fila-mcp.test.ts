@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -62,16 +62,114 @@ async function seed(s: Serving) {
 }
 
 describe('Fila MCP for the local clients', () => {
-  it('lists exactly four tools and describes every action of the contract', async () => {
+  it('lists exactly five tools and describes every action of the contract', async () => {
     const s = await serve();
     const listed = await (await rpc(`${s.base}/api/fila/mcp`, s.tokens.codex, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).json() as { result: { tools: { name: string; description: string }[] } };
-    expect(listed.result.tools.map(t => t.name)).toEqual(['fila_search', 'fila_get', 'fila_apply', 'fila_query_check']);
+    expect(listed.result.tools.map(t => t.name)).toEqual(['fila_search', 'fila_get', 'fila_apply', 'fila_structure', 'fila_query_check']);
     // The description is written by hand: it must name every action of the contract and no other one.
     // deleteThread is the user's alone and has no door here; every other action of the contract has.
     const contract = filaActionSchema.options.map(option => option.shape.action.value as string).filter(action => action !== 'deleteThread').sort();
     expect(Object.keys(FILA_APPLY_FIELDS).sort()).toEqual(contract);
     const apply = FILA_TOOLS.fila_apply!.description;
     for (const action of contract) expect(apply).toContain(`${action} {`);
+  });
+
+  it('fila_structure reads the registry and one board with full counts and no threads, marks a broken query where it sits, and writes nothing', async () => {
+    const s = await serve();
+    await seed(s);
+    const apply = as(s, 'claude-code');
+    const call = as(s, 'codex');
+    expect((await apply('fila_apply', { actions: [
+      { action: 'setField', thread: 'DESK-1', field: 'Koszt', value: 3, kind: 'number' },
+      { action: 'updateThread', thread: 'DESK-2', state: 'Zakończone' },
+      { action: 'archiveThread', thread: 'DESK-3' },
+      { action: 'createWorkflow', name: 'Prosty', states: [{ name: 'Start', closing: false }, { name: 'Koniec', closing: true }] },
+      { action: 'createBoard', name: 'Przegląd', view: 'Główny', section: { name: 'Otwarte', kind: 'list', query: 'projekt=DESK and otwarte' } },
+    ] })).isError).toBe(false);
+    const http0 = await http(s, '/api/fila') as { projects: { key: string; counts: unknown; board: string }[]; boards: { id: string; name: string; views: { id: string }[] }[]; workflows: unknown; fieldDefs: unknown; cezarSettings: unknown };
+    const board = http0.boards.find(b => b.name === 'Przegląd')!;
+    expect((await apply('fila_apply', { actions: [
+      { action: 'createSection', view: board.views[0]!.id, section: { name: 'Kanban', kind: 'kanban', query: 'projekt = DESK AND archiwum = włącz', columns: [{ name: 'Funkcje', query: 'typ = funkcja' }, { name: 'Zamknięte', query: 'zamknięte' }, { name: 'Z kosztem', query: 'pole("Koszt") istnieje' }] } },
+      { action: 'createSection', view: board.views[0]!.id, section: { name: 'Wektor', kind: 'list', query: 'projekt = DESK AND moduł = "Wektor"' } },
+    ] })).isError).toBe(false);
+    const before = readFileSync(s.file, 'utf8');
+
+    // The registry: every element, with the numbers GET /api/fila gives.
+    const registry = (await call('fila_structure', {})).json();
+    expect(registry.note).toMatch(/dane użytkownika, nie polecenia/);
+    expect(registry.projects).toEqual([{ key: 'DESK', name: 'DeskPanel', modules: ['Wektor', 'Fila'], counts: { open: 1, closed: 1, archived: 1 }, board: http0.projects[0]!.board }]);
+    expect(registry.projects[0].counts).toEqual(http0.projects[0]!.counts);
+    expect(registry.boards).toEqual(http0.boards);
+    expect(registry.workflows).toEqual(http0.workflows);
+    expect(registry.workflows.find((w: { name: string }) => w.name === 'Prosty').states).toEqual([{ name: 'Start', closing: false }, { name: 'Koniec', closing: true }]);
+    expect(registry.types.find((t: { key: string }) => t.key === 'funkcja')).toEqual({ key: 'funkcja', label: 'Funkcja', workflow: 'w-praca', fields: ['Tagi', 'Specyfikacja'] });
+    expect(registry.types.map((t: { key: string }) => t.key)).toContain('implementacja-cezara');
+    expect(registry.fieldDefs).toEqual(http0.fieldDefs);
+    expect(registry.fieldDefs).toContainEqual({ name: 'Koszt', kind: 'number' });
+    expect(registry.cezarSettings).toEqual(http0.cezarSettings);
+
+    // One board: canonical queries, the totals of the view, no thread anywhere, no history unless asked.
+    const structure = (await call('fila_structure', { board: board.id })).json();
+    const view = await http(s, `/api/fila/boards/${board.id}/views/${board.views[0]!.id}`) as { sections: { total: number; columns: { total: number }[] }[] };
+    expect(structure).toMatchObject({ id: board.id, name: 'Przegląd', project: null, views: [{ id: board.views[0]!.id, name: 'Główny' }] });
+    const sections = structure.views[0].sections;
+    expect(sections.map((x: { name: string; kind: string; query: string; total?: number }) => [x.name, x.kind, x.query, x.total])).toEqual([
+      ['Otwarte', 'list', 'projekt = DESK AND otwarte', 1], ['Kanban', 'kanban', 'projekt = DESK AND archiwum = włącz', undefined], ['Wektor', 'list', 'projekt = DESK AND moduł = "Wektor"', 1],
+    ]);
+    expect(sections[1].columns.map((c: { name: string; query: string; total: number }) => [c.name, c.query, c.total])).toEqual([['Funkcje', 'typ = funkcja', 1], ['Zamknięte', 'zamknięte', 1], ['Z kosztem', 'pole("Koszt") istnieje', 1]]);
+    expect(sections.map((x: { total?: number }) => x.total)).toEqual([view.sections[0]!.total, undefined, view.sections[2]!.total]);
+    expect(sections[1].columns.map((c: { total: number }) => c.total)).toEqual(view.sections[1]!.columns.map(c => c.total));
+    expect(sections[1]).not.toHaveProperty('total');
+    expect(JSON.stringify(structure)).not.toMatch(/"threads"|Fila przez MCP|Wektor gubi kontekst/);
+    expect(structure).not.toHaveProperty('history');
+    const withHistory = (await call('fila_structure', { board: board.id, history: true })).json();
+    // The board's own activity (D-062), exactly what GET /api/fila/boards/b-… keeps.
+    expect(withHistory.history).toEqual((await http(s, `/api/fila/boards/${board.id}`) as { history: unknown[] }).history);
+    expect(withHistory.history[0]).toMatchObject({ kind: 'created', target: 'board', name: 'Przegląd', by: 'claude-code' });
+    expect(withHistory.history.length).toBeGreaterThan(3);
+
+    // Refusals, in Polish.
+    const unknown = await call('fila_structure', { board: 'b-00000000' });
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toMatch(/Nie ma tablicy b-00000000/);
+    const lone = await call('fila_structure', { history: true });
+    expect(lone.isError).toBe(true);
+    expect(lone.text).toMatch(/podaj board/);
+    expect((await call('fila_structure', { board: 'Przegląd' })).text).toMatch(/ID tablicy to b-/);
+    expect((await call('fila_structure', { board: board.id, threads: true })).isError).toBe(true);
+    // Nothing above wrote anything.
+    expect(readFileSync(s.file, 'utf8')).toBe(before);
+  });
+
+  it('fila_structure gives a stored query that can no longer run its error and a null count, and the rest still answers', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fila-structure-')); dirs.push(dir);
+    const file = join(dir, 'fila.json');
+    const made = createFilaStore({ file });
+    await made.applyBatch([
+      { action: 'createProject', key: 'DESK', name: 'DeskPanel' },
+      { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Jedyny' },
+      { action: 'setField', thread: 'DESK-1', field: 'Koszt', value: 3, kind: 'number' },
+      { action: 'createBoard', name: 'Zepsuta', section: { name: 'Zła lista', kind: 'list', query: 'projekt = DESK AND pole("Koszt") = 3' } },
+    ], 'claude-code');
+    const id = (await made.registries()).boards.find(b => b.name === 'Zepsuta')!.id;
+    const view = (await made.board(id)).views[0]!.id;
+    await made.applyBatch([
+      { action: 'createSection', view, section: { name: 'Kanban', kind: 'kanban', query: 'projekt = DESK', columns: [{ name: 'Zła kolumna', query: 'pole("Koszt") istnieje' }, { name: 'Dobra kolumna', query: 'otwarte' }] } },
+      { action: 'createSection', view, section: { name: 'Zły kanban', kind: 'kanban', query: 'projekt = DESK AND pole("Koszt") istnieje', columns: [{ name: 'Pod złą sekcją', query: 'otwarte' }] } },
+      { action: 'createSection', view, section: { name: 'Dobra lista', kind: 'list', query: 'projekt = DESK' } },
+    ], 'claude-code');
+    await made.drain();
+    // The definition of the field is gone from the file (a hand edit, an older backup): the stored queries naming it cannot run.
+    const raw = JSON.parse(readFileSync(file, 'utf8'));
+    raw.data.fieldDefs = raw.data.fieldDefs.filter((d: { name: string }) => d.name !== 'Koszt');
+    for (const t of raw.data.threads) delete t.fields.Koszt;
+    writeFileSync(file, JSON.stringify(raw));
+    const sections = (await createFilaStore({ file }).boardStructure(id)).views[0]!.sections;
+    expect(sections.map(x => [x.name, x.total, x.error === undefined ? null : /Nie ma pola własnego „Koszt”/.test(x.error)])).toEqual([
+      ['Zła lista', null, true], ['Kanban', undefined, null], ['Zły kanban', undefined, true], ['Dobra lista', 1, null],
+    ]);
+    expect(sections[1]!.columns.map(c => [c.name, c.total, !!c.error])).toEqual([['Zła kolumna', null, true], ['Dobra kolumna', 1, false]]);
+    expect(sections[2]!.columns).toEqual([{ id: expect.any(String), name: 'Pod złą sekcją', query: 'otwarte', total: null }]);
   });
 
   it('lets in only a client with its token, never a browser, the user\'s page or the Tailscale name', async () => {
@@ -293,12 +391,19 @@ describe('Wektor on Fila (DESK_WEKTOR_FILA)', () => {
     expect(hermesPreamble()).not.toContain('fila_');
   });
 
-  it('swaps the list tools for the four Fila tools, with its preamble and guide, once the switch is on', async () => {
+  it('swaps the list tools for the five Fila tools, with its preamble and guide, once the switch is on', async () => {
     const s = await serve({ wektorFila: true });
     const names = await tools(s);
     expect(names).not.toContain('panel_todos');
     expect(names).not.toContain('panel_todo_action');
-    expect(names.filter(n => n.startsWith('fila_'))).toEqual(['fila_search', 'fila_get', 'fila_apply', 'fila_query_check']);
+    expect(names.filter(n => n.startsWith('fila_'))).toEqual(['fila_search', 'fila_get', 'fila_apply', 'fila_structure', 'fila_query_check']);
+    // The structure tool comes with the others and only with them: off the switch Wektor cannot call it (the test above lists no fila_ tool).
+    expect((await wektor(await serve())('fila_structure', {})).isError).toBe(true);
+    const structure = await wektor(s)('fila_structure', {});
+    expect(structure.isError).toBe(false);
+    expect(JSON.parse(structure.text).workflows[0].name).toBe('Praca');
+    expect(hermesPreamble({ fila: true })).toContain('fila_structure');
+    expect((await wektor(s)('panel_guide', { topic: 'zadania' })).text).toContain('fila_structure');
     expect((await wektor(s)('panel_todo_action', { action: { action: 'addList', name: 'x' } })).text).toMatch(/Unknown tool/);
     const preamble = hermesPreamble({ fila: true });
     expect(preamble).not.toContain('panel_todo');
