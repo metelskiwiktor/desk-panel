@@ -120,10 +120,15 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     expect(register).toEqual({ thread: id, dispatches: [{ thread: id, specRevision: 1, mode: 'implementacja', taskId: 'desk-panel/run-1', url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' }] });
   });
 
-  it('zleca tylko ze Stanu z listy ustawień (odczyt w GET /api/fila), a blokada nie odbiera gotowości', async () => {
+  it('zleca tylko ze Stanu z listy ustawień (odczyt w GET /api/fila); wpis w „Zablokowane” nie odbiera gotowości ani nie unieważnia podglądu, a `expected` z dawnym `blocked` to 400', async () => {
     const { created, prepared, expectedOf, post, act, fila, base } = await start();
     const id = await prepared();
-    await act({ action: 'setCezar', thread: id, blocked: 'Czekam na decyzję' });
+    const seen = await expectedOf(id);
+    expect(seen).not.toHaveProperty('blocked');
+    await act({ action: 'addBlocker', thread: id, reason: 'Czekam na decyzję' }, 'user');
+    // An old client still sending `blocked` is refused outright; the preview made before the block is still good.
+    expect((await post(id, { expected: { ...seen, blocked: null } })).status).toBe(400);
+    expect(created).not.toHaveBeenCalled();
     await act({ action: 'updateThread', thread: id, state: 'Pomysł' });
     const outside = await post(id, { expected: await expectedOf(id) });
     expect(outside.status).toBe(409);
@@ -133,7 +138,7 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     await act({ action: 'setCezarSettings', readyStates });
     expect((await (await fetch(`${base}/api/fila`)).json()).cezarSettings).toEqual({ readyStates });
     // On the list now, and still blocked by hand: ready all the same.
-    expect((await fila.thread(id)).cezar.blocked).toBe('Czekam na decyzję');
+    expect((await fila.thread(id)).blockers.map(b => b.reason)).toEqual(['Czekam na decyzję']);
     expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
     expect(created).toHaveBeenCalledTimes(1);
   });

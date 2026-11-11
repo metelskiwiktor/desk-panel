@@ -5,7 +5,7 @@ import { TODO_LIMITS, TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
   filaActionSchema, filaDataSchema, isFilaBoardAction,
-  type FilaAction, type FilaActor, type FilaBoardActor, type FilaBoard, type FilaCezar, type FilaCezarSettings, defaultFilaCezarSettings, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
+  type FilaAction, type FilaActor, type FilaBlocker, type FilaBoardActor, type FilaBoard, type FilaCezar, type FilaCezarSettings, defaultFilaCezarSettings, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
 import { applyBoardAction, createStarterBoard, seedStarterBoards } from './fila-boards';
@@ -31,6 +31,8 @@ export interface FilaThreadView {
   spec: { enabled: boolean; revision: number };
   /** The Cezar kit (1.4a); `enabled: false` with empty values when it was never added. */
   cezar: FilaCezar;
+  /** „Zablokowane” (2.3a): the thread's blocks, oldest first; it is blocked while the list has an entry. */
+  blockers: FilaBlocker[];
   archived: boolean; revision: number;
   createdAt: number; updatedAt: number; createdBy: string;
   history: FilaThread['history'];
@@ -116,6 +118,35 @@ export async function installFilaSnapshot(file: string, raw: Buffer, suffix = 'c
   await rename(temp, file);
 }
 
+/** The id of the entry an old `cezar.blocked` text becomes: derived from the thread's uid, so every load and every migration trial gives the same one. */
+export const legacyBlockerId = (uid: string) => `k-${createHash('sha256').update(`cezar.blocked:${uid}`).digest('hex').slice(0, 8)}`;
+/**
+ * Stage 2.3a: `cezar.blocked` (one text in the Cezar kit) became the thread's list „Zablokowane”. Works on the raw data
+ * before validation (the schema no longer knows `blocked` and would drop it silently): a non-empty text, also on a thread
+ * whose kit is switched off, becomes one hand-written entry by `panel`, dated by the thread's `updatedAt`. The thread's
+ * `revision`, `history` and `updatedAt` stay as they were. Returns how many entries were made (0 on converted data).
+ */
+export function convertLegacyBlocked(raw: unknown): number {
+  const threads = raw && typeof raw === 'object' ? (raw as { threads?: unknown }).threads : undefined;
+  if (!Array.isArray(threads)) return 0;
+  let made = 0;
+  for (const thread of threads as { uid?: unknown; updatedAt?: unknown; blockers?: unknown; cezar?: unknown }[]) {
+    const cezar = thread && typeof thread === 'object' ? thread.cezar : undefined;
+    if (!cezar || typeof cezar !== 'object' || !('blocked' in cezar)) continue;
+    const text = (cezar as { blocked?: unknown }).blocked;
+    delete (cezar as { blocked?: unknown }).blocked;
+    if (typeof text !== 'string' || !text.trim()) continue;
+    const id = legacyBlockerId(String(thread.uid));
+    const blockers: unknown[] = Array.isArray(thread.blockers) ? thread.blockers : [];
+    if (!blockers.some(entry => (entry as { id?: unknown } | null)?.id === id)) {
+      blockers.push({ id, reason: text.trim().slice(0, FILA_LIMITS.blockerReason), origin: { kind: 'ręczne' }, at: thread.updatedAt, by: 'panel' });
+      made += 1;
+    }
+    thread.blockers = blockers;
+  }
+  return made;
+}
+
 /** The workflow "Praca": today's states of the to-do lists (D-005); the closing ones are Zakończone and Porzucone. */
 export function defaultFilaData(): FilaData {
   return {
@@ -151,7 +182,11 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   const load = () => loaded ??= (async () => {
     const { file } = options;
-    if (!file) { data = filaDataSchema.parse(options.initial ?? defaultFilaData()); seedStarterBoards(data, now()); return; }
+    if (!file) {
+      const initial: unknown = structuredClone(options.initial ?? defaultFilaData());
+      convertLegacyBlocked(initial);
+      data = filaDataSchema.parse(initial); seedStarterBoards(data, now()); return;
+    }
     let raw: string;
     try { raw = await readFile(file, 'utf8'); }
     catch (error) {
@@ -160,14 +195,16 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return;
     }
     let parsed: ReturnType<typeof filaDataSchema.safeParse> | undefined;
-    try { const value = JSON.parse(raw); if (value?.version === 1) parsed = filaDataSchema.safeParse(value.data); } catch { /* corrupt, handled below */ }
+    // An old `cezar.blocked` becomes an entry of „Zablokowane” on the raw data, before the schema would drop it (2.3a).
+    let converted = 0;
+    try { const value = JSON.parse(raw); if (value?.version === 1) { converted = convertLegacyBlocked(value.data); parsed = filaDataSchema.safeParse(value.data); } } catch { /* corrupt, handled below */ }
     if (parsed?.success) {
       data = parsed.data;
       // Projects from before 1.2 get their starter board once; the record in starterBoards keeps it from coming back.
-      if (seedStarterBoards(data, now())) {
-        if (options.readOnly) throw new Error('Snapshot Fili wymaga zapisu tablic startowych.');
-        await persist().catch(() => undefined);
-      }
+      const seeded = seedStarterBoards(data, now());
+      if (seeded && options.readOnly) throw new Error('Snapshot Fili wymaga zapisu tablic startowych.');
+      // Written once; a locked (read-only) store keeps the conversion in memory and leaves the file as it is.
+      if ((seeded || converted) && !options.readOnly) await persist().catch(() => undefined);
       return;
     }
     // Never write over what cannot be read: keep it aside and start again, and say so.
@@ -245,6 +282,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       module: t.module, fields: structuredClone(t.fields),
       spec: { enabled: specOf(t).enabled, revision: latestSpec(t)?.number ?? 0 },
       cezar: structuredClone(t.cezar ?? emptyFilaCezar()),
+      blockers: structuredClone(t.blockers),
       archived: t.archived, revision: t.revision,
       createdAt: t.createdAt, updatedAt: t.updatedAt, createdBy: t.history[0]?.by ?? 'user',
       history: structuredClone(t.history),
@@ -326,7 +364,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
           uid: uid(), project: project.key, number: project.nextNumber++, type: action.type, workflow: workflow.id, state: workflow.states[0]!.name,
           title: action.title, description: action.description ?? '', parent: parent?.uid ?? null, module: action.module ?? null,
           fields, spec: { enabled: FILA_TYPES[action.type].spec, revisions: [] },
-          ...(FILA_TYPES[action.type].cezar ? { cezar: { ...emptyFilaCezar(), enabled: true } } : {}), archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
+          ...(FILA_TYPES[action.type].cezar ? { cezar: { ...emptyFilaCezar(), enabled: true } } : {}), blockers: [], archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
         };
         data.threads.push(t);
         record(t, actor, { kind: 'created', text: FILA_TYPES[action.type].label });
@@ -457,15 +495,13 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         if (!kit.enabled) throw new FilaError(409, 'Wątek nie ma zestawu pól Cezara: dodaj go (addCezarKit).');
         const next: FilaCezar = { ...kit };
         const changes: { field: string; from: string | null; to: string | null }[] = [];
-        const set = <K extends 'executor' | 'repo' | 'mode' | 'blocked'>(key: K, label: string, value: FilaCezar[K] | undefined) => {
+        const set = <K extends 'executor' | 'repo' | 'mode'>(key: K, label: string, value: FilaCezar[K] | undefined) => {
           if (value === undefined) return;
-          const clean = (key === 'blocked' && typeof value === 'string' && value.trim() === '' ? null : value) as FilaCezar[K];
-          if (kit[key] !== clean) { changes.push({ field: label, from: kit[key] === null ? null : cut(String(kit[key])), to: clean === null ? null : cut(String(clean)) }); next[key] = clean; }
+          if (kit[key] !== value) { changes.push({ field: label, from: kit[key] === null ? null : cut(String(kit[key])), to: value === null ? null : cut(String(value)) }); next[key] = value; }
         };
         set('executor', 'Wykonawca', action.executor);
         set('repo', 'Repo', action.repo);
         set('mode', 'Tryb', action.mode);
-        set('blocked', 'Blokada', action.blocked);
         if (!changes.length) return done(t);
         t.cezar = next;
         t.revision += 1;
@@ -490,6 +526,28 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         t.cezar = { ...kit, links: [...kit.links, { kind: action.kind, id: action.id, ...(action.title ? { title: action.title } : {}), at: now() }] };
         t.revision += 1;
         record(t, actor, { kind: 'changed', changes: [{ field: label, from: null, to: cut(action.id) }] });
+        return done(t);
+      }
+      case 'addBlocker': {
+        const t = threadOf(action.thread);
+        expect(t, action.expectedRevision);
+        if (t.blockers.length >= FILA_LIMITS.blockers) throw new FilaError(409, `Wątek może mieć najwyżej ${FILA_LIMITS.blockers} wpisów w „Zablokowane”.`);
+        let id: string;
+        do { id = `k-${randomUUID().slice(0, 8)}`; } while (t.blockers.some(b => b.id === id));
+        // The same reason twice is two entries: each is taken off on its own.
+        t.blockers.push({ id, reason: action.reason, origin: { kind: 'ręczne' }, at: now(), by: actor });
+        t.revision += 1;
+        record(t, actor, { kind: 'changed', changes: [{ field: 'Zablokowane', from: null, to: cut(action.reason) }] });
+        return done(t, { blocker: id });
+      }
+      case 'removeBlocker': {
+        const t = threadOf(action.thread);
+        expect(t, action.expectedRevision);
+        const at = t.blockers.findIndex(b => b.id === action.blocker);
+        if (at < 0) throw new FilaError(404, `Wątek ${idOf(t)} nie ma wpisu ${action.blocker} w „Zablokowane”.`);
+        const [gone] = t.blockers.splice(at, 1);
+        t.revision += 1;
+        record(t, actor, { kind: 'changed', changes: [{ field: 'Zablokowane', from: cut(gone!.reason), to: null }] });
         return done(t);
       }
       case 'comment': {

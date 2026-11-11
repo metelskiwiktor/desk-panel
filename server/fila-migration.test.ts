@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { migrationHash, previewMigration, type MigrationInput, type MigrationPlan } from './fila-migration';
 import { todoTaskSchema, TODO_STATUSES } from '../src/todo-contract';
-import { createFilaStore } from './fila';
+import { createFilaStore, legacyBlockerId } from './fila';
 import { migrateCockpitCopy, createCockpit } from './cockpit';
 import { runMigration } from '../scripts/fila-migrate';
 import { installCutoverCopy, openCutoverCopy, restoreCutoverCopy } from './fila-cutover-install';
@@ -294,8 +294,17 @@ describe('offline migration integrity', () => {
     const native = createFilaStore({ file: join(root, 'fila.json') });
     expect((await native.spec('DESK-1')).revision).toBe(13);
     expect((await native.thread('DESK-1')).migratedTodo?.original.links[0].kind).toBe('chat');
+    // The to-do's block is already an entry of „Zablokowane” in the result (2.3a), with the id a load would give it.
+    expect(stored.fila.data.threads).toHaveLength(7);
+    for (const t of stored.fila.data.threads) {
+      expect(t.blockers).toEqual([{ id: legacyBlockerId(t.uid), reason: 'czeka', origin: { kind: 'ręczne' }, at: t.updatedAt, by: 'panel' }]);
+      expect(t.cezar).not.toHaveProperty('blocked');
+    }
+    expect((await native.thread('DESK-1')).blockers).toEqual(stored.fila.data.threads.find((t: { number: number; project: string }) => t.project === 'DESK' && t.number === 1).blockers);
+    const hash = (await readFile(join(root, 'trial.json'), 'utf8'));
     await runMigration('trial', root);
     expect(await readFile(join(root, 'result.json'), 'utf8')).toBe(result);
+    expect(JSON.parse(await readFile(join(root, 'trial.json'), 'utf8')).resultHash).toBe(JSON.parse(hash).resultHash);
     await runMigration('rollback', root);
     expect(await readFile(join(root, 'result.json'), 'utf8')).toBe(await readFile(join(root, 'before.json'), 'utf8'));
     await runMigration('trial', root);

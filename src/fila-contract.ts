@@ -10,6 +10,7 @@ export const FILA_LIMITS = {
   name: 80, state: 60, module: 60, fieldName: 60, title: 200, description: 20_000, comment: 5000,
   text: 2000, multi: 50, multiItem: 200, fieldsPerThread: 60, spec: 50_000,
   boards: 200, views: 30, sections: 30, columns: 30, query: 2000, results: 5000,
+  blockers: 20, blockerReason: 300,
 } as const;
 
 /** The clients of D-057. Each has its own token on the backend; none of them is ever the user (D-006). */
@@ -80,8 +81,8 @@ export const filaSpecRevisionSchema = z.object({
 });
 export type FilaSpecRevision = z.infer<typeof filaSpecRevisionSchema>;
 /**
- * The Cezar kit of a thread (1.4a): executor, repo and mode with today's vocabulary and `null` = not chosen, the manual
- * block reason, and the task / PR links (unique by kind+id, at most 20). Added to any type like the Specyfikacja; the data
+ * The Cezar kit of a thread (1.4a): executor, repo and mode with today's vocabulary and `null` = not chosen, and the
+ * task / PR links (unique by kind+id, at most 20). Added to any type like the Specyfikacja; the data
  * outlive removing the kit, so the links and the dispatch register keep their meaning.
  */
 const filaCezarLinkKind = z.enum(['cezar', 'pr']);
@@ -91,11 +92,24 @@ export const filaCezarLinkSchema = z.object({ kind: filaCezarLinkKind, id: filaC
 export const filaCezarSchema = z.object({
   enabled: z.boolean(),
   executor: todoExecutorSchema.nullable(), repo: todoRepoSchema.nullable(), mode: todoModeSchema.nullable(),
-  blocked: z.string().max(TODO_LIMITS.blocked).nullable(),
   links: z.array(filaCezarLinkSchema).max(TODO_LIMITS.links).refine(links => new Set(links.map(l => `${l.kind}:${l.id}`)).size === links.length, 'Duplicate link'),
 });
 export type FilaCezar = z.infer<typeof filaCezarSchema>;
-export const emptyFilaCezar = (): FilaCezar => ({ enabled: false, executor: null, repo: null, mode: null, blocked: null, links: [] });
+export const emptyFilaCezar = (): FilaCezar => ({ enabled: false, executor: null, repo: null, mode: null, links: [] });
+
+/**
+ * One entry of a thread's „Zablokowane” (2.3a, D-104): the field belongs to the thread, not to Cezar, and only informs.
+ * A thread is blocked while it has an entry. `origin` says where the entry came from: written by hand (the user or an AI;
+ * also the old `cezar.blocked` text, converted once with the author `panel`); stage 2.3b adds entries made from a task.
+ */
+const blockerId = z.string().regex(/^k-[0-9a-f]{8}$/);
+const blockerReason = z.string().trim().min(1).max(FILA_LIMITS.blockerReason);
+export const filaBlockerSchema = z.object({
+  id: blockerId, reason: blockerReason,
+  origin: z.discriminatedUnion('kind', [z.object({ kind: z.literal('ręczne') }).strict()]),
+  at: z.number().finite(), by: z.enum([...filaActorSchema.options, 'panel']),
+});
+export type FilaBlocker = z.infer<typeof filaBlockerSchema>;
 
 /** Stage 2.1: the states a thread may be dispatched to Cezar from (D-039), as workflow id + state name. Only the AI edits the list. */
 export const FILA_READY_STATES_MAX = 20;
@@ -121,6 +135,8 @@ export const filaThreadSchema = z.object({
   spec: z.object({ enabled: z.boolean(), revisions: z.array(filaSpecRevisionSchema) }).optional(),
   /** The Cezar kit; absent = not added. */
   cezar: filaCezarSchema.optional(),
+  /** „Zablokowane”: the thread's blocks, oldest first; any thread may have them, with or without the Cezar kit. */
+  blockers: z.array(filaBlockerSchema).max(FILA_LIMITS.blockers).refine(list => new Set(list.map(b => b.id)).size === list.length, 'Duplicate blocker').default([]),
   archived: z.boolean(),
   revision: z.number().int().min(1),
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
@@ -234,11 +250,12 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('setCezar'), thread: threadId, expectedRevision: z.number().int().min(1).optional(),
     executor: todoExecutorSchema.nullable().optional(), repo: todoRepoSchema.nullable().optional(), mode: todoModeSchema.nullable().optional(),
-    blocked: z.string().trim().max(TODO_LIMITS.blocked).nullable().optional(),
-  }).strict().refine(a => ['executor', 'repo', 'mode', 'blocked'].some(key => (a as Record<string, unknown>)[key] !== undefined), { message: 'Nothing to change' }),
+  }).strict().refine(a => ['executor', 'repo', 'mode'].some(key => (a as Record<string, unknown>)[key] !== undefined), { message: 'Nothing to change' }),
   z.object({ action: z.literal('linkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId, title: z.string().trim().min(1).max(200).optional() }).strict()
     .refine(validPrUrl, { message: 'Invalid GitHub pull request URL' }),
   z.object({ action: z.literal('unlinkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId }).strict(),
+  z.object({ action: z.literal('addBlocker'), thread: threadId, reason: blockerReason, expectedRevision: z.number().int().min(1).optional() }).strict(),
+  z.object({ action: z.literal('removeBlocker'), thread: threadId, blocker: blockerId, expectedRevision: z.number().int().min(1).optional() }).strict(),
   z.object({ action: z.literal('comment'), thread: threadId, text: z.string().trim().min(1).max(FILA_LIMITS.comment) }).strict(),
   z.object({ action: z.literal('archiveThread'), thread: threadId }).strict(),
   z.object({ action: z.literal('restoreThread'), thread: threadId }).strict(),
@@ -251,4 +268,4 @@ const boardActionNames = new Set<string>(filaBoardActions.map(schema => schema.s
 export const isFilaBoardAction = (action: FilaAction): action is FilaBoardAction => boardActionNames.has(action.action);
 
 /** What an action answers: the ids it made or touched. */
-export interface FilaResult { ok: true; board?: string; view?: string; section?: string; column?: string; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; specRevision?: number; removed?: number }
+export interface FilaResult { ok: true; board?: string; view?: string; section?: string; column?: string; project?: string; workflow?: string; thread?: { id: string; revision: number; previousId?: string }; specRevision?: number; /** The id of the entry `addBlocker` made. */ blocker?: string; removed?: number }

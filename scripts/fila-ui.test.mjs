@@ -527,11 +527,19 @@ URL: ${page?.url()}`);
     await expect.poll(() => gaps.locator('li').count()).toBeLessThan(before);
     await cezarPanel().getByLabel('Powód blokady').fill('Czeka na decyzję');
     await cezarPanel().getByRole('button', { name: 'Zablokuj' }).click();
-    await cezarPanel().getByText('Blokada: Czeka na decyzję').waitFor();
-    expect((await thread('DESK-6')).cezar.blocked).toBe('Czeka na decyzję');
-    await cezarPanel().getByRole('button', { name: 'Zdejmij blokadę' }).click();
-    await cezarPanel().getByLabel('Powód blokady').waitFor();
-    expect((await thread('DESK-6')).cezar.blocked).toBe(null);
+    // „Zablokowane” (2.3a): the thread's own list, kept in this panel for now; each entry has its „Zdejmij”.
+    const blocks = cezarPanel().getByRole('list', { name: 'Zablokowane' });
+    await blocks.getByText('Zablokowane: Czeka na decyzję').waitFor();
+    expect((await thread('DESK-6')).blockers.map(b => [b.reason, b.origin.kind, b.by])).toEqual([['Czeka na decyzję', 'ręczne', 'user']]);
+    await cezarPanel().getByLabel('Powód blokady').fill('Druga blokada');
+    await cezarPanel().getByRole('button', { name: 'Zablokuj' }).click();
+    await blocks.getByText('Zablokowane: Druga blokada').waitFor();
+    await blocks.getByRole('listitem').filter({ hasText: 'Czeka na decyzję' }).getByRole('button', { name: 'Zdejmij' }).click();
+    await expect.poll(async () => (await thread('DESK-6')).blockers.map(b => b.reason)).toEqual(['Druga blokada']);
+    await blocks.getByText('Zablokowane: Czeka na decyzję').waitFor({ state: 'detached' });
+    await blocks.getByRole('button', { name: 'Zdejmij' }).click();
+    await blocks.waitFor({ state: 'detached' });
+    expect((await thread('DESK-6')).blockers).toEqual([]);
   });
 
   it('shows the task and the PR of a thread as links, not as fields', async () => {
@@ -565,7 +573,7 @@ URL: ${page?.url()}`);
     // Nothing happens by itself and a repeat is refused: the thread is no longer ready, and the server says so too.
     await cezarPanel().getByRole('list', { name: 'Braki gotowości' }).waitFor();
     expect(await cezarPanel().getByRole('button', { name: /Zleć Cezarowi/ }).count()).toBe(0);
-    const again = await asUser('api/fila/threads/DESK-7/cezar-dispatch', { expected: { specRevision: 1, title: sent.title, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'W realizacji', blocked: null } });
+    const again = await asUser('api/fila/threads/DESK-7/cezar-dispatch', { expected: { specRevision: 1, title: sent.title, executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'W realizacji' } });
     expect(again.status).toBe(409);
     expect((await (await fetch(new URL('api/fila/threads/DESK-7/cezar-dispatch/register', fila.url), close)).json()).dispatches).toHaveLength(1);
   });
@@ -589,7 +597,7 @@ URL: ${page?.url()}`);
     await cezarPanel().getByText(/zmieniły się od podglądu/).waitFor({ state: 'detached' });
     expect(await send.isDisabled()).toBe(false);
     // The server compares with the preview too: a request made from the old one is refused, nothing is sent.
-    const stale = await asUser(`api/fila/threads/${id}/cezar-dispatch`, { expected: { specRevision: 1, title: 'Eksport zadań do CSV', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'Gotowe do realizacji', blocked: null } });
+    const stale = await asUser(`api/fila/threads/${id}/cezar-dispatch`, { expected: { specRevision: 1, title: 'Eksport zadań do CSV', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'Gotowe do realizacji' } });
     expect(stale.status).toBe(409);
     expect((await (await fetch(new URL(`api/fila/threads/${id}/cezar-dispatch/register`, fila.url), close)).json()).dispatches).toEqual([]);
     await send.focus();

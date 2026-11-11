@@ -12,6 +12,8 @@ export type FilaQueryValue = string | number | boolean;
 export type FilaCondition =
   | { kind: 'type' | 'state' | 'module' | 'tag'; any: string[] }
   | { kind: 'closed'; value: boolean }
+  /** „Zablokowane” (2.3a): the thread has an entry on its list of blocks, or has none. */
+  | { kind: 'blocked'; value: boolean }
   | { kind: 'parent'; is: 'none' | 'any' | string }
   | { kind: 'field'; name: string; test: 'exists' | 'missing' | 'eq'; value?: FilaQueryValue };
 export interface FilaSortKey { key: 'state' | 'title' | 'id'; desc: boolean }
@@ -141,6 +143,11 @@ export function parseFilaQuery(text: string, kind: FilaQueryKind): FilaQuery {
         query.conditions.push({ kind: 'closed', value: name === 'zamkniete' });
         return;
       }
+      case 'zablokowane': case 'niezablokowane': {
+        once('zablokowane/niezablokowane');
+        query.conditions.push({ kind: 'blocked', value: name === 'zablokowane' });
+        return;
+      }
       case 'rodzic': {
         once('rodzic');
         const token = next('wartości po rodzic');
@@ -182,10 +189,10 @@ export function parseFilaQuery(text: string, kind: FilaQueryKind): FilaQuery {
         query.conditions.push({ kind: 'field', name: field.v, test: 'eq', value: typed });
         return;
       }
-      case 'kiedy': case 'termin': case 'data': case 'zablokowane': fail(UNSUPPORTED_DATES);
+      case 'kiedy': case 'termin': case 'data': fail(UNSUPPORTED_DATES);
       // fallthrough is impossible: fail throws
       default:
-        fail(`Nieznany filtr „${head.v}”. Dostępne: projekt, typ, stan, moduł, tag, pole("…"), otwarte, zamknięte, rodzic, archiwum, SORTUJ.`);
+        fail(`Nieznany filtr „${head.v}”. Dostępne: projekt, typ, stan, moduł, tag, pole("…"), otwarte, zamknięte, zablokowane, niezablokowane, rodzic, archiwum, SORTUJ.`);
     }
   };
 
@@ -244,6 +251,7 @@ export function formatFilaQuery(query: FilaQuery): string {
       case 'module': parts.push(choiceText('moduł', c.any, quote)); break;
       case 'tag': parts.push(choiceText('tag', c.any, quote)); break;
       case 'closed': parts.push(c.value ? 'zamknięte' : 'otwarte'); break;
+      case 'blocked': parts.push(c.value ? 'zablokowane' : 'niezablokowane'); break;
       case 'parent': parts.push(c.is === 'none' ? 'rodzic brak' : c.is === 'any' ? 'rodzic istnieje' : `rodzic = ${c.is}`); break;
       case 'field': parts.push(`pole(${quote(c.name)}) ${c.test === 'exists' ? 'istnieje' : c.test === 'missing' ? 'brak' : `= ${literal(c.value!)}`}`); break;
     }

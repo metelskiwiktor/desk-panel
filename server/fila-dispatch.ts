@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { filaDispatchExpected, filaDispatchKey, filaDispatchMatches, filaTaskTitle, getFilaDispatch } from '../src/fila-dispatch';
-import { TODO_LIMITS, TODO_STATUSES, todoExecutorSchema, todoModeSchema, todoRepoSchema } from '../src/todo-contract';
+import { TODO_STATUSES, todoExecutorSchema, todoModeSchema, todoRepoSchema } from '../src/todo-contract';
 import { FILA_LIMITS } from '../src/fila-contract';
 import type { Cockpit } from './cockpit';
 import { filaCezarTasks } from './fila-cezar-tasks';
@@ -16,7 +16,6 @@ const requestSchema = z.object({
     title: z.string().max(FILA_LIMITS.title),
     executor: todoExecutorSchema.nullable(), repo: todoRepoSchema.nullable(), mode: todoModeSchema.nullable(),
     state: z.string().max(FILA_LIMITS.state),
-    blocked: z.string().max(TODO_LIMITS.blocked).nullable(),
   }).strict(),
 }).strict();
 

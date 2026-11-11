@@ -285,7 +285,8 @@
 .fl-cezar dd { margin: 0; }
 .fl-block-form { display: flex; gap: 6px; margin-top: 8px; }
 .fl-block-form input { flex: 1; min-width: 0; min-height: 30px; padding: 3px 8px; border: 1px solid var(--p2-line); border-radius: 7px; background: var(--fl-panel); color: var(--p2-text); font-size: 13px; }
-.fl-blocked { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--quota-yellow); font-size: 12.5px; }
+.fl-blocked { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--quota-yellow); font-size: 12.5px; }
+.fl-blocked li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fl-links { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
 .fl-links li { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--p2-muted); }
 .fl-link { color: var(--fl-accent) !important; text-decoration: none; }

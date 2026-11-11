@@ -5,7 +5,7 @@ import { FilaError } from './fila-error';
 const lower = (s: string) => s.toLocaleLowerCase('pl');
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
 /** Not available in stage 1: dates, deadlines (Q-016) and the properties of later stages. */
-const later = new Set(['kiedy', 'termin', 'zablokowane', 'implementacja cezara', 'specyfikacja']);
+const later = new Set(['kiedy', 'termin', 'implementacja cezara', 'specyfikacja']);
 
 const kindName: Record<FilaFieldKind, string> = { text: 'tekst', number: 'liczba', date: 'data', bool: 'tak/nie', multi: 'wiele wartości' };
 
@@ -18,6 +18,7 @@ function bind(query: FilaQuery, data: FilaData, kind: FilaQueryKind): FilaQuery 
   const conditions = query.conditions.map((c): FilaCondition => {
     if (c.kind !== 'field') return c;
     const key = lower(c.name);
+    if (key === 'zablokowane') throw new FilaQueryError('„Zablokowane” nie jest polem własnym: użyj filtru zablokowane albo niezablokowane.');
     if (later.has(key)) throw new FilaQueryError(`„${c.name}” nie jest dostępne w zapytaniach w etapie 1.`);
     if (reserved.has(key)) throw new FilaQueryError(`„${c.name}” nie jest polem własnym: użyj filtrów stan, moduł, rodzic albo typ.`);
     const def = data.fieldDefs.find(d => lower(d.name) === key);
@@ -67,6 +68,7 @@ export function selectFilaThreads(data: FilaData, query: FilaQuery): FilaThread[
       case 'module': return t.module !== null && c.any.some(v => lower(v) === lower(t.module!));
       case 'tag': { const tags = t.fields['Tagi']; return Array.isArray(tags) && tags.some(tag => c.any.some(v => lower(v) === lower(tag))); }
       case 'closed': return closing(t) === c.value;
+      case 'blocked': return (t.blockers.length > 0) === c.value;
       case 'parent': {
         const parent = t.parent ? uids.get(t.parent) : undefined;
         return c.is === 'none' ? !t.parent : c.is === 'any' ? !!t.parent : !!parent && idOf(parent) === c.is;

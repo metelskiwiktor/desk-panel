@@ -22,21 +22,21 @@ export function getFilaDispatch(thread: FilaDispatchThread, specText: string | n
   });
 }
 
-/** The fields a dispatch may rely on: what the user saw in the preview (the to-do's seven, `state` instead of `status`). */
+/** The fields a dispatch may rely on: what the user saw in the preview. „Zablokowane” is not among them (2.3a): it only informs, so a block added or taken off does not void the preview. */
 export interface FilaDispatchExpected {
   specRevision: number; title: string;
   executor: FilaCezar['executor']; repo: FilaCezar['repo']; mode: FilaCezar['mode'];
-  state: string; blocked: string | null;
+  state: string;
 }
 export const filaDispatchExpected = (thread: FilaDispatchThread): FilaDispatchExpected => ({
   specRevision: thread.spec.revision, title: thread.title,
   executor: thread.cezar.executor, repo: thread.cezar.repo, mode: thread.cezar.mode,
-  state: thread.state, blocked: thread.cezar.blocked ?? null,
+  state: thread.state,
 });
 export const filaDispatchMatches = (thread: FilaDispatchThread, expected: FilaDispatchExpected): boolean => {
   const now = filaDispatchExpected(thread);
   return now.specRevision === expected.specRevision && now.title === expected.title && now.executor === expected.executor
-    && now.repo === expected.repo && now.mode === expected.mode && now.state === expected.state && now.blocked === expected.blocked;
+    && now.repo === expected.repo && now.mode === expected.mode && now.state === expected.state;
 };
 
 /** The register key: the thread's permanent uid (so a move cannot dodge the block), the revision and the mode. */

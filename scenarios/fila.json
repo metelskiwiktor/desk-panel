@@ -2357,7 +2357,6 @@
           "executor": null,
           "repo": null,
           "mode": null,
-          "blocked": null,
           "links": []
         }
       },
@@ -2461,7 +2460,6 @@
           "executor": "cezar",
           "repo": "desk-panel",
           "mode": "implementacja",
-          "blocked": null,
           "links": []
         }
       },
@@ -2601,7 +2599,6 @@
           "executor": "cezar",
           "repo": "desk-panel",
           "mode": "implementacja",
-          "blocked": null,
           "links": [
             {
               "kind": "cezar",
@@ -3180,7 +3177,6 @@
           "executor": "cezar",
           "repo": "desk-panel",
           "mode": "implementacja",
-          "blocked": null,
           "links": []
         }
       }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { filaDataSchema, filaThreadSchema, filaTypeSchema, type FilaData, type FilaThread } from '../src/fila-contract';
 import { TODO_STATUSES, todoDataSchema, type TodoTask } from '../src/todo-contract';
 import { parseWorkspace } from '../src/tile-grid';
-import { defaultFilaData } from './fila';
+import { defaultFilaData, legacyBlockerId } from './fila';
 import { seedStarterBoards } from './fila-boards';
 import { compileFilaQuery, selectFilaThreads } from './fila-query';
 import { migrateCockpitCopy } from './cockpit';
@@ -107,14 +107,16 @@ export function previewMigration(rawInput: unknown, rawPlan: unknown) {
         ...(h.kind === 'status' ? { changes: [{ field: 'Stan', from: h.from ? TODO_STATUSES[h.from] : null, to: h.to ? TODO_STATUSES[h.to] : null }] } : {}),
       })),
     ];
+    const updatedAt = Math.max(todo.createdAt, todo.completedAt ?? 0, ...todo.history.map(h => h.at), ...revisions.map(r => r.at), ...todo.links.map(l => l.at));
     data.threads.push({
       uid: row.uid, project: row.project, number, type: row.type, workflow: 'w-praca', state: TODO_STATUSES[todo.status],
       title: todo.title, description: todo.note, parent: null, module: row.module,
       fields: { Tagi: [], ...row.fields, 'Dawne ID': [todo.id], 'Dawna lista': list.id },
       spec: { enabled: true, revisions: revisions.map(r => ({ number: r.revision, text: r.spec, by: actor(r.by), at: r.at })) },
-      cezar: { enabled: true, executor: todo.executor, repo: todo.repo, mode: todo.mode, blocked: todo.blocked, links: todo.links.filter(l => l.kind !== 'chat') as NonNullable<FilaThread['cezar']>['links'] },
-      archived: false, revision: 1, createdAt: todo.createdAt,
-      updatedAt: Math.max(todo.createdAt, todo.completedAt ?? 0, ...todo.history.map(h => h.at), ...revisions.map(r => r.at), ...todo.links.map(l => l.at)),
+      cezar: { enabled: true, executor: todo.executor, repo: todo.repo, mode: todo.mode, links: todo.links.filter(l => l.kind !== 'chat') as NonNullable<FilaThread['cezar']>['links'] },
+      // The to-do's manual block is the thread's „Zablokowane” (2.3a): the entry a loaded `cezar.blocked` would become, written here already.
+      blockers: todo.blocked?.trim() ? [{ id: legacyBlockerId(row.uid), reason: todo.blocked.trim(), origin: { kind: 'ręczne' as const }, at: updatedAt, by: 'panel' as const }] : [],
+      archived: false, revision: 1, createdAt: todo.createdAt, updatedAt,
       history, migratedTodo: { list: list.id, listName: list.name, original: structuredClone(todo) },
     });
   }
@@ -141,7 +143,7 @@ export function previewMigration(rawInput: unknown, rawPlan: unknown) {
       author: t.history[0].by === actor(todo.by),
       history: t.history.length === todo.history.length + 1 && todo.history.every((h, i) => t.history[i + 1].at === h.at && t.history[i + 1].by === actor(h.by) && t.history[i + 1].text === h.text),
       revisions: todo.specRevisions.every(r => t.spec!.revisions.some(s => s.number === r.revision && s.text === r.spec && s.by === actor(r.by) && s.at === r.at)),
-      execution: t.cezar!.executor === todo.executor && t.cezar!.repo === todo.repo && t.cezar!.mode === todo.mode && t.cezar!.blocked === todo.blocked,
+      execution: t.cezar!.executor === todo.executor && t.cezar!.repo === todo.repo && t.cezar!.mode === todo.mode && (t.blockers[0]?.reason ?? null) === (todo.blocked?.trim() || null),
       links: migrationHash(t.cezar!.links) === migrationHash(todo.links.filter(l => l.kind !== 'chat')),
     };
     return { oldId: todo.id, ...mapping[todo.id], project: t.project, type: t.type, state: t.state, module: t.module, fields: t.fields, checks, ok: Object.values(checks).every(Boolean) };

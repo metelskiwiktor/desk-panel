@@ -22,7 +22,7 @@ const PR = 'https://github.com/metelskiwiktor/desk-panel/pull/12';
 describe('the Cezar kit of a thread', () => {
   it('is added to any type, holds executor, repo and mode with the vocabulary of the lists, and is empty until added', async () => {
     const store = await seeded();
-    expect((await store.thread('DESK-1')).cezar).toEqual({ enabled: false, executor: null, repo: null, mode: null, blocked: null, links: [] });
+    expect((await store.thread('DESK-1')).cezar).toEqual({ enabled: false, executor: null, repo: null, mode: null, links: [] });
     await refused(act(store, { action: 'setCezar', thread: 'DESK-1', executor: 'cezar' }), 409, /addCezarKit/);
     await act(store, { action: 'addCezarKit', thread: 'DESK-1' }, 'user');
     await act(store, { action: 'setCezar', thread: 'DESK-1', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja' }, 'user');
@@ -46,9 +46,10 @@ describe('the Cezar kit of a thread', () => {
     expect((await store.thread('DESK-1')).revision).toBe(revision + 1);
     await refused(act(store, { action: 'setCezar', thread: 'DESK-1', mode: 'analiza', expectedRevision: revision }), 409);
     expect((await store.thread('DESK-1')).cezar.mode).toBeNull();
-    await act(store, { action: 'setCezar', thread: 'DESK-1', blocked: 'Czekam na decyzję' });
-    await act(store, { action: 'setCezar', thread: 'DESK-1', blocked: '  ' });
-    expect((await store.thread('DESK-1')).cezar.blocked).toBeNull();
+    // The manual block left the kit (2.3a): it is the thread's „Zablokowane” now.
+    await refused(act(store, { action: 'setCezar', thread: 'DESK-1', blocked: 'Czekam na decyzję' } as never), 400);
+    await refused(act(store, { action: 'setCezar', thread: 'DESK-1', executor: 'lokalnie', blocked: null } as never), 400);
+    expect((await store.thread('DESK-1')).cezar).not.toHaveProperty('blocked');
   });
 
   it('keeps task and PR links unique by kind and id, limited to 20, validates the PR URL, and a repeat changes nothing', async () => {

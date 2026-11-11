@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FilaAction, FilaActor } from '../src/fila-contract';
-import { createFilaStore, FilaError, type FilaStore } from './fila';
+import { createFilaStore, FilaError, legacyBlockerId, type FilaStore } from './fila';
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -57,7 +57,7 @@ describe('stage 2.1: Implementacja Cezara, the kit settings and tags at creation
     for (const [id, parent] of [['DESK-2', 'DESK-1'], ['DESK-3', null]] as const) {
       const t = await store.thread(id);
       expect(t).toMatchObject({ type: { key: 'implementacja-cezara', label: 'Implementacja Cezara' }, parent, workflow: { id: 'w-praca', name: 'Praca' }, state: 'Pomysł', spec: { enabled: true, revision: 0 }, fields: { Tagi: [] } });
-      expect(t.cezar).toEqual({ enabled: true, executor: null, repo: null, mode: null, blocked: null, links: [] });
+      expect(t.cezar).toEqual({ enabled: true, executor: null, repo: null, mode: null, links: [] });
       expect((await store.spec(id)).text).toBeNull();
     }
     // The other types still start without the kit.
@@ -95,6 +95,119 @@ describe('stage 2.1: Implementacja Cezara, the kit settings and tags at creation
     expect((await store.query('projekt = DESK AND tag = "fila"')).threads.map(t => t.id)).toEqual(['DESK-1']);
     await refused(act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'x', tags: [''] }), 400);
     await refused(act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'x', tags: 'retro' as never }), 400);
+  });
+});
+
+describe('stage 2.3a: the field Zablokowane', () => {
+  it('lets the user and the AI add and take off entries on any thread, with history and a revision; refuses a long reason, a 21st entry, an unknown id, a stale revision and the panel', async () => {
+    let clock = 1000;
+    const store = await seeded(createFilaStore({ now: () => clock++ }));
+    await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Bez zestawu' });
+    expect((await store.thread('DESK-1')).blockers).toEqual([]);
+    const first = await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: '  Czekam na decyzję  ' }, 'user');
+    const second = await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Brak danych', expectedRevision: 2 }, 'codex');
+    expect(first.blocker).toMatch(/^k-[0-9a-f]{8}$/);
+    expect(second).toMatchObject({ thread: { id: 'DESK-1', revision: 3 } });
+    let t = await store.thread('DESK-1');
+    expect(t.cezar.enabled).toBe(false);
+    expect(t.blockers).toEqual([
+      { id: first.blocker, reason: 'Czekam na decyzję', origin: { kind: 'ręczne' }, at: expect.any(Number), by: 'user' },
+      { id: second.blocker, reason: 'Brak danych', origin: { kind: 'ręczne' }, at: expect.any(Number), by: 'codex' },
+    ]);
+    expect(t.history.slice(-2)).toMatchObject([
+      { by: 'user', kind: 'changed', changes: [{ field: 'Zablokowane', from: null, to: 'Czekam na decyzję' }] },
+      { by: 'codex', kind: 'changed', changes: [{ field: 'Zablokowane', from: null, to: 'Brak danych' }] },
+    ]);
+    // Either of them takes off any entry, also the other's.
+    await act(store, { action: 'removeBlocker', thread: 'DESK-1', blocker: first.blocker! }, 'claude-code');
+    await act(store, { action: 'removeBlocker', thread: 'DESK-1', blocker: second.blocker! }, 'user');
+    t = await store.thread('DESK-1');
+    expect(t.blockers).toEqual([]);
+    expect(t.revision).toBe(5);
+    expect(t.history.at(-1)).toMatchObject({ by: 'user', changes: [{ field: 'Zablokowane', from: 'Brak danych', to: null }] });
+
+    await refused(act(store, { action: 'removeBlocker', thread: 'DESK-1', blocker: first.blocker! }), 404);
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x'.repeat(301) }), 400);
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: '   ' }), 400);
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x', expectedRevision: 1 }), 409);
+    await refused(store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'x' }, 'panel'), 403);
+    await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x'.repeat(300) });
+    for (let i = 0; i < 19; i += 1) await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Ten sam powód' });
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Dwudziesty pierwszy' }), 409, /najwyżej 20/);
+    const full = (await store.thread('DESK-1')).blockers;
+    expect(full).toHaveLength(20);
+    expect(new Set(full.map(b => b.id)).size).toBe(20);
+    expect((await store.thread('DESK-1')).revision).toBe(25);
+  });
+
+  it('answers the queries zablokowane and niezablokowane (without either: both), also in a board column, and still refuses pole("Zablokowane")', async () => {
+    const store = await seeded();
+    for (const title of ['Stoi', 'Idzie', 'Stoi w archiwum']) await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title });
+    await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Czeka' });
+    const added = await act(store, { action: 'addBlocker', thread: 'DESK-2', reason: 'Chwilowo' });
+    await act(store, { action: 'removeBlocker', thread: 'DESK-2', blocker: added.blocker! });
+    await act(store, { action: 'addBlocker', thread: 'DESK-3', reason: 'Czeka' });
+    await act(store, { action: 'archiveThread', thread: 'DESK-3' });
+    const ids = async (q: string) => (await store.query(q)).threads.map(t => t.id);
+    expect(await ids('projekt = DESK AND Zablokowane')).toEqual(['DESK-1']);
+    expect(await ids('projekt = DESK AND niezablokowane')).toEqual(['DESK-2']);
+    expect(await ids('projekt = DESK')).toEqual(['DESK-1', 'DESK-2']);
+    expect(await ids('projekt = DESK AND zablokowane AND archiwum = włącz')).toEqual(['DESK-1', 'DESK-3']);
+    expect((await store.check('projekt = DESK AND otwarte AND ZABLOKOWANE', 'section')).text).toBe('projekt = DESK AND otwarte AND zablokowane');
+    expect((await store.check('niezablokowane', 'column')).text).toBe('niezablokowane');
+    await refused(store.check('projekt = DESK AND zablokowane AND niezablokowane', 'section'), 400, /tylko raz/);
+    await refused(store.check('projekt = DESK AND pole("Zablokowane") istnieje', 'section'), 400, /zablokowane albo niezablokowane/);
+    const board = await act(store, { action: 'createBoard', name: 'Blokady', section: { name: 'Kanban', kind: 'kanban', query: 'projekt = DESK', columns: [{ name: 'Stoją', query: 'zablokowane' }, { name: 'Idą', query: 'niezablokowane' }] } });
+    const view = await store.boardView(board.board!, board.view!);
+    expect(view.sections[0]!.columns.map(c => c.threads.map(t => t.id))).toEqual([['DESK-1'], ['DESK-2']]);
+  });
+
+  it('turns a stored cezar.blocked into one hand-written entry with the same id at every load, without touching revision or history; a read-only store leaves the file alone', async () => {
+    const dir = tmp();
+    const file = join(dir, 'fila.json');
+    const made = await seeded(createFilaStore({ file, now: () => 5000 }));
+    await act(made, { action: 'createThread', project: 'DESK', type: 'funkcja', title: 'Z zestawem' });
+    await act(made, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Zestaw wyłączony' });
+    await act(made, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Bez blokady' });
+    await act(made, { action: 'addCezarKit', thread: 'DESK-1' });
+    // What 1.4a wrote: the block is a text inside the kit, also on a thread whose kit was switched off later, and null elsewhere.
+    const old = JSON.parse(readFileSync(file, 'utf8'));
+    for (const t of old.data.threads) delete t.blockers;
+    old.data.threads[0].cezar.blocked = 'Czekam na decyzję';
+    old.data.threads[1].cezar = { enabled: false, executor: null, repo: null, mode: null, blocked: ' Stara blokada ', links: [] };
+    old.data.threads[2].cezar = { enabled: true, executor: null, repo: null, mode: null, blocked: null, links: [] };
+    const legacy = JSON.stringify(old);
+    const before = old.data.threads.map((t: { revision: number; history: unknown; updatedAt: number }) => ({ revision: t.revision, history: t.history, updatedAt: t.updatedAt }));
+
+    // Locked: the conversion is in memory only.
+    writeFileSync(file, legacy);
+    const locked = createFilaStore({ file, readOnly: true });
+    const uid = (await locked.thread('DESK-1')).uid;
+    const entry = { id: legacyBlockerId(uid), reason: 'Czekam na decyzję', origin: { kind: 'ręczne' }, at: 5000, by: 'panel' };
+    expect((await locked.thread('DESK-1')).blockers).toEqual([entry]);
+    expect(readFileSync(file, 'utf8')).toBe(legacy);
+
+    // The service: converted and written once; every later load reads the same entry and writes nothing.
+    const first = createFilaStore({ file });
+    expect((await first.thread('DESK-1')).blockers).toEqual([entry]);
+    expect((await first.thread('DESK-2')).blockers).toMatchObject([{ reason: 'Stara blokada', by: 'panel', origin: { kind: 'ręczne' } }]);
+    expect((await first.thread('DESK-2')).cezar.enabled).toBe(false);
+    expect((await first.thread('DESK-3')).blockers).toEqual([]);
+    for (const [i, id] of ['DESK-1', 'DESK-2', 'DESK-3'].entries()) {
+      const t = await first.thread(id);
+      expect({ revision: t.revision, history: t.history, updatedAt: t.updatedAt }).toEqual(before[i]);
+    }
+    expect((await first.query('projekt = DESK AND zablokowane')).threads.map(t => t.id)).toEqual(['DESK-1', 'DESK-2']);
+    await first.drain();
+    const written = readFileSync(file, 'utf8');
+    expect(written).not.toBe(legacy);
+    expect(written).not.toContain('"blocked"');
+    const again = createFilaStore({ file });
+    expect((await again.thread('DESK-1')).blockers).toEqual([entry]);
+    expect(readFileSync(file, 'utf8')).toBe(written);
+    // The entry is an ordinary one: the user takes it off, and it does not come back.
+    await act(again, { action: 'removeBlocker', thread: 'DESK-1', blocker: entry.id }, 'user');
+    expect((await createFilaStore({ file }).thread('DESK-1')).blockers).toEqual([]);
   });
 });
 

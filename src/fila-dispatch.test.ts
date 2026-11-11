@@ -7,12 +7,12 @@ import { getTodoDispatch } from './todo-dispatch';
 const SPEC = ['CEL:', 'Cel.', '', 'ZAKRES:', '- Zmiana.', '', 'POZA ZAKRESEM:', '- Nic.', '', 'WARUNKI ODBIORU:', '1. Test.'].join('\n');
 
 /** A to-do and a thread that say the same thing; `status` is the to-do's key, the thread gets the label of the workflow Praca. */
-function pair(over: { status?: keyof typeof TODO_STATUSES; blocked?: string | null; executor?: TodoTask['executor']; repo?: TodoTask['repo']; mode?: TodoTask['mode']; spec?: string; revision?: number } = {}) {
-  const { status = 'gotowe', blocked = null, executor = 'cezar', repo = 'desk-panel', mode = 'implementacja', spec = SPEC, revision = 2 } = over;
-  const todo = { id: 't-00000001', title: 'Zadanie', status, blocked, executor, repo, mode, spec, specRevision: revision } as TodoTask;
+function pair(over: { status?: keyof typeof TODO_STATUSES; executor?: TodoTask['executor']; repo?: TodoTask['repo']; mode?: TodoTask['mode']; spec?: string; revision?: number } = {}) {
+  const { status = 'gotowe', executor = 'cezar', repo = 'desk-panel', mode = 'implementacja', spec = SPEC, revision = 2 } = over;
+  const todo = { id: 't-00000001', title: 'Zadanie', status, blocked: null, executor, repo, mode, spec, specRevision: revision } as TodoTask;
   const thread: FilaDispatchThread = {
     id: 'DESK-7', uid: 'f-00000007', title: 'Zadanie', state: TODO_STATUSES[status], workflow: { id: FILA_DEFAULT_WORKFLOW },
-    spec: { enabled: true, revision }, cezar: { ...emptyFilaCezar(), enabled: true, executor, repo, mode, blocked },
+    spec: { enabled: true, revision }, cezar: { ...emptyFilaCezar(), enabled: true, executor, repo, mode },
   };
   return { todo, thread, spec };
 }
@@ -51,12 +51,16 @@ describe('C1 on a thread equals C1 on a to-do', () => {
     expect(getFilaDispatch({ ...thread, spec: { enabled: false, revision: 2 } }, spec).missing).toContain('Brak specyfikacji.');
   });
 
-  it('blokada nie wpływa na gotowość wątku (D-105), choć lista zadań nadal ją sprawdza', () => {
-    const { todo, thread, spec } = pair({ blocked: 'Czekam' });
-    expect(getTodoDispatch(todo).missing).toEqual(['Zadanie ma aktywną blokadę: Czekam.']);
-    const ready = getFilaDispatch(thread, spec);
+  it('blokada nie wpływa na gotowość wątku (D-105): C1 w ogóle nie czyta „Zablokowane”, choć lista zadań nadal sprawdza swoją blokadę', () => {
+    const { todo, thread, spec } = pair();
+    expect(getTodoDispatch({ ...todo, blocked: 'Czekam' }).missing).toEqual(['Zadanie ma aktywną blokadę: Czekam.']);
+    const blocked = { ...thread, blockers: [{ id: 'k-00000001', reason: 'Czekam', origin: { kind: 'ręczne' }, at: 1, by: 'user' }] };
+    const ready = getFilaDispatch(blocked, spec);
     expect(ready.missing).toEqual([]);
     expect(ready.prompt).toContain('Zadanie: DESK-7');
+    // The preview is not voided by a block either: `expected` has no such field any more.
+    expect(filaDispatchExpected(blocked)).toEqual({ specRevision: 2, title: 'Zadanie', executor: 'cezar', repo: 'desk-panel', mode: 'implementacja', state: 'Gotowe do realizacji' });
+    expect(filaDispatchMatches(blocked, filaDispatchExpected(thread))).toBe(true);
   });
 });
 
@@ -67,7 +71,7 @@ describe('the preview state of a thread', () => {
     expect(filaDispatchMatches(thread, expected)).toBe(true);
     for (const changed of [
       { ...thread, title: 'Inny' }, { ...thread, state: 'Pomysł' }, { ...thread, spec: { enabled: true, revision: 3 } },
-      { ...thread, cezar: { ...thread.cezar, mode: 'analiza' as const } }, { ...thread, cezar: { ...thread.cezar, blocked: 'x' } },
+      { ...thread, cezar: { ...thread.cezar, mode: 'analiza' as const } },
       { ...thread, cezar: { ...thread.cezar, executor: 'lokalnie' as const } },
     ]) expect(filaDispatchMatches(changed, expected)).toBe(false);
     expect(filaDispatchMatches({ ...thread, id: 'CEZR-1' }, expected)).toBe(true);
