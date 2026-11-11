@@ -31,7 +31,7 @@ describe('specifications and their revisions', () => {
     let clock = 1000;
     const store = await seeded(createFilaStore({ now: () => clock++ }));
     for (const type of ['funkcja', 'blad', 'sprawa'] as const) await act(store, { action: 'createThread', project: 'DESK', type, title: type });
-    expect((await store.registries()).types.map(t => t.spec)).toEqual([false, true, true, false, false]);
+    expect((await store.registries()).types.map(t => t.spec)).toEqual([false, true, true, false, false, true]);
     expect((await store.thread('DESK-3')).spec).toEqual({ enabled: false, revision: 0 });
     await refused(spec(store, 'DESK-3', 'x', 0), 409, /addSpecField/);
     await refused(store.spec('DESK-3'), 404);

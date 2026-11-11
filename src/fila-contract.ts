@@ -20,11 +20,13 @@ export type FilaActor = z.infer<typeof filaActorSchema>;
 /** Types are templates in code (D-025): the base fields and the default workflow. Nothing here can be edited. */
 export const FILA_DEFAULT_WORKFLOW = 'w-praca';
 export const FILA_TYPES = {
-  sprawa: { label: 'Sprawa', fields: ['Tagi'], spec: false },
-  funkcja: { label: 'Funkcja', fields: ['Tagi'], spec: true },
-  blad: { label: 'Błąd', fields: ['Tagi'], spec: true },
-  notatka: { label: 'Notatka', fields: ['Tagi'], spec: false },
-  spotkanie: { label: 'Spotkanie', fields: ['Tagi'], spec: false },
+  sprawa: { label: 'Sprawa', fields: ['Tagi'], spec: false, cezar: false },
+  funkcja: { label: 'Funkcja', fields: ['Tagi'], spec: true, cezar: false },
+  blad: { label: 'Błąd', fields: ['Tagi'], spec: true, cezar: false },
+  notatka: { label: 'Notatka', fields: ['Tagi'], spec: false, cezar: false },
+  spotkanie: { label: 'Spotkanie', fields: ['Tagi'], spec: false, cezar: false },
+  /** Stage 2.1 (D-107): a thread made to be handed to Cezar, so it starts with the Specyfikacja and the Cezar kit (values unset). */
+  'implementacja-cezara': { label: 'Implementacja Cezara', fields: ['Tagi'], spec: true, cezar: true },
 } as const;
 export const filaTypeSchema = z.enum(Object.keys(FILA_TYPES) as [keyof typeof FILA_TYPES, ...(keyof typeof FILA_TYPES)[]]);
 
@@ -48,6 +50,8 @@ const threadId = z.string().trim().regex(/^[A-Za-z]{4}-[1-9][0-9]*$/);
 const workflowId = z.string().regex(/^w-[a-z0-9]{1,16}$/);
 const title = z.string().trim().min(1).max(FILA_LIMITS.title);
 const description = z.string().max(FILA_LIMITS.description);
+/** The value of the field Tagi at creation: the rules of a `multi` field. */
+const tags = z.array(z.string().trim().min(1).max(FILA_LIMITS.multiItem)).max(FILA_LIMITS.multi);
 const unique = (items: string[]) => new Set(items.map(item => item.toLowerCase())).size === items.length;
 
 export const filaProjectSchema = z.object({
@@ -92,6 +96,17 @@ export const filaCezarSchema = z.object({
 });
 export type FilaCezar = z.infer<typeof filaCezarSchema>;
 export const emptyFilaCezar = (): FilaCezar => ({ enabled: false, executor: null, repo: null, mode: null, blocked: null, links: [] });
+
+/** Stage 2.1: the states a thread may be dispatched to Cezar from (D-039), as workflow id + state name. Only the AI edits the list. */
+export const FILA_READY_STATES_MAX = 20;
+export const filaReadyStateSchema = z.object({ workflow: workflowId, state: stateName }).strict();
+export type FilaReadyState = z.infer<typeof filaReadyStateSchema>;
+const readyStates = z.array(filaReadyStateSchema).min(1).max(FILA_READY_STATES_MAX)
+  .refine(pairs => new Set(pairs.map(p => `${p.workflow}|${p.state}`)).size === pairs.length, 'Duplicate ready state');
+export const filaCezarSettingsSchema = z.object({ readyStates });
+export type FilaCezarSettings = z.infer<typeof filaCezarSettingsSchema>;
+/** Without stored settings: the workflow Praca's „Gotowe do realizacji”, what stage 1 had in code. */
+export const defaultFilaCezarSettings = (): FilaCezarSettings => ({ readyStates: [{ workflow: FILA_DEFAULT_WORKFLOW, state: 'Gotowe do realizacji' }] });
 
 export const filaThreadSchema = z.object({
   /** Internal and permanent: parents point at it, so a move (a new display ID) keeps every relation. */
@@ -150,6 +165,8 @@ export const filaDataSchema = z.object({
   boards: z.array(filaBoardSchema).max(FILA_LIMITS.boards).default([]),
   /** Project → the board it got at the start. A record of its own, so a deleted starter board is not made again (D-019). */
   starterBoards: z.record(projectKey, boardId).default({}),
+  /** The Cezar kit's global settings (2.1); absent = `defaultFilaCezarSettings()`. */
+  cezarSettings: filaCezarSettingsSchema.optional(),
   /** Idempotency keys of batches already applied (1.3a): a retry with the same key and batch answers again without writing. */
   idempotency: z.array(z.object({
     actor: filaActorSchema, key: z.string().min(1).max(100), hash: z.string().max(64), at: z.number().finite(),
@@ -199,7 +216,8 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('createWorkflow'), name, states: filaWorkflowSchema.shape.states }).strict(),
   z.object({ action: z.literal('updateWorkflow'), workflow: workflowId, name: name.optional(), states: filaWorkflowSchema.shape.states.optional() }).strict()
     .refine(a => a.name !== undefined || a.states !== undefined, { message: 'Nothing to change' }),
-  z.object({ action: z.literal('createThread'), project: projectKey, type: filaTypeSchema, title, description: description.optional(), parent: threadId.optional(), module: moduleName.optional() }).strict(),
+  z.object({ action: z.literal('createThread'), project: projectKey, type: filaTypeSchema, title, description: description.optional(), parent: threadId.optional(), module: moduleName.optional(), tags: tags.optional() }).strict(),
+  z.object({ action: z.literal('setCezarSettings'), readyStates }).strict(),
   z.object({
     action: z.literal('updateThread'), thread: threadId, expectedRevision: z.number().int().min(1).optional(),
     title: title.optional(), description: description.optional(), state: stateName.optional(),

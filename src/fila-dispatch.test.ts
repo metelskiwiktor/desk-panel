@@ -19,7 +19,7 @@ function pair(over: { status?: keyof typeof TODO_STATUSES; blocked?: string | nu
 
 describe('C1 on a thread equals C1 on a to-do', () => {
   const cases: [string, Parameters<typeof pair>[0]][] = [
-    ['gotowe', {}], ['analiza', { mode: 'analiza' }], ['stan Pomysł', { status: 'pomysl' }], ['blokada', { blocked: 'Czekam' }],
+    ['gotowe', {}], ['analiza', { mode: 'analiza' }],
     ['executor lokalnie', { executor: 'lokalnie' }], ['brak executora, repo, trybu', { executor: null, repo: null, mode: null }],
     ['pusta specyfikacja', { spec: '' }], ['brak sekcji', { spec: 'CEL:\nx' }], ['powtórzona sekcja', { spec: `${SPEC}\n\nCEL:\nDrugi` }],
   ];
@@ -38,10 +38,25 @@ describe('C1 on a thread equals C1 on a to-do', () => {
     expect(getFilaDispatch(thread, spec).missing).toEqual(['Wykonawca (executor) to „lokalnie”, a gotowość wymaga „cezar”.']);
   });
 
-  it('inne workflow niż Praca nie jest gotowe, nawet ze Stanem o tej nazwie; wątek bez pola Specyfikacja nie ma specyfikacji', () => {
+  it('Stan musi być na liście gotowości (domyślnie Praca / „Gotowe do realizacji”), a komunikat ją wymienia; wątek bez pola Specyfikacja nie ma specyfikacji', () => {
     const { thread, spec } = pair();
-    expect(getFilaDispatch({ ...thread, workflow: { id: 'w-inne' } }, spec).missing[0]).toContain('Zadanie musi mieć stan „Gotowe do realizacji (gotowe)”, a ma „Gotowe do realizacji”');
+    expect(getFilaDispatch({ ...thread, state: 'Pomysł' }, spec).missing).toEqual(['Wątek musi mieć Stan, z którego wolno zlecić Cezarowi („Gotowe do realizacji”, w workflow z ustawień zestawu), a ma „Pomysł”.']);
+    // Another workflow is not ready even with a state of the same name, until the settings list that pair.
+    const other = { ...thread, workflow: { id: 'w-inne' } };
+    expect(getFilaDispatch(other, spec).prompt).toBeNull();
+    const listed = [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }, { workflow: 'w-inne', state: 'Gotowe do realizacji' }, { workflow: 'w-inne', state: 'Start' }];
+    expect(getFilaDispatch(other, spec, listed).missing).toEqual([]);
+    expect(getFilaDispatch({ ...other, state: 'Start' }, spec, listed).prompt).toContain('Zadanie: DESK-7');
+    expect(getFilaDispatch({ ...thread, state: 'Start' }, spec, listed).missing[0]).toContain('(„Gotowe do realizacji”, „Start”, w workflow z ustawień zestawu), a ma „Start”');
     expect(getFilaDispatch({ ...thread, spec: { enabled: false, revision: 2 } }, spec).missing).toContain('Brak specyfikacji.');
+  });
+
+  it('blokada nie wpływa na gotowość wątku (D-105), choć lista zadań nadal ją sprawdza', () => {
+    const { todo, thread, spec } = pair({ blocked: 'Czekam' });
+    expect(getTodoDispatch(todo).missing).toEqual(['Zadanie ma aktywną blokadę: Czekam.']);
+    const ready = getFilaDispatch(thread, spec);
+    expect(ready.missing).toEqual([]);
+    expect(ready.prompt).toContain('Zadanie: DESK-7');
   });
 });
 

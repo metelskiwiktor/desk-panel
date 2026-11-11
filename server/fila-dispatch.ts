@@ -61,19 +61,20 @@ export async function handleFilaDispatchRoute(req: IncomingMessage, res: ServerR
     const spec = thread.spec.enabled ? (await fila.spec(thread.id)).text : null;
     // The preview is the only consent: nothing new may have happened to the thread since the user saw it.
     if (!filaDispatchMatches(thread, expected)) throw new FilaError(409, 'Dane wątku zmieniły się od podglądu — odśwież podgląd i zleć ponownie.');
-    const dispatch = getFilaDispatch(thread, spec);
+    const dispatch = getFilaDispatch(thread, spec, (await fila.registries()).cezarSettings.readyStates);
     if (!dispatch.prompt || !dispatch.workflow) throw new FilaError(409, dispatch.missing.join(' '));
     const mode = thread.cezar.mode!;
     const key = filaDispatchKey(thread.uid, thread.spec.revision, mode);
     if (inFlight.has(key)) throw new FilaError(409, 'To zlecenie jest właśnie wysyłane.');
     inFlight.add(key);
     try {
-      const last = cockpit.threadDispatches().find(entry => filaDispatchKey(entry.uid, entry.specRevision, entry.mode) === key);
+      // One successful implementation per revision (D-100): the newest entry of the key decides, and it blocks unless its
+      // task is known to have failed (a task gone from the snapshot blocks too). An analysis has no limit and reads no register.
+      const last = mode === 'implementacja' ? cockpit.threadDispatches().find(entry => filaDispatchKey(entry.uid, entry.specRevision, entry.mode) === key) : undefined;
       if (last) {
         const snapshot = await sources.cezar();
         const known = [...snapshot.tasks, ...snapshot.finished].find(item => item.id === last.taskId);
-        // Still running or finished well: no second dispatch. Failed/cancelled (mapped to FAILED) or gone may retry.
-        if (known && known.status !== 'failed') throw new FilaError(409, `Wątek ma już zlecenie (task ${last.taskId}): ${last.url}`);
+        if (known?.status !== 'failed') throw new FilaError(409, `Wątek ma już zlecenie implementacji tej rewizji (task ${last.taskId}): ${last.url}`);
       }
       if (!sources.cezarCreateRun) throw new SourceError(503);
       const created = await sources.cezarCreateRun({ task: dispatch.prompt, title: thread.title, project: dispatch.project, workflow: dispatch.workflow });

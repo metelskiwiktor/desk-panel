@@ -27,12 +27,14 @@ async function seeded(store = createFilaStore()) {
 }
 
 describe('registries and templates', () => {
-  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the five type templates', async () => {
+  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the six type templates', async () => {
     const reg = await createFilaStore().registries();
     expect(reg.projects).toEqual([]);
     expect(reg.workflows[0]!.states.map(s => s.name)).toEqual(['Pomysł', 'Do przygotowania', 'Gotowe do realizacji', 'W realizacji', 'Do sprawdzenia', 'Zakończone', 'Porzucone']);
     expect(reg.workflows[0]!.states.filter(s => s.closing).map(s => s.name)).toEqual(['Zakończone', 'Porzucone']);
-    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie']);
+    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie', 'Implementacja Cezara']);
+    expect(reg.types.filter(t => t.cezar).map(t => t.key)).toEqual(['implementacja-cezara']);
+    expect(reg.cezarSettings).toEqual({ readyStates: [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }] });
     expect(reg.types.every(t => t.workflow === 'w-praca' && t.fields.join() === 'Tagi')).toBe(true);
   });
 
@@ -43,6 +45,56 @@ describe('registries and templates', () => {
     await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
     await refused(act(store, { action: 'createProject', key: 'DESK', name: 'Inny' }), 409);
     expect((await store.registries()).projects.map(p => p.key)).toEqual(['DESK']);
+  });
+});
+
+describe('stage 2.1: Implementacja Cezara, the kit settings and tags at creation', () => {
+  it('creates an Implementacja Cezara with or without a parent: the kit on, an empty Specyfikacja, the workflow Praca, found by its type', async () => {
+    const store = await seeded();
+    await act(store, { action: 'createThread', project: 'DESK', type: 'funkcja', title: 'Źródło' });
+    await act(store, { action: 'createThread', project: 'DESK', type: 'implementacja-cezara', title: 'Z rodzicem', parent: 'DESK-1' });
+    await act(store, { action: 'createThread', project: 'DESK', type: 'implementacja-cezara', title: 'Bez rodzica' }, 'user');
+    for (const [id, parent] of [['DESK-2', 'DESK-1'], ['DESK-3', null]] as const) {
+      const t = await store.thread(id);
+      expect(t).toMatchObject({ type: { key: 'implementacja-cezara', label: 'Implementacja Cezara' }, parent, workflow: { id: 'w-praca', name: 'Praca' }, state: 'Pomysł', spec: { enabled: true, revision: 0 }, fields: { Tagi: [] } });
+      expect(t.cezar).toEqual({ enabled: true, executor: null, repo: null, mode: null, blocked: null, links: [] });
+      expect((await store.spec(id)).text).toBeNull();
+    }
+    // The other types still start without the kit.
+    expect((await store.thread('DESK-1')).cezar.enabled).toBe(false);
+    const found = await store.query('projekt = DESK AND typ = "Implementacja Cezara"');
+    expect(found.query).toBe('projekt = DESK AND typ = implementacja-cezara');
+    expect(found.threads.map(t => t.id)).toEqual(['DESK-2', 'DESK-3']);
+    expect((await store.query(found.query)).total).toBe(2);
+  });
+
+  it('lets only the AI set the ready states, refuses unknown workflows and states, and keeps a listed state in its workflow', async () => {
+    const file = join(tmp(), 'fila.json');
+    const store = await seeded(createFilaStore({ file }));
+    const states = (await store.registries()).workflows[0]!.states;
+    const readyStates = [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }, { workflow: 'w-praca', state: 'Do sprawdzenia' }];
+    await refused(act(store, { action: 'setCezarSettings', readyStates }, 'user'), 403);
+    await refused(act(store, { action: 'setCezarSettings', readyStates: [{ workflow: 'w-praca', state: 'Nie ma' }] }), 409, /nie ma Stanu/);
+    await refused(act(store, { action: 'setCezarSettings', readyStates: [{ workflow: 'w-brak', state: 'Pomysł' }] }), 409, /Nie ma workflow/);
+    await refused(act(store, { action: 'setCezarSettings', readyStates: [] }), 400);
+    await refused(act(store, { action: 'setCezarSettings', readyStates: [readyStates[0]!, readyStates[0]!] }), 400);
+    expect((await store.registries()).cezarSettings.readyStates).toEqual([readyStates[0]]);
+    await act(store, { action: 'setCezarSettings', readyStates }, 'codex');
+    expect((await store.registries()).cezarSettings).toEqual({ readyStates });
+    // A state on the list cannot leave its workflow; one that is not on it (and not in use) can.
+    await refused(act(store, { action: 'updateWorkflow', workflow: 'w-praca', states: states.filter(s => s.name !== 'Do sprawdzenia') }), 409, /gotowości Cezara: Do sprawdzenia/);
+    await act(store, { action: 'updateWorkflow', workflow: 'w-praca', states: states.filter(s => s.name !== 'Do przygotowania') });
+    expect((await createFilaStore({ file }).registries()).cezarSettings).toEqual({ readyStates });
+  });
+
+  it('takes tags at creation by the rules of the field Tagi, and a tag query finds the thread', async () => {
+    const store = await seeded();
+    await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Z tagami', tags: ['retro', ' fila ', 'retro'] });
+    await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Bez tagów' });
+    expect((await store.thread('DESK-1')).fields.Tagi).toEqual(['retro', 'fila']);
+    expect((await store.query('projekt = DESK AND tag = "fila"')).threads.map(t => t.id)).toEqual(['DESK-1']);
+    await refused(act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'x', tags: [''] }), 400);
+    await refused(act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'x', tags: 'retro' as never }), 400);
   });
 });
 

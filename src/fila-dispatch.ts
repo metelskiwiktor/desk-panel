@@ -1,5 +1,4 @@
-import { FILA_DEFAULT_WORKFLOW, type FilaCezar } from './fila-contract';
-import { TODO_STATUSES } from './todo-contract';
+import { defaultFilaCezarSettings, type FilaCezar, type FilaReadyState } from './fila-contract';
 import { evaluateDispatch, type TodoDispatch } from './todo-dispatch';
 
 /** The parts of a Fila thread C1 reads (`FilaThreadView` has them); `specText` is the current Specyfikacja, '' without one. */
@@ -8,20 +7,18 @@ export interface FilaDispatchThread {
   spec: { enabled: boolean; revision: number }; cezar: FilaCezar;
 }
 
-/** Today's „Gotowe do realizacji” is the state of the workflow Praca with that name (D-005); no other workflow is ready. */
-export const FILA_READY_STATE = TODO_STATUSES.gotowe;
-
-const stateLabel = (thread: FilaDispatchThread): string => {
-  const key = Object.entries(TODO_STATUSES).find(([, label]) => label === thread.state)?.[0];
-  return thread.workflow.id === FILA_DEFAULT_WORKFLOW && key ? `${thread.state} (${key})` : thread.state;
-};
-
-/** C1 on a thread: the very rules and messages of the to-do list (`getTodoDispatch`), the thread's ID in the prompt's `Zadanie:` line. */
-export function getFilaDispatch(thread: FilaDispatchThread, specText: string | null): TodoDispatch {
+/**
+ * C1 on a thread (2.1): the rules and messages of the to-do list (`evaluateDispatch`) with two differences. The state must
+ * be on the list of ready states (`cezarSettings.readyStates` of `GET /api/fila`; without it the default pair), and the
+ * manual block is not looked at (D-105). The thread's ID stands in the prompt's `Zadanie:` line.
+ */
+export function getFilaDispatch(thread: FilaDispatchThread, specText: string | null, readyStates: FilaReadyState[] = defaultFilaCezarSettings().readyStates): TodoDispatch {
+  const names = [...new Set(readyStates.map(pair => `„${pair.state}”`))].join(', ');
   return evaluateDispatch({
     id: thread.id, title: thread.title, specRevision: thread.spec.revision, spec: thread.spec.enabled ? specText ?? '' : '',
-    ready: thread.workflow.id === FILA_DEFAULT_WORKFLOW && thread.state === FILA_READY_STATE, stateLabel: stateLabel(thread),
-    blocked: thread.cezar.blocked, executor: thread.cezar.executor, repo: thread.cezar.repo, mode: thread.cezar.mode,
+    ready: readyStates.some(pair => pair.workflow === thread.workflow.id && pair.state === thread.state), stateLabel: thread.state,
+    notReady: `Wątek musi mieć Stan, z którego wolno zlecić Cezarowi (${names}, w workflow z ustawień zestawu), a ma „${thread.state}”.`,
+    blocked: null, executor: thread.cezar.executor, repo: thread.cezar.repo, mode: thread.cezar.mode,
   });
 }
 

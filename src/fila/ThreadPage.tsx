@@ -272,7 +272,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
             <div className="fl-actions"><button type="button" className="fl-text" onClick={() => setAddingField(false)}>Anuluj</button><button type="submit" className="fl-primary small">Dodaj pole</button></div>
           </form>
           : <button type="button" className="fl-text" onClick={() => setAddingField(true)}><Plus size={14} aria-hidden="true" /> Pole</button>}
-        <CezarPanel thread={thread} />
+        <CezarPanel thread={thread} readyStates={registry.cezarSettings.readyStates} />
         <p className="fl-muted fl-props-note">Workflow, jego Stany i listę modułów zmienia AI.</p>
       </aside>
     </div>

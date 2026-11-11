@@ -5,7 +5,7 @@ import { TODO_LIMITS, TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
   FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
   filaActionSchema, filaDataSchema, isFilaBoardAction,
-  type FilaAction, type FilaActor, type FilaBoardActor, type FilaBoard, type FilaCezar, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
+  type FilaAction, type FilaActor, type FilaBoardActor, type FilaBoard, type FilaCezar, type FilaCezarSettings, defaultFilaCezarSettings, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
 import { applyBoardAction, createStarterBoard, seedStarterBoards } from './fila-boards';
@@ -48,8 +48,11 @@ export interface FilaRegistries {
   projects: (FilaProject & { counts: { open: number; closed: number; archived: number }; board: string | null })[];
   boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
-  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean }[];
+  /** `cezar`: the type starts with the Cezar kit (2.1). */
+  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean }[];
   fieldDefs: FilaData['fieldDefs'];
+  /** The states a thread may be dispatched to Cezar from (2.1); only the AI changes them (`setCezarSettings`). */
+  cezarSettings: FilaCezarSettings;
 }
 /** A thread as a query result: what a list row or a card needs, without the history. */
 export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'>;
@@ -123,7 +126,7 @@ export function defaultFilaData(): FilaData {
   };
 }
 
-const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow', 'setSpec', 'addSpecField', 'removeSpecField']);
+const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow', 'setSpec', 'addSpecField', 'removeSpecField', 'setCezarSettings']);
 const panelMay = new Set<FilaAction['action']>(['linkCezar', 'unlinkCezar', 'comment', 'updateThread']);
 const userOnly = new Set<FilaAction['action']>(['deleteThread']);
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
@@ -226,6 +229,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   const specOf = (t: FilaThread) => t.spec ?? { enabled: FILA_TYPES[t.type].spec, revisions: [] };
   const latestSpec = (t: FilaThread) => specOf(t).revisions.at(-1);
+  const cezarSettings = () => data.cezarSettings ?? defaultFilaCezarSettings();
 
   const view = (t: FilaThread): FilaThreadView => {
     const workflow = workflowOf(t.workflow);
@@ -258,7 +262,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   /** Validates, then changes; a refusal is thrown before anything is touched (and memory is restored if one comes late). */
   const mutate = (action: FilaAction, actor: FilaBoardActor): FilaResult => {
-    if (aiOnly.has(action.action) && actor === 'user') throw new FilaError(403, 'Definicje workflow i wartości Modułu zmienia tylko AI (D-033).');
+    if (aiOnly.has(action.action) && actor === 'user') throw new FilaError(403, 'Definicje workflow, wartości Modułu i ustawienia zestawu Cezara zmienia tylko AI (D-033, D-039).');
     // The panel itself (never reachable over HTTP) only bookkeeps a dispatch: links, a comment and the state.
     if (actor === 'panel' && !panelMay.has(action.action)) throw new FilaError(403, 'Panel zapisuje tylko powiązania, komentarz i Stan po zleceniu.');
     if (userOnly.has(action.action) && actor !== 'user') throw new FilaError(403, 'Trwale usuwa wątek tylko użytkownik, z archiwum (D-038); AI może go zarchiwizować.');
@@ -293,10 +297,21 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         if (action.states) {
           const gone = [...new Set(data.threads.filter(t => t.workflow === workflow.id && !action.states!.some(s => s.name === t.state)).map(t => t.state))];
           if (gone.length) throw new FilaError(409, `Stan jest w użyciu: ${gone.join(', ')}. Najpierw zmień Stan tych wątków.`);
+          const ready = cezarSettings().readyStates.filter(p => p.workflow === workflow.id && !action.states!.some(s => s.name === p.state)).map(p => p.state);
+          if (ready.length) throw new FilaError(409, `Stan jest na liście Stanów gotowości Cezara: ${ready.join(', ')}. Najpierw zmień ustawienia (setCezarSettings).`);
           workflow.states = action.states;
         }
         if (action.name !== undefined) workflow.name = action.name;
         return { ok: true, workflow: workflow.id };
+      }
+      case 'setCezarSettings': {
+        for (const pair of action.readyStates) {
+          const workflow = data.workflows.find(w => w.id === pair.workflow);
+          if (!workflow) throw new FilaError(409, `Nie ma workflow ${pair.workflow}.`);
+          if (!workflow.states.some(s => s.name === pair.state)) throw new FilaError(409, `Workflow „${workflow.name}” nie ma Stanu „${pair.state}”.`);
+        }
+        data.cezarSettings = { readyStates: action.readyStates };
+        return { ok: true };
       }
       case 'createThread': {
         const project = projectOf(action.project);
@@ -306,10 +321,12 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         const workflow = workflowOf(FILA_DEFAULT_WORKFLOW);
         const fields: Record<string, FilaFieldValue> = {};
         for (const name of FILA_TYPES[action.type].fields) fields[name] = fieldName(name)?.kind === 'multi' ? [] : '';
+        if (action.tags !== undefined) fields.Tagi = validateValue('multi', action.tags);
         const t: FilaThread = {
           uid: uid(), project: project.key, number: project.nextNumber++, type: action.type, workflow: workflow.id, state: workflow.states[0]!.name,
           title: action.title, description: action.description ?? '', parent: parent?.uid ?? null, module: action.module ?? null,
-          fields, spec: { enabled: FILA_TYPES[action.type].spec, revisions: [] }, archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
+          fields, spec: { enabled: FILA_TYPES[action.type].spec, revisions: [] },
+          ...(FILA_TYPES[action.type].cezar ? { cezar: { ...emptyFilaCezar(), enabled: true } } : {}), archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
         };
         data.threads.push(t);
         record(t, actor, { kind: 'created', text: FILA_TYPES[action.type].label });
@@ -506,14 +523,14 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   return {
     async registries() {
       await tail; await load();
-      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: FILA_DEFAULT_WORKFLOW, fields: [...type.fields], spec: type.spec }));
+      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: FILA_DEFAULT_WORKFLOW, fields: [...type.fields], spec: type.spec, cezar: type.cezar }));
       const projects = data.projects.map(p => {
         const own = data.threads.filter(t => t.project === p.key);
         const closed = (t: FilaThread) => workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false;
         return { ...structuredClone(p), counts: { open: own.filter(t => !t.archived && !closed(t)).length, closed: own.filter(t => !t.archived && closed(t)).length, archived: own.filter(t => t.archived).length } };
       });
       const boards = data.boards.map(b => ({ id: b.id, name: b.name, views: b.views.map(v => ({ id: v.id, name: v.name })) }));
-      return { projects: projects.map(p => ({ ...p, board: data.boards.some(b => b.id === data.starterBoards[p.key]) ? data.starterBoards[p.key]! : null })), boards, workflows: structuredClone(data.workflows), types, fieldDefs: structuredClone(data.fieldDefs) };
+      return { projects: projects.map(p => ({ ...p, board: data.boards.some(b => b.id === data.starterBoards[p.key]) ? data.starterBoards[p.key]! : null })), boards, workflows: structuredClone(data.workflows), types, fieldDefs: structuredClone(data.fieldDefs), cezarSettings: structuredClone(cezarSettings()) };
     },
     async check(text, kind) {
       await tail; await load();

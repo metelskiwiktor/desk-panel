@@ -94,6 +94,8 @@ export interface DispatchInput {
   id: string; title: string; specRevision: number; spec: string;
   /** Whether the state is „Gotowe do realizacji” of the workflow Praca, and how to name the state when it is not. */
   ready: boolean; stateLabel: string;
+  /** The sentence for a state that is not ready, when the caller's rule is not the lists' single state (Fila, 2.1). */
+  notReady?: string;
   blocked: string | null; executor: TodoTask['executor']; repo: TodoTask['repo']; mode: TodoTask['mode'];
 }
 
@@ -104,7 +106,7 @@ export interface DispatchInput {
  */
 export function evaluateDispatch(input: DispatchInput): TodoDispatch {
   const missing: string[] = [];
-  if (!input.ready) missing.push(`Zadanie musi mieć stan „Gotowe do realizacji (gotowe)”, a ma „${input.stateLabel}”.`);
+  if (!input.ready) missing.push(input.notReady ?? `Zadanie musi mieć stan „Gotowe do realizacji (gotowe)”, a ma „${input.stateLabel}”.`);
   if (input.blocked !== null && input.blocked !== '') missing.push(`Zadanie ma aktywną blokadę: ${input.blocked}.`);
   if (input.executor !== 'cezar') missing.push(input.executor === null ? 'Brak wykonawcy (executor = cezar).' : `Wykonawca (executor) to „${input.executor}”, a gotowość wymaga „cezar”.`);
   if (input.repo !== 'desk-panel') missing.push(input.repo === null ? 'Brak repozytorium (repo = desk-panel).' : `Repozytorium (repo) to „${input.repo}”, a gotowość wymaga „desk-panel”.`);

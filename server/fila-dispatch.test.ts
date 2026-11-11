@@ -62,7 +62,7 @@ async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolea
 }
 
 describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatch)', () => {
-  it('odrzuca brak i obcy Origin oraz token klienta (403), nieznany wątek (404), zmienione dane (409) i niegotowość z tymi samymi komunikatami co lista, bez zlecenia', async () => {
+  it('odrzuca brak i obcy Origin oraz token klienta (403), nieznany wątek (404), zmienione dane (409) i niegotowość z komunikatem braku, bez zlecenia', async () => {
     const { created, prepared, expectedOf, post, tokens, fila, act } = await start();
     const id = await prepared();
     const expected = await expectedOf(id);
@@ -77,10 +77,6 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     const local = await post(id, { expected: await expectedOf(id) });
     expect(local.status).toBe(409);
     expect((await local.json()).error).toBe('Wykonawca (executor) to „lokalnie”, a gotowość wymaga „cezar”.');
-    await act({ action: 'setCezar', thread: id, executor: 'cezar', blocked: 'Czekam na decyzję' });
-    const blocked = await post(id, { expected: await expectedOf(id) });
-    expect(blocked.status).toBe(409);
-    expect((await blocked.json()).error).toContain('blokad');
     expect(created).not.toHaveBeenCalled();
     expect((await fila.thread(id)).state).toBe('Gotowe do realizacji');
   });
@@ -120,30 +116,69 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     expect(register).toEqual({ thread: id, dispatches: [{ thread: id, specRevision: 1, mode: 'implementacja', taskId: 'desk-panel/run-1', url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' }] });
   });
 
-  it('task w toku albo zakończony sukcesem blokuje (409 z linkiem), nieudany lub nieobecny pozwala ponowić po przywróceniu gotowości', async () => {
-    const { created, prepared, expectedOf, post, restore, fila, state } = await start();
+  it('zleca tylko ze Stanu z listy ustawień (odczyt w GET /api/fila), a blokada nie odbiera gotowości', async () => {
+    const { created, prepared, expectedOf, post, act, fila, base } = await start();
     const id = await prepared();
+    await act({ action: 'setCezar', thread: id, blocked: 'Czekam na decyzję' });
+    await act({ action: 'updateThread', thread: id, state: 'Pomysł' });
+    const outside = await post(id, { expected: await expectedOf(id) });
+    expect(outside.status).toBe(409);
+    expect((await outside.json()).error).toBe('Wątek musi mieć Stan, z którego wolno zlecić Cezarowi („Gotowe do realizacji”, w workflow z ustawień zestawu), a ma „Pomysł”.');
+    expect(created).not.toHaveBeenCalled();
+    const readyStates = [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }, { workflow: 'w-praca', state: 'Pomysł' }];
+    await act({ action: 'setCezarSettings', readyStates });
+    expect((await (await fetch(`${base}/api/fila`)).json()).cezarSettings).toEqual({ readyStates });
+    // On the list now, and still blocked by hand: ready all the same.
+    expect((await fila.thread(id)).cezar.blocked).toBe('Czekam na decyzję');
+    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
+    expect(created).toHaveBeenCalledTimes(1);
+  });
+
+  it('jedna udana implementacja na rewizję: task w toku, zakończony i nieobecny blokują (409 z linkiem), failed i nowa rewizja pozwalają, o blokadzie decyduje najnowszy wpis; analiza bez limitu', async () => {
+    const { created, prepared, expectedOf, post, restore, act, fila, cockpit, state } = await start();
+    const id = await prepared();
+    const again = async () => { await restore(id); return post(id, { expected: await expectedOf(id) }); };
     state.snapshot = snapshotOf([{ id: 'desk-panel/run-1', status: 'running' }]);
     expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
-    await restore(id);
-    const blocked = await post(id, { expected: await expectedOf(id) });
+    const blocked = await again();
     expect(blocked.status).toBe(409);
     const refused = (await blocked.json()).error as string;
     expect(refused).toContain('desk-panel/run-1');
     expect(refused).toContain('http://127.0.0.1:4321/p/desk-panel/tasks/run-1');
     state.snapshot = snapshotOf([{ id: 'desk-panel/run-1', status: 'done' }]);
-    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(409);
+    expect((await again()).status).toBe(409);
+    // Gone from Cezar's snapshot: blocks as well (it used to unblock).
+    state.snapshot = snapshotOf([]);
+    expect((await again()).status).toBe(409);
     expect(created).toHaveBeenCalledTimes(1);
 
     state.snapshot = snapshotOf([{ id: 'desk-panel/run-1', status: 'failed' }]);
-    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
+    expect((await again()).status).toBe(200);
     expect(created).toHaveBeenCalledTimes(2);
     expect((await fila.thread(id)).history.filter(h => h.kind === 'comment').at(-1)?.text).toContain('Ponowienie po nieudanym tasku desk-panel/run-1');
+    // failed, then a retry in flight: the newest entry decides, so a third try is refused.
+    state.snapshot = snapshotOf([{ id: 'desk-panel/run-1', status: 'failed' }, { id: 'desk-panel/run-2', status: 'running' }]);
+    const third = await again();
+    expect(third.status).toBe(409);
+    expect((await third.json()).error).toContain('desk-panel/run-2');
+    expect(created).toHaveBeenCalledTimes(2);
 
-    await restore(id);
-    state.snapshot = snapshotOf([]);
-    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
-    expect(created).toHaveBeenCalledTimes(3);
+    // An analysis may be dispatched beside the running implementation, as often as the user clicks; each is its own entry.
+    await act({ action: 'setCezar', thread: id, mode: 'analiza' });
+    expect((await again()).status).toBe(200);
+    expect((await again()).status).toBe(200);
+    expect(created).toHaveBeenCalledTimes(4);
+    expect(created).toHaveBeenLastCalledWith(expect.objectContaining({ workflow: 'analysis' }));
+    expect((await fila.thread(id)).history.filter(h => h.kind === 'comment').at(-1)?.text).not.toContain('Ponowienie');
+    expect((await fila.thread(id)).cezar.links.filter(l => l.kind === 'cezar').map(l => l.id)).toEqual(['desk-panel/run-1', 'desk-panel/run-2', 'desk-panel/run-3', 'desk-panel/run-4']);
+
+    // A new revision is a new key: the implementation may go again while the old one still runs.
+    await act({ action: 'setCezar', thread: id, mode: 'implementacja' });
+    expect((await again()).status).toBe(409);
+    await act({ action: 'setSpec', thread: id, text: `${SPEC}\n2. Drugi test.`, baseRevision: 1 });
+    expect((await again()).status).toBe(200);
+    expect(created).toHaveBeenCalledTimes(5);
+    expect(cockpit.threadDispatches().map(d => `${d.specRevision}|${d.mode}|${d.taskId}`)).toEqual(['1|implementacja|desk-panel/run-2', '1|analiza|desk-panel/run-4', '2|implementacja|desk-panel/run-5']);
   });
 
   it('niepewny wynik (błąd Cezara) mówi „sprawdź Cezara”, niczego nie zapisuje i sam nie ponawia', async () => {

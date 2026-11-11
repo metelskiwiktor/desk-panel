@@ -3,14 +3,14 @@ import { GitPullRequest, Send } from 'lucide-react';
 import { filaDispatchExpected, filaDispatchMatches, getFilaDispatch, type FilaDispatchExpected } from '../fila-dispatch';
 import { safeUrl } from '../model';
 import { TODO_EXECUTORS, TODO_MODES } from '../todo-contract';
-import { announceFilaChange, useFilaActions, useFilaGet, useFilaSpec, type FilaThreadDoc } from './api';
+import { announceFilaChange, useFilaActions, useFilaGet, useFilaSpec, type FilaRegistry, type FilaThreadDoc } from './api';
 
 /**
  * The Cezar kit of a thread (part 4): executor, repo and mode, a manual block, task and PR as links, readiness with its gaps
  * (C1, the very function the server uses), the exact prompt as a preview, and „Zleć Cezarowi” from the user's click only (D-042).
  * Nothing here dispatches by itself, and any change to the thread voids the consent given by the preview.
  */
-export function CezarPanel({ thread }: { thread: FilaThreadDoc }) {
+export function CezarPanel({ thread, readyStates }: { thread: FilaThreadDoc; readyStates: FilaRegistry['cezarSettings']['readyStates'] }) {
   const { act, error, clear } = useFilaActions();
   const spec = useFilaSpec(thread.spec.enabled && thread.spec.revision > 0 ? thread.id : null);
   const register = useFilaGet<{ dispatches: { specRevision: number; mode: string; taskId: string; url: string }[] }>(thread.cezar.enabled ? `/api/fila/threads/${thread.id}/cezar-dispatch/register` : null);
@@ -23,7 +23,7 @@ export function CezarPanel({ thread }: { thread: FilaThreadDoc }) {
 
   const cezar = thread.cezar;
   const specText = spec.data?.text ?? null;
-  const ready = getFilaDispatch(thread, specText);
+  const ready = getFilaDispatch(thread, specText, readyStates);
   // Whatever changed since the preview (a field, the Stan, the title, a new Specyfikacja revision) voids it.
   const stale = preview !== null && !filaDispatchMatches(thread, preview.expected);
   const consent = preview !== null && !stale && ready.missing.length === 0;
