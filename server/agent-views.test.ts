@@ -203,7 +203,9 @@ describe('widoki dla agenta: reszta źródeł (scenariusz standardowy)', () => {
   });
 
   it('trening: kroki dopiero na prośbę', async () => {
-    const wide = '?from=2026-10-01&to=2026-11-10';
+    // Around today, like the scenario's own relative dates: a fixed window stopped holding the planned training once the calendar passed it.
+    const day = (offset: number) => new Date(now + offset * 86_400_000).toISOString().slice(0, 10);
+    const wide = `?from=${day(-30)}&to=${day(10)}`;
     const plain = await view('training', wide);
     const steps = await view('training', `${wide}&kroki=1`);
     expect(plain).not.toContain('kroki:');
