@@ -100,13 +100,18 @@ export const emptyFilaCezar = (): FilaCezar => ({ enabled: false, executor: null
 /**
  * One entry of a thread's „Zablokowane” (2.3a, D-104): the field belongs to the thread, not to Cezar, and only informs.
  * A thread is blocked while it has an entry. `origin` says where the entry came from: written by hand (the user or an AI;
- * also the old `cezar.blocked` text, converted once with the author `panel`); stage 2.3b adds entries made from a task.
+ * also the old `cezar.blocked` text, converted once with the author `panel`), or made by the panel from a failed Cezar
+ * task it dispatched from the thread (2.3b): the task, its mode, the Specyfikacja revision and the task's address.
  */
 const blockerId = z.string().regex(/^k-[0-9a-f]{8}$/);
 const blockerReason = z.string().trim().min(1).max(FILA_LIMITS.blockerReason);
+const blockerTaskOrigin = z.object({
+  kind: z.literal('task'), taskId: z.string().trim().min(1).max(200), mode: todoModeSchema,
+  specRevision: z.number().int().nonnegative(), url: z.string().trim().min(1).max(500),
+}).strict();
 export const filaBlockerSchema = z.object({
   id: blockerId, reason: blockerReason,
-  origin: z.discriminatedUnion('kind', [z.object({ kind: z.literal('ręczne') }).strict()]),
+  origin: z.discriminatedUnion('kind', [z.object({ kind: z.literal('ręczne') }).strict(), blockerTaskOrigin]),
   at: z.number().finite(), by: z.enum([...filaActorSchema.options, 'panel']),
 });
 export type FilaBlocker = z.infer<typeof filaBlockerSchema>;
@@ -254,7 +259,8 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('linkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId, title: z.string().trim().min(1).max(200).optional() }).strict()
     .refine(validPrUrl, { message: 'Invalid GitHub pull request URL' }),
   z.object({ action: z.literal('unlinkCezar'), thread: threadId, kind: filaCezarLinkKind, id: filaCezarLinkId }).strict(),
-  z.object({ action: z.literal('addBlocker'), thread: threadId, reason: blockerReason, expectedRevision: z.number().int().min(1).optional() }).strict(),
+  /** `origin` is the panel's alone (an entry from a task, 2.3b): the user and the AI write entries by hand and may not send it. */
+  z.object({ action: z.literal('addBlocker'), thread: threadId, reason: blockerReason, origin: blockerTaskOrigin.optional(), expectedRevision: z.number().int().min(1).optional() }).strict(),
   z.object({ action: z.literal('removeBlocker'), thread: threadId, blocker: blockerId, expectedRevision: z.number().int().min(1).optional() }).strict(),
   z.object({ action: z.literal('comment'), thread: threadId, text: z.string().trim().min(1).max(FILA_LIMITS.comment) }).strict(),
   z.object({ action: z.literal('archiveThread'), thread: threadId }).strict(),

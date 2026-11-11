@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CezarCreateRunInput, CezarSnapshot } from '../src/cezar-contract';
+import type { CezarCreateRunInput, CezarSnapshot, FinishedTask } from '../src/cezar-contract';
 import type { FilaAction } from '../src/fila-contract';
 import { filaDispatchExpected, getFilaDispatch } from '../src/fila-dispatch';
 import { createPanelServer } from './app';
@@ -258,6 +258,119 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     const moved = await act({ action: 'updateThread', thread: 'DESK-32', project: 'TABL' });
     expect(moved.thread!.id).toBe('TABL-1');
     expect((await tasks('TABL-1')).tasks.map(t => t.taskId)).toEqual(before.tasks.map(t => t.taskId));
+  });
+
+  describe('automat blokad z tasków (2.3b)', () => {
+    const finished = (id: string, status: 'done' | 'failed', completedAt: number): FinishedTask => ({ id: `desk-panel/${id}`, title: 'Task', project: 'desk-panel', status, checkedAt: 9_000, completedAt, description: 'x', sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${id}` });
+    const handled = () => JSON.parse(readFileSync(join(dir, 'cockpit.json'), 'utf8')).threadTaskBlocks as Record<string, number> | undefined;
+    /** A thread dispatched `runs` times in the given modes (run-1, run-2, …), with the automat already past its first, empty read. */
+    async function dispatched(modes: ('implementacja' | 'analiza')[]) {
+      const s = await start();
+      const id = await s.prepared();
+      await s.cockpit.blockersFromFinished([], true);
+      let last = 0;
+      for (const mode of modes) {
+        await s.act({ action: 'setCezar', thread: id, mode });
+        await s.restore(id);
+        // A second implementation of the same revision needs the first one failed in Cezar's snapshot (2.1).
+        s.state.snapshot = snapshotOf(Array.from({ length: last }, (_, i) => ({ id: `desk-panel/run-${i + 1}`, status: 'failed' as const })));
+        expect((await s.post(id, { expected: await s.expectedOf(id) })).status).toBe(200);
+        last += 1;
+      }
+      const reasons = async () => (await s.fila.thread(id)).blockers.map(b => b.reason);
+      return { ...s, id, reasons };
+    }
+
+    it('nieudany task z rejestru daje wpis z trybem i odnośnikiem, późniejszy udany tego trybu go zdejmuje; wpis ręczny i innego trybu zostają, task spoza rejestru nic nie robi', async () => {
+      const { cockpit, fila, act, id, reasons } = await dispatched(['implementacja', 'analiza', 'implementacja']);
+      await act({ action: 'addBlocker', thread: id, reason: 'Ręczna blokada' }, 'user');
+      await cockpit.blockersFromFinished([finished('run-2', 'failed', 200), finished('run-1', 'failed', 100), finished('obcy', 'failed', 150)], true);
+      const thread = await fila.thread(id);
+      expect(thread.blockers).toMatchObject([
+        { reason: 'Ręczna blokada', origin: { kind: 'ręczne' }, by: 'user' },
+        { reason: 'Nieudany task desk-panel/run-1 (implementacja, rewizja v1)', by: 'panel', origin: { kind: 'task', taskId: 'desk-panel/run-1', mode: 'implementacja', specRevision: 1, url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' } },
+        { reason: 'Nieudany task desk-panel/run-2 (analiza, rewizja v1)', by: 'panel', origin: { kind: 'task', taskId: 'desk-panel/run-2', mode: 'analiza' } },
+      ]);
+      // The entry does not change the Stan (Q-061): making the thread ready again is the user's move.
+      expect(thread.state).toBe('W realizacji');
+      expect(handled()).toEqual({ 'desk-panel/run-1': 100, 'desk-panel/run-2': 200 });
+      await cockpit.blockersFromFinished([finished('run-3', 'done', 300), finished('run-1', 'failed', 100), finished('run-2', 'failed', 200)], true);
+      expect(await reasons()).toEqual(['Ręczna blokada', 'Nieudany task desk-panel/run-2 (analiza, rewizja v1)']);
+      expect((await fila.thread(id)).history.at(-1)).toMatchObject({ by: 'panel', changes: [{ field: 'Zablokowane', to: null }] });
+      expect(handled()).toEqual({ 'desk-panel/run-1': 100, 'desk-panel/run-2': 200, 'desk-panel/run-3': 300 });
+    });
+
+    it('odczyt, restart i ręczne zdjęcie wpisu nie przywracają go, a starszy udany task nie zdejmuje nowszej porażki, także w kolejnym odczycie', async () => {
+      const first = await dispatched(['implementacja', 'implementacja', 'implementacja']);
+      const { id } = first;
+      const failure = finished('run-2', 'failed', 500);
+      await first.cockpit.blockersFromFinished([failure], true);
+      await first.cockpit.blockersFromFinished([failure], true);
+      expect(await first.reasons()).toEqual(['Nieudany task desk-panel/run-2 (implementacja, rewizja v1)']);
+      // An older success (it ended before the failure) leaves the newer failure's entry, in the same read and in a later one.
+      await first.cockpit.blockersFromFinished([failure, finished('run-1', 'done', 400)], true);
+      await first.cockpit.blockersFromFinished([finished('run-1', 'done', 400), failure], true);
+      expect(await first.reasons()).toHaveLength(1);
+      const blocker = (await first.fila.thread(id)).blockers[0]!;
+      await first.act({ action: 'removeBlocker', thread: id, blocker: blocker.id }, 'user');
+      await first.cockpit.blockersFromFinished([failure], true);
+      expect(await first.reasons()).toEqual([]);
+      first.stop();
+      // The panel is started again on the same files: the handled task stays handled.
+      const second = await start();
+      await second.cockpit.blockersFromFinished([failure, finished('run-1', 'done', 400)], true);
+      expect((await second.fila.thread(id)).blockers).toEqual([]);
+      // A failure and a newer success in one read: the entry is made and taken off, oldest first.
+      await second.cockpit.blockersFromFinished([finished('run-3', 'done', 700), failure], true);
+      expect((await second.fila.thread(id)).blockers).toEqual([]);
+    });
+
+    it('błąd czytnika zakończonych (complete: false) nie tworzy pola ani wpisów, pierwszy kompletny odczyt tworzy pole bez wpisów; 20 wpisów, wątek w archiwum i błąd zapisu kończą odczyt bez zmian', async () => {
+      const s = await start();
+      const id = await s.prepared();
+      expect((await s.post(id, { expected: await s.expectedOf(id) })).status).toBe(200);
+      const failure = finished('run-1', 'failed', 100);
+      await s.cockpit.blockersFromFinished([failure], false);
+      expect(handled()).toBeUndefined();
+      expect((await s.fila.thread(id)).blockers).toEqual([]);
+      // The first complete read: what finished before it is history, handled with no entry.
+      await s.cockpit.blockersFromFinished([failure, finished('obcy', 'failed', 50)], true);
+      expect(handled()).toEqual({ 'desk-panel/run-1': 100 });
+      await s.cockpit.blockersFromFinished([failure], true);
+      expect((await s.fila.thread(id)).blockers).toEqual([]);
+
+      // 20 entries: the failure is handled without an entry, and the next task of the same read still gets its turn.
+      const other = await s.prepared();
+      for (const thread of [id, other]) {
+        await s.act({ action: 'updateThread', thread, state: 'Gotowe do realizacji' });
+        await s.act({ action: 'setCezar', thread, mode: 'analiza' });
+        expect((await s.post(thread, { expected: await s.expectedOf(thread) })).status).toBe(200);
+      }
+      for (let i = 0; i < 20; i += 1) await s.act({ action: 'addBlocker', thread: id, reason: `Blokada ${i + 1}` });
+      await s.cockpit.blockersFromFinished([finished('run-2', 'failed', 200), finished('run-3', 'failed', 300)], true);
+      expect((await s.fila.thread(id)).blockers).toHaveLength(20);
+      expect((await s.fila.thread(other)).blockers.map(b => b.reason)).toEqual(['Nieudany task desk-panel/run-3 (analiza, rewizja v1)']);
+      expect(handled()).toMatchObject({ 'desk-panel/run-2': 200, 'desk-panel/run-3': 300 });
+
+      // An archived thread and a failed write: handled, nothing changed, the read ends.
+      await s.act({ action: 'updateThread', thread: other, state: 'Gotowe do realizacji' });
+      expect((await s.post(other, { expected: await s.expectedOf(other) })).status).toBe(200);
+      await s.act({ action: 'archiveThread', thread: other });
+      await s.cockpit.blockersFromFinished([finished('run-4', 'failed', 400)], true);
+      expect((await s.fila.thread(other)).blockers).toHaveLength(1);
+      await s.act({ action: 'restoreThread', thread: other });
+      await s.act({ action: 'updateThread', thread: other, state: 'Gotowe do realizacji' });
+      expect((await s.post(other, { expected: await s.expectedOf(other) })).status).toBe(200);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      mkdirSync(join(dir, 'fila.json.tmp')); // Fila cannot write now
+      await s.cockpit.blockersFromFinished([finished('run-5', 'failed', 500)], true);
+      rmSync(join(dir, 'fila.json.tmp'), { recursive: true });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('desk-panel/run-5'));
+      warn.mockRestore();
+      expect((await s.fila.thread(other)).blockers).toHaveLength(1);
+      expect(handled()).toMatchObject({ 'desk-panel/run-4': 400, 'desk-panel/run-5': 500 });
+      expect(existsSync(join(dir, 'cockpit.json'))).toBe(true);
+    });
   });
 
   it('niepewny wynik (błąd Cezara) mówi „sprawdź Cezara”, niczego nie zapisuje i sam nie ponawia', async () => {

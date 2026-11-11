@@ -39,7 +39,7 @@ function mailError(what: string, error: unknown): SourceError {
   return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
 }
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; cutoverLocked?: boolean; filaActive?: boolean; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[]) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation> }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; cutoverLocked?: boolean; filaActive?: boolean; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[], complete: boolean) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation> }): PanelSources {
   const { calendarId, env } = options;
   const dir = join(homedir(), '.desk-panel');
   const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
@@ -108,11 +108,14 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
         await pending;
       }
       // Finished tasks are a bonus: a Cezar that cannot list them still shows the rest, with the last list it gave.
-      lastFinished = await finishedReader.read().catch(() => lastFinished);
+      // `complete` says the list was really read now (cached or fresh): a failed read keeps the last list for the screen,
+      // but whoever acts on "what has finished" (the block automat) must not take it for the whole truth.
+      let complete = true;
+      lastFinished = await finishedReader.read().catch(() => { complete = false; return lastFinished; });
       // What is active now (a waiting task) and what just finished: the automation observer follows both, best-effort.
       Promise.resolve().then(() => options.onActive?.(cache!.tasks)).catch(() => {});
       // The PR these tasks opened, linked to the to-do they were dispatched from; best-effort, never blocks the read.
-      Promise.resolve().then(() => options.onFinished?.(lastFinished)).catch(() => {});
+      Promise.resolve().then(() => options.onFinished?.(lastFinished, complete)).catch(() => {});
       return { ...cache!, finished: lastFinished };
     },
     async cezarRun(id) {

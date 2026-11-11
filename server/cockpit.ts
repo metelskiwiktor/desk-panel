@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   watchedTask, type CezarStatus, type CockpitDispatch, type CockpitPrView, type CockpitTaskView, type CockpitView, type DispatchOutcome, type StepState,
 } from '../src/cockpit-contract';
-import { stepOverridesSchema } from '../src/cezar-contract';
+import { stepOverridesSchema, type FinishedTask } from '../src/cezar-contract';
 import { todoDispatchRecordSchema, todoModeSchema, type TodoDispatchRecord } from '../src/todo-contract';
 import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { type AutomationOutcome, automationOutcomeSchema } from '../src/automation-contract';
@@ -52,6 +52,12 @@ const storeSchema = z.object({
   todoDispatches: z.array(todoDispatchSchema).default([]),
   /** The same for threads of Fila (1.4a), in the same file and with the same single writer. */
   threadDispatches: z.array(threadDispatchSchema).default([]),
+  /**
+   * Finished tasks the block automat already handled (2.3b), by task id → the time the task ended. Optional on purpose,
+   * with no default: a missing field means "never read yet", and the first complete read of the finished list fills it
+   * without writing any block.
+   */
+  threadTaskBlocks: z.record(z.string(), z.number()).optional(),
   chats: z.record(z.string(), z.object({
     /** Tasks dispatched from the conversation, oldest first: the last one is watched. */
     runs: z.array(z.string()).default([]),
@@ -188,6 +194,12 @@ export interface Cockpit {
    * The to-do id comes from the kept dispatch, so this works after a restart and with no chat open.
    */
   linkPrs(tasks: readonly { id: string; pullRequestUrl?: string; title?: string }[]): Promise<void>;
+  /**
+   * The block automat (2.3b, docs/fila.md): for finished tasks the panel dispatched from a thread, a failed one adds an
+   * entry to the thread's „Zablokowane”, a later successful one of the same mode takes the failures' entries off. Each
+   * task is handled once (kept in `cockpit.json`); `complete: false` (the finished list could not be read) does nothing.
+   */
+  blockersFromFinished(tasks: readonly FinishedTask[], complete: boolean): Promise<void>;
   /** The user's answer on a bank change card; `plan` is the one the conversation's tool call holds. `beforeWrite` runs after the last await and before the write. Answered twice: done once. */
   bankPlan(chatId: string, input: { toolCallId: string; decision: 'apply' | 'reject' }, plan: BankPlan, beforeWrite?: () => Promise<void>): Promise<BankPlanOutcome>;
   /** The user's answer on a bulk-assign card; `skip` are the groups unticked. Answered twice: done once. */
@@ -252,6 +264,53 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     for (const chat of Object.values(store.chats)) for (const outcome of Object.values(chat.dispatches))
       if (outcome.decision === 'dispatched' && outcome.taskId === taskId && outcome.threadUid) return outcome.threadUid;
     return undefined;
+  }
+  let blockerRuns: Promise<void> = Promise.resolve();
+  /** When a finished task ended: Cezar's time, else its start, else the read. */
+  const endOf = (task: FinishedTask) => task.completedAt ?? task.startedAt ?? task.checkedAt;
+  async function handleFinished(tasks: readonly FinishedTask[], complete: boolean) {
+    const fila = sources.fila;
+    if (!complete || !fila) return;
+    // The full register, not its projection: after a retry the failed first task shares its key with the second one.
+    const entryOf = (taskId: string) => store.threadDispatches.find(d => d.taskId === taskId);
+    if (!store.threadTaskBlocks) {
+      // The first complete read, an empty one too: what has finished until now is history, handled without any entry.
+      store.threadTaskBlocks = Object.fromEntries(tasks.filter(task => entryOf(task.id)).map(task => [task.id, endOf(task)]));
+      save();
+      return;
+    }
+    const handled = store.threadTaskBlocks;
+    const fresh = tasks.filter(task => handled[task.id] === undefined && entryOf(task.id))
+      .sort((a, b) => endOf(a) - endOf(b) || (a.id < b.id ? -1 : 1));
+    for (const task of fresh) {
+      const entry = entryOf(task.id)!;
+      const end = endOf(task);
+      try {
+        const id = await fila.idOfUid(entry.uid);
+        const thread = id ? await fila.thread(id) : undefined;
+        // A deleted or archived thread is left alone; the task still counts as handled.
+        if (thread && !thread.archived) {
+          if (task.status === 'failed') {
+            // Not twice: the entry may already be there when the last run stopped between the two files.
+            if (!thread.blockers.some(b => b.origin.kind === 'task' && b.origin.taskId === task.id)) {
+              await fila.apply({ action: 'addBlocker', thread: thread.id, reason: `Nieudany task ${task.id} (${entry.mode}, rewizja v${entry.specRevision})`, origin: { kind: 'task', taskId: task.id, mode: entry.mode, specRevision: entry.specRevision, url: entry.url } }, 'panel');
+            }
+          } else {
+            // A success takes off the failures of its mode (any revision) that ended before it; a failure not on record is the oldest.
+            for (const blocker of thread.blockers) {
+              if (blocker.origin.kind === 'task' && blocker.origin.mode === entry.mode && (handled[blocker.origin.taskId] ?? -Infinity) < end) {
+                await fila.apply({ action: 'removeBlocker', thread: thread.id, blocker: blocker.id }, 'panel');
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // 20 entries already, or Fila could not write: the task is handled all the same, and the read goes on.
+        console.warn(`fila: task ${task.id} nie zmienił „Zablokowane” (${error instanceof Error ? error.message : 'błąd'}).`);
+      }
+      handled[task.id] = end;
+      save();
+    }
   }
   async function linkThreadPr(taskId: string, prUrl: string, title?: string) {
     const uid = threadUidOf(taskId);
@@ -362,6 +421,13 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
 
     async linkPrs(tasks) {
       for (const task of tasks) if (task.pullRequestUrl) await linkPr(task.id, task.pullRequestUrl, task.title);
+    },
+
+    blockersFromFinished(tasks, complete) {
+      // One run after another: two reads a few seconds apart must not both handle the same task.
+      const run = blockerRuns.then(() => handleFinished(tasks, complete));
+      blockerRuns = run.catch(error => { console.warn(`fila: przebieg blokad z tasków nie powiódł się (${error instanceof Error ? error.message : 'błąd'}).`); });
+      return blockerRuns;
     },
 
     dispatched() {

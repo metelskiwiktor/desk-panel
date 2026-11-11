@@ -130,7 +130,6 @@ describe('stage 2.3a: the field Zablokowane', () => {
     await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x'.repeat(301) }), 400);
     await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: '   ' }), 400);
     await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x', expectedRevision: 1 }), 409);
-    await refused(store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'x' }, 'panel'), 403);
     await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x'.repeat(300) });
     for (let i = 0; i < 19; i += 1) await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Ten sam powód' });
     await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Dwudziesty pierwszy' }), 409, /najwyżej 20/);
@@ -138,6 +137,31 @@ describe('stage 2.3a: the field Zablokowane', () => {
     expect(full).toHaveLength(20);
     expect(new Set(full.map(b => b.id)).size).toBe(20);
     expect((await store.thread('DESK-1')).revision).toBe(25);
+  });
+
+  it('gives the panel two rights for entries from a task (2.3b): it adds one with an origin and takes it off, never a hand-written one; the user and the AI never send an origin', async () => {
+    const store = await seeded();
+    await act(store, { action: 'createThread', project: 'DESK', type: 'sprawa', title: 'Wątek' });
+    const origin = { kind: 'task' as const, taskId: 'desk-panel/run-1', mode: 'implementacja' as const, specRevision: 3, url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1' };
+    const manual = await act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'Ręczna' }, 'user');
+    await refused(store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'Bez origin' }, 'panel'), 400, /origin/);
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x', origin }, 'user'), 400, /tylko panel/);
+    await refused(act(store, { action: 'addBlocker', thread: 'DESK-1', reason: 'x', origin }, 'codex'), 400, /tylko panel/);
+    await refused(store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'x', origin: { kind: 'ręczne' } } as never, 'panel'), 400);
+    const made = await store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'Nieudany task desk-panel/run-1 (implementacja, rewizja v3)', origin }, 'panel');
+    expect((await store.thread('DESK-1')).blockers).toMatchObject([
+      { id: manual.blocker, origin: { kind: 'ręczne' }, by: 'user' },
+      { id: made.blocker, reason: 'Nieudany task desk-panel/run-1 (implementacja, rewizja v3)', origin, by: 'panel' },
+    ]);
+    expect((await store.thread('DESK-1')).history.at(-1)).toMatchObject({ by: 'panel', changes: [{ field: 'Zablokowane', from: null }] });
+    await refused(store.apply({ action: 'removeBlocker', thread: 'DESK-1', blocker: manual.blocker! }, 'panel'), 403, /wpis ręczny/);
+    await store.apply({ action: 'removeBlocker', thread: 'DESK-1', blocker: made.blocker! }, 'panel');
+    expect((await store.thread('DESK-1')).blockers.map(b => b.id)).toEqual([manual.blocker]);
+    // The panel's entry is an ordinary one for people: the user or an AI takes it off as well.
+    const other = await store.apply({ action: 'addBlocker', thread: 'DESK-1', reason: 'Z taska', origin }, 'panel');
+    await act(store, { action: 'removeBlocker', thread: 'DESK-1', blocker: other.blocker! }, 'claude-code');
+    // Nothing else opened up for the panel.
+    await refused(store.apply({ action: 'setField', thread: 'DESK-1', field: 'Tagi', value: ['x'] }, 'panel'), 403);
   });
 
   it('answers the queries zablokowane and niezablokowane (without either: both), also in a board column, and still refuses pole("Zablokowane")', async () => {

@@ -43,7 +43,7 @@ const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mail
   // The same reads that feed the dashboard also feed the automations: an active task waiting for the user, a finished one.
   onActive: tasks => { if (!cutoverLocked) { automation?.active(tasks); void automations?.active(tasks); } },
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
-  onFinished: tasks => { if (!cutoverLocked) { void cockpit?.linkPrs(tasks); automation?.finished(tasks); void automations?.finished(tasks); } },
+  onFinished: (tasks, complete) => { if (!cutoverLocked) { void cockpit?.linkPrs(tasks); void cockpit?.blockersFromFinished(tasks, complete); automation?.finished(tasks); void automations?.finished(tasks); } },
   // The Automaty view reads the active automations; its buttons are the only other way one changes.
   automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}) }),
   automationAction: async input => { if (!automations) throw new Error('Automaty nie są dostępne.'); return automations.update(input); } });

@@ -158,7 +158,7 @@ export function defaultFilaData(): FilaData {
 }
 
 const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'updateWorkflow', 'setSpec', 'addSpecField', 'removeSpecField', 'setCezarSettings']);
-const panelMay = new Set<FilaAction['action']>(['linkCezar', 'unlinkCezar', 'comment', 'updateThread']);
+const panelMay = new Set<FilaAction['action']>(['linkCezar', 'unlinkCezar', 'comment', 'updateThread', 'addBlocker', 'removeBlocker']);
 const userOnly = new Set<FilaAction['action']>(['deleteThread']);
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
 const lower = (s: string) => s.toLocaleLowerCase('pl');
@@ -301,8 +301,8 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   /** Validates, then changes; a refusal is thrown before anything is touched (and memory is restored if one comes late). */
   const mutate = (action: FilaAction, actor: FilaBoardActor): FilaResult => {
     if (aiOnly.has(action.action) && actor === 'user') throw new FilaError(403, 'Definicje workflow, wartości Modułu i ustawienia zestawu Cezara zmienia tylko AI (D-033, D-039).');
-    // The panel itself (never reachable over HTTP) only bookkeeps a dispatch: links, a comment and the state.
-    if (actor === 'panel' && !panelMay.has(action.action)) throw new FilaError(403, 'Panel zapisuje tylko powiązania, komentarz i Stan po zleceniu.');
+    // The panel itself (never reachable over HTTP) only bookkeeps a dispatch (links, a comment, the state) and the blocks of failed tasks.
+    if (actor === 'panel' && !panelMay.has(action.action)) throw new FilaError(403, 'Panel zapisuje tylko powiązania, komentarz i Stan po zleceniu oraz wpisy „Zablokowane” z taska.');
     if (userOnly.has(action.action) && actor !== 'user') throw new FilaError(403, 'Trwale usuwa wątek tylko użytkownik, z archiwum (D-038); AI może go zarchiwizować.');
     if (isFilaBoardAction(action)) return applyBoardAction(data, action, actor, now());
     const done = (t: FilaThread, extra: Partial<FilaResult> = {}): FilaResult => ({ ok: true, thread: { id: idOf(t), revision: t.revision }, ...extra });
@@ -531,11 +531,14 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       case 'addBlocker': {
         const t = threadOf(action.thread);
         expect(t, action.expectedRevision);
+        // An entry from a task is the panel's (2.3b), a hand-written one the user's or an AI's: neither may write the other kind.
+        if (actor === 'panel' && !action.origin) throw new FilaError(400, 'Panel dodaje do „Zablokowane” tylko wpis z taska: podaj origin.');
+        if (actor !== 'panel' && action.origin) throw new FilaError(400, 'Wpis z taska (origin) dodaje tylko panel; wpis ręczny nie ma origin.');
         if (t.blockers.length >= FILA_LIMITS.blockers) throw new FilaError(409, `Wątek może mieć najwyżej ${FILA_LIMITS.blockers} wpisów w „Zablokowane”.`);
         let id: string;
         do { id = `k-${randomUUID().slice(0, 8)}`; } while (t.blockers.some(b => b.id === id));
         // The same reason twice is two entries: each is taken off on its own.
-        t.blockers.push({ id, reason: action.reason, origin: { kind: 'ręczne' }, at: now(), by: actor });
+        t.blockers.push({ id, reason: action.reason, origin: action.origin ?? { kind: 'ręczne' }, at: now(), by: actor });
         t.revision += 1;
         record(t, actor, { kind: 'changed', changes: [{ field: 'Zablokowane', from: null, to: cut(action.reason) }] });
         return done(t, { blocker: id });
@@ -545,6 +548,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         expect(t, action.expectedRevision);
         const at = t.blockers.findIndex(b => b.id === action.blocker);
         if (at < 0) throw new FilaError(404, `Wątek ${idOf(t)} nie ma wpisu ${action.blocker} w „Zablokowane”.`);
+        if (actor === 'panel' && t.blockers[at]!.origin.kind !== 'task') throw new FilaError(403, 'Panel zdejmuje z „Zablokowane” tylko wpisy z taska; wpis ręczny zdejmuje użytkownik albo AI.');
         const [gone] = t.blockers.splice(at, 1);
         t.revision += 1;
         record(t, actor, { kind: 'changed', changes: [{ field: 'Zablokowane', from: cut(gone!.reason), to: null }] });
