@@ -370,6 +370,15 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
       expect((await s.fila.thread(other)).blockers).toHaveLength(1);
       expect(handled()).toMatchObject({ 'desk-panel/run-4': 400, 'desk-panel/run-5': 500 });
       expect(existsSync(join(dir, 'cockpit.json'))).toBe(true);
+
+      // A thread deleted for good: its task is handled, nothing throws, and the other thread is untouched.
+      await s.act({ action: 'updateThread', thread: other, state: 'Gotowe do realizacji' });
+      expect((await s.post(other, { expected: await s.expectedOf(other) })).status).toBe(200);
+      await s.act({ action: 'archiveThread', thread: other });
+      await s.act({ action: 'deleteThread', thread: other }, 'user');
+      await s.cockpit.blockersFromFinished([finished('run-6', 'failed', 600)], true);
+      expect(handled()).toMatchObject({ 'desk-panel/run-6': 600 });
+      expect((await s.fila.thread(id)).blockers).toHaveLength(20);
     });
   });
 

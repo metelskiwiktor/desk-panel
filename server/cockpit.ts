@@ -299,7 +299,9 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
             // A success takes off the failures of its mode (any revision) that ended before it; a failure not on record is the oldest.
             for (const blocker of thread.blockers) {
               if (blocker.origin.kind === 'task' && blocker.origin.mode === entry.mode && (handled[blocker.origin.taskId] ?? -Infinity) < end) {
-                await fila.apply({ action: 'removeBlocker', thread: thread.id, blocker: blocker.id }, 'panel');
+                // Each on its own: one entry that cannot be taken off (taken off by hand a moment ago) must not keep the others.
+                await fila.apply({ action: 'removeBlocker', thread: thread.id, blocker: blocker.id }, 'panel')
+                  .catch(error => { console.warn(`fila: task ${task.id} nie zdjął wpisu ${blocker.id} z „Zablokowane” (${error instanceof Error ? error.message : 'błąd'}).`); });
               }
             }
           }
