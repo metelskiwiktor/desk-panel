@@ -41,3 +41,17 @@ export const filaDispatchMatches = (thread: FilaDispatchThread, expected: FilaDi
 
 /** The register key: the thread's permanent uid (so a move cannot dodge the block), the revision and the mode. */
 export const filaDispatchKey = (uid: string, specRevision: number, mode: string | null): string => `${uid}|${specRevision}|${mode ?? ''}`;
+
+/** Cezar's limit of a task title (`cezarCreateRunSchema`), in UTF-16 units like every length the contracts count. */
+const TASK_TITLE_MAX = 120;
+/**
+ * The name of a task dispatched from a thread (2.2): `<ID> <title>`, at most 120 units with the „…” inside the limit.
+ * Only the title is shortened (never through the middle of a surrogate pair); the ID always stays whole.
+ */
+export function filaTaskTitle(id: string, title: string): string {
+  const full = `${id} ${title}`;
+  if (full.length <= TASK_TITLE_MAX) return full;
+  let kept = '';
+  for (const char of title) { if (id.length + 1 + kept.length + char.length + 1 > TASK_TITLE_MAX) break; kept += char; }
+  return `${id} ${kept.trimEnd()}…`;
+}

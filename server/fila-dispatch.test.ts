@@ -10,6 +10,7 @@ import { filaDispatchExpected, getFilaDispatch } from '../src/fila-dispatch';
 import { createPanelServer } from './app';
 import { createCockpit } from './cockpit';
 import { createFilaStore } from './fila';
+import type { FilaCezarTask } from './fila-cezar-tasks';
 import { filaTokens } from './fila-routes';
 import type { PanelSources } from './sources';
 
@@ -21,21 +22,22 @@ let servers: Server[] = [];
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'fila-dispatch-')); });
 afterEach(() => { for (const s of servers.splice(0)) { s.closeAllConnections(); s.close(); } rmSync(dir, { recursive: true, force: true }); });
 
-const snapshotOf = (entries: { id: string; status: 'running' | 'failed' | 'done'; pullRequestUrl?: string }[]): CezarSnapshot => ({
+type Entry = { id: string; status: 'running' | 'failed' | 'done'; title?: string; description?: string; branch?: string; startedAt?: number; pullRequestUrl?: string };
+const taskOf = ({ title = 'Task', description = 'x', ...e }: Entry) => ({ title, description, project: 'desk-panel', checkedAt: Date.now(), sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${e.id}`, ...e });
+const snapshotOf = (entries: Entry[]): CezarSnapshot => ({
   observedAt: Date.now(), partial: false, scheduled: 0, counts: { running: 0, queue: 0, 'needs-input': 0, review: 0 },
-  tasks: entries.filter(e => e.status !== 'failed').map(e => ({ id: e.id, title: 'Task', project: 'desk-panel', status: e.status, checkedAt: Date.now(), description: 'x', sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${e.id}` })),
-  finished: entries.filter(e => e.status === 'failed').map(e => ({ id: e.id, title: 'Task', project: 'desk-panel', status: 'failed' as const, checkedAt: Date.now(), description: 'x', sourceUrl: `http://127.0.0.1:4321/p/desk-panel/tasks/${e.id}` })),
+  tasks: entries.filter(e => e.status !== 'failed').map(taskOf), finished: entries.filter(e => e.status === 'failed').map(taskOf),
 }) as CezarSnapshot;
 
 /** The panel with a real Fila store and cockpit on files in `dir` and a stand-in for Cezar; "restarting" starts it again on the same files. */
-async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolean } = { snapshot: snapshotOf([]), run: 0, fail: false }) {
+async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolean; down?: boolean } = { snapshot: snapshotOf([]), run: 0, fail: false }) {
   const fila = createFilaStore({ file: join(dir, 'fila.json') });
   const created = vi.fn(async (input: CezarCreateRunInput) => {
     if (state.fail) throw new Error('timeout');
     state.run += 1;
     return { ok: true as const, id: `desk-panel/run-${state.run}`, project: 'desk-panel', url: `http://127.0.0.1:4321/p/desk-panel/tasks/run-${state.run}`, workflow: input.workflow ?? 'desk-panel-task' };
   });
-  const sources = { fila, cezar: async () => state.snapshot, cezarCreateRun: created } as unknown as PanelSources;
+  const sources = { fila, cezar: async () => { if (state.down) throw new Error('Cezar nie odpowiada'); return state.snapshot; }, cezarCreateRun: created } as unknown as PanelSources;
   const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });
   const tokens = filaTokens(join(dir, 'home'));
   const server = createPanelServer(sources, dir, undefined, undefined, { cockpit, filaTokens: tokens });
@@ -43,9 +45,9 @@ async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolea
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const act = (action: FilaAction, actor: 'user' | 'claude-code' = 'claude-code') => fila.apply(action, actor);
-  const prepared = async (over: { executor?: 'cezar' | 'lokalnie' | 'rozmowa'; spec?: string } = {}) => {
+  const prepared = async (over: { executor?: 'cezar' | 'lokalnie' | 'rozmowa'; spec?: string; title?: string; parent?: string } = {}) => {
     if (!(await fila.registries()).projects.length) { await act({ action: 'createProject', key: 'DESK', name: 'DeskPanel' }); await act({ action: 'createProject', key: 'CEZR', name: 'Cezar' }); }
-    const id = (await act({ action: 'createThread', project: 'DESK', type: 'funkcja', title: 'Gotowy wątek' })).thread!.id;
+    const id = (await act({ action: 'createThread', project: 'DESK', type: 'funkcja', title: over.title ?? 'Gotowy wątek', ...(over.parent ? { parent: over.parent } : {}) })).thread!.id;
     await act({ action: 'setSpec', thread: id, text: over.spec ?? SPEC, baseRevision: 0 });
     await act({ action: 'addCezarKit', thread: id });
     await act({ action: 'setCezar', thread: id, executor: over.executor ?? 'cezar', repo: 'desk-panel', mode: 'implementacja' });
@@ -58,7 +60,8 @@ async function start(state: { snapshot: CezarSnapshot; run: number; fail: boolea
   });
   const restore = (id: string) => act({ action: 'updateThread', thread: id, state: 'Gotowe do realizacji' });
   const stop = () => { server.closeAllConnections(); server.close(); };
-  return { base, fila, cockpit, created, act, prepared, expectedOf, post, restore, tokens, state, stop };
+  const tasks = async (id: string) => (await fetch(`${base}/api/fila/threads/${id}/cezar-tasks`)).json() as Promise<{ thread: string; partial: boolean; tasks: FilaCezarTask[] }>;
+  return { base, fila, cockpit, created, act, prepared, expectedOf, post, restore, tasks, tokens, state, stop };
 }
 
 describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatch)', () => {
@@ -94,7 +97,8 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     const prompt = getFilaDispatch(thread, (await fila.spec(id)).text).prompt;
     expect((await post(id, { expected })).status).toBe(200);
     expect(created).toHaveBeenCalledTimes(1);
-    expect(created).toHaveBeenCalledWith({ task: prompt, title: 'Gotowy wątek', project: 'desk-panel', workflow: 'desk-panel-task' });
+    // The task is named after the thread (2.2): the ID first, the prompt and `expected` untouched.
+    expect(created).toHaveBeenCalledWith({ task: prompt, title: 'DESK-1 Gotowy wątek', project: 'desk-panel', workflow: 'desk-panel-task' });
     expect(prompt).toContain('Zadanie: DESK-1');
     expect(prompt).toContain('Rewizja specyfikacji: 1');
     expect(prompt!.endsWith(SPEC)).toBe(true);
@@ -179,6 +183,76 @@ describe('Zlecenie Cezara z wątku Fili (POST /api/fila/threads/ID/cezar-dispatc
     expect((await again()).status).toBe(200);
     expect(created).toHaveBeenCalledTimes(5);
     expect(cockpit.threadDispatches().map(d => `${d.specRevision}|${d.mode}|${d.taskId}`)).toEqual(['1|implementacja|desk-panel/run-2', '1|analiza|desk-panel/run-4', '2|implementacja|desk-panel/run-5']);
+  });
+
+  it('nazywa task od ID wątku: tytuł 200 znaków daje nazwę do 120 znaków z pełnym ID i skróconym tytułem', async () => {
+    const { created, prepared, expectedOf, post } = await start();
+    const long = await prepared({ title: `${'Bardzo długi tytuł wątku '.repeat(8)}`.slice(0, 198) + '😀' });
+    expect((await post(long, { expected: await expectedOf(long) })).status).toBe(200);
+    const title = created.mock.calls[0]![0].title!;
+    expect(title.length).toBeLessThanOrEqual(120);
+    expect(title.length).toBeGreaterThan(110);
+    expect(title.startsWith('DESK-1 Bardzo długi tytuł wątku Bardzo')).toBe(true);
+    expect(title.endsWith('…')).toBe(true);
+  });
+
+  it('lista tasków wątku: oba wpisy rejestru po ponowieniu, task bez snapshotu jako „nieznany”, a przy błędzie Cezara rejestr z partial', async () => {
+    const { prepared, expectedOf, post, restore, tasks, state } = await start();
+    const id = await prepared();
+    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
+    state.snapshot = snapshotOf([{ id: 'desk-panel/run-1', status: 'failed', title: 'DESK-1 Gotowy wątek', branch: 'desk-1-gotowy', pullRequestUrl: PR }]);
+    await restore(id);
+    expect((await post(id, { expected: await expectedOf(id) })).status).toBe(200);
+    const listed = await tasks(id);
+    expect(listed).toMatchObject({ thread: id, partial: false });
+    expect(listed.tasks).toEqual([
+      { taskId: 'desk-panel/run-1', name: 'DESK-1 Gotowy wątek', status: 'failed', mode: 'implementacja', specRevision: 1, url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-1', branch: 'desk-1-gotowy', prUrl: PR, source: 'rejestr', at: expect.any(Number) },
+      { taskId: 'desk-panel/run-2', name: null, status: 'nieznany', mode: 'implementacja', specRevision: 1, url: 'http://127.0.0.1:4321/p/desk-panel/tasks/run-2', branch: null, prUrl: null, source: 'rejestr', at: expect.any(Number) },
+    ]);
+    expect(listed.tasks[0]!.at).toBeLessThanOrEqual(listed.tasks[1]!.at);
+    state.down = true;
+    const partial = await tasks(id);
+    expect(partial.partial).toBe(true);
+    expect(partial.tasks.map(t => [t.taskId, t.status, t.source])).toEqual([['desk-panel/run-1', 'nieznany', 'rejestr'], ['desk-panel/run-2', 'nieznany', 'rejestr']]);
+    expect((await fetch(`${(await start()).base}/api/fila/threads/DESK-99/cezar-tasks`)).status).toBe(404);
+  });
+
+  it('lista tasków wątku: taski spoza panelu po ID na początku nazwy, surowego tytułu lub brancha (także po przeniesieniu), powiązanie bez wpisu, bez tasków podwątku i bez duplikatów', async () => {
+    const { prepared, expectedOf, post, act, tasks, fila, state } = await start();
+    // DESK-32 with neighbours DESK-3 and (as names only) DESK-321: the fillers are bare threads, written in one batch.
+    await prepared({ title: 'Wątek 1' });
+    await fila.applyBatch(Array.from({ length: 30 }, (_, i) => ({ action: 'createThread', project: 'DESK', type: 'sprawa', title: `Wątek ${i + 2}` })), 'claude-code');
+    expect(await prepared({ title: 'Wątek 32' })).toBe('DESK-32');
+    const child = await prepared({ title: 'Podwątek', parent: 'DESK-32' });
+    expect(child).toBe('DESK-33');
+    // One task dispatched from the thread, one from its subthread; the subthread's task is even named after the parent.
+    expect((await post('DESK-32', { expected: await expectedOf('DESK-32') })).status).toBe(200);
+    expect((await post(child, { expected: await expectedOf(child) })).status).toBe(200);
+    await act({ action: 'linkCezar', thread: 'DESK-32', kind: 'cezar', id: 'desk-panel/linked', title: 'Dopięty ręcznie' });
+    state.snapshot = snapshotOf([
+      { id: 'desk-panel/run-1', status: 'running', title: 'DESK-32 Wątek 32' },
+      { id: 'desk-panel/run-2', status: 'running', title: 'DESK-32 zlecony z podwątku' },
+      { id: 'desk-panel/by-title', status: 'done', title: 'desk-32: poprawka', startedAt: 5 },
+      { id: 'desk-panel/by-raw', status: 'failed', title: 'Podsumowanie bez ID', description: 'DESK-32 surowy tytuł', startedAt: 3 },
+      { id: 'desk-panel/by-branch', status: 'running', branch: 'desk-32-lista-taskow', startedAt: 4 },
+      { id: 'desk-panel/longer', status: 'running', title: 'DESK-321 inny wątek', branch: 'desk-321-x' },
+      { id: 'desk-panel/shorter', status: 'running', title: 'DESK-3 inny wątek' },
+      { id: 'desk-panel/inside', status: 'running', title: 'Poprawka DESK-32' },
+    ]);
+    const before = await tasks('DESK-32');
+    expect(before.tasks.map(t => [t.taskId, t.source])).toEqual([
+      ['desk-panel/by-raw', 'nazwa'], ['desk-panel/by-branch', 'nazwa'], ['desk-panel/by-title', 'nazwa'], ['desk-panel/run-1', 'rejestr'], ['desk-panel/linked', 'powiązanie'],
+    ]);
+    expect(before.tasks.find(t => t.taskId === 'desk-panel/by-raw')).toMatchObject({ name: 'Podsumowanie bez ID', status: 'failed', mode: null, specRevision: null, url: 'http://127.0.0.1:4321/p/desk-panel/tasks/desk-panel/by-raw', at: 3 });
+    expect(before.tasks.find(t => t.taskId === 'desk-panel/linked')).toMatchObject({ name: null, status: 'nieznany', url: null });
+    expect((await tasks(child)).tasks.map(t => [t.taskId, t.source])).toEqual([['desk-panel/run-2', 'rejestr']]);
+    expect((await tasks('DESK-3')).tasks.map(t => t.taskId)).toEqual(['desk-panel/shorter']);
+
+    // Moved to another project: the tasks named after the former ID are still the thread's.
+    await act({ action: 'createProject', key: 'TABL', name: 'Tabularium' });
+    const moved = await act({ action: 'updateThread', thread: 'DESK-32', project: 'TABL' });
+    expect(moved.thread!.id).toBe('TABL-1');
+    expect((await tasks('TABL-1')).tasks.map(t => t.taskId)).toEqual(before.tasks.map(t => t.taskId));
   });
 
   it('niepewny wynik (błąd Cezara) mówi „sprawdź Cezara”, niczego nie zapisuje i sam nie ponawia', async () => {

@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
-import { filaDispatchExpected, filaDispatchKey, filaDispatchMatches, getFilaDispatch } from '../src/fila-dispatch';
+import { filaDispatchExpected, filaDispatchKey, filaDispatchMatches, filaTaskTitle, getFilaDispatch } from '../src/fila-dispatch';
 import { TODO_LIMITS, TODO_STATUSES, todoExecutorSchema, todoModeSchema, todoRepoSchema } from '../src/todo-contract';
 import { FILA_LIMITS } from '../src/fila-contract';
 import type { Cockpit } from './cockpit';
+import { filaCezarTasks } from './fila-cezar-tasks';
 import { FilaError } from './fila-error';
 import type { PanelSources } from './sources';
 import { SourceError } from './sources';
@@ -19,7 +20,7 @@ const requestSchema = z.object({
   }).strict(),
 }).strict();
 
-const THREAD = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)\/cezar-dispatch(?:\/(register))?$/;
+const THREAD = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)\/(?:cezar-dispatch(?:\/(register))?|(cezar-tasks))$/;
 const json = (res: ServerResponse, status: number, body: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body)); };
 
 /** Keys being dispatched right now: a second request for the same revision and mode meets 409 instead of a second run. */
@@ -30,6 +31,7 @@ const inFlight = new Set<string>();
  * `POST /api/fila/threads/ID/cezar-dispatch` is the user's click only (the panel's own Origin, never a client token); it
  * re-reads the thread, compares `expected` with the preview, computes C1 itself and sends the prompt it composed.
  * `GET …/cezar-dispatch/register` reads the kept dispatches of the thread (the projection the screen shows).
+ * `GET …/cezar-tasks` (2.2) lists the thread's Cezar tasks, computed at read time (`filaCezarTasks`).
  * Handled before `handleFilaRoute`, which would answer an unknown POST with 404.
  */
 export async function handleFilaDispatchRoute(req: IncomingMessage, res: ServerResponse, url: URL, ctx: { ownOrigin: string; sources: PanelSources; cockpit?: Cockpit }): Promise<boolean> {
@@ -42,6 +44,14 @@ export async function handleFilaDispatchRoute(req: IncomingMessage, res: ServerR
     if (req.method === 'GET' && match[2] === 'register') {
       const thread = await fila.thread(match[1]!);
       json(res, 200, { thread: thread.id, dispatches: (cockpit?.threadDispatches() ?? []).filter(d => d.uid === thread.uid).map(({ uid: _uid, ...rest }) => rest) });
+      return true;
+    }
+    if (match[3]) {
+      if (req.method !== 'GET') { res.writeHead(405).end(); return true; }
+      const thread = await fila.thread(match[1]!);
+      // Cezar down is no reason to hide what the panel itself knows: the register and the links answer, marked partial.
+      const snapshot = await sources.cezar().catch(() => null);
+      json(res, 200, { thread: thread.id, ...filaCezarTasks(thread, cockpit?.threadDispatchLog() ?? [], snapshot) });
       return true;
     }
     if (req.method !== 'POST' || match[2]) { res.writeHead(405).end(); return true; }
@@ -77,7 +87,7 @@ export async function handleFilaDispatchRoute(req: IncomingMessage, res: ServerR
         if (known?.status !== 'failed') throw new FilaError(409, `Wątek ma już zlecenie implementacji tej rewizji (task ${last.taskId}): ${last.url}`);
       }
       if (!sources.cezarCreateRun) throw new SourceError(503);
-      const created = await sources.cezarCreateRun({ task: dispatch.prompt, title: thread.title, project: dispatch.project, workflow: dispatch.workflow });
+      const created = await sources.cezarCreateRun({ task: dispatch.prompt, title: filaTaskTitle(thread.id, thread.title), project: dispatch.project, workflow: dispatch.workflow });
       cockpit.recordThreadDispatch({ uid: thread.uid, thread: thread.id, specRevision: thread.spec.revision, mode, taskId: created.id, url: created.url, at: Date.now() });
       const comment = `Zlecono Cezarowi: rewizja v${thread.spec.revision}, task ${created.id}.${last ? ` Ponowienie po nieudanym tasku ${last.taskId}.` : ''}`;
       try {

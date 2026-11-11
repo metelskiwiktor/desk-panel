@@ -20,6 +20,7 @@ Fila to moduł wątków (sprawy, funkcje, błędy, notatki, spotkania) w projekt
 | tablice, widoki, sekcje, kolumny, tablica startowa | `server/fila-boards.ts` |
 | gotowość C1, podgląd i klucz rejestru wątku (wspólne z GUI) | `src/fila-dispatch.ts` (reguły C1 wspólne z listami: `evaluateDispatch` w `src/todo-dispatch.ts`) |
 | zlecenie Cezara z wątku (HTTP) | `server/fila-dispatch.ts` |
+| lista tasków Cezara wątku (2.2) | `server/fila-cezar-tasks.ts` (trasa w `server/fila-dispatch.ts`) |
 | magazyn i reguły domenowe | `server/fila.ts` |
 | HTTP, tożsamość, tokeny | `server/fila-routes.ts` |
 | MCP: cztery narzędzia, wejście klientów `/api/fila/mcp` | `server/fila-mcp.ts` (paczka atomowa i klucz idempotencji: `applyBatch` w `server/fila.ts`) |
@@ -129,7 +130,7 @@ SORTUJ stan malejąco, tytuł
 - **Archiwum** (D-037): domyślnie wykluczone, `włącz` daje oba, `tylko` samo archiwum.
 - **Stan** to dopasowanie po nazwie (bez względu na wielkość liter) w workflow wątku (D-015): Stan, którego żaden workflow nie ma, daje brak trafień. Tak samo `moduł` spoza projektu i tag, którego nikt nie użył: **brak trafień, nie błąd**.
 - **Pola własne**: wszystkie rodzaje z D-047. Wartość: liczba (`3`, `2.5`), `tak`/`nie`, data `RRRR-MM-DD` (dosłowna równość), tekst w cudzysłowie; pole `multi` pasuje, gdy lista **zawiera** wartość. `istnieje` = wątek ma niepustą wartość (pusty tekst i pusta lista to „brak”). **Błąd 400**: nieznana definicja pola, wartość niezgodna z rodzajem (np. tekst do liczby, liczba bez cudzysłowu do tekstu), nazwa zastrzeżona (`pole("Stan")` → użyj `stan`).
-- **Poza etapem 1, zgłasza 400**: `Kiedy`, `Termin`, `Zablokowane`, `Implementacja Cezara`, `Specyfikacja` w `pole(…)`, `kiedy`/`termin`/`data` jako filtr, operatory `<`, `>`, `!=`, `~` i daty względne (Q-016, etap 3), kilka projektów.
+- **Poza etapem 1, zgłasza 400**: zastrzeżone nazwy `Kiedy`, `Termin`, `Zablokowane`, `Implementacja Cezara`, `Specyfikacja` użyte jako `pole(…)` (typ wątku Implementacja Cezara filtruje `typ = implementacja-cezara`), `kiedy`/`termin`/`data` jako filtr, operatory `<`, `>`, `!=`, `~` i daty względne (Q-016, etap 3), kilka projektów.
 - **Sortowanie** (`SORTUJ klucz [rosnąco|malejąco], …`, najwyżej 3 klucze): `stan` (kolejność Stanu w workflow, D-034), `tytuł` (bez względu na wielkość liter i polskie znaki), `id` (projekt, potem numer). **Domyślnie ID rosnąco; remisy zawsze rozstrzyga ID rosnąco.** Ręcznego porządkowania wątków nie ma.
 
 ### Odczyt zapytań
@@ -175,6 +176,18 @@ Etap 2 (D-012) to Cezar w wątku; ta część daje typ, ustawienia i reguły zle
 - **Gotowość**: Stan wątku musi być na liście (para workflow + Stan); brak daje komunikat „Wątek musi mieć Stan, z którego wolno zlecić Cezarowi („…”, w workflow z ustawień zestawu), a ma „…”.”. Ręczna blokada `blocked` **nie jest sprawdzana** (D-105; zostaje do 2.3). Pozostałe braki jak w listach.
 - **Limit** w `POST …/cezar-dispatch` (D-100, D-116): jedna udana implementacja na rewizję Specyfikacji. O blokadzie decyduje **najnowszy** wpis rejestru dla klucza (`uid` + rewizja + tryb): 409 z linkiem, dopóki jego task w snapshocie Cezara nie ma statusu `failed` (anulowany to `failed`). Task w toku, zakończony i **nieobecny w snapshocie** blokują; po `failed` można ponowić, a po sekwencji failed → ponowienie w toku kolejna próba znów dostaje 409. Nowa rewizja to nowy klucz. **Analiza** nie ma limitu i nie czyta rejestru (można ją zlecić także przy trwającej implementacji albo analizie); każde zlecenie to osobny wpis rejestru. Równoczesne żądanie tego samego klucza nadal dostaje 409.
 - **Akceptowane ryzyko**: task usunięty z Cezara albo przycięty ze snapshotu blokuje implementację tej rewizji na stałe (wyjście: nowa rewizja Specyfikacji). Zlecenie z workflow bez Stanu „W realizacji” udaje się, a zmiana Stanu po zleceniu jest pominięta (log serwera); powiązanie i komentarz powstają wcześniej.
+
+## Etap 2.2: lista tasków Cezara i konwencja ID
+
+`GET /api/fila/threads/ID/cezar-tasks` → `{ thread, partial, tasks }` (nieznany wątek 404; odczyt jak inne GET-y). Lista jest **wyliczana przy odczycie**, dla każdego wątku (także bez zestawu), i nigdzie nie jest zapisywana. Tylko HTTP: `fila_get` jej nie zwraca. Wygląd ustali pictor.
+
+- **Źródła**, task raz po `taskId`; przy kilku źródłach wygrywa pierwsze: (a) `rejestr`: wszystkie wpisy rejestru zleceń z `uid` wątku (`cockpit.threadDispatchLog()`: każdy wpis osobno z czasem, także wpisy z migracji etapu 1, więc po ponowieniu oba taski); (b) `powiązanie`: powiązania `cezar` wątku; (c) `nazwa`: taski ze snapshotu Cezara (aktywne i zakończone), których `title`, surowy tytuł (`description`) albo `branch` zaczyna się od ID wątku lub wartości pola „Dawne ID” (po przeniesieniu). Powiązań `pr` lista nie czyta: PR bierze z taska. Kart zleceń z czatu (`threadUid`) nie czyta: ich taski dochodzą przez powiązanie `cezar` albo nazwę.
+- **Dopasowanie ID**: na samym początku tekstu, bez względu na wielkość liter; po ID koniec tekstu albo znak, który nie jest literą ani cyfrą (Unicode), więc `DESK-6` nie pasuje do `DESK-61 …`, a `desk-32-lista` pasuje do DESK-32.
+- **Pozycja**: `taskId`; `name` (`title` ze snapshotu, inaczej `null`; po podsumowaniu przez Cezara nie musi zaczynać się od ID); `status` (`needs-input`, `review`, `running`, `queue`, `done`, `failed` albo `nieznany`, gdy taska nie ma w snapshocie); `mode`, `specRevision` (z rejestru, inaczej `null`); `url` (rejestr, inaczej `sourceUrl`, inaczej `null`); `branch`, `prUrl` (snapshot, inaczej `null`); `source`; `at` (rejestr: czas wpisu; powiązanie: jego `at`; nazwa: `startedAt`, inaczej `completedAt`, inaczej `checkedAt`). Kolejność: `at` rosnąco, remis po `taskId`.
+- **Snapshot niedostępny albo niepełny**: 200 z rejestrem i powiązaniami, `partial: true` (taski mają wtedy `nieznany`).
+- **Bez tasków podwątków**: rejestr i powiązania są per wątek, a task, który rejestr trzyma pod innym wątkiem, nie wchodzi przez nazwę (rozstrzygnięcie wykonawcy: inaczej task zlecony z podwątku, nazwany ID rodzica, trafiałby na obie listy).
+- **Rozstrzygnięcia wykonawcy**: gdy jeden `taskId` ma kilka wpisów rejestru wątku, `mode`, `specRevision`, `url` i `at` pochodzą z najnowszego (jak limit w 2.1); bez kokpitu lista ma tylko powiązania i nazwy.
+- **Konwencja ID**: nowy task ze zlecenia z Fili dostaje nazwę `<ID> <tytuł wątku>` (`filaTaskTitle`), najwyżej **120 znaków** (jednostki UTF-16, limit `title` w `cezarCreateRun`; „…” wlicza się do limitu): skracany jest tylko tytuł, ID nigdy. Nazwę ustawia wyłącznie `title` w wywołaniu `cezarCreateRun`; prompt, podgląd i `expected` są bez zmian, tytuł powiązania `cezar` na wątku to nadal tytuł wątku. Lista **nie zależy** od konwencji (pewne są rejestr i powiązania); prefiks w branchach, PR i commitach wprowadza osobno repo Cezara (CEZR-4), a taski spoza panelu widać tylko, dopóki są w snapshocie Cezara (30 ostatnich zakończonych).
 
 ## Migrator i propozycja przełączenia (1.4b)
 

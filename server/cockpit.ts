@@ -176,6 +176,8 @@ export interface Cockpit {
   recordTodoDispatch(record: TodoDispatchRun): void;
   /** The last successful dispatch per thread uid+revision+mode (without `at`): what the retry check and the thread screen read. */
   threadDispatches(): Omit<ThreadDispatchRun, 'at'>[];
+  /** Every kept thread dispatch with its time, oldest first (migrated ones too): a retry leaves both entries (the task list of 2.2). */
+  threadDispatchLog(): ThreadDispatchRun[];
   recordThreadDispatch(record: ThreadDispatchRun): void;
   /** Whether an automation turn for this task and state was already sent (or deliberately skipped). */
   automationReported(chatId: string, taskId: string, state: string): boolean;
@@ -390,6 +392,8 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       for (const dispatch of store.threadDispatches) last.set(`${dispatch.uid}|${dispatch.specRevision}|${dispatch.mode}`, dispatch);
       return [...last.values()].map(({ at: _at, ...rest }) => rest);
     },
+
+    threadDispatchLog() { return store.threadDispatches.map(dispatch => ({ ...dispatch })); },
 
     recordThreadDispatch(record) {
       store.threadDispatches.push(record);
