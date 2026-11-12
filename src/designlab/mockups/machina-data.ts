@@ -2,7 +2,7 @@
  * Fila, the data live here; the IRONMAN states and fragments come from the real automat a-f6354232578d (12.11.2026). */
 
 export type Chwila = 'przeniesienie' | 'pozniej';
-export type AutomatStatus = 'aktywny' | 'wstrzymany' | 'czeka na kartę przepisu' | 'czeka na naprawę' | 'czeka na decyzję' | 'zakończony';
+export type AutomatStatus = 'aktywny' | 'wstrzymany' | 'czeka na kartę programu' | 'czeka na naprawę' | 'czeka na decyzję' | 'zakończony';
 export type Rodzaj = 'cykliczny' | 'jednorazowy' | 'zdarzenie' | 'wbudowany';
 export type Grupa = 'odczyt' | 'przetwarzanie' | 'akcja' | 'sterowanie';
 
@@ -34,13 +34,13 @@ const REAKCJA = 'tylko w reakcji sytuacji (zakładka Katalog sytuacji)';
 const ironKlockiV1: Klocek[] = [
   ODCZYT(IRON_URL_PL, 'ironmanpoznan.com.pl'),
   { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'wiersz „Enea IRONMAN 70.3 Poznań”: przyciski i etykiety', kiedy: 'po odczycie strony PL',
-    ustawienia: [['skąd', IRON_URL_PL], ['fragment', 'wiersz tabeli z tekstem „Enea IRONMAN 70.3 Poznań”: etykiety i adresy przycisków'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+    ustawienia: [['skąd', IRON_URL_PL], ['fragment', 'wiersz tabeli z tekstem „Enea IRONMAN 70.3 Poznań”: etykiety i adresy przycisków'], ['gdy fragmentu brak', 'naprawa programu (D-002)']] },
   ODCZYT(IRON_URL_COM, 'ironman.com'),
   { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'karta data-race-id="107211": tag rejestracji', kiedy: 'po odczycie ironman.com',
-    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu data-race-id="107211": tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu data-race-id="107211": tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa programu (D-002)']] },
   ODCZYT(IRON_URL_REG, 'ironman.com'),
   { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'klasa registration-state-- i linki slotmarket.pl', kiedy: 'po odczycie /register',
-    ustawienia: [['skąd', IRON_URL_REG], ['fragment', 'klasa body registration-state--… i wszystkie linki slotmarket.pl'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+    ustawienia: [['skąd', IRON_URL_REG], ['fragment', 'klasa body registration-state--… i wszystkie linki slotmarket.pl'], ['gdy fragmentu brak', 'naprawa programu (D-002)']] },
   { rodzaj: 'Porównanie z sytuacjami', grupa: 'przetwarzanie', opis: 'trzy wycinki z katalogiem sytuacji', kiedy: 'po wszystkich wycinkach',
     ustawienia: [['porównuje', 'trzy wycinki razem z próbkami sytuacji z katalogu'], ['pasuje do sytuacji', 'wykonuje reakcję tej sytuacji bez modelu'], ['nie pasuje', 'ocena (następny klocek)']] },
   { rodzaj: 'Ocena', grupa: 'przetwarzanie', opis: 'Wektor, gdy wycinki nie pasują do żadnej sytuacji', kiedy: 'tylko gdy porównanie nie znalazło sytuacji',
@@ -58,7 +58,7 @@ const ironKlockiV1: Klocek[] = [
 ];
 const ironKlockiV2: Klocek[] = ironKlockiV1.map(k => k.opis.startsWith('karta data-race-id')
   ? { ...k, opis: 'karta 70.3 po nazwie „IRONMAN 70.3 Poznan” (race-id zmienia się między edycjami)',
-    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu z nazwą „IRONMAN 70.3 Poznan”: tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] } : k);
+    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu z nazwą „IRONMAN 70.3 Poznan”: tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa programu (D-002)']] } : k);
 
 const zamkniete: Stan = {
   nazwa: 'Zamknięte (2026 wyprzedane)', rodzaj: 'znany', reakcja: 'bez zmian',
@@ -69,11 +69,11 @@ const zamkniete: Stan = {
 };
 
 const IRONMAN_PRZENIESIONY: Automat = {
-  id: 'a-f6354232578d', nazwa: 'Zapisy: IRONMAN 70.3 Poznań 2027', rodzaj: 'cykliczny', status: 'czeka na kartę przepisu',
+  id: 'a-f6354232578d', nazwa: 'Zapisy: IRONMAN 70.3 Poznań 2027', rodzaj: 'cykliczny', status: 'czeka na kartę programu',
   wyzwalacze: ['codziennie 10:00 i 19:00, do 28 sty 2027'],
   opis: 'Czy ruszyły zapisy na Enea IRONMAN 70.3 Poznań 2027 (tylko 70.3).',
   wersje: [], stany: [], runy: [],
-  rozmowy: [{ id: 'r-proj', powod: 'projektowanie', tytul: 'Projektowanie przepisu', at: '20 lis 09:12' }],
+  rozmowy: [{ id: 'r-proj', powod: 'projektowanie', tytul: 'Projektowanie programu', at: '20 lis 09:12' }],
   historia: { runy: 26, bledy: 6, od: '31 paź', notatnik: '2026-11-12 10:00 (odczyt) — bez zmian: wiersz 70.3 = Read more + SOLD OUT; ironman.com: „Registration Opening Soon” przy race-id 107211; /register = opening_soon, jedyny slotmarket 735 (2026). Pułapka: „Registration Now Open” należy do karty 94586 (5150 Erkner).' },
   usuwalny: true,
 };
@@ -81,7 +81,7 @@ const IRONMAN_PRZENIESIONY: Automat = {
 const IRONMAN_POZNIEJ: Automat = {
   ...IRONMAN_PRZENIESIONY, status: 'czeka na decyzję', nastepny: 'dziś 19:00',
   wersje: [
-    { n: 1, at: '20 lis 09:30', powod: 'projektowanie', opis: 'pierwszy przepis z rozmowy projektowania', klocki: ironKlockiV1 },
+    { n: 1, at: '20 lis 09:30', powod: 'projektowanie', opis: 'pierwszy program z rozmowy projektowania', klocki: ironKlockiV1 },
     { n: 2, at: '28 lis 10:14', powod: 'naprawa', opis: 'karta 70.3 szukana po nazwie, nie po race-id', klocki: ironKlockiV2 },
   ],
   stany: [
@@ -112,20 +112,20 @@ const IRONMAN_POZNIEJ: Automat = {
     { id: 'r-ocena', powod: 'ocena', tytul: 'Ocena: nowy wygląd karty 70.3', at: '2 gru 19:01', run: 'run-0127' },
     { id: 'r-naprawa', powod: 'naprawa', tytul: 'Naprawa: brak karty 107211', at: '28 lis 10:01', run: 'run-0119' },
     { id: 'r-ocena-0110', powod: 'ocena', tytul: 'Ocena: „Registration Now Open”', at: '24 lis 19:01', run: 'run-0110' },
-    { id: 'r-proj', powod: 'projektowanie', tytul: 'Projektowanie przepisu', at: '20 lis 09:12' },
+    { id: 'r-proj', powod: 'projektowanie', tytul: 'Projektowanie programu', at: '20 lis 09:12' },
   ],
 };
 
 const wbudowany = (id: string, nazwa: string, wyzwalacz: string, opis: string, klocki: Klocek[], runy: Run[] = []): Automat => ({
   id, nazwa, rodzaj: 'wbudowany', status: 'aktywny', wyzwalacze: [wyzwalacz], opis, usuwalny: false,
-  wersje: [{ n: 1, at: 'od wdrożenia', powod: 'kod panelu', opis: 'przepis panelu (zmienia go tylko kod, D-046)', klocki }], stany: [], runy, rozmowy: [],
+  wersje: [{ n: 1, at: 'od wdrożenia', powod: 'kod panelu', opis: 'program panelu (zmienia go tylko kod, D-046)', klocki }], stany: [], runy, rozmowy: [],
 });
 
 const prosty = (id: string, nazwa: string, rodzaj: Rodzaj, status: AutomatStatus, wyzwalacze: string[], opis: string, klocki: Klocek[], runy: Run[] = [], nowy?: string): Automat => ({
   id, nazwa, rodzaj, status, wyzwalacze, opis, usuwalny: true, stany: [], runy,
-  rozmowy: nowy ? [{ id: `${id}-proj`, powod: 'projektowanie', tytul: 'Projektowanie przepisu', at: nowy }] : [],
+  rozmowy: nowy ? [{ id: `${id}-proj`, powod: 'projektowanie', tytul: 'Projektowanie programu', at: nowy }] : [],
   wersje: [nowy
-    ? { n: 1, at: nowy, powod: 'projektowanie', opis: 'przepis z rozmowy projektowania', klocki }
+    ? { n: 1, at: nowy, powod: 'projektowanie', opis: 'program z rozmowy projektowania', klocki }
     : { n: 1, at: '20 lis', powod: 'przeniesienie', opis: 'panel przeniósł dzisiejszą regułę albo obserwatora z obecnych ustawień, bez karty (D-025)', klocki }],
 });
 
@@ -187,8 +187,8 @@ export const automaty = (chwila: Chwila): Automat[] => chwila === 'przeniesienie
   ? wspolne(IRONMAN_PRZENIESIONY)
   : [...wspolne(IRONMAN_POZNIEJ), FAKTURA_ALERT, FAKTURA_KSIEG, { ...prosty('a-obs-czas-old', 'Obserwator czasu: 30 paź 21:02', 'jednorazowy', 'zakończony', ['30 paź 21:02'], 'Dawny obserwator, wykonany.', []) }];
 
-/** The recipe card of the IRONMAN design conversation (D-002, D-009, D-035). */
-export const KARTA_PRZEPISU = {
+/** The program card of the IRONMAN design conversation (D-002, D-009, D-035). */
+export const KARTA_PROGRAMU = {
   automat: IRONMAN_PRZENIESIONY.nazwa, wersja: 1, klocki: ironKlockiV1,
   znany: { nazwa: 'Zamknięte (2026 wyprzedane)', probka: zamkniete.probki[0].wycinek.replace('20 lis', '') },
   przewidywane: IRONMAN_POZNIEJ.stany.filter(s => s.rodzaj === 'przewidywany'),

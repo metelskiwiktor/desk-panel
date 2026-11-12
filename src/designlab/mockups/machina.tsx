@@ -1,13 +1,13 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { Bell, Bot, CalendarClock, Check, Cog, FileText, History, Layers3, Lock, MessageSquare, Pause, Play, RotateCcw, Workflow, X, Zap } from 'lucide-react';
 import { Link, useSearch } from '../nav';
-import { ALERT_FAKTURY, KARTA_PRZEPISU, OCENA, WATKI, automaty, type Automat, type Chwila, type Grupa, type Run } from './machina-data';
+import { ALERT_FAKTURY, KARTA_PROGRAMU, OCENA, WATKI, automaty, type Automat, type Chwila, type Grupa, type Run } from './machina-data';
 
 /** Conceptual mockup of Machina (docs/designlab.md; concept C:\Tabularium\Incepta\DeskPanel\Mea\Machina). Every element
  * follows a decision D-001–D-058 (automat as a Fila thread: D-053–D-057); the rest is marked as an agent proposal in the conversation. No writes. */
 
 type Widok = 'lista' | 'karta' | 'ocena' | 'alert';
-type Zakladka = 'przepis' | 'stany' | 'dziennik' | 'rozmowy';
+type Zakladka = 'program' | 'stany' | 'dziennik' | 'rozmowy';
 
 const MODULY = ['Obserwacja', 'Obsługa', 'Przypomnienia', 'Systemowe'];
 const RODZAJ: Record<Automat['rodzaj'], string> = { cykliczny: 'cykliczny', zdarzenie: 'na zdarzenie', jednorazowy: 'jednorazowy', wbudowany: 'wbudowany' };
@@ -36,7 +36,7 @@ function Klocki({ klocki, zakresy = true, otwarty }: { klocki: Automat['wersje']
           {(k.ustawienia ?? []).map(([key, value]) => <Fragment key={key}><dt>{key}</dt><dd>{value}</dd></Fragment>)}
           {k.zakres && <><dt>Zakres</dt><dd><Lock size={12} /> {k.zakres} (zatwierdzony na karcie, D-009)</dd></>}
         </dl>
-        <p className="mach-note">Zmiana ustawień: poproś Wektora w rozmowie automatu; zmiana to nowa wersja przepisu z kartą (D-035).</p>
+        <p className="mach-note">Zmiana ustawień: poproś Wektora w rozmowie automatu; zmiana to nowa wersja programu z kartą (D-035).</p>
       </div>}
     </li>)}
   </ol>;
@@ -70,15 +70,15 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
       </div>
       <div className="mach-actions">
         <span className={`mach-status s-${statusTone(a.status)}`} title="Stan wątku w workflow Automat; ustawia go tylko Machina">Stan: {stanWatku(a)}</span>
-        <button className="mach-icon" aria-label="Uruchom teraz" disabled={a.status === 'czeka na kartę przepisu'}><Play size={16} /></button>
+        <button className="mach-icon" aria-label="Uruchom teraz" disabled={a.status === 'czeka na kartę programu'}><Play size={16} /></button>
         <button className="mach-icon" aria-label="Wstrzymaj"><Pause size={16} /></button>
         {a.usuwalny && <button className="mach-icon" aria-label="Anuluj"><X size={16} /></button>}
       </div>
     </header>
-    {a.status === 'czeka na kartę przepisu' && <div className="mach-banner">
+    {a.status === 'czeka na kartę programu' && <div className="mach-banner">
       <CalendarClock size={18} />
-      <div><strong>Wstrzymany do zatwierdzenia pierwszego przepisu.</strong> Wektor projektuje go w rozmowie projektowania; do tego czasu automat nie sprawdza stron.</div>
-      <Link className="mach-primary small" href={href({ widok: 'karta' })}>Otwórz kartę przepisu</Link>
+      <div><strong>Wstrzymany do zatwierdzenia pierwszego programu.</strong> Wektor projektuje go w rozmowie projektowania; do tego czasu automat nie sprawdza stron.</div>
+      <Link className="mach-primary small" href={href({ widok: 'karta' })}>Otwórz kartę programu</Link>
     </div>}
     {a.status === 'czeka na decyzję' && <div className="mach-banner">
       <Bot size={18} />
@@ -100,10 +100,10 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
     </div>
     <h2 className="mach-kit"><Cog size={16} />Zestaw Machiny<span className="mach-muted">zmienia go tylko karta Machiny</span></h2>
     <div className="mach-tabs">
-      {tab('przepis', 'Przepis', a.wersje.length || undefined)}{tab('stany', 'Katalog sytuacji', a.stany.length || undefined)}
+      {tab('program', 'Program', a.wersje.length || undefined)}{tab('stany', 'Katalog sytuacji', a.stany.length || undefined)}
       {tab('dziennik', 'Dziennik', a.runy.length || undefined)}{tab('rozmowy', 'Rozmowy', a.rozmowy.length || undefined)}
     </div>
-    {zakladka === 'przepis' && (shown ? <div className="mach-cols">
+    {zakladka === 'program' && (shown ? <div className="mach-cols">
       <div><h2>Wersja {shown.n}{shown.n === a.wersje.at(-1)?.n ? ' (bieżąca)' : ''}</h2><p className="mach-muted">{shown.at} · {shown.powod} · {shown.opis}</p>
         <div className="mach-kiedy"><Zap size={15} /><div><strong>Kiedy rusza run</strong>{a.wyzwalacze.map(w => <span key={w}>{w}</span>)}</div></div>
         {porownuje(a) && <p className="mach-note">Akcje wykonują się tylko w reakcji sytuacji (Katalog sytuacji); zwykły run kończy się na porównaniu.</p>}
@@ -114,15 +114,15 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
           {w.n !== a.wersje.at(-1)?.n && <button className="mach-text"><RotateCcw size={13} />Przywróć jako v{a.wersje.length + 1}</button>}
         </li>)}</ul>
         {a.wersje.length > 1 && <p className="mach-note">Przywrócona wersja przechodzi sprawdzenie na próbkach katalogu.</p>}</aside>}
-      {a.rodzaj === 'wbudowany' && <aside className="mach-side"><h3><Cog size={15} />Przepis panelu</h3><p className="mach-note">Zmienia go tylko kod panelu. Możesz wstrzymać i wznowić; nie da się usunąć.</p></aside>}
-    </div> : <p className="mach-empty">Brak przepisu: czeka na rozmowę projektowania.</p>)}
+      {a.rodzaj === 'wbudowany' && <aside className="mach-side"><h3><Cog size={15} />Program panelu</h3><p className="mach-note">Zmienia go tylko kod panelu. Możesz wstrzymać i wznowić; nie da się usunąć.</p></aside>}
+    </div> : <p className="mach-empty">Brak programu: czeka na rozmowę projektowania.</p>)}
     {zakladka === 'stany' && (a.stany.length ? <ul className="mach-stany">{a.stany.map(s => <li key={s.nazwa} className={`mach-stan r-${s.rodzaj}`}>
       <div className="mach-stan-head"><strong>{s.nazwa}</strong><span className="mach-pill">{s.rodzaj === 'przewidywany' ? 'przewidywana (bez próbki)' : s.rodzaj === 'znany' ? 'znana' : 'wycofana'}</span><span className="mach-muted">→ {s.reakcja}</span></div>
       {s.uwaga && <p className="mach-note">{s.uwaga}</p>}
       {s.probki.map(p => <p key={p.run} className="mach-probka"><span>{p.at} · {p.run}</span>{p.wycinek}</p>)}
     </li>)}</ul> : <p className="mach-empty">{porownuje(a) || !a.wersje.length
-      ? 'Katalog powstanie z pierwszym przepisem.'
-      : 'Ten przepis nie porównuje wycinków z sytuacjami, więc nie ma katalogu sytuacji: każde zdarzenie wyzwalacza wykonuje klocki od razu. Katalog mają tylko przepisy, które obserwują stronę albo źródło.'}</p>)}
+      ? 'Katalog powstanie z pierwszym programem.'
+      : 'Ten program nie porównuje wycinków z sytuacjami, więc nie ma katalogu sytuacji: każde zdarzenie wyzwalacza wykonuje klocki od razu. Katalog mają tylko programy, które obserwują stronę albo źródło.'}</p>)}
     {zakladka === 'dziennik' && <>
       {a.runy.length ? <ul className="mach-runs">{a.runy.map((run, i) => <RunRow key={run.id} run={run} open={i === 0} />)}</ul> : <p className="mach-empty">Brak runów w Machinie.</p>}
       {a.historia && <div className="mach-history"><h3><History size={15} />Historia sprzed Machiny</h3>
@@ -161,7 +161,7 @@ function Kokpit({ a }: { a: Automat }) {
     <h2>{a.nazwa}</h2>
     <p className="mach-muted">{watek(a).id} · <span className={`mach-status s-${statusTone(a.status)}`}>{stanWatku(a)}</span> wersja {a.wersje.at(-1)?.n}</p>
     {last && <div className="mach-cockpit-run"><h3>Run {last.at}</h3><ul className="mach-run-klocki">{last.klocki.map((k, i) => <li key={i} className={k.zly ? 'bad' : undefined}><span>{k.rodzaj}</span>{k.wynik}</li>)}</ul></div>}
-    <h3>Przepis v{a.wersje.at(-1)?.n}</h3>
+    <h3>Program v{a.wersje.at(-1)?.n}</h3>
     <Klocki klocki={a.wersje.at(-1)?.klocki ?? []} zakresy={false} />
   </aside>;
 }
@@ -170,10 +170,10 @@ function Wiadomosc({ kto, children }: { kto: 'wektor' | 'panel' | 'ty'; children
   return <div className={`mach-msg m-${kto}`}><span className="mach-msg-who">{kto === 'wektor' ? 'Wektor' : kto === 'panel' ? 'Machina' : 'Ty'}</span>{children}</div>;
 }
 
-function KartaPrzepisu() {
-  const k = KARTA_PRZEPISU;
-  return <section className="mach-card" aria-label="Karta przepisu">
-    <p className="mach-eyebrow">Karta · nowy przepis</p>
+function KartaProgramu() {
+  const k = KARTA_PROGRAMU;
+  return <section className="mach-card" aria-label="Karta programu">
+    <p className="mach-eyebrow">Karta · nowy program</p>
     <h2>{k.automat}: wersja {k.wersja}</h2>
     <h3>Klocki</h3><Klocki klocki={k.klocki} />
     <h3>Znana sytuacja z próbką</h3>
@@ -182,7 +182,7 @@ function KartaPrzepisu() {
     <ul className="mach-stany">{k.przewidywane.map(s => <li key={s.nazwa} className="mach-stan r-przewidywany"><div className="mach-stan-head"><strong>{s.nazwa}</strong><span className="mach-muted">→ {s.reakcja}</span></div></li>)}</ul>
     <p className="mach-note">Każdy inny wygląd wycinków to sytuacja nieznana: ocena Wektora i karta przed reakcją. Pierwsze wejście w „Zapisy otwarte” zawsze potwierdza Wektor.</p>
     <h3>Zakresy</h3><ul className="mach-scopes">{k.zakresy.map(z => <li key={z}><Lock size={12} />{z}</li>)}</ul>
-    <div className="mach-card-actions"><button className="mach-primary"><Check size={16} />Zatwierdź przepis</button><button className="mach-text">Odrzuć</button></div>
+    <div className="mach-card-actions"><button className="mach-primary"><Check size={16} />Zatwierdź program</button><button className="mach-text">Odrzuć</button></div>
   </section>;
 }
 
@@ -193,7 +193,7 @@ export default function Machina() {
   const lista = automaty(chwila);
   const iron = lista[0];
   const wybrany = lista.find(a => a.id === params.get('automat')) ?? iron;
-  const zakladka = (params.get('zakladka') ?? (wybrany.runy.length ? 'dziennik' : 'przepis')) as Zakladka;
+  const zakladka = (params.get('zakladka') ?? (wybrany.runy.length ? 'dziennik' : 'program')) as Zakladka;
   const href = (extra: Record<string, string>, ch: Chwila = chwila) =>
     `?${new URLSearchParams({ designlab: 'machina', ...(ch === 'pozniej' ? { chwila: 'pozniej' } : {}), ...extra })}`;
 
@@ -206,7 +206,7 @@ export default function Machina() {
       </div>
       <div className="mach-jump">
         <Link href={href({}, 'przeniesienie')}>1 Lista</Link><Link href={href({ zakladka: 'dziennik' }, 'pozniej')}>2 IRONMAN</Link>
-        <Link href={href({ widok: 'karta' }, 'przeniesienie')}>3 Karta przepisu</Link><Link href={href({ widok: 'ocena' }, 'pozniej')}>4 Ocena</Link>
+        <Link href={href({ widok: 'karta' }, 'przeniesienie')}>3 Karta programu</Link><Link href={href({ widok: 'ocena' }, 'pozniej')}>4 Ocena</Link>
         <Link href={href({ widok: 'alert' }, 'pozniej')}>5 Alert faktury</Link>
       </div>
     </header>
@@ -216,14 +216,14 @@ export default function Machina() {
     {widok === 'karta' && <div className="mach-chat-layout">
       <section className="mach-thread" aria-label="Rozmowa automatu">
         <p className="mach-eyebrow"><span className="mach-pill p-projektowanie">projektowanie</span> {iron.nazwa}</p>
-        <h1>Projektowanie przepisu</h1>
-        <Wiadomosc kto="panel">Automat przeniesiony do Machiny i wstrzymany do zatwierdzenia pierwszego przepisu. Cel: {iron.opis}</Wiadomosc>
+        <h1>Projektowanie programu</h1>
+        <Wiadomosc kto="panel">Automat przeniesiony do Machiny i wstrzymany do zatwierdzenia pierwszego programu. Cel: {iron.opis}</Wiadomosc>
         <Wiadomosc kto="wektor">Sprawdziłem trzy strony z celu. Z każdej biorę tylko fragment o 70.3, więc zmiany przy 5150, Relay czy banerze nie budzą oceny. Obecny wygląd zapisuję jako znaną sytuację „Zamknięte”, a dla otwarcia, którego jeszcze nie widzieliśmy, proponuję sytuacje przewidywane z reakcjami. Automat ma już wątek MACH-1 w Fili.</Wiadomosc>
-        <KartaPrzepisu />
+        <KartaProgramu />
       </section>
       <aside className="mach-cockpit"><p className="mach-eyebrow">Kokpit rozmowy</p><h2>{iron.nazwa}</h2>
-        <p className="mach-muted">MACH-1 · Stan: <span className="mach-status s-wait">Czeka na kartę przepisu</span></p>
-        <p className="mach-muted">{iron.wyzwalacze[0]}</p><p className="mach-note">Brak przepisu i runów w Machinie. Historia sprzed Machiny: 26 runów, 6 błędów.</p></aside>
+        <p className="mach-muted">MACH-1 · Stan: <span className="mach-status s-wait">Czeka na kartę programu</span></p>
+        <p className="mach-muted">{iron.wyzwalacze[0]}</p><p className="mach-note">Brak programu i runów w Machinie. Historia sprzed Machiny: 26 runów, 6 błędów.</p></aside>
     </div>}
 
     {widok === 'ocena' && <div className="mach-chat-layout">
@@ -261,7 +261,7 @@ export default function Machina() {
         <p className="mach-eyebrow">Automat uruchamiany przyciskiem</p>
         <h2>{ALERT_FAKTURY.cel}</h2>
         <h3>Wejście runu</h3><ul className="mach-scopes">{ALERT_FAKTURY.wejscie.map(w => <li key={w}>{w}</li>)}</ul>
-        <h3>Przepis v1</h3><Klocki klocki={lista.find(a => a.id === 'a-faktura-ksieg')?.wersje[0].klocki ?? []} />
+        <h3>Program v1</h3><Klocki klocki={lista.find(a => a.id === 'a-faktura-ksieg')?.wersje[0].klocki ?? []} />
         <p className="mach-note">Drugie kliknięcie to nowy run, który nie powtarza wykonanych skutków (np. drugiego pliku na Drive).</p>
       </section>
     </div>}
