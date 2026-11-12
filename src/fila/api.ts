@@ -13,7 +13,7 @@ export interface FilaRegistry {
   boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
   fieldDefs: { name: string; kind: 'text' | 'number' | 'date' | 'bool' | 'multi' }[];
-  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean }[];
+  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean; machina: boolean }[];
   /** The states a thread may be dispatched to Cezar from (2.1). */
   cezarSettings: { readyStates: { workflow: string; state: string }[] };
   notice?: string;

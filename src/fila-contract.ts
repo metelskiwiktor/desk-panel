@@ -30,7 +30,23 @@ export const FILA_TYPES = {
   etap: { label: 'Etap', fields: ['Tagi'], spec: false, cezar: false },
   /** Stage 2.1 (D-107): a thread made to be handed to Cezar, so it starts with the Specyfikacja and the Cezar kit (values unset). */
   'implementacja-cezara': { label: 'Implementacja Cezara', fields: ['Tagi'], spec: true, cezar: true },
+  /** Machina's automat (D-053): made only by Machina, with its kit and the workflow Automat; no public action creates one. */
+  automat: { label: 'Automat', fields: ['Tagi'], spec: false, cezar: false },
 } as const;
+/** The home of Machina in Fila: the type, its fixed workflow and the project made on Machina's first use (docs/fila.md, „Machina”). */
+export const FILA_AUTOMAT_TYPE = 'automat';
+export const FILA_AUTOMAT_WORKFLOW = {
+  id: 'w-automat', name: 'Automat',
+  states: [
+    { name: 'Czeka na kartę programu', closing: false }, { name: 'Aktywny', closing: false }, { name: 'Czeka na decyzję', closing: false },
+    { name: 'Czeka na naprawę', closing: false }, { name: 'Wstrzymany', closing: false },
+    { name: 'Zakończony', closing: true }, { name: 'Wygasł', closing: true }, { name: 'Anulowany', closing: true },
+  ],
+};
+export const FILA_MACHINA_PROJECT = { key: 'MACH', name: 'Machina', modules: ['Obserwacja', 'Obsługa', 'Przypomnienia', 'Systemowe'] };
+/** The four parts of the Machina kit: how the automat works. Everything else about it is the thread itself. */
+export const FILA_MACHINA_PARTS = ['program', 'situations', 'journal', 'conversations'] as const;
+export type FilaMachinaPart = (typeof FILA_MACHINA_PARTS)[number];
 export const filaTypeSchema = z.enum(Object.keys(FILA_TYPES) as [keyof typeof FILA_TYPES, ...(keyof typeof FILA_TYPES)[]]);
 
 /** Names of the properties and of the fields kept in code; a custom field can never take one of them (D-003, D-047). */
@@ -70,9 +86,11 @@ export const filaWorkflowSchema = z.object({
   states: z.array(filaWorkflowStateSchema).min(1).max(FILA_LIMITS.states).refine(states => unique(states.map(s => s.name)), 'Duplicate state'),
 });
 export const filaFieldDefSchema = z.object({ name: fieldName, kind: filaFieldKindSchema });
+/** Who a history entry is by: the user, a client, the panel's bookkeeping, or Machina setting the Stan of its automat. */
+const filaAuthorSchema = z.enum([...filaActorSchema.options, 'panel', 'machina']);
 const changeSchema = z.object({ field: z.string().max(100), from: z.string().max(FILA_LIMITS.text).nullable(), to: z.string().max(FILA_LIMITS.text).nullable() });
 export const filaHistorySchema = z.object({
-  at: z.number().finite(), by: z.enum([...filaActorSchema.options, 'panel']),
+  at: z.number().finite(), by: filaAuthorSchema,
   kind: z.enum(['created', 'changed', 'comment', 'archived', 'restored', 'moved']),
   text: z.string().max(FILA_LIMITS.comment).optional(),
   changes: z.array(changeSchema).max(20).optional(),
@@ -129,6 +147,15 @@ export type FilaCezarSettings = z.infer<typeof filaCezarSettingsSchema>;
 /** Without stored settings: the workflow Praca's „Gotowe do realizacji”, what stage 1 had in code. */
 export const defaultFilaCezarSettings = (): FilaCezarSettings => ({ readyStates: [{ workflow: FILA_DEFAULT_WORKFLOW, state: 'Gotowe do realizacji' }] });
 
+/**
+ * The Machina kit of an automat: only how it works (program, situations, journal, conversations). It lives in the thread
+ * record, so it belongs to the thread's permanent uid and is gone with the thread. Fila keeps and guards it; what a part
+ * holds is Machina's own contract (stage 1b), `null` = no content yet. `builtIn` marks an automat shipped by the panel's
+ * code (set only through the internal door): it cannot be deleted.
+ */
+const machinaPart = z.unknown().transform(value => value ?? null);
+const filaMachinaKitSchema = z.object({ builtIn: z.boolean(), program: machinaPart, situations: machinaPart, journal: machinaPart, conversations: machinaPart });
+
 export const filaThreadSchema = z.object({
   /** Internal and permanent: parents point at it, so a move (a new display ID) keeps every relation. */
   uid: z.string().regex(/^f-[0-9a-f]{8}$/),
@@ -144,6 +171,8 @@ export const filaThreadSchema = z.object({
   cezar: filaCezarSchema.optional(),
   /** „Zablokowane”: the thread's blocks, oldest first; any thread may have them, with or without the Cezar kit. */
   blockers: z.array(filaBlockerSchema).max(FILA_LIMITS.blockers).refine(list => new Set(list.map(b => b.id)).size === list.length, 'Duplicate blocker').default([]),
+  /** The Machina kit: present exactly on threads of the type automat (checked for the whole data). */
+  machina: filaMachinaKitSchema.optional(),
   archived: z.boolean(),
   revision: z.number().int().min(1),
   createdAt: z.number().finite(), updatedAt: z.number().finite(),
@@ -195,6 +224,14 @@ export const filaDataSchema = z.object({
     actor: filaActorSchema, key: z.string().min(1).max(100), hash: z.string().max(64), at: z.number().finite(),
     outcome: z.object({ results: z.array(z.record(z.string(), z.unknown())), threads: z.array(z.record(z.string(), z.unknown())) }),
   })).max(200).optional(),
+}).superRefine((data, ctx) => {
+  // An automat is a thread with the kit, in MACH, on the workflow Automat; nothing else has the kit or that workflow.
+  data.threads.forEach((t, i) => {
+    const automat = t.type === FILA_AUTOMAT_TYPE;
+    if (automat !== (t.machina !== undefined)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['threads', i, 'machina'], message: 'The Machina kit belongs to automats only' });
+    if (automat !== (t.workflow === FILA_AUTOMAT_WORKFLOW.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['threads', i, 'workflow'], message: 'The workflow Automat belongs to automats only' });
+    if (automat && t.project !== FILA_MACHINA_PROJECT.key) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['threads', i, 'project'], message: 'An automat lives in MACH' });
+  });
 });
 export type FilaData = z.infer<typeof filaDataSchema>;
 export type FilaProject = z.infer<typeof filaProjectSchema>;
@@ -270,6 +307,20 @@ export const filaActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('deleteThread'), thread: threadId }).strict(),
 ]);
 export type FilaAction = z.infer<typeof filaActionSchema>;
+
+/**
+ * Machina's internal door (never an action, never over HTTP or MCP): what it gives when it makes an automat and when it
+ * changes one. `state` is a Stan of the workflow Automat; a kit part left out stays as it is.
+ */
+const machinaKitChange = z.object({ program: z.unknown(), situations: z.unknown(), journal: z.unknown(), conversations: z.unknown() }).partial().strict();
+export const filaMachinaCreateSchema = z.object({
+  title, description: description.optional(), module: moduleName.optional(), tags: tags.optional(), parent: threadId.optional(),
+  state: stateName.optional(), builtIn: z.boolean().optional(), kit: machinaKitChange.optional(),
+}).strict();
+export const filaMachinaChangeSchema = z.object({ state: stateName.optional(), kit: machinaKitChange.optional() }).strict()
+  .refine(change => change.state !== undefined || change.kit !== undefined, { message: 'Nothing to change' });
+export type FilaMachinaCreate = z.input<typeof filaMachinaCreateSchema>;
+export type FilaMachinaChange = z.input<typeof filaMachinaChangeSchema>;
 export type FilaBoardAction = z.infer<(typeof filaBoardActions)[number]>;
 export type FilaSectionInput = z.infer<typeof sectionInput>;
 const boardActionNames = new Set<string>(filaBoardActions.map(schema => schema.shape.action.value));

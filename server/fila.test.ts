@@ -27,15 +27,15 @@ async function seeded(store = createFilaStore()) {
 }
 
 describe('registries and templates', () => {
-  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the seven type templates', async () => {
+  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the eight type templates', async () => {
     const reg = await createFilaStore().registries();
     expect(reg.projects).toEqual([]);
     expect(reg.workflows[0]!.states.map(s => s.name)).toEqual(['Pomysł', 'Do przygotowania', 'Gotowe do realizacji', 'W realizacji', 'Do sprawdzenia', 'Zakończone', 'Porzucone']);
     expect(reg.workflows[0]!.states.filter(s => s.closing).map(s => s.name)).toEqual(['Zakończone', 'Porzucone']);
-    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie', 'Etap', 'Implementacja Cezara']);
+    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie', 'Etap', 'Implementacja Cezara', 'Automat']);
     expect(reg.types.filter(t => t.cezar).map(t => t.key)).toEqual(['implementacja-cezara']);
     expect(reg.cezarSettings).toEqual({ readyStates: [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }] });
-    expect(reg.types.every(t => t.workflow === 'w-praca' && t.fields.join() === 'Tagi')).toBe(true);
+    expect(reg.types.every(t => t.workflow === (t.machina ? 'w-automat' : 'w-praca') && t.fields.join() === 'Tagi')).toBe(true);
   });
 
   it('keeps a project key of four capital letters, unique', async () => {

@@ -49,7 +49,7 @@ function NewThreadDialog({ registry, project, onClose, onCreated }: { registry: 
       <label>Tytuł<input value={title} maxLength={200} placeholder="Co trzeba zrobić albo zapamiętać" onChange={event => setTitle(event.target.value)} /></label>
       <div className="fl-dialog-row even">
         <label>Projekt<select aria-label="Projekt" value={chosen} onChange={event => setChosen(event.target.value)}>{registry.projects.map(item => <option key={item.key} value={item.key}>{item.name} ({item.key})</option>)}</select></label>
-        <label>Typ<select aria-label="Typ" value={type} onChange={event => setType(event.target.value)}>{registry.types.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+        <label>Typ<select aria-label="Typ" value={type} onChange={event => setType(event.target.value)}>{registry.types.filter(item => !item.machina).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
       </div>
       <label>Rodzic (opcjonalnie)<input aria-label="Rodzic" value={parent} placeholder={`ID wątku, np. ${chosen}-1`} onChange={event => setParent(event.target.value)} /></label>
       {error && <p className="fl-error" role="alert">{error}</p>}
