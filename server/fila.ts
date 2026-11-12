@@ -706,7 +706,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         state: automatState(made.state ?? FILA_AUTOMAT_WORKFLOW.states[0]!.name),
         title: made.title, description: made.description ?? '', parent: parent?.uid ?? null, module: made.module ?? null,
         fields: { Tagi: validateValue('multi', made.tags ?? []) }, spec: { enabled: false, revisions: [] }, blockers: [],
-        machina: { builtIn: made.builtIn ?? false, program: kit.program ?? null, situations: kit.situations ?? null, journal: kit.journal ?? null, conversations: kit.conversations ?? null },
+        machina: structuredClone({ builtIn: made.builtIn ?? false, program: kit.program ?? null, situations: kit.situations ?? null, journal: kit.journal ?? null, conversations: kit.conversations ?? null }),
         archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
       };
       data.threads.push(t);

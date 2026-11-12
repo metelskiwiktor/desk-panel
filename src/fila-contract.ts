@@ -153,7 +153,10 @@ export const defaultFilaCezarSettings = (): FilaCezarSettings => ({ readyStates:
  * holds is Machina's own contract (stage 1b), `null` = no content yet. `builtIn` marks an automat shipped by the panel's
  * code (set only through the internal door): it cannot be deleted.
  */
-const machinaPart = z.unknown().transform(value => value ?? null);
+/** A kit part is plain JSON (what the file keeps exactly): no NaN, dates, functions or `undefined`; parsing also copies it, so the caller's object is never shared. */
+type Json = null | string | number | boolean | Json[] | { [key: string]: Json };
+const machinaJson: z.ZodType<Json> = z.lazy(() => z.union([z.null(), z.string(), z.number().finite(), z.boolean(), z.array(machinaJson), z.record(z.string(), machinaJson)]));
+const machinaPart = machinaJson.optional().transform(value => value ?? null);
 const filaMachinaKitSchema = z.object({ builtIn: z.boolean(), program: machinaPart, situations: machinaPart, journal: machinaPart, conversations: machinaPart });
 
 export const filaThreadSchema = z.object({
@@ -312,7 +315,7 @@ export type FilaAction = z.infer<typeof filaActionSchema>;
  * Machina's internal door (never an action, never over HTTP or MCP): what it gives when it makes an automat and when it
  * changes one. `state` is a Stan of the workflow Automat; a kit part left out stays as it is.
  */
-const machinaKitChange = z.object({ program: z.unknown(), situations: z.unknown(), journal: z.unknown(), conversations: z.unknown() }).partial().strict();
+const machinaKitChange = z.object({ program: machinaJson, situations: machinaJson, journal: machinaJson, conversations: machinaJson }).partial().strict();
 export const filaMachinaCreateSchema = z.object({
   title, description: description.optional(), module: moduleName.optional(), tags: tags.optional(), parent: threadId.optional(),
   state: stateName.optional(), builtIn: z.boolean().optional(), kit: machinaKitChange.optional(),

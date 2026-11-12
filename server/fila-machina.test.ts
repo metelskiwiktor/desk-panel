@@ -131,6 +131,19 @@ describe('the internal door: Stan, kit, archive and delete', () => {
     await store.machina.update(uid, { state: 'Anulowany' });
     expect((await store.thread('MACH-1')).revision).toBe(revision);
     await refused(store.machina.update(uid, { state: 'W realizacji' }), 409, /nie ma Stanu/);
+    // A refused Stan takes back the kit parts of the same change.
+    await refused(store.machina.update(uid, { state: 'Nie ma takiego', kit: { program: { lost: true } } }), 409);
+    expect((await store.machina.read(uid))!.program).toBeNull();
+    // A part is plain JSON, kept exactly as the file keeps it, and never shares the caller's object.
+    for (const bad of [{ n: Number.NaN }, { at: new Date(0) }, { f: () => 1 }, [undefined]]) await refused(store.machina.update(uid, { kit: { program: bad as never } }), 400);
+    await refused(store.machina.create({ title: 'x', kit: { journal: { n: Number.POSITIVE_INFINITY } } }), 400);
+    const shared = { version: 1, steps: [{ kind: 'a' }] };
+    const made = await store.machina.create({ title: 'Kopia', kit: { program: shared } });
+    await store.machina.update(uid, { kit: { situations: shared } });
+    shared.version = 2; shared.steps[0]!.kind = 'b';
+    expect((await store.machina.read(made.uid))!.program).toEqual({ version: 1, steps: [{ kind: 'a' }] });
+    expect((await store.machina.read(uid))!.situations).toEqual({ version: 1, steps: [{ kind: 'a' }] });
+    await store.machina.update(uid, { kit: { situations: null } });
     await refused(store.machina.update('f-00000000', { state: 'Aktywny' }), 404);
     await refused(store.machina.update(uid, {} as never), 400);
     // A kit write alone changes neither the thread's revision nor its history; a part left out stays.
@@ -235,6 +248,12 @@ describe('the public doors (HTTP and MCP) on an automat', () => {
     expect(batch.isError).toBe(true);
     expect(batch.text).toMatch(/Akcja 2 \(updateThread\).*Stan automatu ustawia tylko Machina.*Cała paczka odrzucona/);
     expect((await s.mcp('fila_apply', { actions: [{ action: 'updateThread', thread: id, state: 'Anulowany' }], dryRun: true })).isError).toBe(true);
+    // The panel's own bookkeeping author (the dispatch sets a Stan with it) has no way around either, alone or in a batch.
+    for (const action of [{ action: 'updateThread', thread: id, state: 'Wstrzymany' }, { action: 'updateThread', thread: id, project: 'DESK', module: null }, { action: 'updateThread', thread: id, workflow: 'w-praca', state: 'Pomysł' }] as FilaAction[]) {
+      await refused(s.fila.apply(action, 'panel'), action.action === 'updateThread' && 'project' in action ? 409 : 403);
+      await refused(s.fila.applyBatch([action], 'panel'), action.action === 'updateThread' && 'project' in action ? 409 : 403);
+    }
+    await refused(s.fila.apply({ action: 'createThread', project: 'MACH', type: 'automat', title: 'x' }, 'panel'), 403);
     expect(readFileSync(s.file, 'utf8')).toBe(before);
     expect(await s.fila.machina.read(automat.uid)).toMatchObject({ state: 'Aktywny', program: { version: 1 } });
   });
@@ -309,4 +328,6 @@ it('refuses stored data where the kit, the workflow Automat or MACH are on the w
   await expect(load(thread({ type: 'automat', workflow: 'w-automat', state: 'Aktywny' }))).rejects.toThrow(/kit belongs to automats/);
   await expect(load(thread({ workflow: 'w-automat', state: 'Aktywny' }))).rejects.toThrow(/workflow Automat/);
   await expect(load(thread({ type: 'automat', workflow: 'w-praca', machina: kit }))).rejects.toThrow(/workflow Automat/);
+  const elsewhere = { ...good, projects: [...good.projects, { key: 'DESK', name: 'DeskPanel', createdAt: 1, modules: [], nextNumber: 2 }], threads: [thread({ project: 'DESK', type: 'automat', workflow: 'w-automat', state: 'Aktywny', machina: kit })] };
+  await expect(createFilaStore({ initial: elsewhere as never }).registries()).rejects.toThrow(/An automat lives in MACH/);
 });
