@@ -341,10 +341,10 @@
 .mach-versions li > button:first-child { display: flex; gap: 8px; border: 0; padding: 2px 0; background: none; text-align: left; }
 .mach-versions li.active > button:first-child { color: var(--mach-accent); font-weight: 600; }
 .mach-klocki { display: grid; gap: 4px; }
-.mach-klocek { display: grid; grid-template-columns: 104px 180px minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 7px 10px; border-left: 3px solid var(--g); border-radius: 6px; background: var(--mach-panel); }
+.mach-klocek { display: grid; grid-template-columns: 104px 190px minmax(0, 1fr); align-items: baseline; gap: 10px; padding: 7px 10px; border-left: 3px solid var(--g); border-radius: 6px; background: var(--mach-panel); }
 .g-odczyt { --g: var(--p2-cal); } .g-przetwarzanie { --g: #c3a4f3; } .g-akcja { --g: var(--quota-green); } .g-sterowanie { --g: var(--amber); }
 .mach-klocek > .mach-muted { min-width: 160px; overflow-wrap: anywhere; }
-.mach-klocek > .mach-zakres { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mach-klocek-opis { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .mach-klocek-wrap { border-radius: 6px; }
 button.mach-klocek { width: 100%; border: 0; border-left: 3px solid var(--g); text-align: left; }
 button.mach-klocek:hover { background: var(--mach-raise); }
@@ -398,10 +398,19 @@ button.mach-klocek:hover { background: var(--mach-raise); }
 .mach-composer { padding: 12px 14px; border: 1px solid var(--p2-line); border-radius: 10px; color: var(--p2-faint); }
 .mach-cockpit { align-self: start; padding: 14px 16px; border-radius: 12px; background: var(--mach-panel); }
 .mach-cockpit .mach-klocek { grid-template-columns: 90px minmax(0, 1fr); background: var(--mach-raise); }
-.mach-cockpit .mach-klocek .mach-muted { grid-column: 2; font-size: 12px; }
+.mach-cockpit .mach-klocek .mach-klocek-opis { grid-column: 2; font-size: 12px; }
 .mach-cockpit-run .mach-run-klocki { margin-left: 0; }
 .mach-alert-layout { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 28px; align-items: start; }
 .mach-smart { padding: 14px 16px; border-radius: 12px; background: var(--mach-panel); }
 .mach-alert { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: var(--mach-raise); }
 .mach-alert h2 { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
 .mach-alert p { margin: 4px 0; }
+.mach-cel { margin: 6px 0 2px; max-width: 900px; line-height: 1.5; }
+.mach-query { display: flex; align-items: center; gap: 6px; margin: 0 8px 4px; padding: 5px 9px; border-radius: 8px; background: var(--mach-panel); color: var(--p2-muted); font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; }
+.mach-id { margin-right: 8px; color: var(--p2-muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.mach-row.closed strong { color: var(--p2-muted); }
+.mach-fields { display: grid; grid-template-columns: 80px 1fr; gap: 5px 10px; margin: 0; font-size: 13px; }
+.mach-fields dt { color: var(--p2-muted); } .mach-fields dd { margin: 0; }
+.mach-gap { margin-top: 22px !important; }
+.mach-convs strong { white-space: nowrap; }
+

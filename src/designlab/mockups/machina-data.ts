@@ -30,7 +30,7 @@ const IRON_URL_REG = 'ironman.com/races/im703-poznan/register';
 
 const ODCZYT = (url: string, zakres: string): Klocek => ({ rodzaj: 'Odczyt URL', grupa: 'odczyt', opis: url, zakres, kiedy: 'w każdym runie, po kolei',
   ustawienia: [['adres', `https://${url}`], ['metoda', 'GET, bez logowania (D-006)'], ['gdy strona nie odpowiada', 'run kończy się błędem odczytu, następna pora próbuje ponownie']] });
-const REAKCJA = 'tylko w reakcji stanu (zakładka Katalog stanów)';
+const REAKCJA = 'tylko w reakcji sytuacji (zakładka Katalog sytuacji)';
 const ironKlockiV1: Klocek[] = [
   ODCZYT(IRON_URL_PL, 'ironmanpoznan.com.pl'),
   { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'wiersz „Enea IRONMAN 70.3 Poznań”: przyciski i etykiety', kiedy: 'po odczycie strony PL',
@@ -41,18 +41,20 @@ const ironKlockiV1: Klocek[] = [
   ODCZYT(IRON_URL_REG, 'ironman.com'),
   { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'klasa registration-state-- i linki slotmarket.pl', kiedy: 'po odczycie /register',
     ustawienia: [['skąd', IRON_URL_REG], ['fragment', 'klasa body registration-state--… i wszystkie linki slotmarket.pl'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
-  { rodzaj: 'Porównanie ze stanami', grupa: 'przetwarzanie', opis: 'trzy wycinki z katalogiem stanów', kiedy: 'po wszystkich wycinkach',
-    ustawienia: [['porównuje', 'trzy wycinki razem z próbkami stanów z katalogu'], ['pasuje do stanu', 'wykonuje reakcję tego stanu bez modelu'], ['nie pasuje', 'ocena (następny klocek)']] },
-  { rodzaj: 'Ocena', grupa: 'przetwarzanie', opis: 'Wektor, gdy wycinki nie pasują do żadnego stanu', kiedy: 'tylko gdy porównanie nie znalazło stanu',
-    ustawienia: [['kto', 'Wektor w nowej rozmowie automatu (powód: ocena)'], ['dostaje', 'było / jest dla każdego wycinka, katalog stanów, cel automatu'], ['wynik', 'znany stan → jego reakcja; nowy stan → karta i run „czeka na decyzję” (D-037)'], ['gdy się nie uda', 'run „błąd oceny”, bez skutków (D-039)']] },
+  { rodzaj: 'Porównanie z sytuacjami', grupa: 'przetwarzanie', opis: 'trzy wycinki z katalogiem sytuacji', kiedy: 'po wszystkich wycinkach',
+    ustawienia: [['porównuje', 'trzy wycinki razem z próbkami sytuacji z katalogu'], ['pasuje do sytuacji', 'wykonuje reakcję tej sytuacji bez modelu'], ['nie pasuje', 'ocena (następny klocek)']] },
+  { rodzaj: 'Ocena', grupa: 'przetwarzanie', opis: 'Wektor, gdy wycinki nie pasują do żadnej sytuacji', kiedy: 'tylko gdy porównanie nie znalazło sytuacji',
+    ustawienia: [['kto', 'Wektor w nowej rozmowie automatu (powód: ocena)'], ['dostaje', 'było / jest dla każdego wycinka, katalog sytuacji, cel automatu'], ['wynik', 'znana sytuacja → jej reakcja; nowa sytuacja → karta i run „czeka na decyzję” (D-037)'], ['gdy się nie uda', 'run „błąd oceny”, bez skutków (D-039)']] },
   { rodzaj: 'Wiadomość', grupa: 'akcja', opis: 'do rozmowy automatu, bez tury Wektora', kiedy: REAKCJA,
-    ustawienia: [['do', 'ostatnia rozmowa automatu (wpis panelu, bez tury, D-021)'], ['treść', 'nazwa stanu, wycinek, link z wycinka']] },
+    ustawienia: [['do', 'ostatnia rozmowa automatu (wpis panelu, bez tury, D-021)'], ['treść', 'nazwa sytuacji, wycinek, link z wycinka']] },
   { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: '07:00–07:30, przypomnienie 60 min', zakres: 'kalendarz panelu', kiedy: REAKCJA,
     ustawienia: [['tytuł', 'Zapisy: Enea IRONMAN 70.3 Poznań 2027'], ['dzień', 'data z wycinka (dzień otwarcia zapisów)'], ['godzina', '07:00–07:30'], ['przypomnienie', '60 min wcześniej'], ['opis', 'link do formularza z wycinka']] },
   { rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk z linkiem do formularza', zakres: 'slotmarket.pl', kiedy: REAKCJA,
     ustawienia: [['gdzie', 'kafelek Smart Actions, autor „Automat: Zapisy: IRONMAN 70.3 Poznań 2027”'], ['tytuł', 'Ruszyły zapisy na IRONMAN 70.3 Poznań 2027'], ['przycisk', '„Zapisz się” → otwiera link z wycinka (tylko slotmarket.pl)'], ['ważność', '30 dni albo do kliknięcia, odrzucenia, anulowania automatu (D-033)']] },
+  { rodzaj: 'Wątek w Fili', grupa: 'akcja', opis: 'Sprawa „Zapisz się na IRONMAN 70.3 Poznań 2027” pod wątkiem automatu', zakres: 'MACH · Sprawa · pod automatem', kiedy: 'tylko w reakcji sytuacji „Zapisy otwarte” (etap 2)',
+    ustawienia: [['działanie', 'utwórz albo zaktualizuj wątek (klucz: edycja 2027)'], ['projekt i typ', 'MACH, Sprawa'], ['rodzic', 'wątek tego automatu'], ['tytuł', 'Zapisz się na IRONMAN 70.3 Poznań 2027'], ['pola', 'Termin: dzień otwarcia zapisów; link do formularza (slotmarket.pl)']] },
   { rodzaj: 'Powiadomienie', grupa: 'akcja', opis: 'dzwonek i telefon (ntfy panelu)', kiedy: REAKCJA,
-    ustawienia: [['gdzie', 'dzwonek panelu i telefon (ntfy panelu)'], ['treść', 'nazwa stanu i link']] },
+    ustawienia: [['gdzie', 'dzwonek panelu i telefon (ntfy panelu)'], ['treść', 'nazwa sytuacji i link']] },
 ];
 const ironKlockiV2: Klocek[] = ironKlockiV1.map(k => k.opis.startsWith('karta data-race-id')
   ? { ...k, opis: 'karta 70.3 po nazwie „IRONMAN 70.3 Poznan” (race-id zmienia się między edycjami)',
@@ -92,17 +94,17 @@ const IRONMAN_POZNIEJ: Automat = {
   ],
   runy: [
     { id: 'run-0127', at: '2 gru 19:00', wersja: 2, wejscie: 'pora 19:00', wynik: 'czeka na decyzję', koszt: 0.04, rozmowa: 'r-ocena',
-      opis: 'Wycinek .com inny niż znane: „Race date: June 14, 2027 · Registration: TBA”. Wektor proponuje nowy stan.',
+      opis: 'Wycinek .com inny niż znane: „Race date: June 14, 2027 · Registration: TBA”. Wektor proponuje nową sytuację.',
       klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 274 kB · 1,1 MB · 640 kB' }, { rodzaj: 'Wycinki', wynik: '3 z 3 znalezione' },
-        { rodzaj: 'Porównanie', wynik: 'karta 70.3 nie pasuje do żadnego stanu', zly: true }, { rodzaj: 'Ocena', wynik: 'nowy stan: „Ogłoszona data zawodów 2027” → karta' }] },
+        { rodzaj: 'Porównanie', wynik: 'karta 70.3 nie pasuje do żadnej sytuacji', zly: true }, { rodzaj: 'Ocena', wynik: 'nowa sytuacja: „Ogłoszona data zawodów 2027” → karta' }] },
     { id: 'run-0126', at: '2 gru 10:00', wersja: 2, wejscie: 'pora 10:00', wynik: 'bez zmian', opis: 'Zamknięte (2026 wyprzedane).',
       klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 200 · 200' }, { rodzaj: 'Wycinki', wynik: '3 z 3' }, { rodzaj: 'Porównanie', wynik: 'Zamknięte (2026 wyprzedane)' }] },
     { id: 'run-0119', at: '28 lis 10:00', wersja: 1, wejscie: 'pora 10:00', wynik: 'naprawa', koszt: 0.11, rozmowa: 'r-naprawa',
       opis: 'Nie znaleziono karty race-id 107211. Automat czekał na naprawę do zatwierdzenia wersji 2 (10:14).',
       klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 200 · 200' }, { rodzaj: 'Wycinki', wynik: '2 z 3: brak karty 107211', zly: true }, { rodzaj: 'Naprawa', wynik: 'wersja 2 na karcie' }] },
     { id: 'run-0110', at: '24 lis 19:00', wersja: 1, wejscie: 'pora 19:00', wynik: 'reakcja', koszt: 0.03, rozmowa: 'r-ocena-0110',
-      opis: 'Ocena zaproponowała nowy stan „Registration Now Open”, zatwierdzony kartą (powiadomienie). 25 lis poprawka kartą: tag należał do 5150 Erkner, stan wycofany, próbka w „Zamknięte”.',
-      klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 200 · 200' }, { rodzaj: 'Porównanie', wynik: 'inny wygląd' }, { rodzaj: 'Ocena', wynik: 'nowy stan → karta zatwierdzona; później wycofany' }] },
+      opis: 'Ocena zaproponowała nową sytuację „Registration Now Open”, zatwierdzoną kartą (powiadomienie). 25 lis poprawka kartą: tag należał do 5150 Erkner, sytuacja wycofana, próbka w „Zamknięte”.',
+      klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 200 · 200' }, { rodzaj: 'Porównanie', wynik: 'inny wygląd' }, { rodzaj: 'Ocena', wynik: 'nowa sytuacja → karta zatwierdzona; później wycofana' }] },
     { id: 'run-0101', at: '20 lis 10:00', wersja: 1, wejscie: 'pora 10:00', wynik: 'bez zmian', opis: 'Pierwszy run wersji 1: Zamknięte (2026 wyprzedane).',
       klocki: [{ rodzaj: 'Odczyt URL ×3', wynik: '200 · 200 · 200' }, { rodzaj: 'Porównanie', wynik: 'Zamknięte (2026 wyprzedane)' }] },
   ],
@@ -142,7 +144,9 @@ const FAKTURA_KSIEG = prosty('a-faktura-ksieg', 'Faktury OpenRouter: księgowani
   [{ rodzaj: 'Pobierz plik', grupa: 'odczyt', opis: 'PDF z linku w mailu (wejście runu)', zakres: 'pay.stripe.com' },
     { rodzaj: 'Zapis pliku', grupa: 'akcja', opis: 'Koszty/OpenRouter/<miesiąc>/<nr faktury>.pdf', zakres: 'Drive: folder Koszty' },
     { rodzaj: 'Skrypt', grupa: 'przetwarzanie', opis: 'kurs NBP z dnia poprzedniego i plik .epp', zakres: 'Q-009' },
-    { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: 'dzień faktury, link do folderu', zakres: 'kalendarz panelu' }], [], '25 lis 17:20');
+    { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: 'dzień faktury, link do folderu', zakres: 'kalendarz panelu' },
+    { rodzaj: 'Wątek w Fili', grupa: 'akcja', opis: 'komentarz w wątku „Koszty OpenRouter <miesiąc>”: link do PDF i kwota', zakres: 'MACH · Sprawa · pod automatem',
+      kiedy: 'w każdym runie (etap 2)', ustawienia: [['działanie', 'utwórz wątek miesiąca, jeśli go nie ma (klucz: miesiąc), i dopisz komentarz'], ['komentarz', 'numer faktury, kwota USD i PLN (kurs NBP), link do PDF na Drive'], ['rodzic', 'wątek tego automatu']] }], [], '25 lis 17:20');
 
 const wspolne = (iron: Automat): Automat[] => [
   iron,
@@ -158,11 +162,26 @@ const wspolne = (iron: Automat): Automat[] => [
     'Dawny obserwator PR.', [{ rodzaj: 'Wiadomość', grupa: 'akcja', opis: 'do rozmowy, z której go utworzono' }]),
   wbudowany('a-cezar-czeka', 'Zadania Cezara czekające na Ciebie', 'task Cezara czeka na użytkownika', 'Alert dla każdego taska, który czeka na decyzję.',
     [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk otwiera task w kokpicie', kiedy: 'w każdym runie: raz na każde przejście taska w „czeka na Ciebie”',
-      ustawienia: [['tytuł', 'nazwa taska Cezara'], ['przycisk', '„Otwórz” → task w kokpicie Cezara'], ['zamyka go', 'task wyszedł ze stanu „czeka”, kliknięcie albo odrzucenie']] }],
+      ustawienia: [['tytuł', 'nazwa taska Cezara'], ['przycisk', '„Otwórz” → task w kokpicie Cezara'], ['zamyka go', 'task przestał czekać, kliknięcie albo odrzucenie']] }],
     [{ id: 'run-c02', at: '2 gru 14:20', wersja: 1, wejscie: 'task desk-panel „Widget PR”: czeka na decyzję', wynik: 'reakcja', opis: 'Alert „Widget PR: czeka na Ciebie”.', klocki: [{ rodzaj: 'Alert', wynik: 'utworzony' }] }]),
   wbudowany('a-cezar-wznow', 'Wznawianie rozmów po zleceniach Cezara', 'task zlecony z rozmowy: zakończony albo czeka', 'Wejściem runu są task i rozmowa, z której go zlecono.',
     [{ rodzaj: 'Wznów rozmowę', grupa: 'akcja', opis: 'rozmowa zlecenia, z wynikiem taska' }]),
 ];
+
+/** Fila home of each automat (D-054, D-056): thread id, module and Stan of the "Automat" workflow (D-053). */
+export const WATKI: Record<string, { id: string; modul: string; wyniki?: { id: string; tytul: string; typ: string; opis: string }[] }> = {
+  'a-f6354232578d': { id: 'MACH-1', modul: 'Sport' },
+  'a-znanylekarz': { id: 'MACH-2', modul: 'Zdrowie' },
+  'a-konto': { id: 'MACH-3', modul: 'Finanse' },
+  'a-obs-czas': { id: 'MACH-4', modul: 'Osobiste' },
+  'a-obs-pr': { id: 'MACH-5', modul: 'Praca' },
+  'a-cezar-czeka': { id: 'MACH-6', modul: 'Panel' },
+  'a-cezar-wznow': { id: 'MACH-7', modul: 'Panel' },
+  'a-faktura-alert': { id: 'MACH-8', modul: 'Finanse' },
+  'a-faktura-ksieg': { id: 'MACH-9', modul: 'Finanse', wyniki: [
+    { id: 'MACH-10', tytul: 'Koszty OpenRouter 2026-11', typ: 'Sprawa', opis: '2 komentarze: #2609-9426 · 20,00 USD (81,42 PLN) · PDF na Drive; #2611-0042 · 10,00 USD' }] },
+  'a-obs-czas-old': { id: 'MACH-11', modul: 'Osobiste' },
+};
 
 export const automaty = (chwila: Chwila): Automat[] => chwila === 'przeniesienie'
   ? wspolne(IRONMAN_PRZENIESIONY)
@@ -181,7 +200,7 @@ export const OCENA = {
   tytul: 'Ocena: nowy wygląd karty 70.3', run: 'run-0127',
   bylo: '„Registration Opening Soon” · TBD · August 30, 2026',
   jest: '„Race date: June 14, 2027” · „Registration: TBA”',
-  wektor: 'Wycinek karty 70.3 (ironman.com) zmienił się: zamiast daty edycji 2026 jest data zawodów 2027 (14 czerwca), a rejestracja nadal „TBA”. Pozostałe dwa wycinki bez zmian (PL: SOLD OUT 2026, /register: opening_soon). To nie jest żaden stan z katalogu: ani „Ogłoszona data otwarcia” (nie ma daty zapisów), ani otwarte zapisy. Proponuję nowy stan z łagodną reakcją.',
+  wektor: 'Wycinek karty 70.3 (ironman.com) zmienił się: zamiast daty edycji 2026 jest data zawodów 2027 (14 czerwca), a rejestracja nadal „TBA”. Pozostałe dwa wycinki bez zmian (PL: SOLD OUT 2026, /register: opening_soon). To nie jest żadna sytuacja z katalogu: ani „Ogłoszona data otwarcia” (nie ma daty zapisów), ani otwarte zapisy. Proponuję nową sytuację z łagodną reakcją.',
   karta: { stan: 'Ogłoszona data zawodów 2027 (zapisy TBA)', probka: '.com: „Race date: June 14, 2027” · „Registration: TBA”', reakcja: ['powiadomienie: ogłoszono datę zawodów 2027, zapisy jeszcze nie ruszyły', 'automat działa dalej'] },
 };
 
