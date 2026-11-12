@@ -27,12 +27,12 @@ async function seeded(store = createFilaStore()) {
 }
 
 describe('registries and templates', () => {
-  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the six type templates', async () => {
+  it('starts with the workflow Praca (the states of the to-do lists, two closing) and the seven type templates', async () => {
     const reg = await createFilaStore().registries();
     expect(reg.projects).toEqual([]);
     expect(reg.workflows[0]!.states.map(s => s.name)).toEqual(['Pomysł', 'Do przygotowania', 'Gotowe do realizacji', 'W realizacji', 'Do sprawdzenia', 'Zakończone', 'Porzucone']);
     expect(reg.workflows[0]!.states.filter(s => s.closing).map(s => s.name)).toEqual(['Zakończone', 'Porzucone']);
-    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie', 'Implementacja Cezara']);
+    expect(reg.types.map(t => t.label)).toEqual(['Sprawa', 'Funkcja', 'Błąd', 'Notatka', 'Spotkanie', 'Etap', 'Implementacja Cezara']);
     expect(reg.types.filter(t => t.cezar).map(t => t.key)).toEqual(['implementacja-cezara']);
     expect(reg.cezarSettings).toEqual({ readyStates: [{ workflow: 'w-praca', state: 'Gotowe do realizacji' }] });
     expect(reg.types.every(t => t.workflow === 'w-praca' && t.fields.join() === 'Tagi')).toBe(true);
@@ -45,6 +45,17 @@ describe('registries and templates', () => {
     await act(store, { action: 'createProject', key: 'DESK', name: 'DeskPanel' });
     await refused(act(store, { action: 'createProject', key: 'DESK', name: 'Inny' }), 409);
     expect((await store.registries()).projects.map(p => p.key)).toEqual(['DESK']);
+  });
+});
+
+describe('type Etap', () => {
+  it('creates a thread without a Specyfikacja and without the Cezar kit, in Praca, found by typ = etap', async () => {
+    const store = await seeded();
+    await act(store, { action: 'createThread', project: 'DESK', type: 'etap', title: 'Etap 1' });
+    const t = await store.thread('DESK-1');
+    expect(t).toMatchObject({ type: { key: 'etap', label: 'Etap' }, workflow: { id: 'w-praca', name: 'Praca' }, spec: { enabled: false }, fields: { Tagi: [] } });
+    expect(t.cezar.enabled).toBe(false);
+    for (const q of ['projekt = DESK AND typ = etap', 'projekt = DESK AND typ = "Etap"']) expect((await store.query(q)).threads.map(x => x.id)).toEqual(['DESK-1']);
   });
 });
 

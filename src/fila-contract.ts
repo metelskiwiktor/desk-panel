@@ -26,6 +26,8 @@ export const FILA_TYPES = {
   blad: { label: 'Błąd', fields: ['Tagi'], spec: true, cezar: false },
   notatka: { label: 'Notatka', fields: ['Tagi'], spec: false, cezar: false },
   spotkanie: { label: 'Spotkanie', fields: ['Tagi'], spec: false, cezar: false },
+  /** Stage of a feature rollout (level 2: feature → stage → tasks): no Specyfikacja of its own, its tasks have them. */
+  etap: { label: 'Etap', fields: ['Tagi'], spec: false, cezar: false },
   /** Stage 2.1 (D-107): a thread made to be handed to Cezar, so it starts with the Specyfikacja and the Cezar kit (values unset). */
   'implementacja-cezara': { label: 'Implementacja Cezara', fields: ['Tagi'], spec: true, cezar: true },
 } as const;
