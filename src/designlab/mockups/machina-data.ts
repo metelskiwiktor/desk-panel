@@ -143,7 +143,7 @@ const FAKTURA_KSIEG = prosty('a-faktura-ksieg', 'Faktury OpenRouter: księgowani
   'Pobiera PDF faktury, zapisuje na Drive, buduje .epp i dodaje wydarzenie.',
   [{ rodzaj: 'Pobierz plik', grupa: 'odczyt', opis: 'PDF z linku w mailu (wejście runu)', zakres: 'pay.stripe.com' },
     { rodzaj: 'Zapis pliku', grupa: 'akcja', opis: 'Koszty/OpenRouter/<miesiąc>/<nr faktury>.pdf', zakres: 'Drive: folder Koszty' },
-    { rodzaj: 'Skrypt', grupa: 'przetwarzanie', opis: 'kurs NBP z dnia poprzedniego i plik .epp', zakres: 'Q-009' },
+    { rodzaj: 'Skrypt', grupa: 'przetwarzanie', opis: 'kurs NBP z dnia poprzedniego i plik .epp', zakres: 'api.nbp.pl; treść skryptu na karcie (D-048)' },
     { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: 'dzień faktury, link do folderu', zakres: 'kalendarz panelu' },
     { rodzaj: 'Wątek w Fili', grupa: 'akcja', opis: 'komentarz w wątku „Koszty OpenRouter <miesiąc>”: link do PDF i kwota', zakres: 'MACH · Sprawa · pod automatem',
       kiedy: 'w każdym runie (etap 2)', ustawienia: [['działanie', 'utwórz wątek miesiąca, jeśli go nie ma (klucz: miesiąc), i dopisz komentarz'], ['komentarz', 'numer faktury, kwota USD i PLN (kurs NBP), link do PDF na Drive'], ['rodzic', 'wątek tego automatu']] }], [], '25 lis 17:20');

@@ -413,4 +413,16 @@ button.mach-klocek:hover { background: var(--mach-raise); }
 .mach-fields dt { color: var(--p2-muted); } .mach-fields dd { margin: 0; }
 .mach-gap { margin-top: 22px !important; }
 .mach-convs strong { white-space: nowrap; }
+.mach-crumbs { margin: 0; color: var(--p2-muted); font-size: 12.5px; }
+.mach-thread-id { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; color: var(--p2-muted); font-size: 18px; font-weight: 500; vertical-align: 3px; }
+.mach-thread-id svg { color: var(--mach-accent); }
+.mach-thread-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; margin-top: 8px; }
+.mach-thread-body h3:first-child { margin-top: 6px; }
+.mach-thread-body .mach-fields { align-self: start; padding: 12px 14px; border-radius: 10px; background: var(--mach-panel); grid-template-columns: 80px 1fr; }
+.mach-subs { margin: 0; padding: 0; list-style: none; }
+.mach-subs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--p2-line); }
+.mach-kit { display: flex; align-items: center; gap: 8px; margin-top: 22px !important; padding-top: 16px; border-top: 1px solid var(--p2-line); }
+.mach-kit svg { color: var(--mach-accent); }
+.mach-kit .mach-muted { margin-left: 8px; font-size: 12.5px; font-weight: 400; }
+.mach-kit + .mach-tabs { margin-top: 8px; }
 

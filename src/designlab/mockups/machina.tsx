@@ -7,7 +7,7 @@ import { ALERT_FAKTURY, KARTA_PRZEPISU, OCENA, WATKI, automaty, type Automat, ty
  * follows a decision D-001–D-058 (automat as a Fila thread: D-053–D-057); the rest is marked as an agent proposal in the conversation. No writes. */
 
 type Widok = 'lista' | 'karta' | 'ocena' | 'alert';
-type Zakladka = 'przepis' | 'stany' | 'dziennik' | 'rozmowy' | 'fila';
+type Zakladka = 'przepis' | 'stany' | 'dziennik' | 'rozmowy';
 
 const MODULY = ['Sport', 'Finanse', 'Zdrowie', 'Praca', 'Osobiste', 'Panel'];
 const RODZAJ: Record<Automat['rodzaj'], string> = { cykliczny: 'cykliczny', zdarzenie: 'na zdarzenie', jednorazowy: 'jednorazowy', wbudowany: 'wbudowany' };
@@ -64,13 +64,12 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
   return <section className="mach-detail">
     <header className="mach-detail-head">
       <div>
-        <p className="mach-eyebrow"><Workflow size={13} />{watek(a).id} · wątek typu automat · {RODZAJ[a.rodzaj]} · moduł {watek(a).modul}</p>
-        <h1>{a.nazwa}</h1>
-        <p className="mach-cel">{a.opis}</p>
+        <p className="mach-crumbs">Fila › Machina (MACH) › {watek(a).modul}</p>
+        <h1><span className="mach-thread-id"><Workflow size={18} />{watek(a).id}</span>{a.nazwa}</h1>
         <p className="mach-muted">{a.wyzwalacze.join(' · ')}{a.nastepny ? ` · następny run ${a.nastepny}` : ''}{a.runy.length ? ` · ${a.runy.length} runów · ${usd(koszt(a))} łącznie` : ''}</p>
       </div>
       <div className="mach-actions">
-        <span className={`mach-status s-${statusTone(a.status)}`} title="Stan wątku w workflow Automat; ustawia go tylko Machina">{stanWatku(a)}</span>
+        <span className={`mach-status s-${statusTone(a.status)}`} title="Stan wątku w workflow Automat; ustawia go tylko Machina">Stan: {stanWatku(a)}</span>
         <button className="mach-icon" aria-label="Uruchom teraz" disabled={a.status === 'czeka na kartę przepisu'}><Play size={16} /></button>
         <button className="mach-icon" aria-label="Wstrzymaj"><Pause size={16} /></button>
         {a.usuwalny && <button className="mach-icon" aria-label="Anuluj"><X size={16} /></button>}
@@ -86,9 +85,23 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
       <div><strong>Run 2 gru 19:00 czeka na decyzję:</strong> ocena nazwała sytuację spoza katalogu.</div>
       <Link className="mach-primary small" href={href({ widok: 'ocena' })}>Otwórz rozmowę oceny</Link>
     </div>}
+    <div className="mach-thread-body">
+      <div>
+        <h3>Opis</h3><p className="mach-cel">{a.opis}</p>
+        <h3>Podwątki</h3>
+        {watek(a).wyniki?.length ? <ul className="mach-subs">{watek(a).wyniki!.map(w => <li key={w.id}>
+          <span className="mach-pill">{w.typ}</span><span className="mach-id">{w.id}</span><span>{w.tytul}</span><span className="mach-muted">{w.opis}</span></li>)}</ul>
+          : <p className="mach-empty">{a.id === 'a-f6354232578d' ? 'Brak. W sytuacji „Zapisy otwarte” klocek „Wątek w Fili” założy tu Sprawę z linkiem i Terminem.' : 'Brak.'}</p>}
+      </div>
+      <dl className="mach-fields">
+        <dt>Typ</dt><dd>automat ({RODZAJ[a.rodzaj]})</dd><dt>Projekt</dt><dd>Machina (MACH)</dd><dt>Moduł</dt><dd>{watek(a).modul}</dd>
+        <dt>Workflow</dt><dd>Automat</dd><dt>Stan</dt><dd>{stanWatku(a)} <span className="mach-muted">(ustawia Machina)</span></dd>
+      </dl>
+    </div>
+    <h2 className="mach-kit"><Cog size={16} />Zestaw Machiny<span className="mach-muted">zmienia go tylko karta Machiny</span></h2>
     <div className="mach-tabs">
       {tab('przepis', 'Przepis', a.wersje.length || undefined)}{tab('stany', 'Katalog sytuacji', a.stany.length || undefined)}
-      {tab('dziennik', 'Dziennik', a.runy.length || undefined)}{tab('rozmowy', 'Rozmowy', a.rozmowy.length || undefined)}{tab('fila', 'W Fili', watek(a).wyniki?.length || undefined)}
+      {tab('dziennik', 'Dziennik', a.runy.length || undefined)}{tab('rozmowy', 'Rozmowy', a.rozmowy.length || undefined)}
     </div>
     {zakladka === 'przepis' && (shown ? <div className="mach-cols">
       <div><h2>Wersja {shown.n}{shown.n === a.wersje.at(-1)?.n ? ' (bieżąca)' : ''}</h2><p className="mach-muted">{shown.at} · {shown.powod} · {shown.opis}</p>
@@ -121,22 +134,6 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
       {r.id === 'r-ocena' ? <Link href={href({ widok: 'ocena' })}>{r.tytul}</Link> : r.id === 'r-proj' ? <Link href={href({ widok: 'karta' })}>{r.tytul}</Link> : <span>{r.tytul}</span>}
       <span className="mach-muted">{r.at}{r.run ? ` · ${r.run}` : ''}</span>
     </li>)}</ul> : <p className="mach-empty">Automat wbudowany nie ma rozmów.</p>)}
-    {zakladka === 'fila' && <div className="mach-cols">
-      <div>
-        <h2>Wyniki w Fili</h2>
-        {watek(a).wyniki?.length ? <ul className="mach-convs">{watek(a).wyniki!.map(w => <li key={w.id}>
-          <span className="mach-pill">{w.typ}</span><strong>{w.id}</strong><span>{w.tytul}</span><span className="mach-muted">{w.opis}</span></li>)}</ul>
-          : <p className="mach-empty">{a.id === 'a-f6354232578d' ? 'Jeszcze nic: w sytuacji „Zapisy otwarte” klocek „Wątek w Fili” założy tu Sprawę z linkiem i Terminem.' : 'Ten automat nie zakłada wątków.'}</p>}
-        <h2 className="mach-gap">Komentarze wątku</h2>
-        <p className="mach-empty">Komentarze w Fili są Twoje; nie zmieniają przepisu.</p>
-      </div>
-      <aside className="mach-side"><h3><Layers3 size={15} />Wątek {watek(a).id}</h3>
-        <dl className="mach-fields">
-          <dt>Projekt</dt><dd>Machina (MACH)</dd><dt>Typ</dt><dd>automat</dd><dt>Moduł</dt><dd>{watek(a).modul}</dd>
-          <dt>Workflow</dt><dd>Automat</dd><dt>Stan</dt><dd>{stanWatku(a)}</dd>
-        </dl>
-        <p className="mach-note">Stan ustawia tylko Machina; przepis, sytuacje i dziennik to zestaw Machiny i fila_apply ich nie zmienia.</p></aside>
-    </div>}
   </section>;
 }
 
