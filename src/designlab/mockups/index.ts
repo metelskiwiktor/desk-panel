@@ -4,4 +4,5 @@ import type { ComponentType } from 'react';
 export const mockups: Record<string, () => Promise<{ default: ComponentType }>> = {
   demo: () => import('./demo'),
   fila: () => import('./fila'),
+  machina: () => import('./machina'),
 };
