@@ -9,11 +9,11 @@ import { ALERT_FAKTURY, KARTA_PRZEPISU, OCENA, WATKI, automaty, type Automat, ty
 type Widok = 'lista' | 'karta' | 'ocena' | 'alert';
 type Zakladka = 'przepis' | 'stany' | 'dziennik' | 'rozmowy';
 
-const MODULY = ['Sport', 'Finanse', 'Zdrowie', 'Praca', 'Osobiste', 'Panel'];
+const MODULY = ['Obserwacja', 'Obsługa', 'Przypomnienia', 'Systemowe'];
 const RODZAJ: Record<Automat['rodzaj'], string> = { cykliczny: 'cykliczny', zdarzenie: 'na zdarzenie', jednorazowy: 'jednorazowy', wbudowany: 'wbudowany' };
 /** Stan of the thread in the "Automat" workflow (D-053); there is no separate "status". */
 const stanWatku = (a: Automat) => a.status.charAt(0).toUpperCase() + a.status.slice(1);
-const watek = (a: Automat) => WATKI[a.id] ?? { id: 'MACH-?', modul: 'Osobiste' };
+const watek = (a: Automat) => WATKI[a.id] ?? { id: 'MACH-?', modul: 'Przypomnienia', tagi: [] };
 const GRUPA: Record<Grupa, string> = { odczyt: 'Odczyt', przetwarzanie: 'Przetwarzanie', akcja: 'Akcja', sterowanie: 'Sterowanie' };
 const statusTone = (status: Automat['status']) =>
   status === 'aktywny' ? 'ok' : status === 'zakończony' ? 'off' : status === 'wstrzymany' ? 'pause' : 'wait';
@@ -94,7 +94,7 @@ function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Z
           : <p className="mach-empty">{a.id === 'a-f6354232578d' ? 'Brak. W sytuacji „Zapisy otwarte” klocek „Wątek w Fili” założy tu Sprawę z linkiem i Terminem.' : 'Brak.'}</p>}
       </div>
       <dl className="mach-fields">
-        <dt>Typ</dt><dd>automat ({RODZAJ[a.rodzaj]})</dd><dt>Projekt</dt><dd>Machina (MACH)</dd><dt>Moduł</dt><dd>{watek(a).modul}</dd>
+        <dt>Typ</dt><dd>automat ({RODZAJ[a.rodzaj]})</dd><dt>Projekt</dt><dd>Machina (MACH)</dd><dt>Moduł</dt><dd>{watek(a).modul}</dd><dt>Tagi</dt><dd>{(watek(a).tagi ?? []).map(tag => `#${tag}`).join(' ') || '—'}</dd>
         <dt>Workflow</dt><dd>Automat</dd><dt>Stan</dt><dd>{stanWatku(a)} <span className="mach-muted">(ustawia Machina)</span></dd>
       </dl>
     </div>
@@ -146,7 +146,7 @@ function Lista({ lista, wybrany, href }: { lista: Automat[]; wybrany: string; hr
       return <div key={modul}><h2>{modul}</h2><ul>{rows.map(a => <li key={a.id}>
         <Link className={`mach-row${a.id === wybrany ? ' active' : ''}${a.status === 'zakończony' ? ' closed' : ''}`} href={href({ automat: a.id })}>
           <span className={`mach-dot s-${statusTone(a.status)}`} />
-          <span className="mach-row-main"><strong><span className="mach-id">{watek(a).id}</span>{a.nazwa}</strong><span className="mach-muted">{a.status === 'aktywny' ? a.wyzwalacze[0] : stanWatku(a)}</span></span>
+          <span className="mach-row-main"><strong><span className="mach-id">{watek(a).id}</span>{a.nazwa}</strong><span className="mach-muted">{(watek(a).tagi ?? []).map(tag => `#${tag} `)}{a.status === 'aktywny' ? a.wyzwalacze[0] : stanWatku(a)}</span></span>
           {a.runy.length > 0 && <span className="mach-dots">{a.runy.slice(0, 5).map(r => <i key={r.id} className={`w-${r.wynik.replaceAll(' ', '-')}`} />)}</span>}
         </Link>
       </li>)}</ul></div>;

@@ -169,18 +169,18 @@ const wspolne = (iron: Automat): Automat[] => [
 ];
 
 /** Fila home of each automat (D-054, D-056): thread id, module and Stan of the "Automat" workflow (D-053). */
-export const WATKI: Record<string, { id: string; modul: string; wyniki?: { id: string; tytul: string; typ: string; opis: string }[] }> = {
-  'a-f6354232578d': { id: 'MACH-1', modul: 'Sport' },
-  'a-znanylekarz': { id: 'MACH-2', modul: 'Zdrowie' },
-  'a-konto': { id: 'MACH-3', modul: 'Finanse' },
-  'a-obs-czas': { id: 'MACH-4', modul: 'Osobiste' },
-  'a-obs-pr': { id: 'MACH-5', modul: 'Praca' },
-  'a-cezar-czeka': { id: 'MACH-6', modul: 'Panel' },
-  'a-cezar-wznow': { id: 'MACH-7', modul: 'Panel' },
-  'a-faktura-alert': { id: 'MACH-8', modul: 'Finanse' },
-  'a-faktura-ksieg': { id: 'MACH-9', modul: 'Finanse', wyniki: [
+export const WATKI: Record<string, { id: string; modul: string; tagi?: string[]; wyniki?: { id: string; tytul: string; typ: string; opis: string }[] }> = {
+  'a-f6354232578d': { id: 'MACH-1', modul: 'Obserwacja', tagi: ['sport'] },
+  'a-znanylekarz': { id: 'MACH-2', modul: 'Obsługa', tagi: ['zdrowie'] },
+  'a-konto': { id: 'MACH-3', modul: 'Obsługa', tagi: ['finanse'] },
+  'a-obs-czas': { id: 'MACH-4', modul: 'Przypomnienia', tagi: ['osobiste'] },
+  'a-obs-pr': { id: 'MACH-5', modul: 'Przypomnienia', tagi: ['praca'] },
+  'a-cezar-czeka': { id: 'MACH-6', modul: 'Systemowe', tagi: ['praca'] },
+  'a-cezar-wznow': { id: 'MACH-7', modul: 'Systemowe', tagi: ['praca'] },
+  'a-faktura-alert': { id: 'MACH-8', modul: 'Obsługa', tagi: ['finanse'] },
+  'a-faktura-ksieg': { id: 'MACH-9', modul: 'Obsługa', tagi: ['finanse'], wyniki: [
     { id: 'MACH-10', tytul: 'Koszty OpenRouter 2026-11', typ: 'Sprawa', opis: '2 komentarze: #2609-9426 · 20,00 USD (81,42 PLN) · PDF na Drive; #2611-0042 · 10,00 USD' }] },
-  'a-obs-czas-old': { id: 'MACH-11', modul: 'Osobiste' },
+  'a-obs-czas-old': { id: 'MACH-11', modul: 'Przypomnienia', tagi: ['osobiste'] },
 };
 
 export const automaty = (chwila: Chwila): Automat[] => chwila === 'przeniesienie'
