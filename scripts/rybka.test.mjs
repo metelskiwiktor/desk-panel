@@ -285,6 +285,34 @@ it('parses CLI arguments for task ID or file path and runner selection with both
   expect(() => parseRybkaArgs(['spec.md', 'extra.md'])).toThrow(/Zbyt wiele argumentów/);
 });
 
+it('parses --agy-model in both forms and rejects a bad value or a runner without agy', () => {
+  expect(parseRybkaArgs(['spec.md', '--runner', 'agy', '--agy-model', 'gemini-4-hydrogen-medium']))
+    .toEqual({ specPath: 'spec.md', runner: 'agy', agyModel: 'gemini-4-hydrogen-medium' });
+  expect(parseRybkaArgs(['spec.md', '--agy-model=gemini-4.1-x'])).toEqual({ specPath: 'spec.md', runner: 'both', agyModel: 'gemini-4.1-x' });
+  expect(() => parseRybkaArgs(['spec.md', '--agy-model', 'Gemini_4'])).toThrow(/Nieprawidłowy model agy/);
+  expect(() => parseRybkaArgs(['spec.md', '--agy-model'])).toThrow(/Nieprawidłowy model agy/);
+  expect(() => parseRybkaArgs(['spec.md', '--runner', 'claude', '--agy-model', 'x-1'])).toThrow(/tylko z --runner agy albo both/);
+});
+
+it('passes a chosen agy model to --model and to the report header', async () => {
+  const cwd = fixture();
+  const child = new EventEmitter();
+  child.pid = 5051;
+  child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
+  const calls = [];
+  const done = runRybka({ specPath: 'spec.md', runner: 'agy', agyModel: 'gemini-4-hydrogen-medium', cwd,
+    rolePath: join(cwd, 'role.md'), log: () => {}, spawnImpl: (...a) => { calls.push(a); return child; },
+    killTree: () => child.emit('close', null) });
+  const args = calls[0][1];
+  expect(args[args.indexOf('--model') + 1]).toBe('gemini-4-hydrogen-medium');
+  child.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: goodReport,
+    usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }) + '\n');
+  child.emit('close', 0);
+  const result = await done;
+  expect(result.metrics.model).toBe('gemini-4-hydrogen-medium');
+  expect(readFileSync(result.reportPath, 'utf8')).toContain('- Model: gemini-4-hydrogen-medium');
+});
+
 it('runs agy runner without tool permissions, with inlined materials, stream-json protocol and header', async () => {
   const cwd = fixture();
   const child = new EventEmitter();

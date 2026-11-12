@@ -8,7 +8,7 @@ Nie uruchamiaj go w runie wykonawcy Cezara.
 ## Uruchomienie i argumenty
 
 ```bash
-just rybka SPEC [--runner claude|agy|opencode|both]
+just rybka SPEC [--runner claude|agy|opencode|both] [--agy-model ID]
 ```
 
 - `SPEC`: ID wątku Fili (`just rybka DESK-32`) albo dawne ID zadania (`t-…`); w trybie Fili runner szuka go w polu „Dawne ID” i czyta kanoniczny wątek,
@@ -29,6 +29,7 @@ just rybka SPEC [--runner claude|agy|opencode|both]
 - `--runner claude`: uruchamia tylko recenzenta Sonnet.
 - `--runner opencode`: zachowana opcja recenzenta DeepSeek; nie należy do domyślnej pary.
 - `--runner agy`: uruchamia tylko recenzenta Gemini.
+- `--agy-model ID`: model agy tylko dla tego uruchomienia (małe litery, cyfry, kropki, myślniki; z `--runner agy` albo `both`), np. `just rybka DESK-32 --runner agy --agy-model gemini-4-hydrogen-medium`; trafia do `--model` i do pola Model raportu, bez niej obowiązuje domyślny `AGY_MODEL`.
 
 Każdy raport zapisuje w nagłówku zadanie, numer przeczytanej rewizji i model rybki.
 Przy sukcesie runner zapisuje też `report-comments.json`: gotowe teksty komentarzy (limity 2000 znaków i 4096 bajtów JSON z `by: codex`; to limity list zadań, a komentarz wątku Fili ma limit 5000 znaków, więc te same części mieszczą się w obu), których jawne markery chronią wszystkie białe znaki raportu przed `trim` API; przy zapisie i porównywaniu zachowaj markery, a po odczycie sklej treści między nimi — runner sam nie publikuje komentarzy.

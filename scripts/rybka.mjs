@@ -294,11 +294,11 @@ const REASONS = {
 };
 
 /** Executes a review run using a single runner ('claude', 'agy' or 'opencode'). */
-async function runRybkaOne({ runner = 'opencode', specPath, spec, taskId = null, revision = null, materials, reads, role,
+async function runRybkaOne({ runner = 'opencode', agyModel = AGY_MODEL, specPath, spec, taskId = null, revision = null, materials, reads, role,
   cwd = process.cwd(), env = process.env, wallMs = WALL_MS, idleMs = IDLE_MS,
   progressMs = 15_000, spawnImpl = spawn, execImpl = execFileSync, killTree = killProcessTree,
   log = console.log, now = Date.now } = {}) {
-  const model = runner === 'agy' ? AGY_MODEL : runner === 'claude' ? CLAUDE_MODEL : MODEL;
+  const model = runner === 'agy' ? agyModel : runner === 'claude' ? CLAUDE_MODEL : MODEL;
   const started = now();
   const dir = join(cwd, '.ai', 'rybka-runs', new Date(started).toISOString().replace(/[:.]/g, '-') + '-' + runner + '-' + randomUUID().slice(0, 8));
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -571,7 +571,7 @@ async function runRybkaOne({ runner = 'opencode', specPath, spec, taskId = null,
       const args = runner === 'claude'
         ? ['-p', '--model', CLAUDE_MODEL, '--effort', 'medium', '--tools', '', '--strict-mcp-config',
           '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'stream-json', '--verbose']
-        : ['--model', AGY_MODEL, '--output-format', 'stream-json', '--input-format', 'stream-json', '-p', ''];
+        : ['--model', agyModel, '--output-format', 'stream-json', '--input-format', 'stream-json', '-p', ''];
       child = spawnImpl(bin, args,
         { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     } catch { finish(1); return; }
@@ -666,6 +666,13 @@ export async function runRybka(options = {}) {
 export function parseRybkaArgs(argv) {
   let specPath = null;
   let runner = 'both';
+  let agyModel = null;
+  const takeModel = val => {
+    if (!val || !/^[a-z0-9.-]+$/.test(val)) {
+      throw Error(`Nieprawidłowy model agy: ${val}. Dozwolone: małe litery, cyfry, kropki i myślniki, np. gemini-4-hydrogen-medium.`);
+    }
+    agyModel = val;
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') return { help: true };
@@ -675,6 +682,10 @@ export function parseRybkaArgs(argv) {
         throw Error(`Nieprawidłowy runner: ${val}. Dozwolone: claude, agy, opencode, both.`);
       }
       runner = val;
+    } else if (arg === '--agy-model') {
+      takeModel(argv[++i]);
+    } else if (arg.startsWith('--agy-model=')) {
+      takeModel(arg.slice('--agy-model='.length));
     } else if (arg.startsWith('--runner=')) {
       const val = arg.slice('--runner='.length);
       if (!['claude', 'agy', 'opencode', 'both'].includes(val)) {
@@ -689,19 +700,23 @@ export function parseRybkaArgs(argv) {
     }
   }
   if (!specPath) throw Error('Wymagany argument SPEC (ścieżka pliku, ID wątku Fili, np. DESK-32, albo id zadania t-… do 1.6).');
-  return { specPath, runner };
+  if (agyModel && runner !== 'agy' && runner !== 'both') {
+    throw Error(`Opcja --agy-model działa tylko z --runner agy albo both, nie z ${runner}.`);
+  }
+  return agyModel ? { specPath, runner, agyModel } : { specPath, runner };
 }
 
 if (process.argv[1] && import.meta.url.toLowerCase() === pathToFileURL(resolve(process.argv[1])).href.toLowerCase()) {
   try {
     const parsed = parseRybkaArgs(process.argv.slice(2));
     if (parsed.help) {
-      console.log('Użycie: just rybka SPEC [--runner claude|agy|opencode|both]');
+      console.log('Użycie: just rybka SPEC [--runner claude|agy|opencode|both] [--agy-model ID]');
       console.log('  SPEC: ID wątku Fili (DESK-32), id zadania t-… (do 1.6) lub ścieżka pliku w repo');
       console.log('  --runner: claude (Sonnet 5.5 medium), agy (Gemini 3.8 Flash high), opencode (DeepSeek), both (domyślnie claude + agy)');
+      console.log('  --agy-model: model agy dla tego uruchomienia (runner agy lub both), np. --agy-model gemini-4-hydrogen-medium');
       process.exitCode = 0;
     } else {
-      const result = await runRybka({ specPath: parsed.specPath, runner: parsed.runner });
+      const result = await runRybka({ specPath: parsed.specPath, runner: parsed.runner, agyModel: parsed.agyModel });
       process.exitCode = result.code;
     }
   } catch (error) {
