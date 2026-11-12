@@ -165,15 +165,33 @@ export function buildAgyPrompt(role, materials, spec, cwd) {
     const text = readFileSync(abs, 'utf8').replace(/^\uFEFF/, '');
     return `--- Plik referencyjny: ${m.path} ---\n${text}`;
   });
+  // Order: role, specification, then materials, so truncating a long input's end never drops the specification.
   return [
     role,
     '',
-    'Materiały referencyjne (wklejone poniżej; nie używaj narzędzi, wszystkie materiały masz w tej wiadomości):',
-    fileBlocks.join('\n\n'),
-    '',
     'Specyfikacja do recenzji:',
     spec,
+    '',
+    'Materiały referencyjne (wklejone poniżej; nie używaj narzędzi, wszystkie materiały masz w tej wiadomości):',
+    fileBlocks.join('\n\n'),
   ].join('\n');
+}
+
+/** Prompt for the single format-correction turn: the model's own report plus a short instruction. */
+export function buildCorrectionPrompt(report) {
+  return [
+    'Poniżej jest Twój raport z recenzji specyfikacji. Nie spełnia wymaganego formatu. Przepisz go dokładnie w wymaganym formacie, bez zmiany treści merytorycznej i bez nowych uwag; nie używaj narzędzi.',
+    'Format: sekcja „BLOKUJĄCE:” (albo „brak uwag blokujących”); każda uwaga blokująca to numerowana pozycja (najwyżej 5) z polami „Niejasność:”, „Niezapisane założenie:”, „Wpływ na wykonanie:”, „Pytanie:”; potem „DROBNE:”; na końcu „ROZMIAR: adekwatny” albo „ROZMIAR: za duży”. Brakujące pole uzupełnij z treści uwagi.',
+    '',
+    'Raport do przepisania:',
+    report,
+  ].join('\n');
+}
+
+const sumField = (a, b) => (a === null || a === undefined ? b ?? null : b === null || b === undefined ? a : a + b);
+function sumUsage(a, b) {
+  return Object.fromEntries(['inputTokens', 'outputTokens', 'totalTokens', 'reasoningTokens', 'cacheReadTokens', 'costUsd']
+    .map(k => [k, sumField(a[k], b[k])]));
 }
 
 /** Read only explicitly named, local text files. No following links outside the repo or opening credentials. */
@@ -413,7 +431,8 @@ async function runRybkaOne({ runner = 'opencode', agyModel = AGY_MODEL, specPath
   const prompt = buildAgyPrompt(role, materials, spec, cwd);
   const bin = runner === 'claude' ? 'claude' : agyExecutable(env);
 
-  return new Promise(resolveResult => {
+  // One model turn without tools. Settles with the raw outcome; the caller judges the report.
+  const runTurn = (prompt, turnName) => new Promise(resolveTurn => {
     const events = [];
     let buffer = '', ending, settled = false, child, wallTimer, idleTimer, progressTimer, forceTimer;
     let firstEventMs = null, firstTextMs = null, usageWarning = false;
@@ -453,16 +472,7 @@ async function runRybkaOne({ runner = 'opencode', agyModel = AGY_MODEL, specPath
       const reason = ending ?? (metrics.errors ? 'provider-error' : code !== 0 ? 'process-error'
         : metrics.stopReason === 'length' ? 'length'
         : !metrics.completed || !report ? 'no-report' : !validReport(report) ? 'incomplete-report' : 'completed');
-      const ok = reason === 'completed';
-      const record = { reason, ok, model, runner, startedAt: new Date(started).toISOString(), durationMs: now() - started,
-        eventCount: events.length, lastEventAt: null, lastTool: 'brak', fileReads: reads, modelReads: 0,
-        firstEventMs, firstTextMs, firstTokenMs: null, exitCode: code, ...metrics };
-      writeFileSync(join(dir, 'metrics.json'), JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
-      if (ok) saveReport(reportPath, header + '\n' + report + '\n');
-      else if (report) writeFileSync(join(dir, 'partial-report.md'), header + '\n' + report + '\n', { mode: 0o600 });
-      log(`Rybka (${runner}): ${REASONS[reason]}. Zdarzenia: ${events.length}; ${usageLabel(metrics)}; czas: ${Math.round(record.durationMs / 1000)} s.`);
-      log(`Rybka (${runner}): ${ok ? reportPath : dir}`);
-      resolveResult({ ok, code: ok ? 0 : ['timeout', 'idle-timeout'].includes(reason) ? 124 : 1, reason, dir, reportPath: ok ? reportPath : null, metrics: record, runner });
+      resolveTurn({ reason, report, metrics, code, eventCount: events.length, firstEventMs, firstTextMs });
     };
 
     const stop = reason => {
@@ -597,8 +607,35 @@ async function runRybkaOne({ runner = 'opencode', agyModel = AGY_MODEL, specPath
     wallTimer = setTimeout(() => stop('timeout'), Math.max(1, wallMs - (now() - started)));
     resetIdle();
     progressTimer = setInterval(progress, progressMs);
-    log(`Rybka (${runner}): model ${model}; limit 10 min, bez zdarzeń 8 min; postęp co 15 s.`);
+    log(`Rybka (${runner}): model ${model}${turnName ? ` (${turnName})` : ''}; limit 10 min, bez zdarzeń 8 min; postęp co 15 s.`);
   });
+
+  let turn = await runTurn(prompt);
+  let corrected = false;
+  let usage = turn.metrics;
+  let firstReport = turn.report;
+  if (turn.reason === 'incomplete-report') {
+    // One automatic correction turn: same model, no tools, only the model's own report and a format instruction.
+    corrected = true;
+    log(`Rybka (${runner}): raport niepełny — jedna tura poprawki formatu.`);
+    writeFileSync(join(dir, 'first-report.md'), header + '\n' + firstReport + '\n', { mode: 0o600 });
+    const second = await runTurn(buildCorrectionPrompt(firstReport), 'poprawka formatu');
+    usage = sumUsage(turn.metrics, second.metrics);
+    turn = { ...second, metrics: { ...second.metrics, ...usage } };
+  }
+  const { reason, metrics, code } = turn;
+  const report = turn.report || firstReport;
+  const ok = reason === 'completed';
+  const record = { reason, ok, model, runner, startedAt: new Date(started).toISOString(), durationMs: now() - started,
+    eventCount: turn.eventCount, lastEventAt: null, lastTool: 'brak', fileReads: reads, modelReads: 0,
+    firstEventMs: turn.firstEventMs, firstTextMs: turn.firstTextMs, firstTokenMs: null, exitCode: code, ...metrics,
+    corrected };
+  writeFileSync(join(dir, 'metrics.json'), JSON.stringify(record, null, 2) + '\n', { mode: 0o600 });
+  if (ok) saveReport(reportPath, header + '\n' + report + '\n');
+  else if (report) writeFileSync(join(dir, 'partial-report.md'), header + '\n' + report + '\n', { mode: 0o600 });
+  log(`Rybka (${runner}): ${REASONS[reason]}${corrected ? ' (po turze poprawki)' : ''}. Zdarzenia: ${turn.eventCount}; czas: ${Math.round(record.durationMs / 1000)} s.`);
+  log(`Rybka (${runner}): ${ok ? reportPath : dir}`);
+  return { ok, code: ok ? 0 : ['timeout', 'idle-timeout'].includes(reason) ? 124 : 1, reason, dir, reportPath: ok ? reportPath : null, metrics: record, runner, corrected };
 }
 
 /** A fresh run and its private files; supports single or both runners in parallel. */

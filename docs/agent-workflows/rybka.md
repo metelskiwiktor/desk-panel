@@ -62,6 +62,8 @@ przekroczenie limitu lub niedozwolona ścieżka zatrzymuje próbę przed wywoła
 - W OpenCode do promptu roli trafia lista dozwolonych plików, a model czyta AGENTS.md i istotne
   załączniki wyłącznie narzędziem `read`: uprawnienia dopuszczają tylko te dokładne ścieżki, pozostałe są odrzucane.
 - W Claude i agy treść tych samych sprawdzonych materiałów jest wklejana do wiadomości użytkownika, a model nie ma narzędzi.
+  Kolejność w prompcie: rola, specyfikacja, dopiero potem materiały referencyjne, żeby ucięcie końca długiego wejścia (agy) nie zabierało specyfikacji.
+- Gdy raport Claude lub agy jest niepełny (`incomplete-report`), runner robi jedną automatyczną turę poprawki: ten sam model, bez narzędzi, dostaje własny raport i instrukcję przepisania go w wymaganym formacie bez zmiany treści; wynik przechodzi to samo `validReport`, drugi raz niepełny = brak raportu. `metrics.json` i wynik mają `corrected: true`, a pierwszy raport leży w `first-report.md`.
 - Model OpenCode ma najwyżej 12 wywołań odczytu (ponowne odczyty i odmowy też się liczą); wykrycie przekroczenia przerywa próbę
   i wyklucza skuteczny raport.
 - Nie ma wyszukiwania, zapisu, powłoki ani delegacji. MCP są wyłączone.

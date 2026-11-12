@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   reviewMaterials, runRybka, fetchTaskSpec, fetchTaskOrFilaSpec, fetchFilaSpec, isTaskId, isFilaId, parseRybkaArgs,
-  validReport, formatReportHeader, splitReportComments, AGY_MODEL, CLAUDE_MODEL, MODEL,
+  validReport, buildAgyPrompt, buildCorrectionPrompt, formatReportHeader, splitReportComments, AGY_MODEL, CLAUDE_MODEL, MODEL,
 } from './rybka.mjs';
 
 const dirs = [];
@@ -624,6 +624,11 @@ it.each(['empty', 'partial', 'length', 'tool', 'provider', 'exit', 'unfinished']
     result: kind === 'empty' ? '' : kind === 'partial' ? 'BLOKUJĄCE:\nbrak uwag blokujących' : goodReport,
     stop_reason: kind === 'length' ? 'max_tokens' : 'end_turn' });
   f.child.emit('close', kind === 'exit' ? 1 : 0);
+  if (kind === 'partial') { // the incomplete report gets one correction turn, answered here with the same incomplete text
+    await vi.waitFor(() => expect(f.calls).toHaveLength(2));
+    event(f.child, { type: 'result', subtype: 'success', result: 'BLOKUJĄCE:\nbrak uwag blokujących' });
+    f.child.emit('close', 0);
+  }
   expect((await done).ok).toBe(false);
 });
 
@@ -734,4 +739,77 @@ it.each([
 
 it.each(['ADEKWATNY, dalszy tekst.', 'za duży.', 'Za Duży:\n1. Wydziel backend.\n2. Wydziel UI.'])('accepts a size verdict with arbitrary continuation: %s', verdict => {
   expect(validReport(goodReport.replace('adekwatny', verdict))).toBe(true);
+});
+
+it('puts the specification before the reference materials in the prompt for agy and Claude', () => {
+  const cwd = fixture();
+  const { spec, materials } = reviewMaterials('spec.md', cwd);
+  const prompt = buildAgyPrompt('ROLA', materials, spec, cwd);
+  expect(prompt.indexOf('ROLA')).toBeLessThan(prompt.indexOf(spec));
+  expect(prompt.indexOf(spec)).toBeLessThan(prompt.indexOf('Plik referencyjny: AGENTS.md'));
+});
+
+const blocking = fields => `BLOKUJĄCE:
+1. ${fields}
+
+DROBNE:
+brak
+
+ROZMIAR: adekwatny`;
+const missingAssumption = blocking('Niejasność: a. Wpływ na wykonanie: b. Pytanie: c?');
+const fullIssue = blocking('Niejasność: a. Niezapisane założenie: x. Wpływ na wykonanie: b. Pytanie: c?');
+
+async function twoTurns(runner, first, second) {
+  const cwd = fixture(); const inputs = []; const children = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter(); child.pid = 7000 + children.length;
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
+    const index = children.length; inputs[index] = '';
+    child.stdin.on('data', chunk => { inputs[index] += chunk.toString(); });
+    children.push(child);
+    return child;
+  };
+  const answer = (child, text) => {
+    if (runner === 'claude') event(child, { type: 'result', subtype: 'success', result: text });
+    else event(child, { event: 'result', result: { status: 'SUCCESS', response: text } });
+    child.emit('close', 0);
+  };
+  const done = runRybka({ specPath: 'spec.md', runner, cwd, rolePath: join(cwd, 'role.md'), log: () => {}, spawnImpl,
+    killTree: child => child.emit('close', null) });
+  answer(children[0], first);
+  await vi.waitFor(() => expect(children.length).toBeGreaterThan(1));
+  if (second !== null) answer(children[1], second);
+  return { result: await done, inputs, children };
+}
+
+it.each(['claude', 'agy'])('%s: an incomplete report gets one correction turn and the fixed report is accepted', async runner => {
+  const { result, inputs, children } = await twoTurns(runner, missingAssumption, fullIssue);
+  expect(children).toHaveLength(2);
+  expect(inputs[1]).toContain('Niezapisane założenie');
+  expect(inputs[1]).toContain('Niejasność: a. Wpływ na wykonanie: b.');
+  expect(result).toMatchObject({ ok: true, reason: 'completed', corrected: true });
+  expect(result.metrics.corrected).toBe(true);
+  expect(readFileSync(result.reportPath, 'utf8')).toContain('Niezapisane założenie: x.');
+});
+
+it.each(['claude', 'agy'])('%s: two incomplete reports end as incomplete-report with no third turn', async runner => {
+  const { result, children } = await twoTurns(runner, missingAssumption, missingAssumption);
+  expect(children).toHaveLength(2);
+  expect(result).toMatchObject({ ok: false, reason: 'incomplete-report', reportPath: null, corrected: true });
+  expect(existsSync(join(result.dir, 'partial-report.md'))).toBe(true);
+});
+
+it('a valid first report triggers no correction turn', async () => {
+  const cwd = fixture(); let spawned = 0;
+  const spawnImpl = () => {
+    spawned++;
+    const child = new EventEmitter(); child.pid = 1;
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
+    setImmediate(() => { event(child, { type: 'result', subtype: 'success', result: goodReport }); child.emit('close', 0); });
+    return child;
+  };
+  const result = await runRybka({ specPath: 'spec.md', runner: 'claude', cwd, rolePath: join(cwd, 'role.md'), log: () => {}, spawnImpl });
+  expect(spawned).toBe(1);
+  expect(result).toMatchObject({ ok: true, corrected: false });
+  expect(buildCorrectionPrompt('X')).toContain('X');
 });
