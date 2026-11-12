@@ -343,7 +343,19 @@
 .mach-klocki { display: grid; gap: 4px; }
 .mach-klocek { display: grid; grid-template-columns: 104px 180px minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 7px 10px; border-left: 3px solid var(--g); border-radius: 6px; background: var(--mach-panel); }
 .g-odczyt { --g: var(--p2-cal); } .g-przetwarzanie { --g: #c3a4f3; } .g-akcja { --g: var(--quota-green); } .g-sterowanie { --g: var(--amber); }
-.mach-klocek > .mach-muted { min-width: 0; overflow-wrap: anywhere; }
+.mach-klocek > .mach-muted { min-width: 160px; overflow-wrap: anywhere; }
+.mach-klocek > .mach-zakres { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mach-klocek-wrap { border-radius: 6px; }
+button.mach-klocek { width: 100%; border: 0; border-left: 3px solid var(--g); text-align: left; }
+button.mach-klocek:hover { background: var(--mach-raise); }
+.mach-klocek-wrap.open button.mach-klocek { border-radius: 6px 6px 0 0; background: var(--mach-raise); }
+.mach-klocek-detail { padding: 10px 14px 12px 117px; border-left: 3px solid var(--g); border-radius: 0 0 6px 6px; background: var(--mach-raise); }
+.mach-klocek-detail dl { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 13px; }
+.mach-klocek-detail dt { color: var(--p2-muted); }
+.mach-klocek-detail dd { margin: 0; }
+.mach-kiedy { display: flex; gap: 10px; margin: 10px 0 10px; padding: 10px 12px; border-radius: 9px; border: 1px dashed var(--p2-line); }
+.mach-kiedy svg { color: var(--amber); flex: none; margin-top: 2px; }
+.mach-kiedy div { display: flex; flex-direction: column; gap: 2px; }
 .mach-grupa { color: var(--g); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 .mach-zakres, .mach-scopes li { display: inline-flex; align-items: center; gap: 5px; color: var(--p2-muted); font-size: 12px; }
 .mach-scopes { display: grid; gap: 4px; }

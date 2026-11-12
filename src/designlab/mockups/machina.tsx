@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Bell, Bot, CalendarClock, Check, Cog, FileText, History, Lock, MessageSquare, Pause, Play, RotateCcw, Workflow, X, Zap } from 'lucide-react';
 import { Link, useSearch } from '../nav';
 import { ALERT_FAKTURY, KARTA_PRZEPISU, OCENA, automaty, type Automat, type Chwila, type Grupa, type Run } from './machina-data';
@@ -18,13 +18,25 @@ const statusTone = (status: Automat['status']) =>
   status === 'aktywny' ? 'ok' : status === 'zakończony' ? 'off' : status === 'wstrzymany' ? 'pause' : 'wait';
 const koszt = (a: Automat) => a.runy.reduce((sum, run) => sum + (run.koszt ?? 0), 0);
 const usd = (value: number) => `$${value.toFixed(2)}`;
+const porownuje = (a: Automat) => !!a.wersje.at(-1)?.klocki.some(k => k.rodzaj === 'Porównanie ze stanami');
 
-function Klocki({ klocki, zakresy = true }: { klocki: Automat['wersje'][number]['klocki']; zakresy?: boolean }) {
+function Klocki({ klocki, zakresy = true, otwarty }: { klocki: Automat['wersje'][number]['klocki']; zakresy?: boolean; otwarty?: number }) {
+  const [open, setOpen] = useState<number | null>(otwarty ?? null);
   return <ol className="mach-klocki">
-    {klocki.map((k, i) => <li key={i} className={`mach-klocek g-${k.grupa}`}>
-      <span className="mach-grupa">{GRUPA[k.grupa]}</span>
-      <strong>{k.rodzaj}</strong><span className="mach-muted">{k.opis}</span>
-      {zakresy && k.zakres && <span className="mach-zakres"><Lock size={12} />{k.zakres}</span>}
+    {klocki.map((k, i) => <li key={i} className={`mach-klocek-wrap g-${k.grupa}${open === i ? ' open' : ''}`}>
+      <button className="mach-klocek" aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}>
+        <span className="mach-grupa">{GRUPA[k.grupa]}</span>
+        <strong>{k.rodzaj}</strong><span className="mach-muted">{k.opis}</span>
+        {zakresy && k.zakres ? <span className="mach-zakres"><Lock size={12} />{k.zakres}</span> : <span />}
+      </button>
+      {open === i && <div className="mach-klocek-detail">
+        <dl>
+          {k.kiedy && <><dt>Kiedy</dt><dd>{k.kiedy}</dd></>}
+          {(k.ustawienia ?? []).map(([key, value]) => <Fragment key={key}><dt>{key}</dt><dd>{value}</dd></Fragment>)}
+          {k.zakres && <><dt>Zakres</dt><dd><Lock size={12} /> {k.zakres} (zatwierdzony na karcie, D-009)</dd></>}
+        </dl>
+        <p className="mach-note">Zmiana ustawień: poproś Wektora w rozmowie automatu; zmiana to nowa wersja przepisu z kartą (D-035).</p>
+      </div>}
     </li>)}
   </ol>;
 }
@@ -43,7 +55,7 @@ function RunRow({ run, open }: { run: Run; open: boolean }) {
   </li>;
 }
 
-function Szczegoly({ a, zakladka, href }: { a: Automat; zakladka: Zakladka; href: (extra: Record<string, string>) => string }) {
+function Szczegoly({ a, zakladka, href, klocekParam }: { a: Automat; zakladka: Zakladka; href: (extra: Record<string, string>) => string; klocekParam?: number }) {
   const [wersja, setWersja] = useState<number | null>(null);
   const shown = a.wersje.find(w => w.n === wersja) ?? a.wersje.at(-1);
   const tab = (id: Zakladka, label: string, n?: number) =>
@@ -77,20 +89,25 @@ function Szczegoly({ a, zakladka, href }: { a: Automat; zakladka: Zakladka; href
       {tab('dziennik', 'Dziennik', a.runy.length || undefined)}{tab('rozmowy', 'Rozmowy', a.rozmowy.length || undefined)}
     </div>
     {zakladka === 'przepis' && (shown ? <div className="mach-cols">
-      <div><h2>Wersja {shown.n}{shown.n === a.wersje.at(-1)?.n ? ' (bieżąca)' : ''}</h2><p className="mach-muted">{shown.at} · {shown.powod} · {shown.opis}</p><Klocki klocki={shown.klocki} /></div>
+      <div><h2>Wersja {shown.n}{shown.n === a.wersje.at(-1)?.n ? ' (bieżąca)' : ''}</h2><p className="mach-muted">{shown.at} · {shown.powod} · {shown.opis}</p>
+        <div className="mach-kiedy"><Zap size={15} /><div><strong>Kiedy rusza run</strong>{a.wyzwalacze.map(w => <span key={w}>{w}</span>)}</div></div>
+        {porownuje(a) && <p className="mach-note">Akcje wykonują się tylko w reakcji stanu (Katalog stanów); zwykły run kończy się na porównaniu.</p>}
+        <Klocki key={shown.n} klocki={shown.klocki} otwarty={klocekParam} /></div>
       {a.rodzaj !== 'wbudowany' && <aside className="mach-side"><h3><History size={15} />Wersje</h3>
         <ul className="mach-versions">{[...a.wersje].reverse().map(w => <li key={w.n} className={w.n === shown.n ? 'active' : undefined}>
           <button onClick={() => setWersja(w.n)}>v{w.n} · {w.at}<span className="mach-muted">{w.powod}</span></button>
           {w.n !== a.wersje.at(-1)?.n && <button className="mach-text"><RotateCcw size={13} />Przywróć jako v{a.wersje.length + 1}</button>}
         </li>)}</ul>
-        <p className="mach-note">Przywrócona wersja przechodzi sprawdzenie na próbkach katalogu.</p></aside>}
+        {a.wersje.length > 1 && <p className="mach-note">Przywrócona wersja przechodzi sprawdzenie na próbkach katalogu.</p>}</aside>}
       {a.rodzaj === 'wbudowany' && <aside className="mach-side"><h3><Cog size={15} />Przepis panelu</h3><p className="mach-note">Zmienia go tylko kod panelu. Możesz wstrzymać i wznowić; nie da się usunąć.</p></aside>}
     </div> : <p className="mach-empty">Brak przepisu: czeka na rozmowę projektowania.</p>)}
     {zakladka === 'stany' && (a.stany.length ? <ul className="mach-stany">{a.stany.map(s => <li key={s.nazwa} className={`mach-stan r-${s.rodzaj}`}>
       <div className="mach-stan-head"><strong>{s.nazwa}</strong><span className="mach-pill">{s.rodzaj === 'przewidywany' ? 'przewidywany (bez próbki)' : s.rodzaj}</span><span className="mach-muted">→ {s.reakcja}</span></div>
       {s.uwaga && <p className="mach-note">{s.uwaga}</p>}
       {s.probki.map(p => <p key={p.run} className="mach-probka"><span>{p.at} · {p.run}</span>{p.wycinek}</p>)}
-    </li>)}</ul> : <p className="mach-empty">Katalog powstanie z pierwszym przepisem.</p>)}
+    </li>)}</ul> : <p className="mach-empty">{porownuje(a) || !a.wersje.length
+      ? 'Katalog powstanie z pierwszym przepisem.'
+      : 'Ten przepis nie porównuje wycinków ze stanami, więc nie ma katalogu stanów: każde zdarzenie wyzwalacza wykonuje klocki od razu. Katalog mają tylko przepisy, które obserwują stronę albo źródło.'}</p>)}
     {zakladka === 'dziennik' && <>
       {a.runy.length ? <ul className="mach-runs">{a.runy.map((run, i) => <RunRow key={run.id} run={run} open={i === 0} />)}</ul> : <p className="mach-empty">Brak runów w Machinie.</p>}
       {a.historia && <div className="mach-history"><h3><History size={15} />Historia sprzed Machiny</h3>
@@ -178,7 +195,7 @@ export default function Machina() {
       </div>
     </header>
 
-    {widok === 'lista' && <div className="mach-body"><Lista lista={lista} wybrany={wybrany.id} href={href} /><Szczegoly key={`${chwila}-${wybrany.id}`} a={wybrany} zakladka={zakladka} href={href} /></div>}
+    {widok === 'lista' && <div className="mach-body"><Lista lista={lista} wybrany={wybrany.id} href={href} /><Szczegoly key={`${chwila}-${wybrany.id}`} a={wybrany} zakladka={zakladka} href={href} klocekParam={params.get('klocek') ? Number(params.get('klocek')) : undefined} /></div>}
 
     {widok === 'karta' && <div className="mach-chat-layout">
       <section className="mach-thread" aria-label="Rozmowa automatu">

@@ -6,8 +6,8 @@ export type AutomatStatus = 'aktywny' | 'wstrzymany' | 'czeka na kartę przepisu
 export type Rodzaj = 'cykliczny' | 'jednorazowy' | 'zdarzenie' | 'wbudowany';
 export type Grupa = 'odczyt' | 'przetwarzanie' | 'akcja' | 'sterowanie';
 
-export interface Klocek { rodzaj: string; grupa: Grupa; opis: string; zakres?: string }
-export interface Wersja { n: number; at: string; powod: 'projektowanie' | 'naprawa' | 'przywrócenie'; opis: string; klocki: Klocek[] }
+export interface Klocek { rodzaj: string; grupa: Grupa; opis: string; zakres?: string; kiedy?: string; ustawienia?: [string, string][] }
+export interface Wersja { n: number; at: string; powod: 'projektowanie' | 'naprawa' | 'przywrócenie' | 'przeniesienie' | 'kod panelu'; opis: string; klocki: Klocek[] }
 export interface Probka { run: string; at: string; wycinek: string }
 export interface Stan { nazwa: string; rodzaj: 'znany' | 'przewidywany' | 'wycofany'; reakcja: string; probki: Probka[]; uwaga?: string }
 export interface KlocekWynik { rodzaj: string; wynik: string; zly?: boolean }
@@ -28,22 +28,35 @@ const IRON_URL_PL = 'ironmanpoznan.com.pl/registration';
 const IRON_URL_COM = 'ironman.com/races/im703-poznan';
 const IRON_URL_REG = 'ironman.com/races/im703-poznan/register';
 
+const ODCZYT = (url: string, zakres: string): Klocek => ({ rodzaj: 'Odczyt URL', grupa: 'odczyt', opis: url, zakres, kiedy: 'w każdym runie, po kolei',
+  ustawienia: [['adres', `https://${url}`], ['metoda', 'GET, bez logowania (D-006)'], ['gdy strona nie odpowiada', 'run kończy się błędem odczytu, następna pora próbuje ponownie']] });
+const REAKCJA = 'tylko w reakcji stanu (zakładka Katalog stanów)';
 const ironKlockiV1: Klocek[] = [
-  { rodzaj: 'Odczyt URL', grupa: 'odczyt', opis: IRON_URL_PL, zakres: 'ironmanpoznan.com.pl' },
-  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'wiersz „Enea IRONMAN 70.3 Poznań”: przyciski i etykiety' },
-  { rodzaj: 'Odczyt URL', grupa: 'odczyt', opis: IRON_URL_COM, zakres: 'ironman.com' },
-  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'karta data-race-id="107211": tag rejestracji' },
-  { rodzaj: 'Odczyt URL', grupa: 'odczyt', opis: IRON_URL_REG, zakres: 'ironman.com' },
-  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'klasa registration-state-- i linki slotmarket.pl' },
-  { rodzaj: 'Porównanie ze stanami', grupa: 'przetwarzanie', opis: 'trzy wycinki z katalogiem stanów' },
-  { rodzaj: 'Ocena', grupa: 'przetwarzanie', opis: 'Wektor, gdy wycinki nie pasują do żadnego stanu' },
-  { rodzaj: 'Wiadomość', grupa: 'akcja', opis: 'do rozmowy automatu, bez tury Wektora' },
-  { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: '07:00–07:30, przypomnienie 60 min', zakres: 'kalendarz panelu' },
-  { rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk z linkiem do formularza', zakres: 'slotmarket.pl' },
-  { rodzaj: 'Powiadomienie', grupa: 'akcja', opis: 'dzwonek i telefon (ntfy panelu)' },
+  ODCZYT(IRON_URL_PL, 'ironmanpoznan.com.pl'),
+  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'wiersz „Enea IRONMAN 70.3 Poznań”: przyciski i etykiety', kiedy: 'po odczycie strony PL',
+    ustawienia: [['skąd', IRON_URL_PL], ['fragment', 'wiersz tabeli z tekstem „Enea IRONMAN 70.3 Poznań”: etykiety i adresy przycisków'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+  ODCZYT(IRON_URL_COM, 'ironman.com'),
+  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'karta data-race-id="107211": tag rejestracji', kiedy: 'po odczycie ironman.com',
+    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu data-race-id="107211": tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+  ODCZYT(IRON_URL_REG, 'ironman.com'),
+  { rodzaj: 'Wycinek', grupa: 'przetwarzanie', opis: 'klasa registration-state-- i linki slotmarket.pl', kiedy: 'po odczycie /register',
+    ustawienia: [['skąd', IRON_URL_REG], ['fragment', 'klasa body registration-state--… i wszystkie linki slotmarket.pl'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] },
+  { rodzaj: 'Porównanie ze stanami', grupa: 'przetwarzanie', opis: 'trzy wycinki z katalogiem stanów', kiedy: 'po wszystkich wycinkach',
+    ustawienia: [['porównuje', 'trzy wycinki razem z próbkami stanów z katalogu'], ['pasuje do stanu', 'wykonuje reakcję tego stanu bez modelu'], ['nie pasuje', 'ocena (następny klocek)']] },
+  { rodzaj: 'Ocena', grupa: 'przetwarzanie', opis: 'Wektor, gdy wycinki nie pasują do żadnego stanu', kiedy: 'tylko gdy porównanie nie znalazło stanu',
+    ustawienia: [['kto', 'Wektor w nowej rozmowie automatu (powód: ocena)'], ['dostaje', 'było / jest dla każdego wycinka, katalog stanów, cel automatu'], ['wynik', 'znany stan → jego reakcja; nowy stan → karta i run „czeka na decyzję” (D-037)'], ['gdy się nie uda', 'run „błąd oceny”, bez skutków (D-039)']] },
+  { rodzaj: 'Wiadomość', grupa: 'akcja', opis: 'do rozmowy automatu, bez tury Wektora', kiedy: REAKCJA,
+    ustawienia: [['do', 'ostatnia rozmowa automatu (wpis panelu, bez tury, D-021)'], ['treść', 'nazwa stanu, wycinek, link z wycinka']] },
+  { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: '07:00–07:30, przypomnienie 60 min', zakres: 'kalendarz panelu', kiedy: REAKCJA,
+    ustawienia: [['tytuł', 'Zapisy: Enea IRONMAN 70.3 Poznań 2027'], ['dzień', 'data z wycinka (dzień otwarcia zapisów)'], ['godzina', '07:00–07:30'], ['przypomnienie', '60 min wcześniej'], ['opis', 'link do formularza z wycinka']] },
+  { rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk z linkiem do formularza', zakres: 'slotmarket.pl', kiedy: REAKCJA,
+    ustawienia: [['gdzie', 'kafelek Smart Actions, autor „Automat: Zapisy: IRONMAN 70.3 Poznań 2027”'], ['tytuł', 'Ruszyły zapisy na IRONMAN 70.3 Poznań 2027'], ['przycisk', '„Zapisz się” → otwiera link z wycinka (tylko slotmarket.pl)'], ['ważność', '30 dni albo do kliknięcia, odrzucenia, anulowania automatu (D-033)']] },
+  { rodzaj: 'Powiadomienie', grupa: 'akcja', opis: 'dzwonek i telefon (ntfy panelu)', kiedy: REAKCJA,
+    ustawienia: [['gdzie', 'dzwonek panelu i telefon (ntfy panelu)'], ['treść', 'nazwa stanu i link']] },
 ];
 const ironKlockiV2: Klocek[] = ironKlockiV1.map(k => k.opis.startsWith('karta data-race-id')
-  ? { ...k, opis: 'karta 70.3 po nazwie „IRONMAN 70.3 Poznan” (race-id zmienia się między edycjami)' } : k);
+  ? { ...k, opis: 'karta 70.3 po nazwie „IRONMAN 70.3 Poznan” (race-id zmienia się między edycjami)',
+    ustawienia: [['skąd', IRON_URL_COM], ['fragment', 'karta wyścigu z nazwą „IRONMAN 70.3 Poznan”: tag rejestracji i data'], ['gdy fragmentu brak', 'naprawa przepisu (D-002)']] } : k);
 
 const zamkniete: Stan = {
   nazwa: 'Zamknięte (2026 wyprzedane)', rodzaj: 'znany', reakcja: 'bez zmian',
@@ -101,30 +114,42 @@ const IRONMAN_POZNIEJ: Automat = {
   ],
 };
 
-const wbudowany = (id: string, nazwa: string, wyzwalacz: string, opis: string, klocki: Klocek[]): Automat => ({
+const wbudowany = (id: string, nazwa: string, wyzwalacz: string, opis: string, klocki: Klocek[], runy: Run[] = []): Automat => ({
   id, nazwa, rodzaj: 'wbudowany', status: 'aktywny', wyzwalacze: [wyzwalacz], opis, usuwalny: false,
-  wersje: [{ n: 1, at: 'z kodem panelu', powod: 'projektowanie', opis: 'przepis panelu (zmienia go tylko kod)', klocki }], stany: [], runy: [], rozmowy: [],
+  wersje: [{ n: 1, at: 'od wdrożenia', powod: 'kod panelu', opis: 'przepis panelu (zmienia go tylko kod, D-046)', klocki }], stany: [], runy, rozmowy: [],
 });
 
-const prosty = (id: string, nazwa: string, rodzaj: Rodzaj, status: AutomatStatus, wyzwalacze: string[], opis: string, klocki: Klocek[]): Automat => ({
-  id, nazwa, rodzaj, status, wyzwalacze, opis, usuwalny: true, stany: [], runy: [], rozmowy: [],
-  wersje: [{ n: 1, at: 'przeniesiony 20 lis', powod: 'projektowanie', opis: 'przeniesiony przez panel z obecnych ustawień', klocki }],
+const prosty = (id: string, nazwa: string, rodzaj: Rodzaj, status: AutomatStatus, wyzwalacze: string[], opis: string, klocki: Klocek[], runy: Run[] = [], nowy?: string): Automat => ({
+  id, nazwa, rodzaj, status, wyzwalacze, opis, usuwalny: true, stany: [], runy,
+  rozmowy: nowy ? [{ id: `${id}-proj`, powod: 'projektowanie', tytul: 'Projektowanie przepisu', at: nowy }] : [],
+  wersje: [nowy
+    ? { n: 1, at: nowy, powod: 'projektowanie', opis: 'przepis z rozmowy projektowania', klocki }
+    : { n: 1, at: '20 lis', powod: 'przeniesienie', opis: 'panel przeniósł dzisiejszą regułę albo obserwatora z obecnych ustawień, bez karty (D-025)', klocki }],
 });
 
 const FAKTURA_ALERT = prosty('a-faktura-alert', 'Faktury OpenRouter: alert', 'zdarzenie', 'aktywny', ['mail z reguły: od OpenRouter, temat „Your receipt”, link pay.stripe.com'],
   'Nowy paragon OpenRouter daje alert z przyciskiem „Zaksięguj fakturę”.',
-  [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk „Zaksięguj fakturę” → automat „Faktury OpenRouter: księgowanie”' }]);
+  [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk „Zaksięguj fakturę” → automat „Faktury OpenRouter: księgowanie”', zakres: 'uruchamia: księgowanie',
+    kiedy: 'w każdym runie: raz na każdy nowy mail pasujący do reguły (D-034)',
+    ustawienia: [['gdzie', 'kafelek Smart Actions, autor „Automat: Faktury OpenRouter: alert”'], ['tytuł', 'Paragon OpenRouter #<numer z tematu maila>'], ['treść', 'data, kwota i „link do faktury PDF” z maila'],
+      ['przycisk 1', '„Zaksięguj fakturę” → uruchamia automat „Faktury OpenRouter: księgowanie”; wejściem runu są ten alert i mail (D-032)'], ['przycisk 2', '„Odrzuć” → zamyka alert na wszystkich urządzeniach (D-033)'],
+      ['ważność', '30 dni; zamyka go też wykonanie przycisku albo anulowanie automatu']] }],
+  [{ id: 'run-f02', at: '30 lis 08:12', wersja: 1, wejscie: 'mail OpenRouter #2611-0042', wynik: 'reakcja', opis: 'Alert „Paragon OpenRouter #2611-0042” w Smart Actions.', klocki: [{ rodzaj: 'Alert', wynik: 'utworzony, czeka na kliknięcie' }] },
+    { id: 'run-f01', at: '25 lis 17:40', wersja: 1, wejscie: 'mail OpenRouter #2609-9426', wynik: 'reakcja', opis: 'Alert „Paragon OpenRouter #2609-9426”; przycisk kliknięty 26 lis.', klocki: [{ rodzaj: 'Alert', wynik: 'zamknięty: wykonano przycisk' }] }],
+  '25 lis 17:20');
 const FAKTURA_KSIEG = prosty('a-faktura-ksieg', 'Faktury OpenRouter: księgowanie', 'zdarzenie', 'aktywny', ['przycisk alertu „Faktury OpenRouter: alert”'],
   'Pobiera PDF faktury, zapisuje na Drive, buduje .epp i dodaje wydarzenie.',
   [{ rodzaj: 'Pobierz plik', grupa: 'odczyt', opis: 'PDF z linku w mailu (wejście runu)', zakres: 'pay.stripe.com' },
     { rodzaj: 'Zapis pliku', grupa: 'akcja', opis: 'Koszty/OpenRouter/<miesiąc>/<nr faktury>.pdf', zakres: 'Drive: folder Koszty' },
     { rodzaj: 'Skrypt', grupa: 'przetwarzanie', opis: 'kurs NBP z dnia poprzedniego i plik .epp', zakres: 'Q-009' },
-    { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: 'dzień faktury, link do folderu', zakres: 'kalendarz panelu' }]);
+    { rodzaj: 'Wydarzenie w kalendarzu', grupa: 'akcja', opis: 'dzień faktury, link do folderu', zakres: 'kalendarz panelu' }], [], '25 lis 17:20');
 
 const wspolne = (iron: Automat): Automat[] => [
   iron,
   prosty('a-znanylekarz', 'ZnanyLekarz: potwierdź wizytę', 'zdarzenie', 'aktywny', ['mail z reguły: od ZnanyLekarz, „potwierdź”'],
-    'Dawna reguła poczty Smart Actions.', [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk z linkiem z maila', zakres: 'znanylekarz.pl' }]),
+    'Dawna reguła poczty Smart Actions.', [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk z linkiem z maila', zakres: 'znanylekarz.pl', kiedy: 'w każdym runie: raz na każdy nowy mail pasujący do reguły',
+      ustawienia: [['tytuł', 'temat maila'], ['przycisk', '„Potwierdź wizytę” → otwiera link z maila zawierający „potwierdz” (tylko znanylekarz.pl)'], ['bez linku', 'brak alertu (decyzja z 30.10.2026)']] }],
+    [{ id: 'run-z01', at: '27 lis 09:03', wersja: 1, wejscie: 'mail ZnanyLekarz „Potwierdź wizytę 3 gru”', wynik: 'reakcja', opis: 'Alert z przyciskiem „Potwierdź wizytę”.', klocki: [{ rodzaj: 'Alert', wynik: 'utworzony' }] }]),
   prosty('a-konto', 'Konto: podpowiedzi oznaczeń', 'zdarzenie', 'aktywny', ['operacja konta z podpowiedzią'],
     'Dawna reguła konta Smart Actions.', [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'do 3 przycisków: oznacz operację podpowiedzią (pojedyncza akcja)' }]),
   prosty('a-obs-czas', 'Przypomnij o odpowiedzi do Kasi', 'jednorazowy', 'aktywny', ['jutro 9:00'],
@@ -132,7 +157,9 @@ const wspolne = (iron: Automat): Automat[] => [
   prosty('a-obs-pr', 'PR #57: wynik CI', 'jednorazowy', 'aktywny', ['PR metelskiwiktor/desk-panel#57: zmiana CI'],
     'Dawny obserwator PR.', [{ rodzaj: 'Wiadomość', grupa: 'akcja', opis: 'do rozmowy, z której go utworzono' }]),
   wbudowany('a-cezar-czeka', 'Zadania Cezara czekające na Ciebie', 'task Cezara czeka na użytkownika', 'Alert dla każdego taska, który czeka na decyzję.',
-    [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk otwiera task w kokpicie' }]),
+    [{ rodzaj: 'Alert', grupa: 'akcja', opis: 'przycisk otwiera task w kokpicie', kiedy: 'w każdym runie: raz na każde przejście taska w „czeka na Ciebie”',
+      ustawienia: [['tytuł', 'nazwa taska Cezara'], ['przycisk', '„Otwórz” → task w kokpicie Cezara'], ['zamyka go', 'task wyszedł ze stanu „czeka”, kliknięcie albo odrzucenie']] }],
+    [{ id: 'run-c02', at: '2 gru 14:20', wersja: 1, wejscie: 'task desk-panel „Widget PR”: czeka na decyzję', wynik: 'reakcja', opis: 'Alert „Widget PR: czeka na Ciebie”.', klocki: [{ rodzaj: 'Alert', wynik: 'utworzony' }] }]),
   wbudowany('a-cezar-wznow', 'Wznawianie rozmów po zleceniach Cezara', 'task zlecony z rozmowy: zakończony albo czeka', 'Wejściem runu są task i rozmowa, z której go zlecono.',
     [{ rodzaj: 'Wznów rozmowę', grupa: 'akcja', opis: 'rozmowa zlecenia, z wynikiem taska' }]),
 ];
