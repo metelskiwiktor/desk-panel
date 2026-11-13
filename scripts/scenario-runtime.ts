@@ -8,7 +8,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { createPanelServer } from '../server/app';
 import { createCockpit } from '../server/cockpit';
 import { createScenarioSources, loadScenario, SCENARIO_PR } from '../server/scenario';
-import { createScenarioChat } from '../server/scenario-chat';
+import { createScenarioChat, seedMachinaChats } from '../server/scenario-chat';
 import type { UsageStore } from '../server/usage';
 import { PANEL_TOOLS } from '../server/panel-mcp';
 import { devices, viewportsOf, type Viewport } from '../src/devices';
@@ -38,6 +38,7 @@ export async function startScenario(file: string, hermes: 'up' | 'down' = 'up', 
     const output = await PANEL_TOOLS.panel_znanylekarz.run(args, { sources, views: {}, now: Date.now(), cezarUrl: 'http://127.0.0.1:4321/' });
     return { tools: [{ name: 'mcp_desk-panel_panel_znanylekarz', args, output }], answer: 'Wybierz dzień i godzinę na karcie. To dane scenariusza; niczego nie rezerwujesz.' };
   } });
+  await seedMachinaChats(chat, sources.fila);
   const directory = mkdtempSync(join(tmpdir(), 'desk-panel-scenario-cockpit-'));
   let checksAsked = 0;
   const cockpit = createCockpit({

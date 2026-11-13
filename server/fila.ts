@@ -77,7 +77,7 @@ export interface FilaRegistries {
   cezarSettings: FilaCezarSettings;
 }
 /** A thread as a query result: what a list row or a card needs, without the history. */
-export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'>;
+export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'> & { /** An automat shipped by the panel's code: a list does not offer to delete it. */ builtIn?: true };
 export interface FilaQueryResult { query: string; project: string; total: number; threads: FilaThreadSummary[] }
 /**
  * A board as structure only (2.4): views, sections and kanban columns with their canonical queries and full counts, no
@@ -334,7 +334,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   const summary = (t: FilaThread): FilaThreadSummary => {
     const v = view(t);
-    return { id: v.id, project: v.project, number: v.number, type: v.type, state: v.state, closed: v.closed, title: v.title, parent: v.parent, module: v.module, fields: v.fields, archived: v.archived, revision: v.revision, updatedAt: v.updatedAt };
+    return { id: v.id, project: v.project, number: v.number, type: v.type, state: v.state, closed: v.closed, title: v.title, parent: v.parent, module: v.module, fields: v.fields, archived: v.archived, revision: v.revision, updatedAt: v.updatedAt, ...(t.machina?.builtIn ? { builtIn: true as const } : {}) };
   };
   const pageOf = (threads: FilaThread[], limit: number, offset = 0) => ({ total: threads.length, threads: threads.slice(offset, offset + limit).map(summary) });
   const boardOf = (id: string) => data.boards.find(b => b.id === id) ?? (() => { throw new FilaError(404, `Nie ma tablicy ${id}.`); })();
@@ -679,12 +679,19 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     }
     if (!workflow && data.workflows.length >= FILA_LIMITS.workflows) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.workflows} workflow.`);
     if (!project && data.projects.length >= FILA_LIMITS.projects) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.projects} projektów.`);
-    if (!workflow) data.workflows.push(structuredClone(W));
+    // The list of automats is a Fila query over threads (D-059): MACH's own board has it as a list section.
+    const list = { name: 'Automaty', query: formatFilaQuery(compileFilaQuery(`projekt = ${P.key} AND typ = ${FILA_AUTOMAT_TYPE}`, { ...data, projects: project ? data.projects : [...data.projects, { key: P.key, name: P.name, createdAt: now(), modules: [...P.modules], nextNumber: 1 }] }, 'section')) };
     if (!project) {
       data.projects.push({ key: P.key, name: P.name, createdAt: now(), modules: [...P.modules], nextNumber: 1 });
-      // The list of automats is a Fila query over threads (D-059): MACH's own board starts with it instead of „Wszystkie wątki”.
-      createStarterBoard(data, P.key, 'panel', now(), { name: 'Automaty', query: formatFilaQuery(compileFilaQuery(`projekt = ${P.key} AND typ = ${FILA_AUTOMAT_TYPE}`, data, 'section')) });
+      createStarterBoard(data, P.key, 'panel', now(), list);
+    } else if (!workflow) {
+      // A MACH that was there before Machina's first use keeps its board as it is and gets the list added to it, once.
+      const board = data.boards.find(b => b.id === data.starterBoards[P.key]);
+      if (board && !board.views.some(v => v.sections.some(s => s.query === list.query)) && board.views[0]!.sections.length < FILA_LIMITS.sections) {
+        applyBoardAction(data, { action: 'createSection', view: board.views[0]!.id, section: { ...list, kind: 'list' } }, 'panel', now());
+      }
     }
+    if (!workflow) data.workflows.push(structuredClone(W));
     return projectOf(P.key);
   };
   const doorInput = <T>(parsed: { success: true; data: T } | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } }): T => {

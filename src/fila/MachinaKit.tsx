@@ -1,4 +1,5 @@
 import { Cog, MessageSquare } from 'lucide-react';
+import { z } from 'zod';
 import { describeTrigger } from '../automation-contract';
 import { MACHINA_BLOCK_LABELS, machinaConversationsSchema, machinaJournalSchema, machinaProgramSchema, type MachinaBlock } from '../machina-contract';
 import { openChatConversation } from '../useChatPresentation';
@@ -18,6 +19,8 @@ const blockLine = (block: MachinaBlock) => {
     default: return [block.title, 'when' in block ? block.when : '', block.domain ? `linki: ${block.domain}` : ''].filter(Boolean).join(' · ');
   }
 };
+/** What this page shows of the catalogue; a part in another shape is said to be unreadable instead of breaking the page. */
+const situationsView = z.object({ items: z.array(z.object({ id: z.string(), name: z.string().optional(), withdrawn: z.unknown().optional(), samples: z.array(z.unknown()).optional() }).passthrough()) });
 const Missing = ({ children }: { children: string }) => <p className="fl-muted fl-machina-missing">Brak treści: {children}</p>;
 
 /**
@@ -32,7 +35,7 @@ export function MachinaKit({ thread }: { thread: FilaThreadDoc }) {
   const conversations = data?.conversations.available ? machinaConversationsSchema.safeParse(data.conversations.content) : null;
   const current = program?.success ? program.data.versions.find(v => v.number === program.data.current) : undefined;
   const runs = journal?.success ? [...journal.data.runs].reverse() : [];
-  const situations = data?.situations.available ? (data.situations.content as { items?: { id: string; name?: string; withdrawn?: boolean; samples?: unknown[] }[] }).items ?? [] : [];
+  const situations = data?.situations.available ? situationsView.safeParse(data.situations.content) : null;
   const unreadable = <p className="fl-error" role="alert">Tej części nie da się odczytać w znanym kształcie.</p>;
 
   return <section className="fl-block fl-machina" aria-label="Zestaw Machiny">
@@ -51,8 +54,8 @@ export function MachinaKit({ thread }: { thread: FilaThreadDoc }) {
       </section>
       <section className="fl-machina-part" aria-label="Sytuacje">
         <h3>Sytuacje</h3>
-        {!data.situations.available || !situations.length ? <Missing>ten automat nie ma jeszcze katalogu sytuacji.</Missing>
-          : <ul className="fl-machina-list">{situations.map(item => <li key={item.id}><b>{item.name ?? item.id}</b><span>{item.withdrawn ? 'wycofana' : `${item.samples?.length ?? 0} próbek`}</span></li>)}</ul>}
+        {!data.situations.available || (situations?.success && !situations.data.items.length) ? <Missing>ten automat nie ma jeszcze katalogu sytuacji.</Missing> : !situations?.success ? unreadable
+          : <ul className="fl-machina-list">{situations.data.items.map(item => <li key={item.id}><b>{item.name ?? item.id}</b><span>{item.withdrawn ? 'wycofana' : `${item.samples?.length ?? 0} próbek`}</span></li>)}</ul>}
       </section>
       <section className="fl-machina-part" aria-label="Dziennik">
         <h3>Dziennik</h3>

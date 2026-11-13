@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createPanelServer } from '../server/app';
 import { createCockpit } from '../server/cockpit';
 import { createScenarioSources, loadScenario, SCENARIO_PR } from '../server/scenario';
-import { createScenarioChat } from '../server/scenario-chat';
+import { createScenarioChat, seedMachinaChats } from '../server/scenario-chat';
 import { createServer as createVite } from 'vite';
 
 // Copied into scripts/ in the selected checkout, preserving these relative application imports.
@@ -28,6 +28,7 @@ const sources = createScenarioSources(file);
 const createRun = sources.cezarCreateRun;
 if (createRun) sources.cezarCreateRun = async input => ({ ...await createRun(input), url: dummyUrl });
 const chat = await createScenarioChat();
+await seedMachinaChats(chat, sources.fila);
 const scenarioCockpit = createCockpit({ sources, file: join(mkdtempSync(join(tmpdir(), 'preview-cockpit-')), 'cockpit.json'), cezarUrl: dummyUrl,
   gh: async () => JSON.stringify({ number: 42, title: 'Synthetic PR', state: 'OPEN', headRefName: 'scenario', url: SCENARIO_PR, statusCheckRollup: [] }) });
 // The scenario uses a GitHub-shaped URL internally to recognize its mock PR. Never expose it to the browser.

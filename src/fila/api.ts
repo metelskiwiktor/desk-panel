@@ -7,6 +7,8 @@ export interface FilaThreadRow {
   id: string; project: string; number: number; type: { key: string; label: string }; state: string; closed: boolean;
   title: string; parent: string | null; module: string | null; fields: Record<string, string | number | boolean | string[]>;
   archived: boolean; revision: number; updatedAt: number;
+  /** An automat shipped by the panel's code: never deleted. */
+  builtIn?: true;
 }
 export interface FilaRegistry {
   projects: { key: string; name: string; modules: string[]; counts: { open: number; closed: number; archived: number }; board: string | null }[];

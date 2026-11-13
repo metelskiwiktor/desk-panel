@@ -103,7 +103,7 @@ export function ProjectPage({ registry, projectKey, tab, onTab, onOpen, onBoard 
                 <div className="fl-row-main"><span className="fl-title">{thread.title}</span><span className="fl-archived-by">Stan zostaje: {thread.state}</span></div>
                 <div className="fl-row-actions">
                   <button type="button" className="fl-text" aria-label={`Przywróć ${thread.id}`} onClick={() => void act({ action: 'restoreThread', thread: thread.id })}><Archive size={15} aria-hidden="true" /> Przywróć</button>
-                  <button type="button" className="fl-icon" aria-label={`Usuń trwale ${thread.id}`} onClick={() => setDeleting(thread)}><Trash2 size={15} aria-hidden="true" /></button>
+                  {!thread.builtIn && <button type="button" className="fl-icon" aria-label={`Usuń trwale ${thread.id}`} onClick={() => setDeleting(thread)}><Trash2 size={15} aria-hidden="true" /></button>}
                 </div>
               </div>
             </li>)}</ul>

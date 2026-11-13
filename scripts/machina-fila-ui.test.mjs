@@ -31,7 +31,7 @@ describe('automats through Fila', () => {
     const seen = [];
     try {
       cache = mkdtempSync(join(tmpdir(), 'machina-fila-ui-vite-'));
-      fila = await startScenario(join(process.cwd(), 'scenarios', 'machina-fila.json'), 'down', undefined, undefined, cache);
+      fila = await startScenario(join(process.cwd(), 'scenarios', 'machina-fila.json'), 'up', undefined, undefined, cache);
       browser = await launchChromium();
       page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
       page.on('pageerror', e => seen.push(`pageerror ${e.message.slice(0, 300)}`));
@@ -83,10 +83,12 @@ describe('automats through Fila', () => {
     // A part without content says so.
     await part('Sytuacje').getByText(/^Brak treści:/).waitFor();
     // The conversation link opens the chat window on that conversation and sends nothing.
-    const chats = (await api('api/chats')).chats?.length ?? 0;
+    const chatId = data.conversations.content.items[0].chatId;
+    const before = await api(`api/chats/${chatId}`);
+    expect(before.items[0]).toMatchObject({ role: 'user', automation: { source: 'machina', reason: 'projektowanie' } });
     await part('Rozmowy').getByRole('button', { name: 'Otwórz rozmowę: projektowanie' }).click();
-    await page.locator('.chat-root:not([hidden]) .wektor-shell').waitFor();
-    expect((await api('api/chats')).chats?.length ?? 0).toBe(chats);
+    await page.locator('.chat-root:not([hidden]) .wektor-shell').getByText(/Rozmowa automatu MACH-1/).first().waitFor();
+    expect((await api(`api/chats/${chatId}`)).items.length).toBe(before.items.length);
     expect(await kit('MACH-1')).toEqual(data);
   });
 

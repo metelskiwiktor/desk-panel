@@ -133,13 +133,22 @@ it('gives MACH a board whose list is the Fila query for automats: threads of tha
   expect(await ids('projekt = MACH AND typ = automat AND zamknięte')).toEqual(['MACH-2']);
   expect(await ids('projekt = MACH AND typ = automat AND archiwum = tylko')).toEqual(['MACH-3']);
   expect(await ids('projekt = MACH AND typ = automat AND stan = "Aktywny"')).toEqual(['MACH-1']);
-  // A MACH that was there before Machina keeps the board it had.
+  // A MACH that was there before Machina keeps its board and gets the list added to it once, at Machina's first use.
   const own = createFilaStore();
   await act(own, { action: 'createProject', key: 'MACH', name: 'Machina' }, 'user');
   await act(own, { action: 'setModules', project: 'MACH', modules: ['Obserwacja', 'Obsługa', 'Przypomnienia', 'Systemowe'] });
   await own.machina.create({ title: 'x' });
+  await own.machina.create({ title: 'y' });
   const kept = await own.board((await own.registries()).projects[0]!.board!);
-  expect(kept.views[0]!.sections.map(s => s.query)).toEqual(['projekt = MACH']);
+  expect(kept.views[0]!.sections.map(s => [s.name, s.query])).toEqual([['Wszystkie wątki', 'projekt = MACH'], ['Automaty', 'projekt = MACH AND typ = automat']]);
+  expect(kept.history.at(-1)).toMatchObject({ by: 'panel', kind: 'created', target: 'section', name: 'Automaty' });
+  // The user's later choice stands: a removed list is not put back.
+  await act(own, { action: 'deleteSection', section: kept.views[0]!.sections[1]!.id }, 'user');
+  await own.machina.create({ title: 'z' });
+  expect((await own.board(kept.id)).views[0]!.sections.map(s => s.query)).toEqual(['projekt = MACH']);
+  // A built-in automat says so in a list row, so a list does not offer to delete it.
+  const builtIn = await store.machina.create({ title: 'Wbudowany', builtIn: true });
+  expect((await store.query('projekt = MACH AND typ = automat')).threads.map(t => [t.id, t.builtIn ?? false])).toEqual([['MACH-1', false], ['MACH-2', false], [builtIn.id, true]]);
 });
 
 describe('the internal door: Stan, kit, archive and delete', () => {
