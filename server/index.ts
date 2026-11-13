@@ -48,7 +48,7 @@ const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mail
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
   onFinished: (tasks, complete) => { if (!cutoverLocked) { void cockpit?.linkPrs(tasks); void cockpit?.blockersFromFinished(tasks, complete); automation?.finished(tasks); void automations?.finished(tasks); } },
   // The Automaty view reads the active automations; its buttons are the only other way one changes.
-  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}), ...(machina ? { machina: await machina.effects() } : {}) }),
+  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}), ...(machina ? { machina: await machina.effects(), machinaAutomats: (await machina.list()).filter(a => !['Zakończony', 'Wygasł', 'Anulowany'].includes(a.state)) } : {}) }),
   machinaAction: async input => { if (!machina) throw new Error('Machina nie jest dostępna.'); return machina.action(input); },
   automationAction: async input => { if (!automations) throw new Error('Automaty nie są dostępne.'); return automations.update(input); } });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).

@@ -261,9 +261,10 @@ export function createMachina(options: MachinaOptions): Machina {
     const base = { title: old.name.slice(0, 200), description: old.goal, module: cyclic ? 'Obserwacja' : 'Przypomnienia', tags: [] as string[] };
     const journal = { runs: [], legacy };
     const chat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(old.chatId) ? old.chatId : null;
-    const plain = old.trigger.kind === 'once' && old.actions.every(action => action.kind === 'message') && chat !== null;
+    // An instruction longer than a resume block holds is never cut: the reminder would say something else; it waits for a card.
+    const plain = old.trigger.kind === 'once' && old.actions.every(action => action.kind === 'message') && chat !== null && old.goal.length <= MACHINA_LIMITS.text;
     if (closedState || !plain) return { ...base, state: closedState ?? PAUSED, kit: { journal, ...(chat ? { conversations: { items: [{ chatId: chat, reason: 'przeniesienie', at: now() }] } } : {}) } };
-    const version = machinaVersionSchema.safeParse({ number: 1, at: now(), by: 'panel', reason: 'przeniesienie', trigger: old.trigger, blocks: [{ id: 'wznowienie', kind: 'resume', text: old.goal.slice(0, MACHINA_LIMITS.text) }], scope: { domains: [], resumeChats: [] }, reactions: {} });
+    const version = machinaVersionSchema.safeParse({ number: 1, at: now(), by: 'panel', reason: 'przeniesienie', trigger: old.trigger, blocks: [{ id: 'wznowienie', kind: 'resume', text: old.goal }], scope: { domains: [], resumeChats: [] }, reactions: {} });
     // An instruction the program format cannot hold (e.g. „{{…}}” in its text) waits for a card like the others.
     if (!version.success) return { ...base, state: PAUSED, kit: { journal, conversations: { items: [{ chatId: chat, reason: 'przeniesienie', at: now() }] } } };
     // A run the old engine already started owns this time: it finishes there, Machina does not do it again.
@@ -669,7 +670,7 @@ export function createMachina(options: MachinaOptions): Machina {
       assertEnabled();
       const done = await madeBy(decision.key);
       if (done) return { decision: done.first && !parsed.data.automat ? 'created' : 'updated', thread: done.thread, version: done.version };
-      const { card } = await checkCard(input);
+      const { card, bare } = await checkCard(input);
       const content = { trigger: card.trigger, blocks: card.blocks, scope: card.scope, reactions: card.reactions };
       if (!card.automat) {
         const situations: MachinaSituations = { items: [], pending: [] };
@@ -678,7 +679,6 @@ export function createMachina(options: MachinaOptions): Machina {
         void pump();
         return { decision: 'created', thread: made.id, version: 1 };
       }
-      const { bare } = await checkCard(input);
       // An automat moved from the old automations has no program yet: this card is its first one, and the consent it waited for.
       if (bare && bare.program === null) {
         await firstProgram(bare.uid, card, content, decision);

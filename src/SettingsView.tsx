@@ -47,7 +47,7 @@ export function SettingsView({
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
       <WarmupSettingsCard warmup={warmup} />
       <Card title="Automaty" icon={<Bot />} area="settings-automations">
-        <p className="card-intro">Automaty czasowe są w Machinie: każdy to wątek w projekcie MACH w Fili. Widok Automaty zostaje dla obserwatorów Cezara i PR oraz dla historii przeniesionych automatów.</p>
+        <p className="card-intro">Na aktywnej Fili automaty czasowe są w Machinie: każdy to wątek w projekcie MACH (lista i przyciski są w jego wątku). Widok Automaty zostaje dla obserwatorów Cezara i PR, a przeniesione pokazuje jako historię z odnośnikiem do wątku.</p>
         <button className="button" onClick={onOpenAutomations}>Otwórz Automaty</button>
       </Card>
       <Card title="Podgląd pionowy" icon={<Settings2 />} area="settings-preview">

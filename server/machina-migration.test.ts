@@ -74,12 +74,21 @@ const verdictOf = (wake: { text: string }) => ({ runId: /runId: "(mr-[0-9a-f]{12
 
 describe('moving the old time automations to Machina (DESK-87)', () => {
   it('makes one thread per time automation with the described Stan, once, without waking any design; the old store keeps the rest', async () => {
-    const fila = createFilaStore();
+    const filaFile = join(dir, 'fila.json');
+    const fila = createFilaStore({ file: filaFile });
     const { w, automations, machina, kit } = world(RECORDS, fila);
-    const moved = await moveTimeAutomations({ automations, machina });
+    // The process dies after the threads were written and before the old store was marked: the threads are on disk only.
+    await machina.adopt(await automations.list());
+    expect(JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8')).automations.some((a: any) => a.movedTo)).toBe(false);
+    // The restart reads Fila from its file again and finds every thread by the old id: nothing is made twice.
+    const restarted = world(RECORDS, createFilaStore({ file: filaFile }));
+    const first = await moveTimeAutomations({ automations: restarted.automations, machina: restarted.machina });
+    expect([first.moved.every(m => !m.created), first.waiting]).toEqual([true, 0]);
+    const moved = first.moved;
+    // Made by the process that died; found again, not made twice.
     expect(moved.map(m => [m.id, m.thread, m.created])).toEqual([
-      ['a-1a0000000001', 'MACH-1', true], ['a-000000000002', 'MACH-2', true], ['a-000000000003', 'MACH-3', true], ['a-000000000004', 'MACH-4', true],
-      ['a-000000000005', 'MACH-5', true], ['a-000000000006', 'MACH-6', true], ['a-000000000007', 'MACH-7', true], ['a-000000000008', 'MACH-8', true],
+      ['a-1a0000000001', 'MACH-1', false], ['a-000000000002', 'MACH-2', false], ['a-000000000003', 'MACH-3', false], ['a-000000000004', 'MACH-4', false],
+      ['a-000000000005', 'MACH-5', false], ['a-000000000006', 'MACH-6', false], ['a-000000000007', 'MACH-7', false], ['a-000000000008', 'MACH-8', false],
     ]);
     const rows = await Promise.all(moved.map(async m => { const k = await kit(m.thread); return [k.title, k.state, k.module, k.tags, k.program === null ? null : k.program.versions[0].reason]; }));
     expect(rows).toEqual([
@@ -94,12 +103,13 @@ describe('moving the old time automations to Machina (DESK-87)', () => {
     ]);
     // The move wakes nobody: no design turn, no assessment.
     expect([w.wakes, w.turns, w.oldTurns]).toEqual([[], [], []]);
-    // Again, and after a restart (a crash between the thread and the old store's mark is the same case): nothing twice.
-    expect((await moveTimeAutomations({ automations, machina })).every(m => !m.created)).toBe(true);
-    const again = world(RECORDS, fila);
-    await again.machina.adopt(await again.automations.list());
-    expect((await moveTimeAutomations({ automations: again.automations, machina: again.machina })).filter(m => m.created)).toEqual([]);
-    expect((await fila.registries()).projects[0]!.counts).toMatchObject({ open: 5, closed: 3 });
+    // Once marked, a record is never made again, even when its thread is gone (deleted on purpose): here a Fila without it.
+    expect((await moveTimeAutomations({ automations: restarted.automations, machina: restarted.machina })).moved).toEqual([]);
+    const emptied = createFilaStore();
+    const gone = world(RECORDS, emptied);
+    expect((await moveTimeAutomations({ automations: gone.automations, machina: gone.machina })).moved).toEqual([]);
+    expect((await emptied.registries()).projects).toEqual([]);
+    expect((await createFilaStore({ file: filaFile }).registries()).projects[0]!.counts).toMatchObject({ open: 5, closed: 3 });
     // The old store keeps every record; the moved ones point at their threads, Cezar and PR do not move.
     const kept = JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8')).automations;
     expect(kept.map((a: any) => [a.id, a.movedTo ?? null])).toEqual([...moved.map(m => [m.id, m.thread]), ['a-000000000009', null], ['a-00000000000a', null]]);
@@ -156,6 +166,45 @@ describe('moving the old time automations to Machina (DESK-87)', () => {
     await automations.tick();
     expect(w.oldTurns).toEqual([]);
     expect((await automations.list()).find(a => a.id === 'a-000000000003')!.runs).toEqual([]);
+  });
+});
+
+describe('moving with an old run going, and an instruction too long to keep (DESK-87 review)', () => {
+  it('leaves a record whose old run is reserved to the old engine until that run ended, then moves it as it ended', async () => {
+    const tea = old({ id: 'a-000000000003', name: 'Herbata', goal: 'Przypomnij o herbacie', trigger: { kind: 'once', at: NOW - 60_000 } });
+    writeFileSync(join(dir, 'automations.json'), JSON.stringify({ version: 1, automations: [tea], pending: [{ id: 'run-00000000000a', automationId: 'a-000000000003', detail: 'x', reason: 'x', startedAt: NOW - 30_000 }], outbox: [] }));
+    const fila = createFilaStore();
+    const s = world([tea], fila);
+    expect(await moveTimeAutomations({ automations: s.automations, machina: s.machina })).toEqual({ moved: [], waiting: 1 });
+    expect((await fila.registries()).projects).toEqual([]);
+    // The old run ends there (here: its record is closed and the reservation gone); the next attempt moves it, closed.
+    writeFileSync(join(dir, 'automations.json'), JSON.stringify({ version: 1, automations: [{ ...tea, status: 'done' }], pending: [], outbox: [] }));
+    const after = world([], fila);
+    expect(await moveTimeAutomations({ automations: after.automations, machina: after.machina })).toMatchObject({ moved: [{ id: 'a-000000000003', created: true }], waiting: 0 });
+    await after.tick();
+    expect([(await after.kit('MACH-1')).state, after.w.turns]).toEqual(['Zakończony', []]);
+  });
+
+  it('does not cut a reminder\'s instruction: one longer than a resume holds waits paused for a card', async () => {
+    const long = old({ id: 'a-00000000000b', name: 'Długie', goal: `Przypomnij: ${'x'.repeat(2500)} i na końcu nie wysyłaj nic bez pytania.`, trigger: { kind: 'once', at: NOW + 60_000 }, nextRunAt: NOW + 60_000 });
+    const s = world([long]);
+    await moveTimeAutomations({ automations: s.automations, machina: s.machina });
+    const k = await s.kit('MACH-1');
+    expect([k.state, k.program, k.description]).toEqual(['Wstrzymany', null, long.goal]);
+  });
+
+  it('keeps a PR watcher running in the old engine after the move', async () => {
+    let state = 'OPEN';
+    const records = [old({ id: 'a-00000000000a', name: 'PR', trigger: { kind: 'pr', url: 'https://github.com/o/r/pull/1' } }), IRONMAN.automation];
+    const s = world(records);
+    const automations = createAutomations({ file: s.w.file, chat: { sendAutomation: async (id, input) => { s.w.oldTurns.push(`${id}: ${input.text.slice(0, 20)}`); } }, now: () => s.w.clock, log: () => undefined, timeInMachina: true,
+      readPr: async () => ({ state, url: 'https://github.com/o/r/pull/1', checks: [] }) as never });
+    await moveTimeAutomations({ automations, machina: s.machina });
+    await automations.tick();
+    state = 'MERGED';
+    await automations.tick();
+    expect(s.w.oldTurns).toHaveLength(1);
+    expect((await automations.get('a-00000000000a'))!.movedTo).toBeUndefined();
   });
 });
 

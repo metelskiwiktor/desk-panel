@@ -270,8 +270,9 @@ export function AutomationsView() {
               </div>}
               {tab === 'notebook' && <div className="automation-tab" role="tabpanel" aria-label="Notatnik">
                 <p className="meta">Notatnik automatu (Markdown, do 4000 znaków). {chosen.learn ? 'Run może go zmieniać; poprzednia wersja zostaje w runie.' : 'Automat się nie uczy; możesz go zmienić ręcznie.'}</p>
-                <textarea aria-label="Notatnik automatu" value={note} maxLength={4000} rows={12} onChange={e => setNote(e.target.value)} />
-                <button className="button" disabled={busy === `${chosen.id}:notebook` || note === chosen.notebook} onClick={() => void saveNote()}><Save size={15} /> Zapisz notatnik</button>
+                <textarea aria-label="Notatnik automatu" value={note} maxLength={4000} rows={12} readOnly={!!chosen.movedTo} onChange={e => setNote(e.target.value)} />
+                {chosen.movedTo ? <p className="meta">Automat jest w Machinie ({chosen.movedTo}): dawny notatnik zostaje tylko do wglądu.</p>
+                  : <button className="button" disabled={busy === `${chosen.id}:notebook` || note === chosen.notebook} onClick={() => void saveNote()}><Save size={15} /> Zapisz notatnik</button>}
               </div>}
               {tab === 'chat' && <div className="automation-tab" role="tabpanel" aria-label="Rozmowa">
                 <p className="meta">Rozmowa, w której automat powstał i do której wracają wyniki runów.</p>

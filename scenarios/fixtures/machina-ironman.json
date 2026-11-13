@@ -1,5 +1,5 @@
 {
-  "_opis": "DESK-87: odbiór drogi IRONMAN na atrapach (server/machina-ironman.test.ts). Dane przykładowe, nie prawdziwy magazyn. Dawny automat z automations.json, karta pierwszego programu zaproponowana przez Wektora na prośbę użytkownika i pięć wyglądów strony.",
+  "_opis": "DESK-87: odbiór drogi IRONMAN na atrapach (server/machina-migration.test.ts, blok „IRONMAN”). Dane przykładowe, nie prawdziwy magazyn. Dawny automat z automations.json, karta pierwszego programu zaproponowana przez Wektora na prośbę użytkownika i pięć wyglądów strony.",
   "automation": {
     "id": "a-1a0000000001",
     "name": "Zapisy IRONMAN 70.3 Gdynia",

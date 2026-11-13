@@ -184,7 +184,9 @@ export const machinaEffectSchema = z.object({
   ref: z.string(), title: z.string(), text: z.string().optional(), url: z.string().optional(),
 });
 export type MachinaEffect = z.infer<typeof machinaEffectSchema>;
-export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional(), machina: z.array(machinaEffectSchema).optional() });
+/** Machina's open automats, briefly (DESK-87): the entries of time automations lead to their threads. */
+const machinaAutomatRowSchema = z.object({ thread: z.string(), title: z.string(), state: z.string(), version: z.number().nullable(), nextRunAt: z.number().nullable(), pending: z.number() });
+export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional(), machina: z.array(machinaEffectSchema).optional(), machinaAutomats: z.array(machinaAutomatRowSchema).optional() });
 export type AutomationList = z.infer<typeof automationListSchema>;
 
 /** The plan a `panel_automation_propose` card carries; `replaces` identifies an automation to update in place. */

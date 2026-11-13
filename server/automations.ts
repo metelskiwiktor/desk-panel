@@ -263,6 +263,8 @@ export interface Automations {
   busy(): boolean;
   /** DESK-87: a time automation was moved to this Machina thread; the record stays as history and never runs or changes here. */
   markMoved(id: string, thread: string): Promise<void>;
+  /** A run of this automation is reserved or going (its owner is still this engine). */
+  hasOpenRun(id: string): boolean;
   tick(): Promise<void>;
   start(): void;
   stop(): void;
@@ -873,6 +875,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         return view(a);
       });
     },
+
+    hasOpenRun(id) { return pendingOf(id).length > 0; },
 
     markMoved(id, thread) {
       return serialize(async () => {
