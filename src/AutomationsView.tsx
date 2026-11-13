@@ -5,6 +5,9 @@ import { ctx } from './chat-context';
 import { stamp } from './format';
 import { usePollingEnabled } from './polling';
 import { openChatConversation } from './useChatPresentation';
+import { FILA_OPEN } from './fila/events';
+/** A moved time automation lives in its Machina thread (DESK-87): the entry opens that thread in Fila. */
+const openThread = (id: string) => window.dispatchEvent(new CustomEvent(FILA_OPEN, { detail: id }));
 import {
   CHANGE_LABELS, changeValue, ACTION_HINTS, ACTION_LABELS, actionLabel, describeTrigger, isCyclic, scheduleLabel, STATUS_LABELS, OUTCOME_LABELS, automationListSchema,
   type Automation, type AutomationRun, type AutomationStatus,
@@ -34,6 +37,7 @@ const nextLabel = (at?: number) => {
   return `${date.getDate()}.${String(date.getMonth() + 1).padStart(2, '0')} ${runTime(at)}`;
 };
 const nextText = (a: Automation) => {
+  if (a.movedTo) return `w Machinie: ${a.movedTo}`;
   if (a.status === 'done') return 'zakończony';
   if (a.status === 'paused') return 'wstrzymany';
   if (a.status === 'cancelled') return 'anulowany';
@@ -197,13 +201,14 @@ export function AutomationsView() {
                   <p className="meta">{detailLine(chosen)}</p>
                 </div>
                 <div className="automation-actions">
-                  {(chosen.status === 'active' || chosen.status === 'paused') && <>
+                  {chosen.movedTo && <button className="button" onClick={() => openThread(chosen.movedTo!)}><Bot size={15} /> Otwórz wątek {chosen.movedTo}</button>}
+                  {!chosen.movedTo && (chosen.status === 'active' || chosen.status === 'paused') && <>
                     <button className="button" disabled={busy === `${chosen.id}:runNow`} onClick={() => void act(chosen.id, 'runNow')}><Play size={15} /> Uruchom teraz</button>
                     <button className="button" disabled={busy === `${chosen.id}:${chosen.status === 'paused' ? 'resume' : 'pause'}`} onClick={() => void act(chosen.id, chosen.status === 'paused' ? 'resume' : 'pause')}>
                       {chosen.status === 'paused' ? <><Play size={15} /> Wznów</> : <><Pause size={15} /> Wstrzymaj</>}
                     </button>
                   </>}
-                  {chosen.status !== 'cancelled' && <button className="button" disabled={busy === `${chosen.id}:cancel`} onClick={() => void act(chosen.id, 'cancel')}><X size={15} /> Anuluj</button>}
+                  {!chosen.movedTo && chosen.status !== 'cancelled' && <button className="button" disabled={busy === `${chosen.id}:cancel`} onClick={() => void act(chosen.id, 'cancel')}><X size={15} /> Anuluj</button>}
                 </div>
               </header>
               <div className="automation-tabs" role="tablist" aria-label="Szczegóły automatu">
@@ -265,8 +270,9 @@ export function AutomationsView() {
               </div>}
               {tab === 'notebook' && <div className="automation-tab" role="tabpanel" aria-label="Notatnik">
                 <p className="meta">Notatnik automatu (Markdown, do 4000 znaków). {chosen.learn ? 'Run może go zmieniać; poprzednia wersja zostaje w runie.' : 'Automat się nie uczy; możesz go zmienić ręcznie.'}</p>
-                <textarea aria-label="Notatnik automatu" value={note} maxLength={4000} rows={12} onChange={e => setNote(e.target.value)} />
-                <button className="button" disabled={busy === `${chosen.id}:notebook` || note === chosen.notebook} onClick={() => void saveNote()}><Save size={15} /> Zapisz notatnik</button>
+                <textarea aria-label="Notatnik automatu" value={note} maxLength={4000} rows={12} readOnly={!!chosen.movedTo} onChange={e => setNote(e.target.value)} />
+                {chosen.movedTo ? <p className="meta">Automat jest w Machinie ({chosen.movedTo}): dawny notatnik zostaje tylko do wglądu.</p>
+                  : <button className="button" disabled={busy === `${chosen.id}:notebook` || note === chosen.notebook} onClick={() => void saveNote()}><Save size={15} /> Zapisz notatnik</button>}
               </div>}
               {tab === 'chat' && <div className="automation-tab" role="tabpanel" aria-label="Rozmowa">
                 <p className="meta">Rozmowa, w której automat powstał i do której wracają wyniki runów.</p>

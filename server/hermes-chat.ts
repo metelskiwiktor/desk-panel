@@ -111,7 +111,8 @@ interface Turn {
   error?: string;
   usage?: ChatMessage['usage'];
 }
-interface Stored { keepUnarchived?: boolean; previousSessions?: string[]; archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+interface Stored { keepUnarchived?: boolean; previousSessions?: string[]; archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[]; /** Entries the panel wrote without a turn (Machina's `message`); they are not in the Hermes session. */ notes?: Note[] }
+interface Note { id: string; key: string; at: number; text: string; automation: ChatAutomation }
 
 interface Live {
   record: Stored;
@@ -249,6 +250,8 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  */
 export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign') || name.includes('panel_smart_rule_propose');
 export const isAutomationCard = (name: string) => name.includes('panel_automation_propose');
+/** Machina's cards (program, new situation, correction): what the chat answers with `POST /api/chats/:id/machina`. */
+export const isMachinaCard = (name: string) => /panel_machina_(propose|situation|correct)$/.test(name);
 /**
  * The plan's hash input. A cyclic trigger with one time is hashed in the legacy `time` shape (with the raw clock string,
  * so a leading zero is preserved), because cards approved before several times existed were hashed that way. Keeping the
@@ -272,6 +275,13 @@ export function stableAutomationCardId(messageId: string, input: string): string
   try { raw = JSON.parse(input); plan = automationPlanSchema.parse(raw); } catch { return null; }
   return `${messageId}:x-${createHash('sha256').update(automationCardKey(plan, raw)).digest('hex').slice(0, 16)}`;
 }
+/** A Machina card's identity is what it proposes (its arguments as JSON), so live, kept and restored reads agree. */
+export function stableMachinaCardId(messageId: string, input: string): string | null {
+  let value: unknown;
+  try { value = JSON.parse(input); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return `${messageId}:m-${createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)}`;
+}
 export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
   if (name.includes('panel_smart_rule_propose')) {
     const plan = smartRulePlanOf(input);
@@ -293,6 +303,7 @@ export function stabilizeBankCards(message: ChatMessage): boolean {
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool') continue;
     const id = isAutomationCard(p.name) ? stableAutomationCardId(message.id, p.input)
+      : isMachinaCard(p.name) ? stableMachinaCardId(message.id, p.input)
       : isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
     if (id && p.id !== id) { p.id = id; changed = true; }
   }
@@ -339,7 +350,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const redact = (text: string): string => {
     for (const record of records.values()) for (const turn of record.turns) {
       if (!turn.automation) continue;
-      for (const match of turn.text.matchAll(/token:"([0-9a-f]{32})"/g)) text = text.replaceAll(match[1], '[redacted]');
+      for (const match of turn.text.matchAll(/token:\s*"([0-9a-f]{32})"/g)) text = text.replaceAll(match[1], '[redacted]');
     }
     return text;
   };
@@ -527,7 +538,11 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     const groups = history?.groups ?? [];
     const out: ChatMessage[] = [];
     let g = 0;
+    // A note stands where it was written: before the first turn that came after it.
+    const notes = [...(record.notes ?? [])].sort((a, b) => a.at - b.at);
+    const notesUntil = (at: number) => { while (notes.length && notes[0]!.at < at) { const note = notes.shift()!; out.push({ id: note.id, role: 'user', at: note.at, text: note.text, automation: note.automation, note: true }); } };
     for (const turn of record.turns) {
+      notesUntil(turn.at);
       out.push({ id: turn.id, role: 'user', at: turn.at, text: turn.text, ...(turn.files?.length ? { files: turn.files } : {}), ...(turn.automation ? { automation: turn.automation } : {}), ...(turn.context?.length ? { context: turn.context } : {}) });
       const group = turn.run ? groups[g++] : undefined;
       const live = lives.get(record.id);
@@ -552,6 +567,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         });
       }
     }
+    notesUntil(Number.POSITIVE_INFINITY);
     // Turns of the same session written outside the panel (e.g. the Hermes CLI) are shown too: the session is the history.
     for (const group of groups.slice(g)) {
       out.push({ id: `${record.id}:h${g}:u`, role: 'user', at: record.updatedAt, text: group.user });
@@ -933,6 +949,18 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     },
     async send(id, input) { await deliver(id, input); },
     async sendAutomation(id, input) { await deliver(id, input, input.automation); },
+    async note(id, input) {
+      await need(id);
+      await mutate(id, async () => {
+        const record = await need(id);
+        if (record.notes?.some(note => note.key === input.key)) return;
+        const at = now();
+        record.notes = [...(record.notes ?? []), { id: randomUUID(), key: input.key, at, text: input.text, automation: input.automation }].slice(-500);
+        record.updatedAt = at;
+        await save(record, true);
+        emit(id, { type: 'state', chat: detail(record) });
+      });
+    },
     async createAutomation(input) {
       await load();
       const at = now();

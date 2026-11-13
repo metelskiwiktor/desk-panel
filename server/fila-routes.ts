@@ -67,6 +67,8 @@ export async function handleFilaRoute(req: IncomingMessage, res: ServerResponse,
       json(res, 200, await ctx.fila.spec(spec[1]!, number));
       return true;
     }
+    const kit = /^\/api\/fila\/threads\/([A-Za-z]{4}-[1-9][0-9]*)\/machina$/.exec(url.pathname);
+    if (req.method === 'GET' && kit) { json(res, 200, await ctx.fila.machinaKit(kit[1]!)); return true; }
     if (req.method === 'GET' && url.pathname === '/api/fila/query') {
       const number = (name: string) => { const raw = url.searchParams.get(name); return raw === null ? undefined : Number(raw); };
       json(res, 200, await ctx.fila.query(url.searchParams.get('q') ?? '', { limit: number('limit'), offset: number('offset') }));

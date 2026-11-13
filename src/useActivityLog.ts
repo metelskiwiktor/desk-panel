@@ -28,7 +28,7 @@ export function useActivityLog(data: DashboardData, now: number) {
         const response = await fetch('/api/automations', { signal: controller.signal });
         if (!response.ok) return;
         const data = automationListSchema.parse(await response.json());
-        if (!controller.signal.aborted) setLog(previous => recordAutomationActivity(previous, data.automations, Date.now()));
+        if (!controller.signal.aborted) setLog(previous => recordAutomationActivity(previous, data.automations, Date.now(), data.machina));
       } catch { /* A failed read never removes history. */ }
     };
     void read(); const timer = setInterval(() => void read(), 15000);

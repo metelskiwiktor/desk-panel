@@ -7,13 +7,15 @@ export interface FilaThreadRow {
   id: string; project: string; number: number; type: { key: string; label: string }; state: string; closed: boolean;
   title: string; parent: string | null; module: string | null; fields: Record<string, string | number | boolean | string[]>;
   archived: boolean; revision: number; updatedAt: number;
+  /** An automat shipped by the panel's code: never deleted. */
+  builtIn?: true;
 }
 export interface FilaRegistry {
   projects: { key: string; name: string; modules: string[]; counts: { open: number; closed: number; archived: number }; board: string | null }[];
   boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
   fieldDefs: { name: string; kind: 'text' | 'number' | 'date' | 'bool' | 'multi' }[];
-  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean }[];
+  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean; machina: boolean }[];
   /** The states a thread may be dispatched to Cezar from (2.1). */
   cezarSettings: { readyStates: { workflow: string; state: string }[] };
   notice?: string;
@@ -28,9 +30,14 @@ export interface FilaThreadDoc {
   cezar: { enabled: boolean; executor: 'cezar' | 'lokalnie' | 'rozmowa' | null; repo: 'desk-panel' | null; mode: 'analiza' | 'implementacja' | null; links: { kind: 'cezar' | 'pr'; id: string; title?: string; at: number }[] };
   /** „Zablokowane” (2.3a): the thread's blocks; it is blocked while the list has an entry. */
   blockers: { id: string; reason: string; origin: { kind: string }; at: number; by: string }[];
+  /** Only on an automat: it has the Machina kit; `builtIn` = shipped by the panel's code (never deleted). */
+  machina?: { builtIn: boolean; parts: Record<'program' | 'situations' | 'journal' | 'conversations', boolean> };
   archived: boolean; revision: number; createdAt: number; updatedAt: number; createdBy: string;
   history: { at: number; by: string; kind: string; text?: string; changes?: { field: string; from: string | null; to: string | null }[] }[];
 }
+/** The Machina kit of an automat (GET /api/fila/threads/ID/machina): each part with an explicit lack of content. */
+type FilaMachinaPartDoc = { available: boolean; content: unknown };
+export interface FilaMachinaKitDoc { thread: string; uid: string; builtIn: boolean; program: FilaMachinaPartDoc; situations: FilaMachinaPartDoc; journal: FilaMachinaPartDoc; conversations: FilaMachinaPartDoc }
 export interface FilaSpecDoc { thread: string; enabled: boolean; revision: number; text: string | null; by: string | null; at: number | null; latest: number }
 export interface FilaBoardDoc {
   id: string; name: string; project: string | null;

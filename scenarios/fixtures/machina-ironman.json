@@ -1,0 +1,58 @@
+{
+  "_opis": "DESK-87: odbiór drogi IRONMAN na atrapach (server/machina-migration.test.ts, blok „IRONMAN”). Dane przykładowe, nie prawdziwy magazyn. Dawny automat z automations.json, karta pierwszego programu zaproponowana przez Wektora na prośbę użytkownika i pięć wyglądów strony.",
+  "automation": {
+    "id": "a-1a0000000001",
+    "name": "Zapisy IRONMAN 70.3 Gdynia",
+    "goal": "Sprawdzaj rano i wieczorem stronę zapisów IRONMAN 70.3 Gdynia; gdy otworzą zapisy, daj znać i wpisz termin do kalendarza.",
+    "trigger": { "kind": "daily", "times": ["7:00", "19:00"] },
+    "status": "active",
+    "doneWhen": "Zapisy są otwarte",
+    "notebook": "Strona ma sekcję „Rejestracja:”. 12.11 nadal zamknięte.",
+    "learn": true,
+    "actions": [{ "kind": "message" }, { "kind": "calendarEvent", "reminderMinutes": 60 }, { "kind": "smartAction", "domain": "ironman.com" }, { "kind": "notify", "domain": "ironman.com" }],
+    "chatId": "11111111-1111-4111-8111-111111111111",
+    "createdAt": 1794000000000,
+    "nextRunAt": 1794549600000,
+    "snapshot": {},
+    "changes": [],
+    "runs": [
+      { "id": "run-1a0000000001", "at": 1794380000000, "chatId": "33333333-3333-4333-8333-333333333331", "outcome": "not-yet", "summary": "Zapisy nadal zamknięte.", "notebookChanged": false, "costUsd": 0.011 },
+      { "id": "run-1a0000000002", "at": 1794423000000, "chatId": "33333333-3333-4333-8333-333333333332", "outcome": "not-yet", "summary": "Bez zmian, sekcja Rejestracja pusta.", "notebookChanged": true }
+    ]
+  },
+  "card": {
+    "trigger": { "kind": "daily", "times": ["7:00", "19:00"] },
+    "scope": { "domains": ["ironman.com"], "resumeChats": [] },
+    "blocks": [
+      { "id": "strona", "kind": "fetch", "url": "https://www.ironman.com/im703-gdynia-register" },
+      { "id": "status", "kind": "extract", "from": "strona", "after": "Rejestracja:", "before": "Regulamin" },
+      { "id": "cmp", "kind": "compare", "from": "status" }
+    ],
+    "situations": [
+      { "id": "s-zamkniete", "name": "Zapisy zamknięte" },
+      { "id": "s-data", "name": "Ogłoszona data otwarcia" },
+      { "id": "s-otwarte", "name": "Zapisy otwarte" }
+    ],
+    "reactions": {
+      "s-zamkniete": [],
+      "s-data": [
+        { "id": "kal-data", "kind": "calendarEvent", "title": "IRONMAN: otwarcie zapisów", "when": "2026-12-01T10:00", "text": "{{status}}", "reminderMinutes": 60 },
+        { "id": "tel-data", "kind": "notify", "title": "IRONMAN: ogłoszono datę zapisów", "text": "{{status}}" }
+      ],
+      "s-otwarte": [
+        { "id": "wpis", "kind": "message", "text": "Zapisy na IRONMAN 70.3 Gdynia są otwarte: {{status}}" },
+        { "id": "kal-start", "kind": "calendarEvent", "title": "IRONMAN: zapisz się", "when": "2026-11-20T08:00", "text": "{{status}}", "url": "{{status.link}}", "domain": "ironman.com" },
+        { "id": "alert", "kind": "smartAction", "title": "Zapisz się na IRONMAN 70.3 Gdynia", "text": "{{status}}", "url": "{{status.link}}", "domain": "ironman.com" },
+        { "id": "tel-start", "kind": "notify", "title": "Zapisy na IRONMAN otwarte", "text": "{{status}}", "url": "{{status.link}}", "domain": "ironman.com" },
+        { "id": "koniec", "kind": "finish" }
+      ]
+    }
+  },
+  "pages": {
+    "zamkniete": "<html><body><h1>IRONMAN 70.3 Gdynia</h1><p>Rejestracja: Zapisy są zamknięte.</p><footer>Regulamin</footer></body></html>",
+    "data": "<html><body><h1>IRONMAN 70.3 Gdynia</h1><p>Rejestracja: Zapisy ruszą 1 grudnia o 10:00.</p><footer>Regulamin</footer></body></html>",
+    "otwarte": "<html><body><h1>IRONMAN 70.3 Gdynia</h1><p>Rejestracja: Zapisy otwarte! <a href=\"https://www.ironman.com/im703-gdynia-register/form\">Formularz</a></p><footer>Regulamin</footer></body></html>",
+    "nieznany": "<html><body><h1>IRONMAN 70.3 Gdynia</h1><p>Rejestracja: Lista rezerwowa — zapisz się na powiadomienia.</p><footer>Regulamin</footer></body></html>",
+    "brak": "<html><body><h1>IRONMAN 70.3 Gdynia</h1><p>Strona w przebudowie.</p></body></html>"
+  }
+}

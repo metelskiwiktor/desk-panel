@@ -11,6 +11,7 @@ import { stepOverridesSchema, type FinishedTask } from '../src/cezar-contract';
 import { todoDispatchRecordSchema, todoModeSchema, type TodoDispatchRecord } from '../src/todo-contract';
 import { type BankPlan, type BankPlanOutcome, type BankPlanPreview } from '../src/bank-plan-contract';
 import { type AutomationOutcome, automationOutcomeSchema } from '../src/automation-contract';
+import { type MachinaOutcome, machinaOutcomeSchema } from '../src/machina-contract';
 import { BankPlanError, planPreview } from './bank-plan';
 import { assignMarks, assignPreview } from './bank-assign';
 import type { BankAssign, BankAssignChoice, BankAssignOutcome, BankAssignPreview } from '../src/bank-assign-contract';
@@ -68,6 +69,8 @@ const storeSchema = z.object({
     automations: z.record(z.string(), z.number()).default({}),
     /** The user's answers on „Nowy automat” cards, by tool call id: a reload shows the decision, a second click does nothing. */
     automationCards: z.record(z.string(), automationOutcomeSchema).default({}),
+    /** The user's answers on Machina cards (program, new situation, correction), by tool call id: a second click does nothing. */
+    machinaCards: z.record(z.string(), machinaOutcomeSchema).default({}),
     updatedAt: z.number().default(0),
   })),
 });
@@ -212,6 +215,8 @@ export interface Cockpit {
    * The answer already kept for this consent card, if the user gave one. A retry gets it even when a newer proposal replaced
    * the card: only undecided superseded cards are refused.
    */
+  /** The user's answer on a Machina card; `work` applies it. Answered twice: done once, kept for a reload and a restart. */
+  machina(chatId: string, toolCallId: string, work: () => Promise<MachinaOutcome>): Promise<MachinaOutcome>;
   kept(chatId: string, toolCallId: string): CockpitView['bankPlans'][string] | AutomationOutcome | undefined;
 }
 
@@ -230,7 +235,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
     writeFileSync(`${file}.tmp`, JSON.stringify(store, null, 2), 'utf8');
     renameSync(`${file}.tmp`, file);
   };
-  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, automations: {}, automationCards: {}, updatedAt: now() };
+  const chatOf = (id: string) => store.chats[id] ??= { runs: [], dispatches: {}, bankPlans: {}, automations: {}, automationCards: {}, machinaCards: {}, updatedAt: now() };
   /** PR links already tried, so a read every few seconds does not write the same link again (the action itself is idempotent). */
   const linkedPrs = new Set<string>();
   /** The to-do a run was dispatched from, kept with the dispatch: it survives a restart and needs no open chat. */
@@ -333,6 +338,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
   const pendingBankPlans = new Map<string, Promise<BankPlanOutcome>>();
   const pendingAssigns = new Map<string, Promise<BankAssignOutcome | SmartRuleOutcome>>();
   const pendingAutomations = new Map<string, Promise<AutomationOutcome>>();
+  const pendingMachina = new Map<string, Promise<MachinaOutcome>>();
   /** A bank card is answered once: the kept answer, one still being worked, or the work (kept when it finishes). */
   async function decideBankCard<T extends BankAssignOutcome | SmartRuleOutcome>(chatId: string, toolCallId: string, work: () => Promise<T>): Promise<T> {
     const chat = chatOf(chatId);
@@ -373,7 +379,7 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
           }
         }
       }
-      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'], automationCards: { ...chat?.automationCards } };
+      return { observedAt: now(), task, pr, dispatches: { ...chat?.dispatches }, bankPlans: { ...chat?.bankPlans } as CockpitView['bankPlans'], automationCards: { ...chat?.automationCards }, machinaCards: { ...chat?.machinaCards } };
     },
 
     async dispatch(chatId, input) {
@@ -530,6 +536,24 @@ export function createCockpit({ sources, file, cezarUrl, gh = runGh, now = Date.
       })();
       pendingAutomations.set(key, operation);
       try { return await operation; } finally { pendingAutomations.delete(key); }
+    },
+
+    async machina(chatId, toolCallId, work) {
+      const chat = chatOf(chatId);
+      const known = chat.machinaCards[toolCallId];
+      if (known) return known;
+      const key = `${chatId}:${toolCallId}`;
+      const pending = pendingMachina.get(key);
+      if (pending) return pending;
+      const operation = (async (): Promise<MachinaOutcome> => {
+        const outcome = await work();
+        chat.machinaCards[toolCallId] = outcome;
+        chat.updatedAt = now();
+        save();
+        return outcome;
+      })();
+      pendingMachina.set(key, operation);
+      try { return await operation; } finally { pendingMachina.delete(key); }
     },
 
     kept(chatId, toolCallId) {

@@ -66,7 +66,7 @@ export type AutomationTrigger = z.infer<typeof triggerSchema>;
  * Zatwierdzone na karcie akcje automatu; parametry są limitem uprawnień runu.
  */
 // PSL includes private suffixes (e.g. github.io): consent must identify an owner, not a hosting service.
-const actionDomainSchema = z.string().trim().toLowerCase()
+export const actionDomainSchema = z.string().trim().toLowerCase()
   .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/)
   .refine(domain => getDomain(domain, { allowPrivateDomains: true }) !== null, 'Domena musi mieć część rejestrowalną, nie sam sufiks publiczny.');
 export const automationActionSchema = z.discriminatedUnion('kind', [
@@ -170,10 +170,23 @@ export const automationSchema = z.object({
   lastRunAt: z.number().int().nonnegative().optional(),
   runs: z.array(automationRunSchema).max(MAX_RUNS),
   changes: z.array(automationChangeSchema).max(50).default([]),
+  /** The Machina thread a time automation was moved to (DESK-87): this record is history only, the thread works. */
+  movedTo: z.string().max(40).optional(),
 });
 export type Automation = z.infer<typeof automationSchema>;
+/** Time triggers: the ones Machina takes over (DESK-87); Cezar and PR stay here until stage 2. */
+export const isTimeTrigger = (trigger: AutomationTrigger) => trigger.kind === 'once' || trigger.kind === 'daily' || trigger.kind === 'weekly';
 
-export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional() });
+/** A settled alert or notification of a Machina run (docs/automaty.md, „Machina”), read by the alerts and the bell next to the old automations' own. */
+export const machinaEffectSchema = z.object({
+  thread: z.string(), name: z.string(), /** The automat was cancelled: its alerts are gone at once. */ cancelled: z.boolean(),
+  runId: z.string(), block: z.string(), kind: z.enum(['smartAction', 'notify']), at: z.number(), result: z.enum(['ok', 'error']),
+  ref: z.string(), title: z.string(), text: z.string().optional(), url: z.string().optional(),
+});
+export type MachinaEffect = z.infer<typeof machinaEffectSchema>;
+/** Machina's open automats, briefly (DESK-87): the entries of time automations lead to their threads. */
+const machinaAutomatRowSchema = z.object({ thread: z.string(), title: z.string(), state: z.string(), version: z.number().nullable(), nextRunAt: z.number().nullable(), pending: z.number() });
+export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional(), machina: z.array(machinaEffectSchema).optional(), machinaAutomats: z.array(machinaAutomatRowSchema).optional() });
 export type AutomationList = z.infer<typeof automationListSchema>;
 
 /** The plan a `panel_automation_propose` card carries; `replaces` identifies an automation to update in place. */

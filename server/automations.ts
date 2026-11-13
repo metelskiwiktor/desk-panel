@@ -9,7 +9,7 @@ import type { CezarSnapshot, FinishedTask } from '../src/cezar-contract';
 import type { CockpitPrView } from '../src/cockpit-contract';
 import {
   CYCLE_DEFAULT_DAYS, MAX_ACTIVE_AUTOMATIONS, MAX_NOTEBOOK, MAX_RUNS, RUN_REPORT_TIMEOUT_MS,
-  automationActionSchema, automationActSchema, automationActionResultSchema, type AutomationAct, type AutomationActionResult, automationChangeSchema, automationDiff, automationPlanValues, automationPlanSchema, isCyclic, isOneShot, parseClock, scheduleLabel, triggerSchema, type Automation, type AutomationPlan, type AutomationReport,
+  automationActionSchema, automationActSchema, automationActionResultSchema, type AutomationAct, type AutomationActionResult, automationChangeSchema, automationDiff, automationPlanValues, automationPlanSchema, isCyclic, isOneShot, isTimeTrigger, parseClock, scheduleLabel, triggerSchema, type Automation, type AutomationPlan, type AutomationReport,
   type AutomationRun, type AutomationStatus, type AutomationTrigger, type AutomationUpdate, type RunOutcome,
 } from '../src/automation-contract';
 
@@ -47,6 +47,8 @@ const recordSchema = z.object({
   /** Internal: what the watched Cezar task / PR looked like, so the first read is a baseline, not a change. */
   snapshot: z.record(z.string(), z.unknown()).default({}),
   changes: z.array(automationChangeSchema).max(50).default([]),
+  /** The Machina thread this time automation was moved to: it never runs here again. */
+  movedTo: z.string().max(40).optional(),
   runs: z.array(z.object({
     actions: z.array(automationActionResultSchema).optional(),
     id: z.string(), at: z.number(), chatId: z.string(), outcome: z.enum(['not-yet', 'done', 'error', 'skipped']),
@@ -257,12 +259,25 @@ export interface Automations {
   active(tasks: readonly CezarSnapshot['tasks'][number][]): Promise<void>;
   /** The panel's existing Cezar reads: a watched task done. */
   finished(tasks: readonly FinishedTask[]): Promise<void>;
+  /** A run of these automations holds, or waits for, the panel's one run slot (Machina's runs wait for it). */
+  busy(): boolean;
+  /** DESK-87: a time automation was moved to this Machina thread; the record stays as history and never runs or changes here. */
+  markMoved(id: string, thread: string): Promise<void>;
+  /** A run of this automation is reserved or going (its owner is still this engine). */
+  hasOpenRun(id: string): boolean;
   tick(): Promise<void>;
   start(): void;
   stop(): void;
 }
 
-export function createAutomations({ file, observersFile, chat, readTask, readPr, enabled = true, now = Date.now, zone = ZONE, log, executeAction }: {
+export function createAutomations({ file, observersFile, chat, readTask, readPr, enabled = true, now = Date.now, zone = ZONE, log, executeAction, blockedBy, timeInMachina = false }: {
+  /**
+   * Machina owns time (DESK-87, the active unlocked Fila): no time automation starts, is made or is changed here any more;
+   * a run already started finishes here (one owner per run). Cezar and PR work as before.
+   */
+  timeInMachina?: boolean;
+  /** The panel's one run slot is taken by someone else (a Machina run): no new run of these starts until it is free. */
+  blockedBy?: () => boolean;
   executeAction?: (input: AutomationAct, approved: Automation['actions'][number], key: string, name: string) => Promise<string | undefined>;
   file: string;
   /** `~/.desk-panel/observers.json`: read once, when there is no automations file yet. */
@@ -342,7 +357,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     if (observersFile && existsSync(observersFile)) renameSync(observersFile, `${observersFile}.migrated`);
   }
 
-  const active = () => store.automations.filter(a => a.status === 'active');
+  const active = () => store.automations.filter(a => a.status === 'active' && !a.movedTo);
+  const timeRefusal = 'Automaty czasowe są w Machinie: zaproponuj program kartą panel_machina_propose (przypomnienie bez karty: panel_machina_reminder).';
   const find = (id: string) => store.automations.find(a => a.id === id);
   const pendingOf = (automationId: string) => store.pending.filter(p => p.automationId === automationId);
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -405,6 +421,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     const plan = automationPlanSchema.parse(raw);
     const at = now();
     const old = plan.replaces ? find(plan.replaces) : undefined;
+    if (timeInMachina && (isTimeTrigger(plan.trigger as AutomationTrigger) || (old && isTimeTrigger(old.trigger as AutomationTrigger)))) throw new AutomationError(409, old?.movedTo ? `Ten automat jest teraz w Machinie (${old.movedTo}): zmianę programu proponuje panel_machina_propose z automat: "${old.movedTo}".` : timeRefusal);
     if (plan.replaces && !old) throw new AutomationError(404, `Panel nie zna automatu ${plan.replaces}.`);
     const assertEditable = () => {
       if (old && old.status !== 'active' && old.status !== 'paused') throw new AutomationError(409, 'Ten automat jest zakończony, wygasły albo anulowany. Zaproponuj nowy automat bez replaces.');
@@ -457,6 +474,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
 
   async function createObserverOne({ chatId, kind, target, instruction }: { chatId: string; kind: 'cezar' | 'pr' | 'time'; target: string; instruction: string }): Promise<Automation> {
     assertEnabled();
+    if (timeInMachina && kind === 'time') throw new AutomationError(409, timeRefusal);
     const at = now();
     if (active().length >= MAX_ACTIVE_AUTOMATIONS) throw new AutomationError(409, `Limit aktywnych automatów to ${MAX_ACTIVE_AUTOMATIONS}. Anuluj któryś w widoku Automaty.`);
     let trigger: AutomationTrigger;
@@ -503,6 +521,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     ...(a.doneWhen ? { doneWhen: a.doneWhen } : {}), notebook: a.notebook, learn: a.learn,
     actions: a.actions, chatId: a.chatId, createdAt: a.createdAt,
     ...(a.nextRunAt !== undefined ? { nextRunAt: a.nextRunAt } : {}), ...(a.lastRunAt !== undefined ? { lastRunAt: a.lastRunAt } : {}),
+    ...(a.movedTo ? { movedTo: a.movedTo } : {}),
     changes: structuredClone(a.changes),
     runs: a.runs.map(({ token: _token, ...run }) => run) as AutomationRun[],
   });
@@ -610,6 +629,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       }
       const pending = store.pending[0];
       if (!pending || pending.sent || !pending.token || !pending.chatId || !pending.turnId) return;
+      if (blockedBy?.()) return;
       pending.deadline ??= now() + RUN_REPORT_TIMEOUT_MS;
       store.execution = { id: pending.id, chatId: pending.chatId, turnId: pending.turnId, hermesRunId: pending.hermesRunId };
       save();
@@ -732,6 +752,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     for (const a of [...active()]) {
       if (started) break;
       if (pendingOf(a.id).length) continue;
+      // Time belongs to Machina now; a record not moved yet waits for its move instead of running twice.
+      if (timeInMachina && isTimeTrigger(a.trigger as AutomationTrigger)) continue;
       if (a.trigger.kind === 'once') {
         const moment = Number(a.trigger.at);
         if (!Number.isFinite(moment) || at < moment) continue;
@@ -811,6 +833,8 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
         if (unsafeFile) throw new AutomationError(503, loadError!);
         const a = find(input.id);
         if (!a) throw new AutomationError(404, `Panel nie zna automatu ${input.id}.`);
+        if (a.movedTo) throw new AutomationError(409, `Ten automat przeniesiono do Machiny (${a.movedTo}); sterowanie jest w jego wątku.`);
+        if (timeInMachina && isTimeTrigger(a.trigger as AutomationTrigger)) throw new AutomationError(409, 'Ten automat czasowy czeka na przeniesienie do Machiny.');
         const before = view(a);
         if (input.name !== undefined) a.name = input.name;
         if (input.notebook !== undefined) { a.notebook = input.notebook.slice(0, MAX_NOTEBOOK); a.learn = true; }
@@ -852,7 +876,20 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       });
     },
 
+    hasOpenRun(id) { return pendingOf(id).length > 0; },
+
+    markMoved(id, thread) {
+      return serialize(async () => {
+        const a = find(id);
+        if (!a || a.movedTo === thread) return;
+        a.movedTo = thread;
+        delete a.nextRunAt;
+        save();
+      });
+    },
+
     error() { return loadError; },
+    busy() { return enabled && !unsafeFile && (!!store.execution || store.pending.length > 0); },
 
     turnChanged(turn) {
       if (unsafeFile) return;

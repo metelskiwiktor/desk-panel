@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Bug, CalendarDays, Check, ChevronDown, CircleDot, Ellipsis, Lightbulb, SlidersHorizontal, StickyNote } from 'lucide-react';
+import { Bug, CalendarDays, Check, ChevronDown, CircleDot, Cog, Ellipsis, Lightbulb, SlidersHorizontal, StickyNote } from 'lucide-react';
 import { useDismiss } from '../popover';
 import { checkFilaQuery, useFilaActions, type FilaRegistry, type FilaThreadRow } from './api';
 import './fila.css';
 
 /** Type → icon and tone (colour carries the type in lists and cards). */
 const TYPE_ICON: Record<string, (size: number) => ReactNode> = {
-  blad: size => <Bug size={size} />, funkcja: size => <Lightbulb size={size} />, sprawa: size => <CircleDot size={size} />,
+  automat: size => <Cog size={size} />, blad: size => <Bug size={size} />, funkcja: size => <Lightbulb size={size} />, sprawa: size => <CircleDot size={size} />,
   spotkanie: size => <CalendarDays size={size} />, notatka: size => <StickyNote size={size} />,
 };
 export const TypeIcon = ({ type, size = 16 }: { type: FilaThreadRow['type']; size?: number }) =>
@@ -15,7 +15,7 @@ export const TypeIcon = ({ type, size = 16 }: { type: FilaThreadRow['type']; siz
 /** The workflow that holds the state; with one workflow (stage 1) it is that one. */
 export const workflowOf = (registry: FilaRegistry, state: string) =>
   registry.workflows.find(w => w.states.some(s => s.name === state)) ?? registry.workflows[0];
-export const stateTone = (state: string, closing: boolean) => closing ? 'closed' : ({ 'Pomysł': 'idea', 'Do przygotowania': 'prep', 'Gotowe do realizacji': 'ready', 'W realizacji': 'doing', 'Do sprawdzenia': 'review' } as Record<string, string>)[state] ?? 'idea';
+export const stateTone = (state: string, closing: boolean) => closing ? 'closed' : ({ 'Pomysł': 'idea', 'Do przygotowania': 'prep', 'Gotowe do realizacji': 'ready', 'W realizacji': 'doing', 'Do sprawdzenia': 'review', 'Czeka na kartę programu': 'idea', 'Aktywny': 'doing', 'Czeka na decyzję': 'review', 'Czeka na naprawę': 'review', 'Wstrzymany': 'prep' } as Record<string, string>)[state] ?? 'idea';
 
 /**
  * A button that opens a list of choices: arrows move, Enter chooses, Escape closes and gives focus back to the button.
@@ -57,6 +57,10 @@ export function StatePicker({ thread, registry, compact = false, onError }: { th
     </button>
   </li>;
   const closing = workflow?.states.find(s => s.name === thread.state)?.closing ?? thread.closed;
+  // The Stan of an automat is Machina's alone: shown everywhere (page, list, kanban, tile), chosen nowhere.
+  if (thread.type.key === 'automat') return <span className={`fl-state fl-state-fixed fl-st-${stateTone(thread.state, thread.closed)}${compact ? ' compact' : ''}`} role="img" aria-label={`Stan ${thread.id}: ${thread.state} (ustawia Machina)`} title={`${thread.state} · Stan automatu ustawia Machina`}>
+    <i className="fl-dot" />{!compact && <span>{thread.state}</span>}
+  </span>;
   return <div className="fl-anchor" ref={list.root} onKeyDown={list.keys}>
     <button type="button" ref={list.trigger} className={`fl-state fl-st-${stateTone(thread.state, closing)}${compact ? ' compact' : ''}`} aria-haspopup="listbox" aria-expanded={list.open}
       aria-label={`Stan ${thread.id}: ${thread.state}`} onClick={() => list.setOpen(!list.open)}>

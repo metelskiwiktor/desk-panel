@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { ChatError, type ChatService } from './agent-chat';
-import { chatEngines, DEFAULT_ENGINE, type ChatAutomationInput, type ChatEngine, type EngineStatus } from '../src/chat-contract';
+import { chatEngines, DEFAULT_ENGINE, type ChatAutomation, type ChatAutomationInput, type ChatEngine, type EngineStatus } from '../src/chat-contract';
 
 /** A chat service of one engine, which can say whether it can take a message now. */
 export type EngineService = ChatService & { status?(): Promise<{ available: boolean; error?: string }> };
@@ -97,6 +97,11 @@ export function createChatHub(options: ChatHubOptions): ChatService {
       const service = await find(id);
       if (!service.sendAutomation) throw new ChatError(503, `Silnik ${owner.get(id) ?? 'rozmowy'} nie przyjmuje tur automatyki.`);
       return service.sendAutomation(id, input);
+    },
+    async note(id: string, input: { text: string; automation: ChatAutomation; key: string }) {
+      const service = await find(id);
+      if (!service.note) throw new ChatError(503, `Silnik ${owner.get(id) ?? 'rozmowy'} nie przyjmuje wpisów panelu.`);
+      return service.note(id, input);
     },
     async createAutomation(input: ChatAutomationInput) {
       // Automation runs are Wektor conversations, and the window talks only to Hermes: an old stored preference for agy

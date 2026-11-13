@@ -29,6 +29,8 @@ import { bankShow, BankShowError, dayIn } from './bank-show';
 import { BankLabelError } from './bank-labels';
 import { observerCancelSchema } from '../src/observers-contract';
 import { automationUpdateSchema } from '../src/automation-contract';
+import { machinaActionSchema } from '../src/machina-contract';
+import { MachinaError } from './machina';
 import { AutomationError, type Automations } from './automations';
 import { usageReport, type UsageStore } from './usage';
 
@@ -112,7 +114,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
       return;
     }
-    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations, options.filaMode)) return;
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations, options.filaMode, sources.machina)) return;
     if (await handleFilaDispatchRoute(req, res, url, { ownOrigin, sources, cockpit: options.cockpit })) return;
     if (await handleFilaRoute(req, res, url, { ownOrigin, proxied, fila: sources.fila, tokens: options.filaTokens })) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.
@@ -200,7 +202,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       }
       return;
     }
-    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle' || url.pathname === '/api/observers/cancel' || url.pathname === '/api/automations/action')) {
+    if (req.method === 'POST' && (url.pathname === '/api/google/connect' || url.pathname === '/api/bank/connect' || url.pathname === '/api/mail/action' || url.pathname === '/api/cezar/action' || url.pathname === '/api/machina/action' || url.pathname === '/api/cezar/runs' || url.pathname === '/api/todos/action' || url.pathname === '/api/bank/labels/action' || url.pathname === '/api/smart-rules/toggle' || url.pathname === '/api/observers/cancel' || url.pathname === '/api/automations/action')) {
       // Actions change state (or Gmail), so only the panel's own page may call them.
       if (req.headers.origin !== ownOrigin) { res.writeHead(403).end(); return; }
       res.setHeader('Cache-Control', 'no-store');
@@ -226,6 +228,11 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
           // The Automaty view's buttons: pause, resume, cancel, run now and the notebook, local only.
           if (!sources.automationAction) throw new SourceError(503);
           res.end(JSON.stringify(await sources.automationAction(await readJson(req, automationUpdateSchema))));
+        } else if (url.pathname === '/api/machina/action') {
+          // Machina's direct actions on an automat (pause, resume, cancel, run now, restore a version): the user's click, local only.
+          if (!sources.machinaAction) throw new SourceError(503);
+          try { res.end(JSON.stringify(await sources.machinaAction(await readJson(req, machinaActionSchema)))); }
+          catch (error) { if (!(error instanceof MachinaError)) throw error; res.writeHead(error.status).end(JSON.stringify({ error: error.message })); }
         } else if (url.pathname === '/api/observers/cancel') {
           // The user's cancel on the settings card: local only, the observer never fires.
           if (!sources.observerCancel) throw new SourceError(503);

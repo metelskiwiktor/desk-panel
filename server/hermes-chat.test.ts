@@ -115,6 +115,30 @@ describe('Hermes API client', () => {
 });
 
 describe('Hermes chat', () => {
+  it('keeps an entry the panel writes without starting a turn: once per key, in its place, after a restart, with no run in Hermes', async () => {
+    const service = hermes();
+    const { id } = await service.create({ text: 'Przypomnij mi o herbacie' });
+    await finishedChat(service, id);
+    const before = runs().length;
+    const events: string[] = [];
+    const stop = await service.subscribe(id, event => events.push(event.type));
+    const note = { text: 'Herbata!', automation: { source: 'machina' as const, reason: 'Za godzinę: herbata' }, key: 'mr-1:b1' };
+    await service.note!(id, note);
+    await service.note!(id, note);
+    stop();
+    const shape = (chat: ChatDetail) => chat.items.map(m => [m.role, m.text ?? answerOf(m).length > 0, m.note ?? false, m.automation?.source ?? null]);
+    expect(shape(await service.get(id))).toEqual([['user', 'Przypomnij mi o herbacie', false, null], ['agent', true, false, null], ['user', 'Herbata!', true, 'machina']]);
+    expect(runs()).toHaveLength(before);
+    expect((await service.get(id)).running).toBe(false);
+    expect(events.filter(type => type === 'state')).toHaveLength(2);
+    // A later turn comes after the note; a fresh process reads the same conversation.
+    await service.send(id, { text: 'Dzięki' });
+    await finishedChat(service, id);
+    const again = hermes();
+    expect(shape(await again.get(id)).map(row => row[1])).toEqual(['Przypomnij mi o herbacie', true, 'Herbata!', 'Dzięki', true]);
+    await expect(service.note!('00000000-0000-4000-8000-000000000000', note)).rejects.toMatchObject({ status: 404 });
+  });
+
   it('temporary-only cleanup cannot delete a chat after keep', async () => {
     const service = hermes();
     const { id } = await service.create({ text: 'keep', temporary: true });

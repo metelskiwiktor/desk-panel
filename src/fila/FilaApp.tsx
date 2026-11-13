@@ -17,7 +17,7 @@ type Dialogs =
   | { kind: 'newColumn'; section: string } | { kind: 'renameColumn'; column: string; name: string } | { kind: 'deleteColumn'; column: string; name: string };
 
 const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor', antigravity: 'Antigravity' };
+const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor', antigravity: 'Antigravity', machina: 'Machina' };
 const KIND: Record<string, string> = { created: 'utworzył', renamed: 'zmienił nazwę', changed: 'zmienił', moved: 'przesunął', removed: 'usunął' };
 const TARGET: Record<string, string> = { board: 'tablicę', view: 'widok', section: 'sekcję', column: 'kolumnę' };
 const sentence = (entry: FilaBoardDoc['history'][number]) => {

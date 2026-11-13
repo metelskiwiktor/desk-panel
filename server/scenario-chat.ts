@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FilaStore } from './fila';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -50,6 +51,24 @@ export function scriptedAgent(): Launcher {
       onExit(callback) { leave = callback; },
     };
   };
+}
+
+/**
+ * The conversations the scenario's automats point at (their kit's `conversations`), made in the scenario's own throwaway
+ * chat store so a link from an automat opens a real conversation. Nothing is sent anywhere but the stand-in Hermes.
+ */
+export async function seedMachinaChats(chat: ChatService, fila: FilaStore | undefined): Promise<void> {
+  if (!fila || !chat.createAutomation) return;
+  const seen = new Set<string>();
+  for (const automat of await fila.machina.list()) {
+    const items = (automat.conversations as { items?: { chatId?: unknown; reason?: unknown }[] } | null)?.items ?? [];
+    for (const item of items) {
+      if (typeof item.chatId !== 'string' || seen.has(item.chatId)) continue;
+      seen.add(item.chatId);
+      const reason = typeof item.reason === 'string' ? item.reason : 'rozmowa';
+      await chat.createAutomation({ chatId: item.chatId, title: `Automat · ${automat.title}`, text: `Rozmowa automatu ${automat.id} „${automat.title}” (${reason}); dane scenariusza.`, automation: { source: 'machina', reason } }).catch(() => undefined);
+    }
+  }
 }
 
 /**

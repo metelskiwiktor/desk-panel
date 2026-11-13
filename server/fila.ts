@@ -3,8 +3,9 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { TODO_LIMITS, TODO_STATUSES, todoIsDone } from '../src/todo-contract';
 import {
-  FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_RESERVED_FIELDS, FILA_TYPES,
-  filaActionSchema, filaDataSchema, isFilaBoardAction,
+  FILA_AUTOMAT_TYPE, FILA_AUTOMAT_WORKFLOW, FILA_DEFAULT_WORKFLOW, FILA_LIMITS, FILA_MACHINA_PARTS, FILA_MACHINA_PROJECT, FILA_RESERVED_FIELDS, FILA_TYPES,
+  filaActionSchema, filaDataSchema, filaMachinaChangeSchema, filaMachinaCreateSchema, isFilaBoardAction,
+  type FilaMachinaChange, type FilaMachinaCreate, type FilaMachinaPart,
   type FilaAction, type FilaActor, type FilaBlocker, type FilaBoardActor, type FilaBoard, type FilaCezar, type FilaCezarSettings, defaultFilaCezarSettings, emptyFilaCezar, type FilaData, type FilaSection, type FilaFieldKind, type FilaFieldValue, type FilaProject, type FilaResult, type FilaSpecRevision, type FilaThread, type FilaWorkflow,
 } from '../src/fila-contract';
 import { formatFilaQuery, type FilaQuery, type FilaQueryKind } from '../src/fila-query';
@@ -33,6 +34,8 @@ export interface FilaThreadView {
   cezar: FilaCezar;
   /** „Zablokowane” (2.3a): the thread's blocks, oldest first; it is blocked while the list has an entry. */
   blockers: FilaBlocker[];
+  /** Only on an automat: the thread has the Machina kit (tied to `uid`), whether it is built in, and which parts have content. The content: `machinaKit()`. */
+  machina?: { builtIn: boolean; parts: Record<FilaMachinaPart, boolean> };
   archived: boolean; revision: number;
   createdAt: number; updatedAt: number; createdBy: string;
   history: FilaThread['history'];
@@ -45,19 +48,36 @@ export interface FilaSpecView {
   /** The newest revision number of the thread. */
   latest: number;
 }
+/** The Machina kit of an automat as read by its thread ID: each part says whether it has content (`available: false` with `content: null` before Machina wrote it). */
+export type FilaMachinaKitView = { thread: string; uid: string; builtIn: boolean } & Record<FilaMachinaPart, { available: boolean; content: unknown }>;
+/** An automat as Machina reads it by the permanent uid. */
+export type FilaAutomat = { id: string; uid: string; title: string; revision: number; state: string; closed: boolean; archived: boolean; builtIn: boolean } & Record<FilaMachinaPart, unknown>;
+/**
+ * Machina's internal door: the only way an automat is made, its Stan set and its kit written. It is not an action, so
+ * neither HTTP nor MCP reaches it. The first use prepares the project MACH, its modules and the workflow Automat; a
+ * configuration that is there and fits is used, one that does not fit is a 409 and nothing is written.
+ */
+export interface FilaMachinaDoor {
+  create(input: FilaMachinaCreate): Promise<FilaAutomat>;
+  /** Sets the Stan it is given (a history entry by `machina`) and/or replaces kit parts (no history, no thread revision), as one write. */
+  update(uid: string, change: FilaMachinaChange): Promise<FilaAutomat>;
+  read(uid: string): Promise<FilaAutomat | null>;
+  /** Every automat, archived ones too, in the order of their numbers: how Machina's clock finds what is due. */
+  list(): Promise<FilaAutomat[]>;
+}
 export interface FilaRegistries {
   /** `board`: the id of the board the project got at the start, null once it was deleted. */
   projects: (FilaProject & { counts: { open: number; closed: number; archived: number }; board: string | null })[];
   boards: { id: string; name: string; views: { id: string; name: string }[] }[];
   workflows: FilaWorkflow[];
-  /** `cezar`: the type starts with the Cezar kit (2.1). */
-  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean }[];
+  /** `cezar`: the type starts with the Cezar kit (2.1). `machina`: the type carries the Machina kit and only Machina creates it. */
+  types: { key: string; label: string; workflow: string; fields: string[]; spec: boolean; cezar: boolean; machina: boolean }[];
   fieldDefs: FilaData['fieldDefs'];
   /** The states a thread may be dispatched to Cezar from (2.1); only the AI changes them (`setCezarSettings`). */
   cezarSettings: FilaCezarSettings;
 }
 /** A thread as a query result: what a list row or a card needs, without the history. */
-export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'>;
+export type FilaThreadSummary = Pick<FilaThreadView, 'id' | 'project' | 'number' | 'type' | 'state' | 'closed' | 'title' | 'parent' | 'module' | 'fields' | 'archived' | 'revision' | 'updatedAt'> & { /** An automat shipped by the panel's code: a list does not offer to delete it. */ builtIn?: true };
 export interface FilaQueryResult { query: string; project: string; total: number; threads: FilaThreadSummary[] }
 /**
  * A board as structure only (2.4): views, sections and kanban columns with their canonical queries and full counts, no
@@ -100,6 +120,10 @@ export interface FilaStore {
   thread(id: string): Promise<FilaThreadView>;
   /** The Specyfikacja: the current text (needs the field on the thread) or one numbered revision (also after the field was removed). */
   spec(id: string, revision?: number): Promise<FilaSpecView>;
+  /** The four parts of an automat's Machina kit by the thread's ID; 404 for a thread without the kit. */
+  machinaKit(id: string): Promise<FilaMachinaKitView>;
+  /** Machina's internal door (see `FilaMachinaDoor`); never wired to a route or a tool. */
+  machina: FilaMachinaDoor;
   /** The actor comes from the caller's authentication, never from the action. */
   apply(action: FilaAction, actor: FilaBoardActor): Promise<FilaResult>;
   /**
@@ -177,6 +201,7 @@ const aiOnly = new Set<FilaAction['action']>(['setModules', 'createWorkflow', 'u
 const panelMay = new Set<FilaAction['action']>(['linkCezar', 'unlinkCezar', 'comment', 'updateThread', 'addBlocker', 'removeBlocker']);
 const userOnly = new Set<FilaAction['action']>(['deleteThread']);
 const reserved = new Set<string>(FILA_RESERVED_FIELDS);
+const sameStates = (a: FilaWorkflow['states'], b: FilaWorkflow['states']) => a.length === b.length && a.every((s, i) => s.name === b[i]!.name && s.closing === b[i]!.closing);
 const lower = (s: string) => s.toLocaleLowerCase('pl');
 const cut = (s: string) => (s.length > 200 ? `${s.slice(0, 200)}…` : s);
 const show = (value: FilaFieldValue | null | undefined) => value === null || value === undefined ? null : cut(Array.isArray(value) ? value.join(', ') : String(value));
@@ -252,7 +277,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   const uid = () => {
     for (;;) { const candidate = `f-${randomUUID().slice(0, 8)}`; if (!byUid(candidate)) return candidate; }
   };
-  const record = (t: FilaThread, by: FilaBoardActor, entry: Omit<FilaThread['history'][number], 'at' | 'by'>) => { t.history.push({ at: now(), by, ...entry }); t.updatedAt = now(); };
+  const record = (t: FilaThread, by: FilaThread['history'][number]['by'], entry: Omit<FilaThread['history'][number], 'at' | 'by'>) => { t.history.push({ at: now(), by, ...entry }); t.updatedAt = now(); };
   const expect = (t: FilaThread, revision: number | undefined) => {
     if (revision !== undefined && revision !== t.revision) throw new FilaError(409, `Konflikt: oczekiwana rewizja ${revision}, aktualna ${t.revision}. Przeczytaj wątek i spróbuj ponownie.`);
   };
@@ -299,6 +324,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       spec: { enabled: specOf(t).enabled, revision: latestSpec(t)?.number ?? 0 },
       cezar: structuredClone(t.cezar ?? emptyFilaCezar()),
       blockers: structuredClone(t.blockers),
+      ...(t.machina ? { machina: { builtIn: t.machina.builtIn, parts: Object.fromEntries(FILA_MACHINA_PARTS.map(part => [part, t.machina![part] !== null])) as Record<FilaMachinaPart, boolean> } } : {}),
       archived: t.archived, revision: t.revision,
       createdAt: t.createdAt, updatedAt: t.updatedAt, createdBy: t.history[0]?.by ?? 'user',
       history: structuredClone(t.history),
@@ -308,7 +334,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
 
   const summary = (t: FilaThread): FilaThreadSummary => {
     const v = view(t);
-    return { id: v.id, project: v.project, number: v.number, type: v.type, state: v.state, closed: v.closed, title: v.title, parent: v.parent, module: v.module, fields: v.fields, archived: v.archived, revision: v.revision, updatedAt: v.updatedAt };
+    return { id: v.id, project: v.project, number: v.number, type: v.type, state: v.state, closed: v.closed, title: v.title, parent: v.parent, module: v.module, fields: v.fields, archived: v.archived, revision: v.revision, updatedAt: v.updatedAt, ...(t.machina?.builtIn ? { builtIn: true as const } : {}) };
   };
   const pageOf = (threads: FilaThread[], limit: number, offset = 0) => ({ total: threads.length, threads: threads.slice(offset, offset + limit).map(summary) });
   const boardOf = (id: string) => data.boards.find(b => b.id === id) ?? (() => { throw new FilaError(404, `Nie ma tablicy ${id}.`); })();
@@ -321,6 +347,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     if (actor === 'panel' && !panelMay.has(action.action)) throw new FilaError(403, 'Panel zapisuje tylko powiązania, komentarz i Stan po zleceniu oraz wpisy „Zablokowane” z taska.');
     if (userOnly.has(action.action) && actor !== 'user') throw new FilaError(403, 'Trwale usuwa wątek tylko użytkownik, z archiwum (D-038); AI może go zarchiwizować.');
     if (isFilaBoardAction(action)) return applyBoardAction(data, action, actor, now());
+    const isAutomat = (t: FilaThread) => t.type === FILA_AUTOMAT_TYPE;
     const done = (t: FilaThread, extra: Partial<FilaResult> = {}): FilaResult => ({ ok: true, thread: { id: idOf(t), revision: t.revision }, ...extra });
     switch (action.action) {
       case 'createProject': {
@@ -332,12 +359,15 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       }
       case 'setModules': {
         const project = projectOf(action.project);
+        const kept = project.key === FILA_MACHINA_PROJECT.key ? FILA_MACHINA_PROJECT.modules.filter(m => !action.modules.includes(m)) : [];
+        if (kept.length) throw new FilaError(409, `Projekt ${project.key} zachowuje moduły Machiny: ${kept.join(', ')}.`);
         const used = [...new Set(data.threads.filter(t => t.project === project.key && t.module && !action.modules.includes(t.module)).map(t => t.module))];
         if (used.length) throw new FilaError(409, `Wartość Modułu jest w użyciu: ${used.join(', ')}. Najpierw zmień Moduł tych wątków.`);
         project.modules = action.modules;
         return { ok: true, project: project.key };
       }
       case 'createWorkflow': {
+        if (lower(action.name) === lower(FILA_AUTOMAT_WORKFLOW.name)) throw new FilaError(409, 'Nazwa workflow „Automat” należy do Machiny.');
         if (data.workflows.some(w => lower(w.name) === lower(action.name))) throw new FilaError(409, 'Workflow o takiej nazwie już jest.');
         if (data.workflows.length >= FILA_LIMITS.workflows) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.workflows} workflow.`);
         let id: string;
@@ -347,6 +377,8 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       }
       case 'updateWorkflow': {
         const workflow = workflowOf(action.workflow);
+        if (workflow.id === FILA_AUTOMAT_WORKFLOW.id) throw new FilaError(403, 'Workflow „Automat” jest stały: jego definicji nie zmienia żadna akcja.');
+        if (action.name !== undefined && lower(action.name) === lower(FILA_AUTOMAT_WORKFLOW.name)) throw new FilaError(409, 'Nazwa workflow „Automat” należy do Machiny.');
         if (action.name !== undefined && data.workflows.some(w => w !== workflow && lower(w.name) === lower(action.name!))) throw new FilaError(409, 'Workflow o takiej nazwie już jest.');
         if (action.states) {
           const gone = [...new Set(data.threads.filter(t => t.workflow === workflow.id && !action.states!.some(s => s.name === t.state)).map(t => t.state))];
@@ -368,6 +400,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         return { ok: true };
       }
       case 'createThread': {
+        if (action.type === FILA_AUTOMAT_TYPE) throw new FilaError(403, 'Automat tworzy tylko Machina (z karty programu), nie akcja Fili.');
         const project = projectOf(action.project);
         if (data.threads.length >= FILA_LIMITS.threads) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.threads} wątków.`);
         const parent = action.parent ? threadOf(action.parent) : undefined;
@@ -389,6 +422,11 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       case 'updateThread': {
         const t = threadOf(action.thread);
         expect(t, action.expectedRevision);
+        if (isAutomat(t)) {
+          if (action.state !== undefined && action.state !== t.state) throw new FilaError(403, 'Stan automatu ustawia tylko Machina.');
+          if (action.workflow !== undefined && action.workflow !== t.workflow) throw new FilaError(403, 'Workflow automatu jest stały.');
+          if (action.project !== undefined && action.project !== t.project) throw new FilaError(409, `Automatu nie przenosi się poza projekt ${FILA_MACHINA_PROJECT.key}.`);
+        } else if (action.workflow === FILA_AUTOMAT_WORKFLOW.id) throw new FilaError(409, 'Workflow „Automat” mają tylko automaty.');
         const targetProject = action.project !== undefined ? projectOf(action.project) : projectOf(t.project);
         const workflow = workflowOf(action.workflow ?? t.workflow);
         const state = action.state ?? t.state;
@@ -579,6 +617,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
         const t = threadOf(action.thread);
         const archive = action.action === 'archiveThread';
         if (t.archived === archive) return done(t);
+        if (archive && isAutomat(t) && !workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing) throw new FilaError(409, 'Zarchiwizować można tylko zamknięty automat (Zakończony, Wygasł albo Anulowany).');
         t.archived = archive;
         t.revision += 1;
         record(t, actor, { kind: archive ? 'archived' : 'restored' });
@@ -587,6 +626,8 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       case 'deleteThread': {
         const t = threadOf(action.thread);
         if (!t.archived) throw new FilaError(409, 'Trwale usunąć można tylko wątek z archiwum.');
+        // The kit is part of the record, so it goes with the thread; an automat shipped by the panel's code stays.
+        if (t.machina?.builtIn) throw new FilaError(409, 'Wbudowanego automatu nie można usunąć.');
         data.threads.splice(data.threads.indexOf(t), 1);
         for (const child of data.threads.filter(c => c.parent === t.uid)) {
           child.parent = null; child.revision += 1;
@@ -598,10 +639,119 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     }
   };
 
+  /** One change at a time: runs after everything queued, writes the file, and takes memory back when it is refused or the write fails. */
+  const write = <T>(change: () => T): Promise<T> => {
+    if (readOnly) return Promise.reject(new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.'));
+    const run = tail.then(async () => {
+      await load();
+      const before = structuredClone(data);
+      try {
+        const result = change();
+        await persist();
+        return result;
+      } catch (error) {
+        // Memory must not get ahead of the disk: whatever was changed is taken back.
+        data = before;
+        throw error;
+      }
+    });
+    tail = run.catch(() => undefined);
+    return run;
+  };
+
+  const automatOf = (t: FilaThread): FilaAutomat => {
+    const kit = t.machina!;
+    return {
+      id: idOf(t), uid: t.uid, title: t.title, revision: t.revision, state: t.state, closed: workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false, archived: t.archived, builtIn: kit.builtIn,
+      ...structuredClone({ program: kit.program, situations: kit.situations, journal: kit.journal, conversations: kit.conversations }),
+    };
+  };
+  /** Machina's first use: the project, its modules and the workflow. What is there and fits is used; what does not fit is refused before anything is made. */
+  const prepareMachina = () => {
+    const W = FILA_AUTOMAT_WORKFLOW, P = FILA_MACHINA_PROJECT;
+    const workflow = data.workflows.find(w => w.id === W.id);
+    if (workflow ? workflow.name !== W.name || !sameStates(workflow.states, W.states) : data.workflows.some(w => lower(w.name) === lower(W.name))) {
+      throw new FilaError(409, 'Kolizja: w Fili jest inny workflow „Automat” niż ten, którego wymaga Machina. Niczego nie zmieniono; usuń kolizję ręcznie.');
+    }
+    const project = data.projects.find(p => p.key === P.key);
+    if (project && (project.name !== P.name || P.modules.some(m => !project.modules.includes(m)))) {
+      throw new FilaError(409, `Kolizja: projekt ${P.key} już jest, ale nie jest projektem „${P.name}” z modułami ${P.modules.join(', ')}. Niczego nie zmieniono; usuń kolizję ręcznie.`);
+    }
+    if (!workflow && data.workflows.length >= FILA_LIMITS.workflows) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.workflows} workflow.`);
+    if (!project && data.projects.length >= FILA_LIMITS.projects) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.projects} projektów.`);
+    // The list of automats is a Fila query over threads (D-059): MACH's own board has it as a list section.
+    const list = { name: 'Automaty', query: formatFilaQuery(compileFilaQuery(`projekt = ${P.key} AND typ = ${FILA_AUTOMAT_TYPE}`, { ...data, projects: project ? data.projects : [...data.projects, { key: P.key, name: P.name, createdAt: now(), modules: [...P.modules], nextNumber: 1 }] }, 'section')) };
+    if (!project) {
+      data.projects.push({ key: P.key, name: P.name, createdAt: now(), modules: [...P.modules], nextNumber: 1 });
+      createStarterBoard(data, P.key, 'panel', now(), list);
+    } else if (!workflow) {
+      // A MACH that was there before Machina's first use keeps its board as it is and gets the list added to it, once.
+      const board = data.boards.find(b => b.id === data.starterBoards[P.key]);
+      if (board && !board.views.some(v => v.sections.some(s => s.query === list.query)) && board.views[0]!.sections.length < FILA_LIMITS.sections) {
+        applyBoardAction(data, { action: 'createSection', view: board.views[0]!.id, section: { ...list, kind: 'list' } }, 'panel', now());
+      }
+    }
+    if (!workflow) data.workflows.push(structuredClone(W));
+    return projectOf(P.key);
+  };
+  const doorInput = <T>(parsed: { success: true; data: T } | { success: false; error: { issues: { path: PropertyKey[]; message: string }[] } }): T => {
+    if (parsed.success) return parsed.data;
+    const issue = parsed.error.issues[0];
+    throw new FilaError(400, `Niepoprawne wejście Machiny${issue ? ` (${issue.path.join('.') || 'wejście'}: ${issue.message})` : ''}.`);
+  };
+  const automatState = (state: string) => {
+    if (!FILA_AUTOMAT_WORKFLOW.states.some(s => s.name === state)) throw new FilaError(409, `Workflow „${FILA_AUTOMAT_WORKFLOW.name}” nie ma Stanu „${state}”.`);
+    return state;
+  };
+  const machina: FilaMachinaDoor = {
+    create: input => write(() => {
+      const made = doorInput(filaMachinaCreateSchema.safeParse(input));
+      const project = prepareMachina();
+      if (data.threads.length >= FILA_LIMITS.threads) throw new FilaError(409, `Może być najwyżej ${FILA_LIMITS.threads} wątków.`);
+      const parent = made.parent ? threadOf(made.parent) : undefined;
+      if (made.module !== undefined && !project.modules.includes(made.module)) throw new FilaError(409, `Projekt ${project.key} nie ma wartości Modułu „${made.module}”.`);
+      const kit = made.kit ?? {};
+      const t: FilaThread = {
+        uid: uid(), project: project.key, number: project.nextNumber++, type: FILA_AUTOMAT_TYPE, workflow: FILA_AUTOMAT_WORKFLOW.id,
+        state: automatState(made.state ?? FILA_AUTOMAT_WORKFLOW.states[0]!.name),
+        title: made.title, description: made.description ?? '', parent: parent?.uid ?? null, module: made.module ?? null,
+        fields: { Tagi: validateValue('multi', made.tags ?? []) }, spec: { enabled: false, revisions: [] }, blockers: [],
+        machina: structuredClone({ builtIn: made.builtIn ?? false, program: kit.program ?? null, situations: kit.situations ?? null, journal: kit.journal ?? null, conversations: kit.conversations ?? null }),
+        archived: false, revision: 1, createdAt: now(), updatedAt: now(), history: [],
+      };
+      data.threads.push(t);
+      record(t, 'machina', { kind: 'created', text: FILA_TYPES[FILA_AUTOMAT_TYPE].label });
+      return automatOf(t);
+    }),
+    update: (id, input) => write(() => {
+      const change = doorInput(filaMachinaChangeSchema.safeParse(input));
+      const t = byUid(id);
+      if (!t?.machina) throw new FilaError(404, 'Nie ma automatu o tej tożsamości.');
+      for (const part of FILA_MACHINA_PARTS) if (change.kit?.[part] !== undefined) t.machina[part] = structuredClone(change.kit[part]);
+      if (change.state !== undefined && automatState(change.state) !== t.state) {
+        const from = t.state;
+        t.state = change.state;
+        t.revision += 1;
+        record(t, 'machina', { kind: 'changed', changes: [{ field: 'Stan', from, to: t.state }] });
+      }
+      return automatOf(t);
+    }),
+    async read(id) { await tail; await load(); const t = byUid(id); return t?.machina ? automatOf(t) : null; },
+    async list() { await tail; await load(); return data.threads.filter(t => t.machina).sort((a, b) => a.number - b.number).map(automatOf); },
+  };
+
   return {
+    machina,
+    async machinaKit(id) {
+      await tail; await load();
+      const t = threadOf(id);
+      if (!t.machina) throw new FilaError(404, `Wątek ${idOf(t)} nie ma zestawu Machiny.`);
+      const part = (name: FilaMachinaPart) => ({ available: t.machina![name] !== null, content: structuredClone(t.machina![name]) });
+      return { thread: idOf(t), uid: t.uid, builtIn: t.machina.builtIn, program: part('program'), situations: part('situations'), journal: part('journal'), conversations: part('conversations') };
+    },
     async registries() {
       await tail; await load();
-      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: FILA_DEFAULT_WORKFLOW, fields: [...type.fields], spec: type.spec, cezar: type.cezar }));
+      const types = Object.entries(FILA_TYPES).map(([key, type]) => ({ key, label: type.label, workflow: key === FILA_AUTOMAT_TYPE ? FILA_AUTOMAT_WORKFLOW.id : FILA_DEFAULT_WORKFLOW, fields: [...type.fields], spec: type.spec, cezar: type.cezar, machina: key === FILA_AUTOMAT_TYPE }));
       const projects = data.projects.map(p => {
         const own = data.threads.filter(t => t.project === p.key);
         const closed = (t: FilaThread) => workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false;
@@ -681,27 +831,14 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return shown(found);
     },
     apply(action, actor) {
-      if (options.readOnly) return Promise.reject(new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.'));
-      const run = tail.then(async () => {
-        await load();
-        const before = structuredClone(data);
-        try {
-          const parsed = filaActionSchema.safeParse(action);
-          if (!parsed.success) {
-            const issue = parsed.error.issues[0];
-            throw new FilaError(400, `Niepoprawna akcja${issue ? ` (${issue.path.join('.') || 'akcja'}: ${issue.message})` : ''}.`);
-          }
-          const result = mutate(parsed.data, actor);
-          await persist();
-          return result;
-        } catch (error) {
-          // Memory must not get ahead of the disk: whatever was changed is taken back.
-          data = before;
-          throw error;
+      return write(() => {
+        const parsed = filaActionSchema.safeParse(action);
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          throw new FilaError(400, `Niepoprawna akcja${issue ? ` (${issue.path.join('.') || 'akcja'}: ${issue.message})` : ''}.`);
         }
+        return mutate(parsed.data, actor);
       });
-      tail = run.catch(() => undefined);
-      return run;
     },
     applyBatch(actions, actor, options = {}) {
       if (readOnly) return Promise.reject(new FilaError(503, 'Przełączenie Fili trwa; zapis zablokowany.'));

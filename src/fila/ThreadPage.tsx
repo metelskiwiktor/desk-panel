@@ -8,11 +8,12 @@ import {
   type FilaFieldValue, type FilaRegistry, type FilaThreadDoc, type FilaThreadRow,
 } from './api';
 import { CezarPanel } from './CezarPanel';
+import { MachinaKit } from './MachinaKit';
 import { ThreadList } from './threads';
 import { ConfirmDialog, Dialog, Menu, StatePicker, TypeIcon } from './ui';
 
 const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor', antigravity: 'Antigravity' };
+const BY: Record<string, string> = { user: 'Ty', panel: 'Panel', 'claude-code': 'Claude Code', 'claude-desktop': 'Claude Desktop', codex: 'Codex', wektor: 'Wektor', antigravity: 'Antigravity', machina: 'Machina' };
 const ACTION: Record<string, string> = { created: 'utworzył wątek', archived: 'zarchiwizował wątek', restored: 'przywrócił wątek', moved: 'przeniósł wątek' };
 const KINDS = { text: 'tekst', number: 'liczba', date: 'data', bool: 'tak/nie', multi: 'wiele wartości' } as const;
 type Kind = keyof typeof KINDS;
@@ -121,6 +122,9 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
   if (!thread) return <div className="fl-thread"><button type="button" className="fl-back" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" /> {boardName}</button>{doc.error ? <p className="fl-error" role="alert">{doc.error}</p> : <p className="fl-muted">Ładowanie wątku…</p>}</div>;
 
   const project = registry.projects.find(p => p.key === thread.project);
+  // An automat (docs/fila.md, „Machina: dom automatu”): it stays in MACH on its fixed workflow, is archived only once closed, and a built-in one is never deleted.
+  const automat = !!thread.machina;
+  const deletable = !thread.machina?.builtIn;
   const send = (action: FilaAction) => act(action);
   const update = async (change: Record<string, unknown>) => send({ action: 'updateThread', thread: thread.id, expectedRevision: thread.revision, ...change } as FilaAction);
   const setField = (field: string, value: FilaFieldValue, kind?: Kind) => send({ action: 'setField', thread: thread.id, field, value, ...(kind ? { kind } : {}), expectedRevision: thread.revision } as FilaAction);
@@ -172,19 +176,21 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
     {notice && <p className="fl-notice" role="alert">{notice}<button type="button" aria-label="Zamknij komunikat" onClick={() => setNotice('')}><X size={13} aria-hidden="true" /></button></p>}
     {thread.archived && <div className="fl-banner" role="status"><span>Wątek jest zarchiwizowany i nie pokazuje się w sekcjach. Jego Stan się nie zmienił.</span>
       <button type="button" className="fl-text" onClick={() => void send({ action: 'restoreThread', thread: thread.id })}>Przywróć</button>
-      <button type="button" className="fl-text danger" onClick={() => setDialog('delete')}>Usuń trwale</button></div>}
+      {deletable && <button type="button" className="fl-text danger" onClick={() => setDialog('delete')}>Usuń trwale</button>}</div>}
     <header className="fl-thread-head">
       <div className="fl-kicker">
         <span className="fl-badge"><TypeIcon type={thread.type} size={15} />{thread.type.label}</span>
         <span className="fl-id">{thread.id}</span>
         <span className="fl-head-menu"><Menu label="Działania wątku" entries={[
-          { label: 'Przenieś do projektu…', icon: <FolderInput size={15} />, onSelect: () => setDialog('project') },
-          { label: 'Zmień workflow…', icon: <Workflow size={15} />, onSelect: () => setDialog('workflow') },
+          ...(automat ? [] : [
+            { label: 'Przenieś do projektu…', icon: <FolderInput size={15} />, onSelect: () => setDialog('project') },
+            { label: 'Zmień workflow…', icon: <Workflow size={15} />, onSelect: () => setDialog('workflow') },
+          ]),
           { label: 'Zmień rodzica…', icon: <GitBranch size={15} />, onSelect: () => setDialog('parent') },
-          thread.archived
-            ? { label: 'Przywróć z archiwum', icon: <Archive size={15} />, onSelect: () => void send({ action: 'restoreThread', thread: thread.id }) }
-            : { label: 'Archiwizuj', icon: <Archive size={15} />, onSelect: () => void send({ action: 'archiveThread', thread: thread.id }) },
-          ...(thread.archived ? [{ label: 'Usuń trwale…', icon: <Trash2 size={15} />, danger: true, onSelect: () => setDialog('delete') }] : []),
+          ...(thread.archived
+            ? [{ label: 'Przywróć z archiwum', icon: <Archive size={15} />, onSelect: () => void send({ action: 'restoreThread', thread: thread.id }) }]
+            : automat && !thread.closed ? [] : [{ label: 'Archiwizuj', icon: <Archive size={15} />, onSelect: () => void send({ action: 'archiveThread', thread: thread.id }) }]),
+          ...(thread.archived && deletable ? [{ label: 'Usuń trwale…', icon: <Trash2 size={15} />, danger: true, onSelect: () => setDialog('delete') }] : []),
         ]} /></span>
       </div>
       {editing === 'title'
@@ -215,7 +221,9 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
           <ThreadList threads={kids} registry={registry} onError={setNotice} onOpen={onOpen} flat />
         </section>}
 
-        <section className="fl-block" aria-label="Specyfikacja">
+        {automat && <MachinaKit thread={thread} />}
+
+        {!automat && <section className="fl-block" aria-label="Specyfikacja">
           <header className="fl-block-head">
             <FileText size={16} aria-hidden="true" /><h2>Specyfikacja</h2>
             {thread.spec.revision > 0 && <label className="fl-revision">
@@ -227,7 +235,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
           {spec.data?.text != null
             ? <><p className="fl-byline">{BY[spec.data.by ?? ''] ?? spec.data.by} · {spec.data.at ? when(spec.data.at) : ''} · tylko do odczytu</p><MarkdownText text={spec.data.text} className="todo-spec-markdown" externalLinks /></>
             : <p className="fl-muted">{thread.spec.enabled ? 'Specyfikacji jeszcze nie ma.' : 'Ten wątek nie ma pola Specyfikacja.'}</p>}
-        </section>
+        </section>}
 
         <section className="fl-block" aria-label="Aktywność">
           <header className="fl-block-head"><h2>Aktywność</h2></header>
@@ -273,7 +281,7 @@ export function ThreadPage({ id, registry, onOpen, onBack, boardName }: { id: st
           </form>
           : <button type="button" className="fl-text" onClick={() => setAddingField(true)}><Plus size={14} aria-hidden="true" /> Pole</button>}
         <CezarPanel thread={thread} readyStates={registry.cezarSettings.readyStates} />
-        <p className="fl-muted fl-props-note">Workflow, jego Stany i listę modułów zmienia AI.</p>
+        <p className="fl-muted fl-props-note">{automat ? 'Stan automatu ustawia Machina; Moduł i Tagi zmieniasz tu, bez wpływu na działanie.' : 'Workflow, jego Stany i listę modułów zmienia AI.'}</p>
       </aside>
     </div>
 

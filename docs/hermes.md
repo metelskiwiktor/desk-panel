@@ -190,6 +190,12 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_automations` | lista albo szczegóły automatu (`id`): harmonogram, stan, notatnik, ostatnie runy |
 | `panel_automation_update` | bez karty: `pause`/`resume`/`cancel`/`runNow`, `notebook?`, `name?` |
 | `panel_automation_report` | tylko w turze automatyki z tym `runId`: `outcome`, `summary`, `notebook?`; zapisuje run i kończy cel przy `done` |
+| `panel_machina` | odczyt automatów Machiny: bez `thread` lista, z `thread` program w mocy, sytuacje z próbkami, czekające karty, ostatnie runy i koszt ([automaty.md](automaty.md), „Machina”) |
+| `panel_machina_propose` | karta programu: nowy automat albo nowa wersja (`automat`), także naprawa; panel sprawdza ją jak przy zapisie, zapis po kliknięciu (`POST /api/chats/:id/machina`, karta z rozmowy) |
+| `panel_machina_reminder` | bez karty: jednorazowy wpis albo wznowienie rozmowy, w której trwa tura |
+| `panel_machina_assess`, `panel_machina_situation` | tylko w turze oceny zaczętej przez panel, z `runId` i żetonem z jej treści: znana sytuacja (bez karty) albo karta nowej sytuacji |
+| `panel_machina_correct` | karta poprawki oceny: przeniesienie próbki runu do innej sytuacji, opcjonalnie wycofanie błędnej |
+Na aktywnej Fili czas należy do Machiny (DESK-87, [automaty.md](automaty.md)): `panel_observe` z `kind: time` tworzy jednorazowe wznowienie tej rozmowy w MACH, `panel_automation_propose` z wyzwalaczem czasu odmawia i wskazuje `panel_machina_propose`, a `panel_automation_update` na przeniesionym automacie odmawia z ID wątku; Cezar i PR działają jak wcześniej.
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 

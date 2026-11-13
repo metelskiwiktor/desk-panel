@@ -18,6 +18,8 @@ import type { OpenRouterUsage } from '../src/openrouter-contract';
 import type { AppointmentService } from './appointments';
 import type { ObserverList } from '../src/observers-contract';
 import type { Automation, AutomationList, AutomationUpdate } from '../src/automation-contract';
+import type { MachinaAction } from '../src/machina-contract';
+import type { Machina } from './machina';
 
 /**
  * Everything the panel API serves. The UI only sees these contracts, never which
@@ -79,6 +81,10 @@ export interface PanelSources {
   /** Wektor's automations: the panel's own scheduled tasks (read-only here; changed by an Origin-checked action). */
   automations?(): Promise<AutomationList>;
   automationAction?(input: AutomationUpdate): Promise<Automation>;
+  /** Machina (docs/automaty.md): what the user does to an automat directly, without a card. */
+  machinaAction?(input: MachinaAction): Promise<unknown>;
+  /** Machina itself, for Wektor's tools and the chat's Machina cards; absent outside the active Fila. */
+  machina?: Machina;
   /** Starts Google sign-in for one configured account and resolves to the authorization URL. */
   googleConnect(email: string): Promise<string>;
   googleCallback(params: URLSearchParams): Promise<{ ok: boolean; message: string }>;

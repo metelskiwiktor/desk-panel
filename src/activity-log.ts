@@ -1,4 +1,4 @@
-import type { Automation } from './automation-contract';
+import type { Automation, MachinaEffect } from './automation-contract';
 import { z } from 'zod';
 import { deriveInsights } from './insights';
 import { fresh, MAX_AGE, MINUTE, type DashboardData } from './model';
@@ -128,7 +128,7 @@ export function restoreActivity(log: ActivityLog, entry: ActivityEntry): Activit
 }
 
 /** Collect settled notify signals from the last 24 h, including while this browser was closed. */
-export function recordAutomationActivity(log: ActivityLog, rows: Automation[], now: number): ActivityLog {
+export function recordAutomationActivity(log: ActivityLog, rows: Automation[], now: number, machina: MachinaEffect[] = []): ActivityLog {
   const seen = new Set(log.seen);
   const added: ActivityEntry[] = [];
   let sequence = log.sequence;
@@ -138,6 +138,14 @@ export function recordAutomationActivity(log: ActivityLog, rows: Automation[], n
     if (seen.has(key)) continue;
     seen.add(key);
     added.push({ id: `${now}:${++sequence}`, signalKey: key, detectedAt: action.at, title: `Automat: ${a.name}`, context: [action.title, action.text].filter(Boolean).join(' · '), tone: 'blue', target: { kind: 'automation', id: a.id, url: action.url } });
+  }
+  // Machina's `notify` blocks ring the same bell; the entry points at the automat's thread.
+  for (const effect of machina) {
+    if (effect.kind !== 'notify' || effect.at < now - 24 * 60 * MINUTE || effect.at > now) continue;
+    const key = `machina:${effect.runId}:${effect.block}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    added.push({ id: `${now}:${++sequence}`, signalKey: key, detectedAt: effect.at, title: `Automat: ${effect.name}`, context: [effect.title, effect.text].filter(Boolean).join(' · '), tone: 'blue', target: { kind: 'automation', id: effect.thread, url: effect.url } });
   }
   return added.length ? { ...log, sequence, seen: [...seen].slice(-2000), entries: [...added.reverse(), ...log.entries].slice(0, ACTIVITY_LIMIT) } : log;
 }

@@ -45,10 +45,10 @@ function buildSection(data: FilaData, input: FilaSectionInput): FilaSection {
 }
 
 /** The board a project gets: one view with one list section choosing the whole project, closed threads included (D-019). */
-export function createStarterBoard(data: FilaData, projectKey: string, by: FilaBoardActor, at: number) {
+export function createStarterBoard(data: FilaData, projectKey: string, by: FilaBoardActor, at: number, first?: { name: string; query: string }) {
   const project = data.projects.find(p => p.key === projectKey)!;
-  const query = `projekt = ${project.key}`;
-  const section: FilaSection = { id: freshId(data, 's'), name: 'Wszystkie wątki', kind: 'list', query, columns: [] };
+  const query = first?.query ?? `projekt = ${project.key}`;
+  const section: FilaSection = { id: freshId(data, 's'), name: first?.name ?? 'Wszystkie wątki', kind: 'list', query, columns: [] };
   const view: View = { id: freshId(data, 'v'), name: 'Widok', sections: [section] };
   const board: FilaBoard = {
     id: freshId(data, 'b'), name: project.name, createdAt: at, views: [view],

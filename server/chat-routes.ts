@@ -17,6 +17,10 @@ import { SmartRuleError } from './smart-rules';
 import { automationPlanSchema, automationDecisionSchema } from '../src/automation-contract';
 import type { Automations } from './automations';
 import { AutomationError } from './automations';
+import { machinaDecisionSchema, type MachinaOutcome } from '../src/machina-contract';
+import { MachinaError, type Machina } from './machina';
+/** The Machina tools whose call is a card the user answers, and the card each one is. */
+const MACHINA_CARDS = { panel_machina_propose: 'machina', panel_machina_situation: 'machinaSituation', panel_machina_correct: 'machinaCorrection' } as const;
 
 /** A message (`MAX_MESSAGE`) plus up to ten context items of 8000 characters each, with room for JSON escaping. */
 const MAX_BODY = 512 * 1024;
@@ -85,10 +89,10 @@ const json = (res: ServerResponse, status: number, value: unknown) => {
  * The chat API (`/api/chats…`). Everything that starts or changes a conversation is a write: only the panel's own page
  * may call it (Origin check), like the Gmail and Cezar actions. Returns false for a path that is not a chat route.
  */
-export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations, filaActive = false): Promise<boolean> {
+export async function handleChatRoute(req: IncomingMessage, res: ServerResponse, url: URL, ownOrigin: string, chat?: ChatService, cockpit?: Cockpit, appointments?: AppointmentService, automations?: Automations, filaActive = false, machina?: Machina): Promise<boolean> {
   // The bytes of one attached file, only under the conversation that sent it.
   const fileMatch = /^\/api\/chats\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})\/?$/.exec(url.pathname);
-  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|automation|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
+  const match = /^\/api\/chats(?:\/([0-9a-f-]{36}|engine)(?:\/(messages|stop|events|approval|cockpit|dispatch|bank-plan|smart-rule|automation|machina|appointment|calendar-plan))?)?\/?$/.exec(url.pathname);
   if (!match && !fileMatch) return false;
   if (!chat) { json(res, 503, { error: 'Czat jest niedostępny.' }); return true; }
   const [, id, action] = (match ?? []) as RegExpExecArray;
@@ -290,6 +294,43 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
           return { decision: plan.replaces ? 'updated' as const : 'created' as const, ...(before ? { before } : {}), at: Date.now(), automationId: automation.id, name: automation.name };
         };
         return json(res, 200, cockpit ? await cockpit.automation(id, input, create) : await create()), true;
+      });
+    } else if (action === 'machina' && req.method === 'GET') {
+      // The Machina cockpit of a conversation: the automat it belongs to, why, the program in force, the last run and
+      // what the automat's conversations really cost. Null for a conversation that is no automat's.
+      if (!machina || id === 'engine') { res.writeHead(503).end(); return true; }
+      try {
+        const view = await machina.conversation(id);
+        return json(res, 200, { machina: view ? { ...view, cost: await machina.cost(view.thread) } : null }), true;
+      } catch (error) { throw error instanceof MachinaError ? new ChatError(error.status, error.message) : error; }
+    } else if (action === 'machina' && req.method === 'POST') {
+      // The user's answer on a Machina card: a program card, a new situation or a correction. What it approves comes from
+      // the conversation's own tool call, never from the request; an answered card keeps its answer (a second click does nothing).
+      if (!machina || id === 'engine') { res.writeHead(503).end(); return true; }
+      return await serializeCard(id, async () => {
+        const input = parse(machinaDecisionSchema, await readBody(req));
+        const conversation = await chat.get(id);
+        const card = conversation.engine === 'hermes' ? conversation.items.flatMap(m => m.role === 'agent' && m.status === 'done'
+          ? (m.parts ?? []).filter(p => p.type === 'tool' && p.id === input.toolCallId && p.id.startsWith(`${m.id}:`) && panelToolName(p.name) in MACHINA_CARDS)
+          : [])[0] as Extract<ChatPart, { type: 'tool' }> | undefined : undefined;
+        if (!card) throw new ChatError(409, 'Nie można potwierdzić tożsamości karty. Odśwież rozmowę i sprawdź historię.');
+        const kind = MACHINA_CARDS[panelToolName(card.name) as keyof typeof MACHINA_CARDS];
+        const refused = cardRefusal(kind, card.output, card.error);
+        let args: Record<string, unknown>;
+        try { args = JSON.parse(card.input) as Record<string, unknown>; } catch { throw new ChatError(409, 'Propozycja ma niepoprawny kształt. Poproś Wektora o nową.'); }
+        const accept = input.decision === 'accept';
+        if (accept && refused) throw new ChatError(409, 'Panel odrzucił tę propozycję, więc nie można jej zatwierdzić. Poproś Wektora o nową.');
+        const work = async (): Promise<MachinaOutcome> => {
+          const at = Date.now();
+          if (refused) return { decision: 'rejected', at };
+          if (kind === 'machina') return { ...await machina.decideCard(args as never, { accept, chatId: id, key: `${id}:${input.toolCallId}` }), at };
+          if (kind === 'machinaSituation') return { ...await machina.decideSituation(String(args.runId ?? ''), accept), at };
+          const made = await machina.correction(args as never, { accept });
+          return { decision: made.decision === 'applied' ? 'applied' : 'rejected', thread: made.thread, at };
+        };
+        // Machina's refusal keeps its own reason (a 404 here is a missing situation or card, not a missing conversation).
+        try { return json(res, 200, cockpit ? await cockpit.machina(id, input.toolCallId, work) : await work()), true; }
+        catch (error) { if (error instanceof MachinaError) return json(res, error.status, { error: error.message }), true; throw error; }
       });
     } else if (action === 'stop' && req.method === 'POST') {
       await chat.stop(id);

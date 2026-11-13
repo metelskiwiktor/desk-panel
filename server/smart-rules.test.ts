@@ -99,8 +99,20 @@ it('expires automation alerts after 30 days and removes cancelled automations im
   const sources = { mail: async () => ({ data: [] }), automations: async () => ({ automations: [
     { id: 'active', name: 'A', status: 'active', runs: [{ actions: [action, { ...action, ref: 'old', at: now - 30 * 24 * 60 * 60_000 - 1 }] }] },
     { id: 'cancelled', name: 'B', status: 'cancelled', runs: [{ actions: [{ ...action, ref: 'cancelled' }] }] },
+  ],
+  // Machina's alert blocks follow the same rules: settled ok, 30 days, gone with a cancelled automat; a notification is no alert.
+  machina: [
+    { thread: 'MACH-1', name: 'M', cancelled: false, runId: 'mr-1', block: 'alert', kind: 'smartAction', at: now, result: 'ok', ref: 'mr-1:alert', title: 'Machina', url: 'https://example.com/' },
+    { thread: 'MACH-1', name: 'M', cancelled: false, runId: 'mr-0', block: 'alert', kind: 'smartAction', at: now - 30 * 24 * 60 * 60_000 - 1, result: 'ok', ref: 'mr-0:alert', title: 'Stary' },
+    { thread: 'MACH-1', name: 'M', cancelled: false, runId: 'mr-2', block: 'alert', kind: 'smartAction', at: now, result: 'error', ref: 'mr-2:alert', title: 'Błąd' },
+    { thread: 'MACH-1', name: 'M', cancelled: false, runId: 'mr-1', block: 'tel', kind: 'notify', at: now, result: 'ok', ref: 'mr-1:tel', title: 'Dzwonek' },
+    { thread: 'MACH-2', name: 'N', cancelled: true, runId: 'mr-3', block: 'alert', kind: 'smartAction', at: now, result: 'ok', ref: 'mr-3:alert', title: 'Anulowany' },
   ] }) } as unknown as import('./sources').PanelSources;
-  try { expect((await smartView(sources)).alerts.map(x => x.id)).toEqual(['recent']); }
+  try {
+    const alerts = (await smartView(sources)).alerts;
+    expect(alerts.map(x => x.id)).toEqual(['recent', 'mr-1:alert']);
+    expect(alerts[1]).toMatchObject({ ruleId: 'MACH-1', badge: 'Automat: M', title: 'Machina', url: 'https://example.com/', source: 'automation' });
+  }
   finally { time.mockRestore(); }
 });
 
