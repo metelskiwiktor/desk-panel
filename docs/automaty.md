@@ -155,9 +155,9 @@ Wyniki (`kind, at, result, ref`, opcjonalnie błąd i treść) zostają w runie 
 
 Widget „Automaty” można umieścić na pulpicie jak inne kafelki: do trzech aktywnych automatów, stan, nazwa, następny run i pięć kropek historii. Dotknięcie otwiera widok Automaty.
 
-## Machina: programy wykonywane przez panel (etap 1b.1, DESK-85)
+## Machina: programy wykonywane przez panel (etap 1b, DESK-85 i DESK-86)
 
-Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Machina`). Automat Machiny jest wątkiem Fili typu `automat` w projekcie MACH ([fila.md](fila.md), „Machina: dom automatu”): wątek trzyma tożsamość, tytuł, cel w opisie, Stan, Moduł i Tagi, a zestaw Machiny tylko działanie. Lista automatów to zapytanie Fili (`projekt = MACH AND typ = automat`), osobnej listy nie ma. Stare automaty (`automations.json`) działają bez zmian do migracji (DESK-87) i nie są źródłem automatów Machiny. Sytuacje, ocena i naprawa przez Wektora, karty w czacie i narzędzia Wektora należą do DESK-86; tu jest silnik i jego kontrakty.
+Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Machina`). Automat Machiny jest wątkiem Fili typu `automat` w projekcie MACH ([fila.md](fila.md), „Machina: dom automatu”): wątek trzyma tożsamość, tytuł, cel w opisie, Stan, Moduł i Tagi, a zestaw Machiny tylko działanie. Lista automatów to zapytanie Fili (`projekt = MACH AND typ = automat`), osobnej listy nie ma. Stare automaty (`automations.json`) działają bez zmian do migracji (DESK-87) i nie są źródłem automatów Machiny. Silnik i jego kontrakty to DESK-85; sytuacje, ocena i naprawa przez Wektora, karty w czacie i narzędzia Wektora to DESK-86 (niżej, „Sytuacje, ocena i naprawa”). Wygląd kart i kokpitu ustala pictor; backend udostępnia zachowanie.
 
 | Co | Plik |
 | --- | --- |
@@ -165,16 +165,18 @@ Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incept
 | silnik: karta, zegar, run, Stany | `server/machina.ts` |
 | publiczny odczyt URL, tekst strony, wycinek | `server/machina-fetch.ts` |
 | wpis panelu w rozmowie bez tury | `ChatService.note` (`server/hermes-chat.ts`) |
+| narzędzia Wektora `panel_machina*` | `server/panel-mcp.ts`, opisy w `COCKPIT_TOOLS` (`src/cockpit-contract.ts`) |
+| karty w czacie i kokpit rozmowy | `POST`/`GET /api/chats/:id/machina` (`server/chat-routes.ts`), odpowiedzi kart w `cockpit.json` (`machinaCards`) |
 
 **Zestaw** (cztery części z `GET /api/fila/threads/ID/machina`, zapis wyłącznie przez `FilaStore.machina`):
-- `program`: `{ current, versions[], nextRunAt, chatId, paused? }`. Wersja: `{ number, at, by: user|wektor|panel, reason, trigger, blocks, scope, restoredFrom? }`; wersji się nie usuwa ani nie zmienia. `chatId` to rozmowa, z której automat powstał.
-- `journal`: `{ runs[] }`, tylko dopisywany. Run: `{ id: mr-…, slot, manual, version, startedAt, endedAt?, state: running|ok|error, error?, blocks[] }`; wynik klocka: `{ id, kind, at, result: ok|error|pending|waiting|skipped, error?, text?, links?, url?, title?, ref? }`.
-- `conversations`: `{ items: [{ chatId, reason, at, runId? }] }` (tu: rozmowa projektowania i rozmowy zmian programu).
-- `situations`: katalog sytuacji z próbkami (wypełnia DESK-86); silnik 1b.1 czyta z niego tylko, czy są próbki.
+- `program`: `{ current, versions[], nextRunAt, chatId, paused? }`. Wersja: `{ number, at, by: user|wektor|panel, reason, trigger, blocks, scope, reactions, restoredFrom? }`; wersji się nie usuwa ani nie zmienia. `reactions` to `{ idSytuacji: klocki akcji }` (pusta lista: nic nie rób). `chatId` to rozmowa, z której automat powstał.
+- `journal`: `{ runs[] }`, tylko dopisywany. Run: `{ id: mr-…, slot, manual, version, startedAt, endedAt?, state: running|evaluating|waiting|ok|error, error?, blocks[], chatId?, costUsd? }`; wynik klocka: `{ id, kind, at, result: ok|error|pending|waiting|skipped, error?, text?, links?, url?, title?, ref?, when?, situation?, card? }`. `evaluating`: trwa tura oceny Wektora; `waiting`: run czeka na kartę nowej sytuacji (decyzja i reakcja dopisują się później do tego samego runu).
+- `conversations`: `{ items: [{ chatId, reason: projektowanie|zmiana programu|ocena|naprawa|utworzenie bez karty, at, runId? }] }`; jedna pozycja na rozmowę.
+- `situations`: `{ items[], pending[] }`. Sytuacja: `{ id: s-…, name, note?, createdAt, samples[], withdrawn? }`, próbka: `{ runId, at, text, links }`. Karta nowej sytuacji (`pending`): `{ id: mc-…, at, runId, runs[], text, links, name, note?, reaction, chatId? }`.
 
 **Wyzwalacze**: `once`, `daily`, `weekly` z dotychczasowego `triggerSchema`, liczone tą samą funkcją (`nextRunFor`, strefa Europe/Warsaw, `from`/`until`, DST); `cezar` i `pr` karta odrzuca (etap 2).
 
-**Klocki** (`machinaBlockSchema`; do 30 w programie, `id` unikalne):
+**Klocki** (`machinaBlockSchema`; do 30 w programie, `id` unikalne w programie i jego reakcjach):
 
 | Klocek | Co robi |
 | --- | --- |
@@ -184,12 +186,13 @@ Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incept
 | `resume { text, chat? }` | jawne wznowienie: tura w rozmowie automatu albo w `chat` z `scope.resumeChats` |
 | `notify`, `calendarEvent`, `smartAction` | dotychczasowe akcje z tymi samymi parametrami (`domain?`, `reminderMinutes?`, `allDay?`, `when`), wykonywane tym samym kodem (`createAutomationExecutor`) |
 | `finish` | program sam wskazuje koniec: po tym runie Stan „Zakończony” |
+| `compare { from }` | ostatni klocek programu: wycinek porównany z katalogiem sytuacji (niżej); reakcje (`reactions`) mają tylko akcje i `finish` |
 
 Teksty akcji mogą wstawiać wyniki wcześniejszych klocków odczytu: `{{id}}` (tekst), `{{id.link}}` (pierwszy link), `{{id.url}}` (odczytany adres). Karta odrzuca program, w którym klocek czyta późniejszy klocek, odczyt wychodzi poza `scope.domains` `resume` wskazuje rozmowę spoza `scope.resumeChats` albo akcja ma link bez własnej zatwierdzonej domeny (400).
 
 **Zakres odczytu** (`server/machina-fetch.ts`): każdy krok, pierwszy adres i każde przekierowanie, jest sprawdzany od nowa: tylko `https`, bez portu i danych logowania, nazwa (nie adres IP) w zatwierdzonej domenie albo jej subdomenie, a wszystkie adresy, na które nazwa wskazuje, muszą być publiczne (bez loopbacku, sieci prywatnych, link-local, CGNAT, multicastu, zakresów dokumentacyjnych i mapowanych). Połączenie idzie dokładnie na sprawdzony adres, więc nazwa nie może odpowiedzieć inaczej między sprawdzeniem a połączeniem. Naruszenie kończy odczyt błędem, a run nie wykonuje żadnego skutku. Własne wartości: 5 przekierowań, 15 s na cały krok (nie tylko na ciszę na łączu), 2 MB treści, tylko typy tekstowe (dość na zwykłą stronę, a nie na pobieranie plików); wycinek w dzienniku do 4000 znaków i 40 linków. Link akcji musi leżeć w `domain` tej akcji (https, bez portu i danych logowania); zły link psuje tylko tę akcję.
 
-**Karta i wersje** (`machina.decideCard(card, { accept, chatId })`): odrzucenie niczego nie zmienia. Zgoda na kartę bez `automat` tworzy wątek (Stan „Aktywny”, autor `machina`) i wersję 1 w jednym zapisie; z `automat` dopisuje kolejną wersję i przelicza następną porę (wątku nie zmienia; „Czeka na kartę programu” staje się „Aktywny”, wstrzymany zostaje wstrzymany, zamknięty odmawia 409). Wyjątek bez karty (`machina.createReminder`): tylko jednorazowy automat z jednym klockiem `message` albo `resume` rozmowy, w której powstał (wersja autora `wektor`, moduł Przypomnienia). Przywrócenie (`restore`) to bezpośrednia akcja użytkownika: nowa wersja z klockami i zakresem starszej (`restoredFrom`), harmonogram zostaje bieżący. Program, którego katalog sytuacji ma próbki, nie daje się przywrócić (409), dopóki DESK-86 nie doda kontroli zgodności próbek. Limit: 50 niezamkniętych automatów, 200 wersji programu (własne wartości, ochrona pliku).
+**Karta i wersje** (`machina.decideCard(card, { accept, chatId })`): odrzucenie niczego nie zmienia. Zgoda na kartę bez `automat` tworzy wątek (Stan „Aktywny”, autor `machina`) i wersję 1 w jednym zapisie; z `automat` dopisuje kolejną wersję i przelicza następną porę (wątku nie zmienia; „Czeka na kartę programu” staje się „Aktywny”, wstrzymany zostaje wstrzymany, zamknięty odmawia 409). Wyjątek bez karty (`machina.createReminder`): tylko jednorazowy automat z jednym klockiem `message` albo `resume` rozmowy, w której powstał (wersja autora `wektor`, moduł Przypomnienia). Przywrócenie (`restore`) to bezpośrednia akcja użytkownika: nowa wersja z klockami, zakresem i reakcjami starszej (`restoredFrom`; bez reakcji sytuacji wycofanych od tamtej pory), harmonogram zostaje bieżący. Zmiana i przywrócenie przechodzą kontrolę zgodności próbek (niżej); sprzeczność to 409 z nazwą sytuacji. Limit: 50 niezamkniętych automatów, 200 wersji programu (własne wartości, ochrona pliku).
 
 **Akcje użytkownika bez karty**: `POST /api/machina/action` `{ thread, action: pause|resume|cancel|runNow|restore, version? }`, tylko z Origin panelu; odmowa ma powód po polsku (400, 404, 409).
 
@@ -203,16 +206,44 @@ Teksty akcji mogą wstawiać wyniki wcześniejszych klocków odczytu: `{{id}}` (
 | jednorazowy po swoim runie (także nieudanym) | Zakończony |
 | cykl bez kolejnej pory (minął `until`) | Wygasł |
 | anulowanie | Anulowany |
+| karta nowej sytuacji czeka (pory działają dalej) | Czeka na decyzję; po odpowiedzi na ostatnią kartę Aktywny |
+| brak wycinka | Czeka na naprawę (pory pominięte) do odpowiedzi na kartę naprawy: zgoda Aktywny (albo Czeka na decyzję), odrzucenie Wstrzymany |
 
-Wstrzymany ma pierwszeństwo: gdy run kończy się podczas pauzy, Stan końcowy trafia do `paused.from` i wraca przy wznowieniu. Po wznowieniu cykl liczy pory od teraz; jednorazowy, którego pora minęła w pauzie, wykona się raz.
+Wstrzymany ma pierwszeństwo: gdy run kończy się podczas pauzy, Stan końcowy trafia do `paused.from` i wraca przy wznowieniu. Karta czekająca w czasie pauzy zostaje; wznowienie przy otwartej karcie wraca do oczekującego Stanu, a karta zatwierdzona w pauzie zostawia automat wstrzymany (po wznowieniu Aktywny). Po wznowieniu cykl liczy pory od teraz; jednorazowy, którego pora minęła w pauzie, wykona się raz.
 
-**Run** składa panel, bez modelu, żetonu i `panel_automation_report`; turę zaczyna wyłącznie klocek `resume`.
+**Run** składa panel, bez modelu, żetonu i `panel_automation_report`; turę zaczyna klocek `resume` albo panel dla oceny i naprawy (niżej), nigdy zwykły run ani wpis panelu.
 - **Jedna pora, najwyżej jeden run**: przed czymkolwiek run jest zapisywany w dzienniku (`running`, `slot` = pora) i w tym samym zapisie harmonogram przechodzi dalej; druga próba tej samej pory niczego nie dopisuje. „Uruchom teraz” to osobny run (`manual`), który nie przesuwa harmonogramu cyklu; dla jednorazowego jest jego jedynym runem (pora przepada, automat kończy się po nim), żeby to samo działanie nie wykonało się drugi raz. Zaległe pory się nie kumulują.
 - **Skutek najwyżej raz**: każdy skutek jest rezerwowany (`pending`) przed wykonaniem, z kluczem `runId:idKlocka` (ten sam klucz daje id wydarzenia Google, klucz wpisu w rozmowie i nonce tury). Po przerwaniu procesu ten sam run jest kończony: odczyty wykonują się ponownie, skutki bezpieczne z kluczem (`message`, `resume`, `calendarEvent`, `smartAction`) są ponawiane, a zarezerwowany `notify` zostaje jako błąd „wynik niepotwierdzony” i nie jest wysyłany drugi raz. Rezerwacja zapisuje gotowe parametry skutku (tytuł, treść, link, termin), a ponowienie używa dokładnie ich, także gdy strona w międzyczasie się zmieniła.
-- **Kolejność i błędy**: nieudany odczyt albo brak wycinka kończy run błędem, a pozostałe klocki są pominięte (żadnego skutku); błąd akcji nie przerywa kolejnych. Przed każdym skutkiem silnik czyta Stan: pauza, anulowanie i wyłącznik pomijają pozostałe skutki.
+- **Kolejność i błędy**: nieudany odczyt albo brak wycinka kończy run błędem, a pozostałe klocki są pominięte (żadnego skutku poza powiadomieniem o naprawie przy braku wycinka); błąd akcji nie przerywa kolejnych. Błąd pobrania strony to błąd odczytu bez skutków, nie nowa sytuacja ani naprawa. Przed każdym skutkiem silnik czyta Stan: pauza, anulowanie i wyłącznik pomijają pozostałe skutki.
 - **Zajęta rozmowa** przy `resume` (409 albo 5xx) zostawia run otwarty (`waiting`) i kolejny tick ponawia tę samą turę; po godzinie (własna wartość) klocek kończy się błędem.
 - **Wspólna kolejka**: jeden run naraz w całym panelu. Machina nie zaczyna runu, gdy stare automaty trzymają slot (`Automations.busy()`), a stare nie zaczynają, gdy trwa run Machiny (`blockedBy`). Tura zaczęta klockiem `resume` trzyma slot do swojego końca (zgłasza go Hermes, `machina.turnChanged`), najdłużej 15 minut jak w starych automatach; po restarcie panelu ta blokada nie jest odtwarzana. Zegar co minutę, jeden tick naraz.
 - **Wyłączniki**: `DESK_AUTOMATIONS=0` i brak aktywnej, odblokowanej Fili (tryb list albo `locked`) zatrzymują zegar oraz odmawiają tworzenia, zmiany, przywracania i „uruchom teraz” (409); pauza i anulowanie działają. W usłudze Machina powstaje tylko w trybie `active`.
 - **Uszkodzony magazyn**: zestaw leży w `fila.json`, więc blokada zapisu Fili blokuje rezerwację runu, a bez rezerwacji nic się nie wykonuje.
+
+### Sytuacje, ocena i naprawa (DESK-86)
+
+**Sytuacja** to wygląd obserwowanego źródła z reakcją; **próbka** to wycinek z runu, który ją potwierdził. Katalog należy do automatu, przeżywa wersje programu i tylko rośnie (do 60 sytuacji, 20 najnowszych próbek na sytuację, 20 czekających kart; własne wartości: ochrona pliku `fila.json`, który zapisuje się w całości). Sytuacja bez próbki jest **przewidywana**: jej reakcję zatwierdziła karta programu (`situations` na karcie deklaruje id `s-…` i nazwę), a pierwszą próbkę dostaje po ocenie Wektora. Wycofana zostaje w katalogu z historią i nigdy się nie dopasowuje.
+
+**Porównanie** (`compare`, `sampleKey`): tekst i linki wycinka po uporządkowaniu odstępów, dokładnie; znana jest sytuacja (niewycofana), której jakakolwiek próbka jest równa wycinkowi. W runie:
+- znany wycinek: panel wykonuje reakcję tej sytuacji z bieżącej wersji, bez modelu;
+- ten sam wycinek co czekająca karta nowej sytuacji: run dołącza do karty (`runs`, wynik `compare` z `card`, run `ok`) bez oceny; reakcja po zgodzie wykona się tylko w runie, z którego karta powstała;
+- inny wycinek: **ocena**. Panel zaczyna turę Wektora w nowej rozmowie tego runu (`chatId` wynika z runId, najwyżej jedna rozmowa na run, oznaczenie „Automatyka · Machina” z powodem `ocena: <tytuł>`), z katalogiem, wycinkiem, `runId` i jednorazowym żetonem w treści tury (żeton tylko w pamięci, nie w zestawie). Run ma stan `evaluating`. Wektor odpowiada jednym narzędziem: `panel_machina_assess` (znana albo przewidywana sytuacja, tylko inaczej zapisana: bez karty, próbka dopisana, reakcja wykonana w tym runie) albo `panel_machina_situation` (nowa sytuacja z nazwą i reakcją: karta, run `waiting`, Stan „Czeka na decyzję”). Tura bez werdyktu, werdykt po końcu tury albo restart panelu w trakcie oceny dają błąd oceny bez skutków; następna pora ocenia ponownie. Tura oceny trzyma wspólną kolejkę do swojego końca (najwyżej 15 minut, jak `resume`); czekanie na kartę jej nie trzyma i nie ma limitu czasu.
+- brak fragmentu (`extract` nie znalazł znaczników albo fragment jest pusty): **naprawa**. Panel wysyła powiadomienie „Automat wymaga naprawy” (dzwonek, telefon przez ntfy, gdy skonfigurowany; klocek `naprawa` w dzienniku, klucz `runId:naprawa`), ustawia „Czeka na naprawę” i raz zaczyna turę Wektora w rozmowie tego runu z programem i początkiem tekstu strony. Do odpowiedzi na kartę naprawy pory są pomijane bez odczytu i bez budzenia Wektora.
+
+**Karty i ich odrzucenie** (bez automatycznego wygaśnięcia; decyzja użytkownika z 2026-11-12):
+
+| Karta | Zgoda | Odrzucenie |
+| --- | --- | --- |
+| programu (`panel_machina_propose`, także zmiana i naprawa: z `automat`) | nowy automat albo nowa wersja | nic się nie zmienia; odrzucona naprawa (karta automatu w „Czeka na naprawę”) daje Wstrzymany, a wznowienie wraca do pracy |
+| nowej sytuacji (`panel_machina_situation`) | sytuacja z próbką w katalogu i jej reakcja jako nowa wersja programu (powód „nowa sytuacja: …”), reakcja w pierwotnym runie | bez akcji i bez sytuacji (wynik `compare` `skipped`); następna pora może ocenić ten wycinek ponownie |
+| poprawki oceny (`panel_machina_correct`) | próbka runu przechodzi z `from` do `to`; z `withdraw` sytuacja `from` jest wycofana | nic się nie zmienia |
+
+Pauza, anulowanie, wyłącznik i brak aktywnej Fili blokują skutki reakcji także po późniejszej zgodzie, jak w każdym runie.
+
+**Zgodność wersji**: ta sama próbka musi trafiać do tej samej sytuacji. Nowa albo przywrócona wersja musi mieć `compare` i reakcję (choćby pustą) dla każdej niewycofanej sytuacji z próbkami; karta nie może przypisać tekstu próbki innej sytuacji niż ta, w której katalog ją trzyma; reakcje wskazują tylko sytuacje z katalogu albo zadeklarowane na karcie. Sprzeczność blokuje zgodę i przywrócenie (409). Reakcję zmienia karta programu, przypisanie próbki tylko karta poprawki, a poprawka przenosi próbkę wyłącznie do sytuacji, na którą program w mocy ma reakcję.
+
+**Rozmowy i koszt**: rozmowa projektowania i zmian to rozmowa, w której użytkownik zatwierdził kartę (`projektowanie`, `zmiana programu`, `naprawa`); ocena i naprawa mają własną rozmowę runu (`ocena`, `naprawa`, z `runId`; run ma `chatId`). Po końcu tury oceny albo naprawy run dostaje `costUsd`, gdy Hermes podał koszt rzeczywisty (`costStatus: actual`). `machina.cost(thread)` sumuje koszty rzeczywiste rozmów automatu, każdą rozmowę raz (koszt runu to koszt jego rozmowy, więc nie dolicza się go drugi raz); rozmowa bez kosztu rzeczywistego jest liczona jako nieznana (`unknown`), nie jako zero. Rozmowa projektowania to zwykła rozmowa użytkownika, więc liczy się cały jej koszt.
+
+**Wektor i czat**: narzędzia `panel_machina` (odczyt), `panel_machina_propose` (karta programu; panel sprawdza ją jak przy zapisie), `panel_machina_reminder` (jedyny automat bez karty: jednorazowy wpis albo wznowienie rozmowy, w której trwa tura), `panel_machina_assess` i `panel_machina_situation` (werdykty, tylko z żetonem tury oceny), `panel_machina_correct` (karta poprawki) — opisy w [hermes.md](hermes.md). Odpowiedź na kartę: `POST /api/chats/:id/machina` `{ toolCallId, decision: accept|reject }`, Origin-checked; to, co karta zatwierdza, panel czyta z wywołania narzędzia w tej rozmowie, nigdy z żądania; karty odrzuconej przez panel nie da się zatwierdzić (409); odpowiedź zostaje w `cockpit.json` (`machinaCards`), więc drugie kliknięcie i restart dają tę samą odpowiedź bez drugiego zapisu. Kokpit rozmowy: `GET /api/chats/:id/machina` → `{ machina: { thread, title, state, reason, runId?, version, blocks, lastRun?, cost } | null }` (wątek automatu jest linkiem do Fili).
 
 **Alerty i dzwonek**: `GET /api/automations` ma dodatkowe pole `machina` z rozstrzygniętymi skutkami `smartAction` i `notify` (`MachinaEffect`); alert Smart Actions żyje 30 dni i znika z anulowaniem automatu, dzwonek zbiera powiadomienia z 24 h, jak dla starych automatów.

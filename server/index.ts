@@ -93,6 +93,8 @@ if (chat && sources.fila && cutoverMode === 'active') machina = createMachina({
   fila: sources.fila, chat, enabled: automationsEnabled(process.env), busy: () => automations?.busy() ?? false,
   executeAction: createAutomationExecutor({ writeCalendar: sources.automationCalendarWrite, ntfyUrl: process.env.DESK_NTFY_URL }),
 });
+// Wektor's Machina tools and the chat's Machina cards reach it through the sources.
+if (machina) sources.machina = machina;
 machina?.start();
 // Usage measurement (docs/uzycie.md): only the service writes this history; scenarios and previews never get a store.
 const usage = cutoverLocked ? undefined : createUsageStore(join(panelDir, 'usage'));

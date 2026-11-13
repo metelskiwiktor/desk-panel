@@ -114,7 +114,7 @@ export function createPanelServer(sources: PanelSources, root: string, allowedHo
       catch { res.writeHead(503).end(JSON.stringify({ error: 'Nie udało się odczytać ustawień Cezara.' })); }
       return;
     }
-    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations, options.filaMode)) return;
+    if (url.pathname.startsWith('/api/chats') && await handleChatRoute(req, res, url, ownOrigin, chat, options.cockpit, sources.appointments, options.automations, options.filaMode, sources.machina)) return;
     if (await handleFilaDispatchRoute(req, res, url, { ownOrigin, sources, cockpit: options.cockpit })) return;
     if (await handleFilaRoute(req, res, url, { ownOrigin, proxied, fila: sources.fila, tokens: options.filaTokens })) return;
     // The panel's tools for Hermes (MCP): local callers with the token only, never through the Tailscale name.

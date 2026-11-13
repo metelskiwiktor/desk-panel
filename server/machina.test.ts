@@ -29,6 +29,10 @@ function setup(over: Partial<MachinaOptions> & { fila?: FilaStore } = {}) {
     gets: [] as string[],
     chatBusy: false,
     hang: undefined as undefined | Promise<never>,
+    /** Conversations the panel started for Wektor's assessment or repair: the fake Hermes only records them. */
+    wakes: [] as { chatId: string; nonce: string; text: string; title?: string; reason: string }[],
+    /** What Hermes reported a conversation's turns really cost (missing: no actual cost). */
+    costs: {} as Record<string, number[]>,
   };
   const read = createMachinaReader({
     resolve: async host => world.hosts[host] ?? ['93.184.216.34'],
@@ -42,6 +46,11 @@ function setup(over: Partial<MachinaOptions> & { fila?: FilaStore } = {}) {
         if (world.chatBusy) throw new ChatError(409, 'Agent jeszcze odpowiada.');
         if (!world.turns.some(t => t.nonce === input.nonce)) world.turns.push({ chat, text: input.text, nonce: input.nonce });
       },
+      createAutomation: async input => {
+        if (!world.wakes.some(w => w.nonce === input.nonce)) world.wakes.push({ chatId: input.chatId!, nonce: input.nonce!, text: input.text, title: input.title, reason: input.automation.reason });
+        return { id: input.chatId! };
+      },
+      get: async id => ({ id, engine: 'hermes', title: 'x', createdAt: 0, updatedAt: 0, items: (world.costs[id] ?? []).map((usd, i) => ({ id: `m${i}`, role: 'agent', at: i, usage: { costStatus: 'actual', costUsd: usd, input: 1, output: 1, thinking: 0, cached: 0, calls: 1, tools: 0 } })) }) as never,
     },
     executeAction: async (input, approved, key) => {
       world.acts.push({ action: input.action, key, title: input.title, when: input.when, url: input.url, text: input.text, domain: 'domain' in approved ? approved.domain : undefined });
@@ -94,11 +103,11 @@ describe('program cards and versions', () => {
     expect(made.conversations.items).toEqual([{ chatId: CHAT, reason: 'projektowanie', at: NOW }]);
     // A rejected change of an existing automat leaves its program as it was.
     const before = JSON.stringify(await world.fila.machinaKit('MACH-1'));
-    expect(await machina.decideCard(reminder({ automat: 'MACH-1', blocks: [{ id: 'm', kind: 'message', text: 'Inna treść' }] }), { accept: false })).toEqual({ decision: 'rejected' });
+    expect(await machina.decideCard(reminder({ automat: 'MACH-1', blocks: [{ id: 'm', kind: 'message', text: 'Inna treść' }] }), { accept: false })).toEqual({ decision: 'rejected', thread: 'MACH-1' });
     expect(JSON.stringify(await world.fila.machinaKit('MACH-1'))).toBe(before);
   });
 
-  it('keeps every version through a change and a restore, and does not restore a program that has samples', async () => {
+  it('keeps every version through a change and a restore, and does not restore a version that drops a situation with samples', async () => {
     const { world, machina } = setup();
     await machina.decideCard(reminder(), { accept: true, chatId: CHAT });
     world.clock += 1000;
@@ -120,9 +129,9 @@ describe('program cards and versions', () => {
     expect(made.program.current).toBe(3);
     await refused(machina.action({ thread: 'MACH-1', action: 'restore', version: 3 }), 409, /bieżąca wersja/);
     await refused(machina.action({ thread: 'MACH-1', action: 'restore', version: 9 }), 404);
-    // With samples in the catalogue the restore waits for the samples check of stage 1b.2.
+    // A situation with samples must still be recognised by a restored version (DESK-86): this one has no comparison at all.
     const uid = (await world.fila.thread('MACH-1')).uid;
-    await world.fila.machina.update(uid, { kit: { situations: { items: [{ id: 's1', name: 'Zamknięte', samples: [{ runId: 'mr-000000000001', text: 'Zapisy zamknięte' }] }] } } });
+    await world.fila.machina.update(uid, { kit: { situations: { items: [{ id: 's-zamkniete', name: 'Zamknięte', createdAt: NOW, samples: [{ runId: 'mr-000000000001', at: NOW, text: 'Zapisy zamknięte', links: [] }] }], pending: [] } } });
     await refused(machina.action({ thread: 'MACH-1', action: 'restore', version: 2 }), 409, /próbki/);
     expect((await kit(world.fila, 'MACH-1')).program.versions).toHaveLength(3);
   });
@@ -351,7 +360,7 @@ describe('effects of blocks', () => {
       ['a redirect to plain http', () => { world.pages[PAGE] = { status: 301, location: 'http://example.com/zapisy', body: '' }; }, /https/],
       ['a name that resolves to loopback', () => { world.pages[PAGE] = { status: 200, type: 'text/html', body: HTML }; world.hosts['example.com'] = ['127.0.0.1']; }, /nie jest publiczny/],
       ['a redirect inside the scope to a private address', () => { world.hosts = { 'intra.example.com': ['93.184.216.34', '10.0.0.8'] }; world.pages[PAGE] = { status: 307, location: 'https://intra.example.com/', body: '' }; }, /nie jest publiczny/],
-      ['the fragment is missing', () => { world.hosts = {}; world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Strona w przebudowie</p>' }; }, /Brak wycinka/],
+      // A missing fragment is no read error since DESK-86: it asks for a repair (see „a missing fragment …” below).
     ];
     let day = 13;
     for (const [name, arrange, message] of cases) {
@@ -517,4 +526,284 @@ it('takes the direct actions only from the panel\'s own page, and answers a refu
   expect([stale.status, (await stale.json()).error]).toEqual([409, 'To jest bieżąca wersja programu.']);
   // The kit is read through Fila, by the thread's ID.
   expect((await (await fetch(`${base}/api/fila/threads/MACH-1/machina`)).json()).program.content.versions).toHaveLength(1);
+});
+
+// DESK-86: situations, Wektor's assessment and repair. Hermes is a fake that records the conversations the panel starts;
+// Wektor's verdicts are given the way its tools give them (machina.assess / proposeSituation with the turn's token).
+const statusPage = (status: string): MachinaHop => ({ status: 200, type: 'text/html', body: `<p>Status: ${status} Regulamin</p>` });
+const SITUATION_BLOCKS: MachinaCard['blocks'] = [
+  { id: 'strona', kind: 'fetch', url: PAGE },
+  { id: 'status', kind: 'extract', from: 'strona', after: 'Status:', before: 'Regulamin' },
+  { id: 'cmp', kind: 'compare', from: 'status' },
+];
+const OPEN_REACTION: MachinaCard['blocks'] = [{ id: 'tel', kind: 'notify', title: 'Zapisy otwarte', text: '{{status}}' }, { id: 'koniec', kind: 'finish' }];
+/** A watcher that compares its extract with the catalogue; two situations are predicted on its card. */
+const comparer = (over: Partial<MachinaCard> = {}): MachinaCard => watcher({
+  blocks: SITUATION_BLOCKS,
+  reactions: { 's-zamkniete': [{ id: 'wpis', kind: 'message', text: 'Nadal: {{status}}' }], 's-otwarte': OPEN_REACTION },
+  situations: [{ id: 's-zamkniete', name: 'Zapisy zamknięte' }, { id: 's-otwarte', name: 'Zapisy otwarte' }],
+  ...over,
+});
+const change = (over: Partial<MachinaCard> = {}) => comparer({ automat: 'MACH-1', title: undefined, ...over });
+/** The times of the watcher (7:00 and 19:00), from the evening of the 13th on. */
+const TIMES = Array.from({ length: 40 }, (_, i) => at(`2026-11-${String(13 + Math.floor((i + 1) / 2)).padStart(2, '0')}T${i % 2 ? '07' : '19'}:00:00+01:00`));
+const verdictOf = (wake: { text: string }) => ({ runId: /runId: "(mr-[0-9a-f]{12})"/.exec(wake.text)![1]!, token: /token: "([0-9a-f]{32})"/.exec(wake.text)![1]! });
+function situations(world: { fila: FilaStore }) { return world.fila.machinaKit('MACH-1').then(view => view.situations.content as any); }
+
+function stage(over: Partial<MachinaOptions> = {}) {
+  const s = setup(over);
+  let next = 0;
+  /** The clock moves to the next time and the panel does what it does then (and what that started in the background). */
+  const runNext = async () => { s.world.clock = TIMES[next++]!; await s.machina.tick(); await s.machina.idle(); return (await kit(s.world.fila, 'MACH-1')).journal.runs.at(-1); };
+  /** Hermes says the last turn the panel started has ended. */
+  const endTurn = async () => { s.machina.turnChanged({ turnId: s.world.wakes.at(-1)!.nonce, ended: true }); await s.machina.idle(); };
+  return { ...s, runNext, endTurn };
+}
+
+describe('situations, assessment and repair (DESK-86)', () => {
+  it('handles a known extract without a model, does a known situation\'s reaction for a new look of it, and does a new situation\'s reaction in its own run only after a yes', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    // Nothing is known yet: Wektor assesses the extract in a conversation of its own and the run waits for the verdict.
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    let run = await runNext();
+    expect([run.state, world.wakes.length]).toEqual(['evaluating', 1]);
+    expect(world.wakes[0]!.text).toContain('Zapisy zamknięte');
+    expect(world.wakes[0]!.text).toContain('s-zamkniete');
+    await machina.assess({ ...verdictOf(world.wakes[0]!), situation: 's-zamkniete' });
+    await endTurn();
+    run = (await kit(world.fila, 'MACH-1')).journal.runs[0];
+    expect([run.state, run.blocks.find((b: any) => b.id === 'cmp')]).toMatchObject(['ok', { result: 'ok', situation: 's-zamkniete' }]);
+    expect(world.notes.map(n => n.text)).toEqual(['Nadal: Zapisy zamknięte']);
+    // The same extract, spaced differently, is known now: its reaction without a model.
+    world.pages[PAGE] = statusPage('Zapisy    zamknięte');
+    run = await runNext();
+    expect([run.state, run.blocks.find((b: any) => b.id === 'cmp').situation, world.wakes.length]).toEqual(['ok', 's-zamkniete', 1]);
+    expect(world.notes.map(n => n.text)).toEqual(['Nadal: Zapisy zamknięte', 'Nadal: Zapisy zamknięte']);
+    // A new look that Wektor assigns to a known situation: no card, the known reaction in that run.
+    world.pages[PAGE] = statusPage('Zapisy jeszcze nie ruszyły');
+    await runNext();
+    expect(world.wakes).toHaveLength(2);
+    await machina.assess({ ...verdictOf(world.wakes[1]!), situation: 's-zamkniete' });
+    await endTurn();
+    expect(world.notes.at(-1)!.text).toBe('Nadal: Zapisy jeszcze nie ruszyły');
+    expect((await situations(world)).items[0].samples.map((s: any) => s.text)).toEqual(['Zapisy zamknięte', 'Zapisy jeszcze nie ruszyły']);
+    // A new situation: a card, and nothing happens until the user says yes.
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    await runNext();
+    const card = await machina.proposeSituation({ ...verdictOf(world.wakes[2]!), name: 'Lista rezerwowa', reaction: [{ id: 'rez', kind: 'notify', title: 'Lista rezerwowa: {{status}}' }] });
+    await endTurn();
+    let k = await kit(world.fila, 'MACH-1');
+    const waiting = k.journal.runs[3];
+    expect([waiting.state, waiting.blocks.find((b: any) => b.id === 'cmp')]).toMatchObject(['waiting', { result: 'waiting', card: card.card }]);
+    expect([k.state, world.acts, machina.running()]).toEqual(['Czeka na decyzję', [], false]);
+    expect(await machina.decideSituation(waiting.id, true)).toEqual({ decision: 'accepted', thread: 'MACH-1', situation: 's-lista-rezerwowa' });
+    expect(world.acts).toMatchObject([{ action: 'notify', key: `${waiting.id}:rez`, title: 'Lista rezerwowa: Lista rezerwowa otwarta' }]);
+    k = await kit(world.fila, 'MACH-1');
+    // The decision and the reaction are later entries of the same run; the reaction joined the program by the same yes.
+    expect(k.journal.runs).toHaveLength(4);
+    expect([k.journal.runs[3].state, k.journal.runs[3].blocks.map((b: any) => [b.id, b.result, b.situation ?? null])]).toEqual(['ok', [['strona', 'ok', null], ['status', 'ok', null], ['cmp', 'ok', 's-lista-rezerwowa'], ['rez', 'ok', null]]]);
+    expect([k.state, k.program.current, k.program.versions[1].reason, Object.keys(k.program.versions[1].reactions)]).toEqual(['Aktywny', 2, 'nowa sytuacja: Lista rezerwowa', ['s-zamkniete', 's-otwarte', 's-lista-rezerwowa']]);
+    // Known from now on: the next time does it without asking anyone.
+    run = await runNext();
+    expect([run.blocks.find((b: any) => b.id === 'cmp').situation, world.wakes.length, world.acts.map(a => a.key)]).toEqual(['s-lista-rezerwowa', 3, [`${waiting.id}:rez`, `${run.id}:rez`]]);
+    // A plain run and a panel entry never start a turn.
+    expect(world.turns).toEqual([]);
+  });
+
+  it('lets later times run while a card waits: the same extract joins the card, another one is assessed; a failed assessment does nothing and the next time assesses again', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    const first = await runNext();
+    const card = await machina.proposeSituation({ ...verdictOf(world.wakes[0]!), name: 'Lista rezerwowa', reaction: [{ id: 'rez', kind: 'notify', title: 'Lista rezerwowa' }] });
+    await endTurn();
+    world.pages[PAGE] = statusPage('Lista   rezerwowa otwarta');
+    const joined = await runNext();
+    expect([joined.state, joined.blocks.find((b: any) => b.id === 'cmp').card, world.wakes.length]).toEqual(['ok', card.card, 1]);
+    expect((await situations(world)).pending[0].runs).toEqual([first.id, joined.id]);
+    // Another extract wakes a new assessment; its turn ends without a verdict: an assessment error, no effect.
+    world.pages[PAGE] = statusPage('Zapisy otwarte');
+    const failed = await runNext();
+    expect([failed.state, world.wakes.length]).toEqual(['evaluating', 2]);
+    await refused(machina.assess({ runId: failed.id, token: '0'.repeat(32), situation: 's-otwarte' }), 403);
+    await endTurn();
+    let k = await kit(world.fila, 'MACH-1');
+    expect([k.journal.runs[2].state, k.journal.runs[2].error]).toEqual(['error', 'Błąd oceny: tura zakończyła się bez werdyktu.']);
+    expect([world.acts, world.notes, k.state]).toEqual([[], [], 'Czeka na decyzję']);
+    // A verdict after its turn ended is refused too, and the next time assesses the same extract again.
+    await refused(machina.assess({ ...verdictOf(world.wakes[1]!), situation: 's-otwarte' }), 403);
+    await runNext();
+    expect(world.wakes).toHaveLength(3);
+    await machina.assess({ ...verdictOf(world.wakes[2]!), situation: 's-zamkniete' });
+    await endTurn();
+    expect(world.notes.map(n => n.text)).toEqual(['Nadal: Zapisy otwarte']);
+    // The waiting card's yes does its reaction once, in the run it came from; the joined run gets none.
+    await machina.decideSituation(first.id, true);
+    expect(world.acts.map(a => a.key)).toEqual([`${first.id}:rez`]);
+    k = await kit(world.fila, 'MACH-1');
+    expect([k.state, k.journal.runs[1].blocks.map((b: any) => b.id)]).toEqual(['Aktywny', ['strona', 'status', 'cmp']]);
+  });
+
+  it('a missing fragment notifies the user and skips the times until the repair card is answered; a pause comes first and keeps the card', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Strona w przebudowie</p>' };
+    const broken = await runNext();
+    expect([broken.state, broken.error]).toEqual(['error', 'Brak wycinka: nie znaleziono fragmentu.']);
+    expect(broken.blocks.map((b: any) => [b.id, b.result])).toEqual([['strona', 'ok'], ['status', 'error'], ['naprawa', 'ok']]);
+    expect(world.acts).toMatchObject([{ action: 'notify', key: `${broken.id}:naprawa`, title: 'Automat wymaga naprawy: Zapisy IRONMAN' }]);
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Czeka na naprawę');
+    // Wektor is asked once, in a conversation of the run, with the page and the program to repair.
+    expect(world.wakes.map(w => w.reason)).toEqual(['naprawa: Zapisy IRONMAN']);
+    expect(world.wakes[0]!.text).toContain('Strona w przebudowie');
+    expect(world.wakes[0]!.text).toContain('panel_machina_propose');
+    await endTurn();
+    // The times pass with no run, no read and no new turn.
+    await runNext();
+    await runNext();
+    expect([(await kit(world.fila, 'MACH-1')).journal.runs.length, world.gets.length, world.wakes.length, world.acts.length]).toEqual([1, 1, 1, 1]);
+    // A pause comes first; resumed with the card still open, it waits for the repair again.
+    await machina.action({ thread: 'MACH-1', action: 'pause' });
+    expect((await kit(world.fila, 'MACH-1')).program.paused).toEqual({ from: 'Czeka na naprawę' });
+    await machina.action({ thread: 'MACH-1', action: 'resume' });
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Czeka na naprawę');
+    // The repair accepted while paused makes the version and leaves the automat paused, now to go back to work.
+    await machina.action({ thread: 'MACH-1', action: 'pause' });
+    const repaired = change({ blocks: [SITUATION_BLOCKS[0]!, { id: 'status', kind: 'extract', from: 'strona', after: 'Stan:', before: 'Koniec' }, SITUATION_BLOCKS[2]!] });
+    expect(await machina.decideCard(repaired, { accept: true, chatId: world.wakes[0]!.chatId })).toEqual({ decision: 'updated', thread: 'MACH-1', version: 2 });
+    let k = await kit(world.fila, 'MACH-1');
+    expect([k.state, k.program.paused, k.program.versions[1].reason]).toEqual(['Wstrzymany', { from: 'Aktywny' }, 'karta naprawy']);
+    await machina.action({ thread: 'MACH-1', action: 'resume' });
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Stan: Zapisy zamknięte Koniec</p>' };
+    const fixed = await runNext();
+    expect([fixed.version, fixed.state, world.wakes.length]).toEqual([2, 'evaluating', 2]);
+    k = await kit(world.fila, 'MACH-1');
+    expect(k.conversations.items.filter((c: any) => c.reason === 'naprawa').map((c: any) => [c.chatId, c.runId])).toEqual([[world.wakes[0]!.chatId, broken.id]]);
+  });
+
+  it('keeps a sample with its situation through versions: a contradicting change or restore is refused, a program card changes the reaction, a correction card moves the sample and a withdrawn situation never matches', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    // A predicted situation gets its first sample from Wektor's assessment.
+    expect((await situations(world)).items.map((s: any) => [s.id, s.samples.length])).toEqual([['s-zamkniete', 0], ['s-otwarte', 0]]);
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    const r0 = await runNext();
+    await machina.assess({ ...verdictOf(world.wakes[0]!), situation: 's-zamkniete' });
+    await endTurn();
+    world.pages[PAGE] = statusPage('Zapisy nadal zamknięte');
+    const r1 = await runNext();
+    await machina.assess({ ...verdictOf(world.wakes[1]!), situation: 's-zamkniete' });
+    await endTurn();
+    expect((await situations(world)).items[0].samples.map((s: any) => s.runId)).toEqual([r0.id, r1.id]);
+    // A version that no longer recognises the situation of a sample, or claims a sample for another situation, is refused.
+    await refused(machina.decideCard(change({ reactions: { 's-otwarte': OPEN_REACTION } }), { accept: true }), 409, /Sprzeczność z próbkami.*s-zamkniete/);
+    await refused(machina.checkCard(change({ situations: [{ id: 's-otwarte', name: 'Zapisy otwarte', samples: ['Zapisy zamknięte'] }] })), 409, /należy do sytuacji/);
+    expect((await kit(world.fila, 'MACH-1')).program.versions).toHaveLength(1);
+    // A program card changes the reaction of a situation with samples.
+    await machina.decideCard(change({ reactions: { 's-zamkniete': [{ id: 'wpis2', kind: 'message', text: 'Bez zmian: {{status}}' }], 's-otwarte': OPEN_REACTION }, situations: [{ id: 's-czekam', name: 'Bez reakcji na razie' }] }), { accept: true });
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    await runNext();
+    expect(world.notes.at(-1)!.text).toBe('Bez zmian: Zapisy zamknięte');
+    // A new situation joins as version 3; restoring a version without it (it has a sample now) is refused.
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    const r3 = await runNext();
+    await machina.proposeSituation({ ...verdictOf(world.wakes[2]!), name: 'Lista rezerwowa', reaction: [] });
+    await endTurn();
+    await machina.decideSituation(r3.id, true);
+    await refused(machina.action({ thread: 'MACH-1', action: 'restore', version: 2 }), 409, /s-lista-rezerwowa.*ma próbki/);
+    await refused(machina.action({ thread: 'MACH-1', action: 'restore', version: 1 }), 409, /próbki/);
+    expect((await kit(world.fila, 'MACH-1')).program.versions).toHaveLength(3);
+    // The correction card: checked first, applied only on the user's yes.
+    const correction = { automat: 'MACH-1', from: 's-zamkniete', runId: r0.id, to: 's-otwarte', withdraw: true };
+    expect(await machina.correction(correction, 'check')).toEqual({ decision: 'checked', thread: 'MACH-1' });
+    await refused(machina.correction({ ...correction, to: 's-nieznana' }, 'check'), 404);
+    // A sample goes only to a situation the program in force reacts to.
+    await refused(machina.correction({ ...correction, to: 's-czekam' }, 'check'), 409, /najpierw karta programu/);
+    expect((await situations(world)).items[0].samples).toHaveLength(2);
+    expect(await machina.correction(correction, { accept: true })).toEqual({ decision: 'applied', thread: 'MACH-1' });
+    const catalogue = (await situations(world)).items;
+    expect(catalogue.map((s: any) => [s.id, s.samples.map((x: any) => x.runId), !!s.withdrawn])).toEqual([['s-zamkniete', [r1.id], true], ['s-otwarte', [r0.id], false], ['s-czekam', [], false], ['s-lista-rezerwowa', [r3.id], false]]);
+    // The withdrawn situation's remaining sample matches nothing any more: Wektor is asked, and may not pick it.
+    world.pages[PAGE] = statusPage('Zapisy nadal zamknięte');
+    await runNext();
+    expect(world.wakes).toHaveLength(4);
+    await refused(machina.assess({ ...verdictOf(world.wakes[3]!), situation: 's-zamkniete' }), 404, /wycofana/);
+    await endTurn();
+    // The moved sample is the other situation's now: its reaction, which ends the automat.
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    const moved = await runNext();
+    expect([moved.blocks.find((b: any) => b.id === 'cmp').situation, world.acts.map(a => a.title)]).toEqual(['s-otwarte', ['Zapisy otwarte']]);
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Zakończony');
+  });
+
+  it('answers a rejected card the way the user decided: a new situation gives no action and may be assessed again, a correction changes nothing, a repair pauses; no card expires', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    const r0 = await runNext();
+    await machina.proposeSituation({ ...verdictOf(world.wakes[0]!), name: 'Lista rezerwowa', reaction: [{ id: 'rez', kind: 'notify', title: 'Lista' }] });
+    await endTurn();
+    expect(await machina.decideSituation(r0.id, false)).toEqual({ decision: 'rejected', thread: 'MACH-1' });
+    let k = await kit(world.fila, 'MACH-1');
+    expect([k.state, k.program.versions.length, world.acts, k.journal.runs[0].state, k.journal.runs[0].blocks.find((b: any) => b.id === 'cmp').result]).toEqual(['Aktywny', 1, [], 'ok', 'skipped']);
+    expect((await situations(world))).toMatchObject({ pending: [], items: [{ id: 's-zamkniete' }, { id: 's-otwarte' }] });
+    await refused(machina.decideSituation(r0.id, true), 404);
+    // The next time may assess the same extract again; this card is left waiting for a month: it does not expire.
+    const r1 = await runNext();
+    expect(world.wakes).toHaveLength(2);
+    await machina.proposeSituation({ ...verdictOf(world.wakes[1]!), name: 'Lista rezerwowa', reaction: [] });
+    await endTurn();
+    world.clock += 30 * 24 * 60 * 60_000;
+    await machina.tick();
+    await machina.idle();
+    k = await kit(world.fila, 'MACH-1');
+    expect([k.state, (await situations(world)).pending.map((c: any) => c.runId)]).toEqual(['Czeka na decyzję', [r1.id]]);
+    await machina.decideSituation(r1.id, true);
+    // A rejected correction leaves the kit as it was.
+    const before = JSON.stringify(await world.fila.machinaKit('MACH-1'));
+    expect(await machina.correction({ automat: 'MACH-1', from: 's-lista-rezerwowa', runId: r1.id, to: 's-zamkniete' }, { accept: false })).toEqual({ decision: 'rejected', thread: 'MACH-1' });
+    expect(JSON.stringify(await world.fila.machinaKit('MACH-1'))).toBe(before);
+    // A rejected repair pauses the automat; resumed, it goes back to work (no card waits any more).
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Strona w przebudowie</p>' };
+    world.clock = at('2026-12-20T19:00:00+01:00');
+    await machina.tick();
+    await machina.idle();
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Czeka na naprawę');
+    await endTurn();
+    expect(await machina.decideCard(change(), { accept: false })).toEqual({ decision: 'rejected', thread: 'MACH-1' });
+    k = await kit(world.fila, 'MACH-1');
+    expect([k.state, k.program.paused, k.program.versions.length]).toEqual(['Wstrzymany', { from: 'Aktywny' }, 2]);
+    await machina.action({ thread: 'MACH-1', action: 'resume' });
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Aktywny');
+  });
+
+  it('keeps one conversation per event with its reason and run, and sums what Hermes really charged without counting a conversation twice', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.costs[CHAT] = [0.03, 0.02];
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    const run = await runNext();
+    const wake = world.wakes[0]!;
+    expect([wake.reason, wake.title]).toEqual(['ocena: Zapisy IRONMAN', 'Automat · Zapisy IRONMAN · ocena']);
+    world.costs[wake.chatId] = [0.02];
+    await machina.assess({ ...verdictOf(wake), situation: 's-zamkniete' });
+    await endTurn();
+    let k = await kit(world.fila, 'MACH-1');
+    // The assessment's cost is in its run; the run and its conversation point at each other.
+    expect([k.journal.runs[0].chatId, k.journal.runs[0].costUsd]).toEqual([wake.chatId, 0.02]);
+    expect(k.conversations.items.map((c: any) => [c.chatId, c.reason, c.runId ?? null])).toEqual([[CHAT, 'projektowanie', null], [wake.chatId, 'ocena', run.id]]);
+    // The cockpit of a conversation: its automat, why, the program in force and the last run.
+    expect(await machina.conversation(wake.chatId)).toMatchObject({ thread: 'MACH-1', title: 'Zapisy IRONMAN', reason: 'ocena', runId: run.id, version: 1, blocks: [{ id: 'strona' }, { id: 'status' }, { id: 'cmp' }], lastRun: { id: run.id, state: 'ok' } });
+    expect(await machina.conversation(OTHER)).toBeNull();
+    // A change made in the design conversation adds no second entry; one made elsewhere has no real cost: unknown, not zero.
+    await machina.decideCard(change({ trigger: { kind: 'daily', times: ['8:00'] } }), { accept: true, chatId: CHAT });
+    await machina.decideCard(change({ trigger: { kind: 'daily', times: ['9:00'] } }), { accept: true, chatId: OTHER });
+    const cost = await machina.cost('MACH-1');
+    expect(cost.usd).toBeCloseTo(0.07, 10);
+    expect([cost.unknown, cost.conversations.map(c => [c.reason, c.usd])]).toEqual([1, [['projektowanie', 0.05], ['ocena', 0.02], ['zmiana programu', null]]]);
+    k = await kit(world.fila, 'MACH-1');
+    expect(k.conversations.items.map((c: any) => c.reason)).toEqual(['projektowanie', 'ocena', 'zmiana programu']);
+    expect(world.turns).toEqual([]);
+  });
 });

@@ -8,7 +8,7 @@ import { useFilaGet, type FilaMachinaKitDoc, type FilaThreadDoc } from './api';
 const when = (at: number) => new Date(at).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const BY: Record<string, string> = { user: 'Ty', wektor: 'Wektor', panel: 'Panel' };
 const RESULT: Record<string, string> = { ok: 'wykonany', error: 'błąd', pending: 'niepotwierdzony', waiting: 'czeka na rozmowę', skipped: 'pominięty' };
-const RUN: Record<string, string> = { running: 'trwa', ok: 'bez błędów', error: 'błąd' };
+const RUN: Record<string, string> = { running: 'trwa', evaluating: 'ocena Wektora', waiting: 'czeka na kartę', ok: 'bez błędów', error: 'błąd' };
 /** What a block does, in one line, from its own settings. */
 const blockLine = (block: MachinaBlock) => {
   switch (block.kind) {
@@ -16,6 +16,7 @@ const blockLine = (block: MachinaBlock) => {
     case 'extract': return `z „${block.from}”${block.after ? `, po „${block.after}”` : ''}${block.before ? `, przed „${block.before}”` : ''}`;
     case 'message': case 'resume': return block.text;
     case 'finish': return 'po tym klocku automat jest zakończony';
+    case 'compare': return `wycinek „${block.from}” z katalogiem sytuacji`;
     default: return [block.title, 'when' in block ? block.when : '', block.domain ? `linki: ${block.domain}` : ''].filter(Boolean).join(' · ');
   }
 };
