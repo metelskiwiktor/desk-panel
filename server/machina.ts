@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { RUN_REPORT_TIMEOUT_MS, type AutomationAct } from '../src/automation-contract';
+import type { Automation } from '../src/automation-contract';
 import type { ChatAutomation, ChatAutomationInput, ChatDetail } from '../src/chat-contract';
 import {
   MACHINA_LIMITS, MACHINA_REPAIR_NOTICE, TEMPLATE_REF, hostInDomain, isMachinaEffect, machinaActionSchema, machinaAssessSchema, machinaCardSchema, machinaConversationsSchema,
@@ -52,10 +53,15 @@ export interface Machina {
   /** Wektor's one card-free case: a one-shot automat that only writes to, or resumes, the conversation it was made in. */
   createReminder(input: { chatId: string; title: string; at: number; kind: 'message' | 'resume'; text: string }): Promise<{ thread: string }>;
   /** What the user does directly: pause, resume, cancel, run now, restore an older version. */
-  action(input: MachinaAction): Promise<MachinaAutomat>;
+  action(input: MachinaAction): Promise<MachinaAutomat | { thread: string; title: string; state: string; closed: boolean; program: null }>;
   get(thread: string): Promise<MachinaAutomat>;
-  /** Every automat with a program, briefly: what Wektor's list shows. */
-  list(): Promise<{ thread: string; title: string; state: string; version: number; nextRunAt: number | null; pending: number }[]>;
+  /** Every automat, briefly: what Wektor's list shows (`version` null: moved from the old automations, no program yet). */
+  list(): Promise<{ thread: string; title: string; state: string; version: number | null; nextRunAt: number | null; pending: number }[]>;
+  /**
+   * Takes over old time automations (DESK-87): one thread each, made once and found again by the old id. Only a plain
+   * one-shot reminder keeps working (a resume of its conversation); everything else open waits paused for a new program.
+   */
+  adopt(automations: readonly Automation[]): Promise<{ id: string; thread: string; created: boolean }[]>;
   /** Wektor's verdict in its own assessment turn: the extract is a known (or predicted) situation. No card: the sample is added and the reaction done in that run. */
   assess(input: unknown): Promise<{ thread: string; situation: string }>;
   /** Wektor's verdict: a new situation. The proposal waits as a card; the run waits with it. */
@@ -235,6 +241,34 @@ export function createMachina(options: MachinaOptions): Machina {
       title: input.title, description: input.description, module: input.module, tags: input.tags, parent: input.parent, state: ACTIVE,
       kit: { program, journal: { runs: [] }, conversations, ...(input.situations?.items.length ? { situations: input.situations } : {}) },
     }).catch(error => { throw refusal(error); });
+  };
+
+  /**
+   * What a moved old automation becomes. Closed ones keep their end (done → Zakończony, expired → Wygasł, cancelled →
+   * Anulowany). A plain one-shot reminder (no calendar, alert or notification; a conversation to go back to) keeps its time,
+   * conversation and work: a resume of that conversation with the old instruction, a version by `panel` „przeniesienie”.
+   * Every other open one is Wstrzymany without a program until the user wants one designed. The old runs and notebook are
+   * history only (`journal.legacy`), never handed to Wektor as material.
+   */
+  const adoption = (old: Automation) => {
+    const cyclic = old.trigger.kind === 'daily' || old.trigger.kind === 'weekly';
+    const closedState = old.status === 'done' ? DONE : old.status === 'expired' ? EXPIRED : old.status === 'cancelled' ? CANCELLED : undefined;
+    const legacy = {
+      id: old.id, name: old.name, goal: old.goal, trigger: old.trigger, status: old.status, actions: old.actions.map(action => action.kind),
+      notebook: old.notebook, createdAt: old.createdAt, movedAt: now(),
+      runs: old.runs.slice(-100).map(run => ({ at: run.at, outcome: run.outcome, summary: run.summary.slice(0, 1000), chatId: run.chatId.slice(0, 200), ...(run.costUsd !== undefined ? { costUsd: run.costUsd } : {}) })),
+    };
+    const base = { title: old.name.slice(0, 200), description: old.goal, module: cyclic ? 'Obserwacja' : 'Przypomnienia', tags: [] as string[] };
+    const journal = { runs: [], legacy };
+    const chat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(old.chatId) ? old.chatId : null;
+    const plain = old.trigger.kind === 'once' && old.actions.every(action => action.kind === 'message') && chat !== null;
+    if (closedState || !plain) return { ...base, state: closedState ?? PAUSED, kit: { journal, ...(chat ? { conversations: { items: [{ chatId: chat, reason: 'przeniesienie', at: now() }] } } : {}) } };
+    const version = machinaVersionSchema.safeParse({ number: 1, at: now(), by: 'panel', reason: 'przeniesienie', trigger: old.trigger, blocks: [{ id: 'wznowienie', kind: 'resume', text: old.goal.slice(0, MACHINA_LIMITS.text) }], scope: { domains: [], resumeChats: [] }, reactions: {} });
+    // An instruction the program format cannot hold (e.g. „{{…}}” in its text) waits for a card like the others.
+    if (!version.success) return { ...base, state: PAUSED, kit: { journal, conversations: { items: [{ chatId: chat, reason: 'przeniesienie', at: now() }] } } };
+    // A run the old engine already started owns this time: it finishes there, Machina does not do it again.
+    const program: MachinaProgram = { current: 1, versions: [version.data], nextRunAt: old.nextRunAt !== undefined && old.trigger.kind === 'once' ? old.trigger.at : null, chatId: chat, ...(old.status === 'paused' ? { paused: { from: ACTIVE } } : {}) };
+    return { ...base, state: old.status === 'paused' ? PAUSED : ACTIVE, kit: { program, journal, conversations: { items: [{ chatId: chat, reason: 'przeniesienie', at: now() }] } } };
   };
 
   /** `{{id}}` and friends, from what earlier blocks gave. */
@@ -581,14 +615,37 @@ export function createMachina(options: MachinaOptions): Machina {
     item.samples = [...item.samples, { ...sample, at: now() }].slice(-MACHINA_LIMITS.samples);
   };
 
+  const bareByThread = async (thread: string) => {
+    const view = await fila.thread(thread).catch(error => { throw refusal(error); });
+    const raw = view.machina ? await fila.machina.read(view.uid) : null;
+    if (!raw) throw new MachinaError(404, `Wątek ${view.id} nie jest automatem.`);
+    return raw;
+  };
+  const firstProgram = (uid: string, card: { situations: { id: string; name: string; note?: string; samples?: string[] }[] }, content: Pick<MachinaVersion, 'trigger' | 'blocks' | 'scope' | 'reactions'>, decision: { chatId?: string; key?: string }) => serial(async () => {
+    const raw = await fila.machina.read(uid);
+    if (!raw) throw new MachinaError(404, 'Nie ma automatu o tej tożsamości.');
+    if (raw.program !== null) throw new MachinaError(409, 'Automat ma już program: odśwież i zaproponuj zmianę.');
+    if (raw.closed) throw new MachinaError(409, 'Zamkniętego automatu nie zmienia się: zaproponuj nowy.');
+    const situations = machinaSituationsSchema.parse(raw.situations ?? { items: [], pending: [] });
+    const conversations = machinaConversationsSchema.parse(raw.conversations ?? { items: [] });
+    assertCompatible(situations, content, card.situations);
+    declare(situations, card.situations);
+    const version = versionFrom(undefined, content, 'user', 'karta programu', { card: decision.key });
+    if (decision.chatId && !conversations.items.some(item => item.chatId === decision.chatId)) conversations.items.push({ chatId: decision.chatId, reason: 'projektowanie', at: now() });
+    const program: MachinaProgram = { current: 1, versions: [version], nextRunAt: firstRun(version.trigger), chatId: decision.chatId ?? null };
+    // A new approved program works: the moved automat leaves its pause (a later change of a working one does not lift a pause).
+    await fila.machina.update(uid, { state: ACTIVE, kit: { program, situations, conversations } }).catch(error => { throw refusal(error); });
+  });
+
   const checkCard = async (input: MachinaCard) => {
     const parsed = machinaCardSchema.safeParse(input);
     if (!parsed.success) throw invalid('Niepoprawna karta programu', parsed.error);
     const card = parsed.data;
-    const target = card.automat ? await byThread(card.automat) : undefined;
-    if (target?.closed) throw new MachinaError(409, 'Zamkniętego automatu nie zmienia się: zaproponuj nowy.');
+    const bare = card.automat ? await bareByThread(card.automat) : undefined;
+    if (bare?.closed) throw new MachinaError(409, 'Zamkniętego automatu nie zmienia się: zaproponuj nowy.');
+    const target = bare && bare.program !== null ? await byUid(bare.uid) : undefined;
     assertCompatible(target?.situations ?? { items: [], pending: [] }, card, card.situations);
-    return { card, target };
+    return { card, target, bare };
   };
 
   return {
@@ -620,6 +677,13 @@ export function createMachina(options: MachinaOptions): Machina {
         const made = await create({ title: card.title!, description: card.description, module: card.module, tags: card.tags, parent: card.parent, chatId: decision.chatId, version: versionFrom(undefined, content, 'user', 'karta programu', { card: decision.key }), reason: 'projektowanie', situations });
         void pump();
         return { decision: 'created', thread: made.id, version: 1 };
+      }
+      const { bare } = await checkCard(input);
+      // An automat moved from the old automations has no program yet: this card is its first one, and the consent it waited for.
+      if (bare && bare.program === null) {
+        await firstProgram(bare.uid, card, content, decision);
+        void pump();
+        return { decision: 'updated', thread: bare.id, version: 1 };
       }
       const target = await byThread(card.automat);
       const version = await change(target.uid, a => {
@@ -654,6 +718,14 @@ export function createMachina(options: MachinaOptions): Machina {
       if (!parsed.success) throw new MachinaError(400, 'Niepoprawna akcja Machiny.');
       const input = parsed.data;
       assertWritable();
+      const bare = await bareByThread(input.thread);
+      if (bare.program === null) {
+        // Moved from the old automations and waiting for its first program: it can only be cancelled.
+        if (input.action !== 'cancel') throw new MachinaError(409, 'Automat nie ma jeszcze programu: najpierw karta programu.');
+        if (bare.closed) throw new MachinaError(409, 'Automat jest już zamknięty.');
+        const made = await serial(() => fila.machina.update(bare.uid, { state: CANCELLED }).catch(error => { throw refusal(error); }));
+        return { thread: made.id, title: made.title, state: made.state, closed: made.closed, program: null };
+      }
       const target = await byThread(input.thread);
       if (input.action === 'runNow') {
         assertEnabled();
@@ -705,7 +777,31 @@ export function createMachina(options: MachinaOptions): Machina {
 
     get: byThread,
     async list() {
-      return (await all()).filter(a => !a.archived).map(a => ({ thread: a.thread, title: a.title, state: a.state, version: a.program.current, nextRunAt: a.program.nextRunAt, pending: a.situations.pending.length }));
+      type Row = { thread: string; title: string; state: string; version: number | null; nextRunAt: number | null; pending: number };
+      return (await fila.machina.list()).filter(a => !a.archived).flatMap((raw): Row[] => {
+        if (raw.program === null) return [{ thread: raw.id, title: raw.title, state: raw.state, version: null, nextRunAt: null, pending: 0 }];
+        const a = parse(raw);
+        return a ? [{ thread: a.thread, title: a.title, state: a.state, version: a.program.current, nextRunAt: a.program.nextRunAt, pending: a.situations.pending.length }] : [];
+      });
+    },
+
+    adopt(automations) {
+      assertWritable();
+      return serial(async () => {
+        const known = new Map<string, string>();
+        for (const raw of await fila.machina.list()) { const legacy = machinaJournalSchema.safeParse(raw.journal ?? { runs: [] }); if (legacy.success && legacy.data.legacy) known.set(legacy.data.legacy.id, raw.id); }
+        const out: { id: string; thread: string; created: boolean }[] = [];
+        for (const old of automations) {
+          if (old.trigger.kind !== 'once' && old.trigger.kind !== 'daily' && old.trigger.kind !== 'weekly') continue;
+          const already = known.get(old.id);
+          if (already) { out.push({ id: old.id, thread: already, created: false }); continue; }
+          const made = await fila.machina.create(adoption(old)).catch(error => { throw refusal(error); });
+          known.set(old.id, made.id);
+          out.push({ id: old.id, thread: made.id, created: true });
+        }
+        if (out.some(item => item.created)) void Promise.resolve().then(() => pump());
+        return out;
+      });
     },
 
     async assess(raw) {

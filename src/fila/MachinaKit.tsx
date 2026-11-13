@@ -67,6 +67,12 @@ export function MachinaKit({ thread }: { thread: FilaThreadDoc }) {
           </li>)}</ul>}
         {runs.length > 30 && <p className="fl-muted">Pokazano 30 najnowszych z {runs.length} runów.</p>}
       </section>
+      {journal?.success && journal.data.legacy && <section className="fl-machina-part" aria-label="Historia sprzed Machiny">
+        <h3>Historia sprzed Machiny</h3>
+        <p className="fl-muted">Przeniesiony z dawnych automatów ({journal.data.legacy.id}, {when(journal.data.legacy.movedAt)}); tylko do wglądu, nie jest materiałem programu.</p>
+        <ul className="fl-machina-list">{[...journal.data.legacy.runs].reverse().slice(0, 30).map(run => <li key={`${run.at}`}><b>{when(run.at)}</b><span>{run.outcome}: {run.summary}</span></li>)}</ul>
+        {journal.data.legacy.notebook && <details><summary>Dawny notatnik</summary><pre className="fl-machina-notebook">{journal.data.legacy.notebook}</pre></details>}
+      </section>}
       <section className="fl-machina-part" aria-label="Rozmowy">
         <h3>Rozmowy</h3>
         {!data.conversations.available || (conversations?.success && !conversations.data.items.length) ? <Missing>z tym automatem nie jest powiązana żadna rozmowa.</Missing> : !conversations?.success ? unreadable

@@ -47,7 +47,7 @@ export function SettingsView({
       {quotaVisibility && <QuotaVisibilitySettings accounts={quotaAccounts ?? null} value={quotaVisibility.value} change={quotaVisibility.set} error={quotaVisibility.error}/>}
       <WarmupSettingsCard warmup={warmup} />
       <Card title="Automaty" icon={<Bot />} area="settings-automations">
-        <p className="card-intro">Cykliczne i jednorazowe zadania Wektora: lista, historia runów, notatnik i przyciski stanu są w osobnym widoku.</p>
+        <p className="card-intro">Automaty czasowe są w Machinie: każdy to wątek w projekcie MACH w Fili. Widok Automaty zostaje dla obserwatorów Cezara i PR oraz dla historii przeniesionych automatów.</p>
         <button className="button" onClick={onOpenAutomations}>Otwórz Automaty</button>
       </Card>
       <Card title="Podgląd pionowy" icon={<Settings2 />} area="settings-preview">

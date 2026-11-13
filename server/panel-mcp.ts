@@ -24,14 +24,14 @@ import { appointmentQuerySchema, calendarProposalSchema } from '../src/appointme
 import { AppointmentError } from './znanylekarz';
 import { SMART_CATEGORIES, SMART_LIMITS, SMART_PRIORITIES, SMART_SUGGESTION, smartRulePlanSchema, smartRuleSchema, type SmartRule, type SmartRulePreview } from '../src/smart-rules-contract';
 import { linksOf, mailRow, previewPlan, smartView, SmartRuleError, TEST_LIMIT } from './smart-rules';
-import { AutomationError, type Automations } from './automations';
+import { AutomationError, resolveObserverTime, type Automations } from './automations';
 import { MachinaError, type Machina } from './machina';
 import { machinaAssessSchema, machinaCardSchema, machinaCorrectionSchema, machinaReminderSchema, machinaSituationCardSchema } from '../src/machina-contract';
 import { callFilaTool, FILA_TOOLS } from './fila-mcp';
 import { filaGuide } from '../src/chat-contract';
 import { observerKinds, OBSERVER_KIND_LABELS } from '../src/observers-contract';
 import {
-  describeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationActSchema, automationPlanSchema, automationReportSchema, automationUpdateSchema,
+  describeTrigger, isTimeTrigger, MAX_ACTIVE_AUTOMATIONS, scheduleLabel, automationActSchema, automationPlanSchema, automationReportSchema, automationUpdateSchema,
   type Automation,
 } from '../src/automation-contract';
 
@@ -566,6 +566,14 @@ export const PANEL_TOOLS: Record<string, Tool> = {
         if (chats.length !== 1) throw new AgentViewError(409, chats.length
           ? 'Automat powstaje w rozmowie, w której trwa tura, a teraz trwa ich kilka. Poczekaj, aż zostanie jedna.'
           : 'Automat powstaje w rozmowie, w której trwa tura; teraz żadna nie trwa. Wywołaj to narzędzie w odpowiedzi na wiadomość użytkownika.');
+        // DESK-87: time is Machina's: the same card-free one-shot, as a resume of this conversation in a MACH thread.
+        if (args.kind === 'time' && ctx.sources.machina) {
+          const at = resolveObserverTime(args.target, ctx.now);
+          if (at === null) throw new AgentViewError(400, 'Nie rozumiem tego momentu: podaj ISO 8601 albo „za 10 minut”, „za 2 godziny”, „za 3 dni”, „jutro o 9”, „dzisiaj o 15:30”.');
+          if (at < ctx.now) throw new AgentViewError(400, 'Ten moment już minął: podaj przyszły czas.');
+          const made = await machinaCall(async () => (await ctx.sources.machina!.createReminder({ chatId: chats[0]!, title: `Powrót do rozmowy: ${args.target}`.slice(0, 200), at, kind: 'resume', text: args.instruction })).thread);
+          return `Automat ${made} utworzony w Machinie: ${localTime(at)} panel wróci do tej rozmowy z Twoim poleceniem. Nic więcej nie zapisano i nie powstała żadna karta.`;
+        }
         const created = await ctx.automations.createObserver({ chatId: chats[0], kind: args.kind, target: args.target, instruction: args.instruction });
         return `Automat ${created.id} utworzony (${created.name}); aktywny do ${describeTrigger(created.trigger)}. Gdy zadziała, panel zacznie w tej rozmowie run automatu z Twoim poleceniem. Nic więcej nie zapisano i nie powstała żadna karta.`;
       } catch (error) {
@@ -586,8 +594,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       learn: { type: 'boolean', description: 'Czy run może zmieniać notatnik automatu' },
       replaces: { type: 'string', description: 'Id istniejącego automatu (a-…), do aktualizacji na miejscu; historia i notatnik zostają' },
     }, ['name', 'goal', 'trigger', 'actions', 'learn']),
-    async run(args) {
+    async run(args, ctx) {
       const plan = automationPlanSchema.parse(args);
+      // DESK-87: a time trigger is Machina's program card now; this card stays for Cezar and PR (stage 2).
+      if (ctx.sources.machina && isTimeTrigger(plan.trigger)) throw new AgentViewError(409, 'Automaty czasowe są w Machinie: zaproponuj program kartą panel_machina_propose (zmiana przeniesionego automatu: automat MACH-n z panel_machina; przypomnienie bez karty: panel_machina_reminder).');
       return `${CARD_SHOWN.automation}: ${plan.name}, ${describeTrigger(plan.trigger)}. ${plan.replaces ? 'Zmiany istniejącego automatu zapiszą się na miejscu' : 'Automat powstaje'} dopiero po kliknięciu użytkownika. Nie pisz, że go utworzyłeś. Zakończ odpowiedź jednym zdaniem.`;
     },
   },
@@ -614,7 +624,7 @@ export const PANEL_TOOLS: Record<string, Tool> = {
         ].join('\n');
       }
       return all.length ? [`Automaty (${all.length}; aktywne: ${all.filter(a => a?.status === 'active').length}):`,
-        ...all.map(a => `${a!.id} · ${a!.name} · ${a!.status} · ${scheduleLabel(a!.trigger)} · runów: ${a!.runs.length} · ${a!.runs.at(-1) ? `${localTime(a!.runs.at(-1)!.at)} ${a!.runs.at(-1)!.outcome}` : 'brak runów'}`)].join('\n')
+        ...all.map(a => `${a!.id} · ${a!.name} · ${a!.movedTo ? `przeniesiony do Machiny: ${a!.movedTo}` : a!.status} · ${scheduleLabel(a!.trigger)} · runów: ${a!.runs.length} · ${a!.runs.at(-1) ? `${localTime(a!.runs.at(-1)!.at)} ${a!.runs.at(-1)!.outcome}` : 'brak runów'}`)].join('\n')
         : 'Brak automatów.';
     },
   },
@@ -677,8 +687,10 @@ export const PANEL_TOOLS: Record<string, Tool> = {
       return machinaCall(async () => {
         if (!args.thread) {
           const rows = await machina.list();
-          return rows.length ? [`Automaty Machiny (${rows.length}):`, ...rows.map(r => `${r.thread} „${r.title}” · ${r.state} · wersja ${r.version}${r.nextRunAt ? ` · następny run ${localTime(r.nextRunAt)}` : ''}${r.pending ? ` · czeka kart: ${r.pending}` : ''}`)].join('\n') : 'Brak automatów Machiny.';
+          return rows.length ? [`Automaty Machiny (${rows.length}):`, ...rows.map(r => `${r.thread} „${r.title}” · ${r.state} · ${r.version === null ? 'bez programu (czeka na kartę programu na prośbę użytkownika)' : `wersja ${r.version}`}${r.nextRunAt ? ` · następny run ${localTime(r.nextRunAt)}` : ''}${r.pending ? ` · czeka kart: ${r.pending}` : ''}`)].join('\n') : 'Brak automatów Machiny.';
         }
+        const row = (await machina.list()).find(r => r.thread === args.thread.toUpperCase());
+        if (row && row.version === null) return `${row.thread} „${row.title}” · ${row.state} · bez programu: przeniesiony z dawnych automatów. Program projektuj tylko na prośbę użytkownika, od zera (dawny notatnik nie jest materiałem), kartą panel_machina_propose z automat: "${row.thread}".`;
         const a = await machina.get(args.thread);
         const version = a.program.versions.find(v => v.number === a.program.current)!;
         const cost = await machina.cost(a.thread);

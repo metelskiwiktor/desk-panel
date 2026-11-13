@@ -170,8 +170,12 @@ export const automationSchema = z.object({
   lastRunAt: z.number().int().nonnegative().optional(),
   runs: z.array(automationRunSchema).max(MAX_RUNS),
   changes: z.array(automationChangeSchema).max(50).default([]),
+  /** The Machina thread a time automation was moved to (DESK-87): this record is history only, the thread works. */
+  movedTo: z.string().max(40).optional(),
 });
 export type Automation = z.infer<typeof automationSchema>;
+/** Time triggers: the ones Machina takes over (DESK-87); Cezar and PR stay here until stage 2. */
+export const isTimeTrigger = (trigger: AutomationTrigger) => trigger.kind === 'once' || trigger.kind === 'daily' || trigger.kind === 'weekly';
 
 /** A settled alert or notification of a Machina run (docs/automaty.md, „Machina”), read by the alerts and the bell next to the old automations' own. */
 export const machinaEffectSchema = z.object({

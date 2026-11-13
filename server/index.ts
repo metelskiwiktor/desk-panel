@@ -14,6 +14,7 @@ import { createHermesChat } from './hermes-chat';
 import { createAutomationExecutor } from './automation-actions';
 import { createAutomations, type Automations } from './automations';
 import { createMachina, type Machina } from './machina';
+import { startTimeMove } from './machina-migration';
 import { mcpToken } from './panel-mcp';
 import { filaTokens } from './fila-routes';
 import { createUsageStore } from './usage';
@@ -85,6 +86,8 @@ if (chat) automations = createAutomations({
   executeAction: createAutomationExecutor({ writeCalendar: sources.automationCalendarWrite, ntfyUrl: process.env.DESK_NTFY_URL }),
   enabled: automationsEnabled(process.env),
   blockedBy: () => machina?.running() ?? false,
+  // DESK-87: on the active, unlocked Fila time belongs to Machina; Cezar and PR stay here until stage 2.
+  timeInMachina: !!(sources.fila && cutoverMode === 'active'),
 });
 automations?.start();
 // Machina (docs/automaty.md): programs the panel runs itself, kept in the automat threads of Fila. It needs the active,
@@ -95,6 +98,8 @@ if (chat && sources.fila && cutoverMode === 'active') machina = createMachina({
 });
 // Wektor's Machina tools and the chat's Machina cards reach it through the sources.
 if (machina) sources.machina = machina;
+// DESK-87: the old time automations move to Machina once (retried until it goes through; repeating makes nothing twice).
+if (machina && automations) startTimeMove({ automations, machina });
 machina?.start();
 // Usage measurement (docs/uzycie.md): only the service writes this history; scenarios and previews never get a store.
 const usage = cutoverLocked ? undefined : createUsageStore(join(panelDir, 'usage'));

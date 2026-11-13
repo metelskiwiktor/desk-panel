@@ -17,7 +17,7 @@ export function AutomationsTile() {
         const response = await fetch('/api/automations', { signal: controller.signal });
         if (!response.ok) throw new Error();
         const data = automationListSchema.parse(await response.json());
-        if (!controller.signal.aborted) { setRows(data.automations.filter(a => a.status === 'active').slice(0, 3)); setError(!!data.error); }
+        if (!controller.signal.aborted) { setRows(data.automations.filter(a => a.status === 'active' && !a.movedTo).slice(0, 3)); setError(!!data.error); }
       } catch { if (!controller.signal.aborted) setError(true); }
     };
     void read(); const timer = setInterval(() => void read(), 15000);

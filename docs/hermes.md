@@ -195,6 +195,7 @@ wyszukiwaniami, więc zlecenie powstało, zanim zobaczył choćby jeden wynik.
 | `panel_machina_reminder` | bez karty: jednorazowy wpis albo wznowienie rozmowy, w której trwa tura |
 | `panel_machina_assess`, `panel_machina_situation` | tylko w turze oceny zaczętej przez panel, z `runId` i żetonem z jej treści: znana sytuacja (bez karty) albo karta nowej sytuacji |
 | `panel_machina_correct` | karta poprawki oceny: przeniesienie próbki runu do innej sytuacji, opcjonalnie wycofanie błędnej |
+Na aktywnej Fili czas należy do Machiny (DESK-87, [automaty.md](automaty.md)): `panel_observe` z `kind: time` tworzy jednorazowe wznowienie tej rozmowy w MACH, `panel_automation_propose` z wyzwalaczem czasu odmawia i wskazuje `panel_machina_propose`, a `panel_automation_update` na przeniesionym automacie odmawia z ID wątku; Cezar i PR działają jak wcześniej.
 Opisy narzędzi kokpitu (co, kiedy, skutek), także wizyty i propozycji wydarzenia Google, i ich reguły w preambule pochodzą z jednej tabeli `COCKPIT_TOOLS` w
 `src/cockpit-contract.ts` (kontrakt kokpitu, zob. [czat.md](czat.md)).
 

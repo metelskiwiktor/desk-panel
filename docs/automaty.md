@@ -155,9 +155,9 @@ Wyniki (`kind, at, result, ref`, opcjonalnie błąd i treść) zostają w runie 
 
 Widget „Automaty” można umieścić na pulpicie jak inne kafelki: do trzech aktywnych automatów, stan, nazwa, następny run i pięć kropek historii. Dotknięcie otwiera widok Automaty.
 
-## Machina: programy wykonywane przez panel (etap 1b, DESK-85 i DESK-86)
+## Machina: programy wykonywane przez panel (etap 1b, DESK-85, DESK-86 i DESK-87)
 
-Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Machina`). Automat Machiny jest wątkiem Fili typu `automat` w projekcie MACH ([fila.md](fila.md), „Machina: dom automatu”): wątek trzyma tożsamość, tytuł, cel w opisie, Stan, Moduł i Tagi, a zestaw Machiny tylko działanie. Lista automatów to zapytanie Fili (`projekt = MACH AND typ = automat`), osobnej listy nie ma. Stare automaty (`automations.json`) działają bez zmian do migracji (DESK-87) i nie są źródłem automatów Machiny. Silnik i jego kontrakty to DESK-85; sytuacje, ocena i naprawa przez Wektora, karty w czacie i narzędzia Wektora to DESK-86 (niżej, „Sytuacje, ocena i naprawa”). Wygląd kart i kokpitu ustala pictor; backend udostępnia zachowanie.
+Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Machina`). Automat Machiny jest wątkiem Fili typu `automat` w projekcie MACH ([fila.md](fila.md), „Machina: dom automatu”): wątek trzyma tożsamość, tytuł, cel w opisie, Stan, Moduł i Tagi, a zestaw Machiny tylko działanie. Lista automatów to zapytanie Fili (`projekt = MACH AND typ = automat`), osobnej listy nie ma. Na aktywnej, odblokowanej Fili automaty czasowe (`once`, `daily`, `weekly`) są w Machinie (przejście DESK-87, niżej); w `automations.json` zostają obserwatory Cezara i PR (do etapu 2) oraz historia przeniesionych automatów. Silnik i jego kontrakty to DESK-85; sytuacje, ocena i naprawa przez Wektora, karty w czacie i narzędzia Wektora to DESK-86 (niżej, „Sytuacje, ocena i naprawa”). Wygląd kart i kokpitu ustala pictor; backend udostępnia zachowanie.
 
 | Co | Plik |
 | --- | --- |
@@ -247,3 +247,26 @@ Pauza, anulowanie, wyłącznik i brak aktywnej Fili blokują skutki reakcji tak�
 **Wektor i czat**: narzędzia `panel_machina` (odczyt), `panel_machina_propose` (karta programu; panel sprawdza ją jak przy zapisie), `panel_machina_reminder` (jedyny automat bez karty: jednorazowy wpis albo wznowienie rozmowy, w której trwa tura), `panel_machina_assess` i `panel_machina_situation` (werdykty, tylko z żetonem tury oceny), `panel_machina_correct` (karta poprawki) — opisy w [hermes.md](hermes.md). Odpowiedź na kartę: `POST /api/chats/:id/machina` `{ toolCallId, decision: accept|reject }`, Origin-checked; to, co karta zatwierdza, panel czyta z wywołania narzędzia w tej rozmowie, nigdy z żądania; karty odrzuconej przez panel nie da się zatwierdzić (409); odpowiedź zostaje w `cockpit.json` (`machinaCards`), więc drugie kliknięcie i restart dają tę samą odpowiedź bez drugiego zapisu; wersja programu z karty ma też klucz karty (`card`: `chatId:toolCallId`), więc ponowienie po awarii między zapisem do Fili a `cockpit.json` nie robi drugiego automatu ani wersji. Karty Machiny mają w rozmowie stałe id z treści wywołania (`<wiadomość>:m-<skrót>`, `stableMachinaCardId`), takie samo na żywo i po odczycie historii Hermesa. Kokpit rozmowy: `GET /api/chats/:id/machina` → `{ machina: { thread, title, state, reason, runId?, version, blocks, lastRun?, cost } | null }` (wątek automatu jest linkiem do Fili).
 
 **Alerty i dzwonek**: `GET /api/automations` ma dodatkowe pole `machina` z rozstrzygniętymi skutkami `smartAction` i `notify` (`MachinaEffect`); alert Smart Actions żyje 30 dni i znika z anulowaniem automatu, dzwonek zbiera powiadomienia z 24 h, jak dla starych automatów.
+
+### Przejście automatów czasowych do Machiny (DESK-87)
+
+**Kiedy**: tylko tam, gdzie Machina istnieje (`fila=true`, `locked=false`; w usłudze tryb `active`). Panel przy starcie wywołuje `startTimeMove` (`server/machina-migration.ts`) i ponawia co minutę, aż przejście raz się uda (np. zablokowany magazyn czeka). Przy liście Fili (`fila=false`) czas zostaje w starym rejestrze bez zmian.
+
+**Jak**: każdy rekord `once`/`daily`/`weekly` z `automations.json`, także zamknięty, dostaje jeden wątek automat w MACH (`machina.adopt`): tytuł = nazwa, opis = cel, Tagi puste, Moduł Obserwacja dla cyklicznych i Przypomnienia dla jednorazowych (zwykłe pole, użytkownik może je zmienić). Najpierw powstaje wątek z `journal.legacy.id` = dawne `a-…`, potem stary rekord dostaje `movedTo` = ID wątku; ponowienie, restart i awaria między tymi zapisami znajdują wątek po starym id i niczego nie dublują.
+
+| Dawny rekord | Wątek |
+| --- | --- |
+| cykliczny aktywny albo wstrzymany | Wstrzymany, bez programu, do nowej karty programu |
+| jednorazowy z `calendarEvent`/`smartAction`/`notify`, aktywny albo wstrzymany | Wstrzymany, bez programu; dawne akcje nie wykonują się same |
+| zwykłe przypomnienie jednorazowe (tylko `message`, rozmowa o identyfikatorze UUID) | Aktywny (wstrzymane: Wstrzymany) z programem wersji 1 autora `panel`, powód „przeniesienie”: ten sam termin i klocek `resume` rozmowy źródłowej z dawną instrukcją; jeśli dawny silnik już zaczął jego run, run kończy się tam, a Machina nie powtarza terminu |
+| `done` / `expired` / `cancelled` | Zakończony / Wygasł / Anulowany, bez reaktywacji |
+
+Zwykłe przypomnienie z instrukcją, której program nie pomieści (np. `{{…}}` w treści), przechodzi jak automat z akcjami: Wstrzymany do karty.
+
+**Historia sprzed Machiny**: `journal.legacy` (nazwa, cel, wyzwalacz, stan, rodzaje akcji, notatnik, do 100 dawnych runów z wynikiem, streszczeniem i kosztem) — tylko do wglądu, poza `journal.runs`; strona wątku pokazuje ją w sekcji „Historia sprzed Machiny”. Nie jest materiałem programu: `panel_machina` jej nie podaje.
+
+**Pierwszy program** przeniesionego automatu powstaje tylko na prośbę użytkownika, od zera: Wektor proponuje kartę `panel_machina_propose` z `automat: MACH-n`; zgoda tworzy wersję 1 i ustawia Aktywny (to zgoda, na którą automat czekał). Przejście nie budzi projektowania. Do tego czasu automat można tylko anulować (inne akcje odmawiają 409).
+
+**Po przejęciu** stary rejestr nie zaczyna, nie tworzy i nie zmienia automatów czasowych (`timeInMachina`): `panel_observe(time)` tworzy w Machinie jednorazowe wznowienie rozmowy, w której trwa tura (Przypomnienia, Aktywny); `panel_automation_propose` z wyzwalaczem czasu odmawia i wskazuje `panel_machina_propose`; sterowanie przeniesionym (`panel_automation_update`, `POST /api/automations/action`) odmawia z ID wątku. Run zaczęty przez stary silnik przed przejęciem domyka się starą ścieżką (jeden właściciel runu). Widok Automaty pokazuje przeniesiony rekord jako „w Machinie: MACH-n” z przyciskiem do wątku i bez przycisków stanu, kafelek ich nie pokazuje, karta w Ustawieniach mówi, gdzie są automaty czasowe. Cezar, PR i Smart Actions działają po staremu.
+
+**Odbiór IRONMAN** na atrapach: blok „IRONMAN” w `server/machina-migration.test.ts` z danymi `scenarios/fixtures/machina-ironman.json` (dawny rekord, karta pierwszego programu, pięć wyglądów strony). Produkcyjny IRONMAN po wdrożeniu czeka Wstrzymany, aż użytkownik poprosi o zaprojektowanie programu.

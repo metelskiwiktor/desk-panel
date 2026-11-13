@@ -161,8 +161,18 @@ export const machinaRunSchema = z.object({
   chatId: chatId.optional(), costUsd: z.number().nonnegative().optional(),
 }).strict();
 export type MachinaRun = z.infer<typeof machinaRunSchema>;
+/**
+ * The history of an old automation this automat was moved from (DESK-87): read-only, outside the runs, and never material
+ * for a program. `id` (a-…) is how a repeated move finds the thread it already made.
+ */
+const legacySchema = z.object({
+  id: z.string().regex(/^a-[0-9a-f]{12}$/), name: z.string().max(120), goal: z.string().max(4000), trigger: triggerSchema,
+  status: z.enum(['active', 'paused', 'done', 'expired', 'cancelled']), actions: z.array(z.string().max(30)).max(20),
+  notebook: z.string().max(4000), createdAt: z.number(), movedAt: z.number(),
+  runs: z.array(z.object({ at: z.number(), outcome: z.string().max(20), summary: z.string().max(1000), chatId: z.string().max(200), costUsd: z.number().nonnegative().optional() }).strict()).max(100),
+}).strict();
 /** Append-only: a run is added and filled in, never removed or rewritten once it ended. */
-export const machinaJournalSchema = z.object({ runs: z.array(machinaRunSchema) }).strict();
+export const machinaJournalSchema = z.object({ runs: z.array(machinaRunSchema), legacy: legacySchema.optional() }).strict();
 export type MachinaJournal = z.infer<typeof machinaJournalSchema>;
 
 /** An extract of a run that confirmed a situation: text with tidy spacing and its links, compared exactly. */
