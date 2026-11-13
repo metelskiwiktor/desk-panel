@@ -22,6 +22,7 @@ które przekazuje żądanie do `ChatWindow` i istniejącego `source.open(id)`. S
 | Task i PR w kokpicie | `src/cockpit/Cockpit.tsx` |
 | Wizyty: karta, wspólny stan, oś kalendarza | `src/cockpit/appointment-card.tsx`, `appointment-workspace.tsx`, `AppointmentPanel.tsx` |
 | Pozostałe karty zgody i danych | `src/cockpit/cards.tsx`, `consent-card.tsx`, `assign-card.tsx`, `smart-cards.tsx` |
+| Karty Machiny: program (również naprawa), nowa sytuacja, poprawka oceny | `src/cockpit/machina-card.tsx`; mapa i zapis decyzji w `live.ts`, rejestracja w `Thread.tsx` |
 | Pamięć podglądów i układu bieżącego okna | `src/chat-snapshots.ts`, `src/cockpit/conversation-cache.ts` |
 
 Nie aktualizuj komponentów assistant-ui z rejestru bez ponownego naniesienia lokalnych zmian. `thread.aui.tsx` ma polskie
@@ -55,6 +56,8 @@ Najpierw sprawdź właściciela reguły i computed styles. Zmiana globalnego res
   zachowania. Szczegóły i sposób zakończenia trybu są w [czat.md](czat.md).
 - Renderowanie, przełączenie rozmowy i wskazanie elementu nie mogą same wysyłać wiadomości ani zatwierdzać kart.
   Ostateczny zapis nadal sprawdza backend, z planem z tej samej rozmowy.
+- Mapa kart w `live.ts` musi obejmować wszystkie rodzaje z `CockpitTool.card` (sprawdza TypeScript); nieznane narzędzie zachowuje własną nazwę. Karty Machiny walidują argumenty kontraktem przed renderowaniem: błędna albo odrzucona propozycja pokazuje powód i nie daje zgody. Decyzja wysyła wyłącznie `toolCallId` i `decision` do `POST /api/chats/:id/machina`, a zapisany wynik czyta z `machinaCards` kokpitu. Program pokazuje harmonogram, zakres, klocki, sytuacje i reakcje; żeton oceny nie jest wyświetlany.
+- `ChatErrorBoundary` chroni każdą kartę i każdą wiadomość asystenta; wyjątek renderowania pokazuje lokalny komunikat zamiast usuwać panel. Nie zastępuje walidacji danych ani ochrony mapowania przed rozpoczęciem renderowania wiadomości. Regresja `src/chat-machina.test.tsx` odtwarza dwie propozycje z jednej tury (odrzuconą i poprawioną), wszystkie rodzaje kart, zapis decyzji i niepoprawne dane.
 
 ## Krótki cykl pracy
 

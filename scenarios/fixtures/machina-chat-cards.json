@@ -1,0 +1,29 @@
+{
+  "id": "m1",
+  "role": "agent",
+  "at": 2,
+  "status": "done",
+  "parts": [
+    {
+      "type": "tool",
+      "id": "m1:m-1",
+      "name": "mcp__desk_panel__panel_machina_propose",
+      "input": "{\"automat\":\"MACH-2\",\"title\":\"Zapisy wydarzenia\",\"module\":\"Obserwacja\",\"description\":\"Obserwuj publiczne zapisy i powiadom o ich otwarciu.\",\"trigger\":{\"daily\":{\"times\":[\"10:00\",\"19:00\"]}},\"scope\":{\"domains\":[\"ironmanpoznan.com.pl\",\"www.ironman.com\"]},\"blocks\":[{\"id\":\"fetch-pl\",\"type\":\"fetch\",\"url\":\"https://ironmanpoznan.com.pl/registration\"},{\"id\":\"wycinek-pl\",\"type\":\"extract\",\"from\":\"fetch-pl\",\"after\":\"Enea IRONMAN 70.3 Poznań\",\"before\":\"Enea IRONMAN 5150\"},{\"id\":\"fetch-en\",\"type\":\"fetch\",\"url\":\"https://www.ironman.com/races/im703-poznan\"},{\"id\":\"wycinek-en\",\"type\":\"extract\",\"from\":\"fetch-en\",\"after\":\"IRONMAN 70.3 Poznan\",\"before\":\"IRONMAN 70.3 Erkner\"},{\"id\":\"fetch-reg\",\"type\":\"fetch\",\"url\":\"https://www.ironman.com/races/im703-poznan/register\"},{\"id\":\"wycinek-reg\",\"type\":\"extract\",\"from\":\"fetch-reg\",\"after\":\"registration-state\"},{\"id\":\"porownanie\",\"type\":\"compare\",\"from\":\"wycinek-pl\"}],\"situations\":[{\"id\":\"s-otwarte\",\"name\":\"Formularz zapisów 70.3 2027 otwarty\",\"note\":\"Na stronie PL wiersz 70.3 ma link slotmarket.pl do edycji 2027 albo /register przestaje być opening_soon/sold out\"},{\"id\":\"s-zamkniete\",\"name\":\"Zapisy jeszcze nie ruszyły\",\"note\":\"SOLD OUT edycji 2026 i opening_soon, bez formularza 2027\"},{\"id\":\"s-nieczytelne\",\"name\":\"Strona nieczytelna albo brak wiersza 70.3\",\"note\":\"fetch pusty, wycinek bez wiersza 70.3 albo błąd odczytu\"}],\"reactions\":{\"s-otwarte\":[{\"id\":\"msg-otwarte\",\"type\":\"message\",\"text\":\"Zapisy na Enea IRONMAN 70.3 Poznań 2027 ruszyły. Formularz: {{wycinek-pl.link}} (status: {{wycinek-reg}})\"},{\"id\":\"notify-otwarte\",\"type\":\"notify\",\"title\":\"IRONMAN 70.3 Poznań 2027: zapisy otwarte\",\"text\":\"Ruszyły zapisy na 70.3 Poznań 2027. Link: {{wycinek-pl.link}}\"}],\"s-zamkniete\":[],\"s-nieczytelne\":[]}}",
+      "state": "done",
+      "error": true,
+      "output": "{\"error\":\"Niepoprawne argumenty: trigger.kind, blocks.0.kind\"}"
+    },
+    {
+      "type": "tool",
+      "id": "m1:m-2",
+      "name": "mcp__desk_panel__panel_machina_propose",
+      "input": "{\"automat\":\"MACH-2\",\"title\":\"Zapisy wydarzenia\",\"description\":\"Obserwuj publiczne zapisy i powiadom o ich otwarciu.\",\"module\":\"Obserwacja\",\"trigger\":{\"kind\":\"daily\",\"times\":[\"10:00\",\"19:00\"]},\"blocks\":[{\"id\":\"fetch-pl\",\"kind\":\"fetch\",\"url\":\"https://ironmanpoznan.com.pl/registration\"},{\"id\":\"wycinek-pl\",\"kind\":\"extract\",\"from\":\"fetch-pl\",\"after\":\"Enea IRONMAN 70.3 Poznań\",\"before\":\"Enea IRONMAN 5150\"},{\"id\":\"fetch-en\",\"kind\":\"fetch\",\"url\":\"https://www.ironman.com/races/im703-poznan\"},{\"id\":\"wycinek-en\",\"kind\":\"extract\",\"from\":\"fetch-en\",\"after\":\"IRONMAN 70.3 Poznan\",\"before\":\"IRONMAN 70.3 Erkner\"},{\"id\":\"fetch-reg\",\"kind\":\"fetch\",\"url\":\"https://www.ironman.com/races/im703-poznan/register\"},{\"id\":\"wycinek-reg\",\"kind\":\"extract\",\"from\":\"fetch-reg\",\"after\":\"registration-state\"},{\"id\":\"porownanie\",\"kind\":\"compare\",\"from\":\"wycinek-pl\"}],\"scope\":{\"domains\":[\"ironmanpoznan.com.pl\",\"www.ironman.com\"]},\"situations\":[{\"id\":\"s-otwarte\",\"name\":\"Formularz zapisów 70.3 2027 otwarty\",\"note\":\"Wiersz 70.3 na stronie PL ma link slotmarket.pl do edycji 2027 albo /register przestaje być opening_soon/sold out\"},{\"id\":\"s-zamkniete\",\"name\":\"Zapisy jeszcze nie ruszyły\",\"note\":\"SOLD OUT edycji 2026 i opening_soon, bez formularza 2027\"},{\"id\":\"s-nieczytelne\",\"name\":\"Strona nieczytelna albo brak wiersza 70.3\",\"note\":\"Pusty fetch, wycinek bez wiersza 70.3 albo błąd odczytu\"}],\"reactions\":{\"s-otwarte\":[{\"id\":\"msg-otwarte\",\"kind\":\"message\",\"text\":\"Zapisy na Enea IRONMAN 70.3 Poznań 2027 ruszyły. Formularz: {{wycinek-pl.link}} (stan /register: {{wycinek-reg}})\"},{\"id\":\"notify-otwarte\",\"kind\":\"notify\",\"title\":\"IRONMAN 70.3 Poznań 2027: zapisy otwarte\",\"text\":\"Ruszyły zapisy na 70.3 Poznań 2027. Link: {{wycinek-pl.link}}\"}],\"s-zamkniete\":[],\"s-nieczytelne\":[]}}",
+      "state": "done",
+      "output": "{\"result\":\"Karta programu automatu jest u użytkownika\"}"
+    },
+    {
+      "type": "text",
+      "text": "Sprawdź proponowany program."
+    }
+  ]
+}

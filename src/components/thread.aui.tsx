@@ -1,4 +1,6 @@
 "use client";
+
+import { ChatErrorBoundary } from "./chat-error-boundary";
 // assistant-ui's Thread (shadcn registry `thread`), adapted for Desk Panel: Polish labels, no attachments, edits, reloads
 // or branches (the panel's runtime has none of them), and slots for what the panel adds (skills, picked elements,
 // the "Hermes nie odpowiada" card, notices). Updating from the registry means merging these changes again.
@@ -289,7 +291,7 @@ const ThreadMessage: FC = () => {
   if (isEditing) return <EditComposer />;
   if (isSpoken) return <SpokenMessage />;
   if (role === "user") return <UserMessage />;
-  return <AssistantMessageComponent />;
+  return <ChatErrorBoundary message="Nie da się pokazać tej wiadomości. Pozostała część rozmowy jest dostępna."><AssistantMessageComponent /></ChatErrorBoundary>;
 };
 
 type VoiceRunPosition = "single" | "start" | "middle" | "end";

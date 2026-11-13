@@ -16,6 +16,7 @@ import { attachmentProblem, chatFileUrl, fileLabel, fileSize, mimeOf, readDraft,
 import { CardActions, CardBoundary, DispatchCard, HermesApprovalCard, ReconCard, ShowCard, WatchCard } from './cards';
 import { BankPlanCard } from './consent-card';
 import { MailListCard, SmartRuleCard } from './smart-cards';
+import { MachinaCard } from './machina-card';
 import { AutomationCard } from './automation-card';
 import { BankAssignCard } from './assign-card';
 import { AppointmentCard, CalendarPlanCard, type AppointmentArgs } from './appointment-card';
@@ -95,6 +96,10 @@ const SmartRuleUI = makeAssistantToolUI<SmartRuleArgs, unknown>({ toolName: SMAR
 const AutomationUI = makeAssistantToolUI<AutomationArgs, AutomationResult>({ toolName: AUTOMATION, display: 'standalone', render: props => <CardBoundary><AutomationCard {...props} /></CardBoundary> });
 const ShowUI = makeAssistantToolUI<ShowArgs, unknown>({ toolName: SHOW, display: 'standalone', render: props => <CardBoundary><ShowCard {...props} /></CardBoundary> });
 const ApprovalUI = makeAssistantToolUI<HermesApprovalArgs, unknown>({ toolName: HERMES_APPROVAL, display: 'standalone', render: props => <CardBoundary><HermesApprovalCard {...props} /></CardBoundary> });
+
+const MachinaUI = makeAssistantToolUI<Record<string, unknown>, unknown>({ toolName: 'machina', display: 'standalone', render: props => <CardBoundary><MachinaCard kind="machina" {...props} /></CardBoundary> });
+const MachinaSituationUI = makeAssistantToolUI<Record<string, unknown>, unknown>({ toolName: 'machinaSituation', display: 'standalone', render: props => <CardBoundary><MachinaCard kind="machinaSituation" {...props} /></CardBoundary> });
+const MachinaCorrectionUI = makeAssistantToolUI<Record<string, unknown>, unknown>({ toolName: 'machinaCorrection', display: 'standalone', render: props => <CardBoundary><MachinaCard kind="machinaCorrection" {...props} /></CardBoundary> });
 
 type Custom = { context: ContextItem[]; files?: ChatFileRef[]; notice?: string; status: CockpitMessage['status']; automation?: ChatAutomation };
 const useCustom = () => useAuiState(s => s.message.metadata.custom) as Custom;
@@ -488,7 +493,7 @@ export function Thread(props: ThreadProps) {
   return <AssistantRuntimeProvider runtime={runtime}>
     <TooltipProvider>
       <CardActions.Provider value={actions}>
-        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><MailListUI /><SmartRuleUI /><AutomationUI /><ApprovalUI />
+        <ReconUI /><DispatchUI /><WatchUI /><ShowUI /><BankPlanUI /><BankAssignUI /><AppointmentUI /><CalendarPlanUI /><MailListUI /><SmartRuleUI /><AutomationUI /><MachinaUI /><MachinaSituationUI /><MachinaCorrectionUI /><ApprovalUI />
         <div className="tw:relative tw:min-h-0 tw:flex-1" onDragOver={onDragOver} onDrop={onDrop}>
           <Conversation {...props} files={files} fileError={fileError} addFiles={addFiles} removeFile={removeFile} commandRef={commandRef} resetLocal={() => setLocalMessages([])} localMessage={text => setLocalMessages(list => [...list, { id: crypto.randomUUID(), role: 'assistant', at: Date.now(), status: 'done', parts: [{ type: 'text', text }] }])} />
         </div>

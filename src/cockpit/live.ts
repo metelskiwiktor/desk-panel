@@ -36,10 +36,10 @@ export function cardArgs(raw: Record<string, unknown>): Record<string, unknown> 
 }
 
 /** The card of a panel tool Hermes called, by the cockpit contract; any other tool keeps its name (a plain tool row). */
-const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN, bankAssign: BANK_ASSIGN, appointment: APPOINTMENT, calendarPlan: CALENDAR_PLAN, mailList: MAIL_LIST, smartRule: SMART_RULE, automation: AUTOMATION } as const;
+const CARDS = { recon: RECON, dispatch: DISPATCH, watch: WATCH, show: SHOW, bankPlan: BANK_PLAN, bankAssign: BANK_ASSIGN, appointment: APPOINTMENT, calendarPlan: CALENDAR_PLAN, mailList: MAIL_LIST, smartRule: SMART_RULE, automation: AUTOMATION, machina: 'machina', machinaSituation: 'machinaSituation', machinaCorrection: 'machinaCorrection' } as const satisfies Record<NonNullable<import('../cockpit-contract').CockpitTool['card']>, string>;
 export const cardOf = (name: string) => {
   const tool = COCKPIT_TOOLS[panelToolName(name) as CockpitToolName] as { card?: keyof typeof CARDS } | undefined;
-  return tool?.card ? CARDS[tool.card] : name;
+  return tool?.card ? CARDS[tool.card] ?? name : name;
 };
 
 const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
@@ -47,7 +47,7 @@ const resultOf = (outcome: DispatchOutcome) => outcome.decision === 'dispatched'
   : { decision: 'rejected' as const };
 
 /** One message of the panel's chat as the cockpit shows it; a dispatch card carries the user's answer, if any. */
-export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}, automationCards: CockpitView['automationCards'] = {}): CockpitMessage {
+export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatches'] = {}, legacyUnresolved = false, bankPlans: CockpitView['bankPlans'] = {}, automationCards: CockpitView['automationCards'] = {}, machinaCards: CockpitView['machinaCards'] = {}): CockpitMessage {
   if (m.role === 'user') return { id: m.id, role: 'user', at: m.at, parts: [{ type: 'text', text: m.text ?? '' }], context: m.context, files: m.files, ...(m.automation ? { automation: m.automation } : {}), status: 'done' };
   return {
     id: m.id, role: 'assistant', at: m.at, error: m.error, notice: m.notice,
@@ -57,8 +57,8 @@ export function cockpitMessage(m: ChatMessage, dispatches: CockpitView['dispatch
       if (p.type === 'approval') return { type: 'tool', id: p.id, name: HERMES_APPROVAL, args: { tool: p.tool, detail: p.detail, state: p.state, at: p.at }, running: p.state === 'pending' };
       const name = cardOf(p.name);
       // A proposal is not done by its tool: it waits for the user's answer (none yet: no result).
-      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : name === AUTOMATION ? automationCards[p.id] : p.output;
-      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : name === AUTOMATION ? 'automation' : null;
+      const result = name === DISPATCH ? (dispatches[p.id] ? resultOf(dispatches[p.id]) : undefined) : name === BANK_PLAN || name === BANK_ASSIGN || name === SMART_RULE ? bankPlans[p.id] : name === AUTOMATION ? automationCards[p.id] : ['machina', 'machinaSituation', 'machinaCorrection'].includes(name) ? machinaCards[p.id] : p.output;
+      const card = name === DISPATCH ? 'dispatch' : name === RECON ? 'recon' : name === SHOW ? 'show' : name === BANK_PLAN ? 'bankPlan' : name === BANK_ASSIGN ? 'bankAssign' : name === APPOINTMENT ? 'appointment' : name === CALENDAR_PLAN ? 'calendarPlan' : name === MAIL_LIST ? 'mailList' : name === SMART_RULE ? 'smartRule' : name === AUTOMATION ? 'automation' : name === 'machina' ? 'machina' : name === 'machinaSituation' ? 'machinaSituation' : name === 'machinaCorrection' ? 'machinaCorrection' : null;
       const refused = card && p.state === 'done' ? cardRefusal(card, p.output, p.error) : null;
       const args = name === RECON || name === DISPATCH || name === WATCH ? cardArgs(parseArgs(p.input)) : parseArgs(p.input);
       return { type: 'tool', id: p.id, name, args: { ...args, ...(name === DISPATCH ? { legacyUnresolved } : {}), ...(refused ? { refused } : {}) }, result, running: p.state === 'running', error: p.error };
@@ -118,7 +118,7 @@ export function useLiveCockpit(): CockpitSource {
   const dispatches = view?.dispatches;
   const bankPlans = view?.bankPlans;
   const automationCards = view?.automationCards;
-  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans, automationCards)), [items, dispatches, view?.legacyUnresolved, bankPlans, automationCards]);
+  const messages = useMemo(() => items.map(m => cockpitMessage(m, dispatches, view?.legacyUnresolved, bankPlans, automationCards, view?.machinaCards)), [items, dispatches, view?.legacyUnresolved, bankPlans, automationCards, view?.machinaCards]);
   const activeId = chat.activeId;
 
   const cockpit: CockpitState = useMemo(() => {
@@ -174,6 +174,12 @@ export function useLiveCockpit(): CockpitSource {
       if (eventResponse?.kind === 'appointment' || eventResponse?.kind === 'calendarPlan') {
         if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
         await call(`/api/chats/${activeId}/${eventResponse.kind === 'appointment' ? 'appointment' : 'calendar-plan'}`, 'POST', { toolCallId: id, action: eventResponse.action });
+        return;
+      }
+      if (response && typeof response === 'object' && (response as { kind?: unknown }).kind === 'machina') {
+        if (!activeId) throw new Error('Nie ma otwartej rozmowy.');
+        await call(`/api/chats/${activeId}/machina`, 'POST', { toolCallId: id, decision: (response as { decision: 'accept' | 'reject' }).decision });
+        refresh();
         return;
       }
       // A Smart Actions rule card: the panel saves the rule (or not) as the user answered.
