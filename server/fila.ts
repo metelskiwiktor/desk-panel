@@ -682,7 +682,8 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
     if (!workflow) data.workflows.push(structuredClone(W));
     if (!project) {
       data.projects.push({ key: P.key, name: P.name, createdAt: now(), modules: [...P.modules], nextNumber: 1 });
-      createStarterBoard(data, P.key, 'panel', now());
+      // The list of automats is a Fila query over threads (D-059): MACH's own board starts with it instead of „Wszystkie wątki”.
+      createStarterBoard(data, P.key, 'panel', now(), { name: 'Automaty', query: formatFilaQuery(compileFilaQuery(`projekt = ${P.key} AND typ = ${FILA_AUTOMAT_TYPE}`, data, 'section')) });
     }
     return projectOf(P.key);
   };

@@ -28,9 +28,14 @@ export interface FilaThreadDoc {
   cezar: { enabled: boolean; executor: 'cezar' | 'lokalnie' | 'rozmowa' | null; repo: 'desk-panel' | null; mode: 'analiza' | 'implementacja' | null; links: { kind: 'cezar' | 'pr'; id: string; title?: string; at: number }[] };
   /** „Zablokowane” (2.3a): the thread's blocks; it is blocked while the list has an entry. */
   blockers: { id: string; reason: string; origin: { kind: string }; at: number; by: string }[];
+  /** Only on an automat: it has the Machina kit; `builtIn` = shipped by the panel's code (never deleted). */
+  machina?: { builtIn: boolean; parts: Record<'program' | 'situations' | 'journal' | 'conversations', boolean> };
   archived: boolean; revision: number; createdAt: number; updatedAt: number; createdBy: string;
   history: { at: number; by: string; kind: string; text?: string; changes?: { field: string; from: string | null; to: string | null }[] }[];
 }
+/** The Machina kit of an automat (GET /api/fila/threads/ID/machina): each part with an explicit lack of content. */
+type FilaMachinaPartDoc = { available: boolean; content: unknown };
+export interface FilaMachinaKitDoc { thread: string; uid: string; builtIn: boolean; program: FilaMachinaPartDoc; situations: FilaMachinaPartDoc; journal: FilaMachinaPartDoc; conversations: FilaMachinaPartDoc }
 export interface FilaSpecDoc { thread: string; enabled: boolean; revision: number; text: string | null; by: string | null; at: number | null; latest: number }
 export interface FilaBoardDoc {
   id: string; name: string; project: string | null;

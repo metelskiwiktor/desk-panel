@@ -298,3 +298,12 @@
 .fl-preview pre { max-height: 260px; margin: 6px 0 8px; padding: 8px 10px; overflow: auto; border: 1px solid var(--p2-line); border-radius: 8px; background: var(--p2-bg, #0b0f16); color: var(--p2-muted); font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
 .fl-primary.wide { width: 100%; margin-top: 10px; }
 .fl-cezar > .fl-text { margin-top: 4px; }
+
+/* The Machina kit on an automat's thread page (read-only; the look is pictor's to settle). */
+.fl-state-fixed { cursor: default; }
+.fl-machina-part { margin-top: 14px; }
+.fl-machina-part h3 { margin: 0 0 6px; font-size: 14px; }
+.fl-machina-blocks, .fl-machina-list { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.fl-machina-list { list-style: none; padding-left: 0; }
+.fl-machina-blocks li span, .fl-machina-list > li > span { display: block; color: var(--fl-muted, inherit); opacity: .8; overflow-wrap: anywhere; }
+.fl-machina-list ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }

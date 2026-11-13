@@ -114,6 +114,34 @@ describe('the home of Machina: preparation on first use', () => {
   });
 });
 
+it('gives MACH a board whose list is the Fila query for automats: threads of that type only, by the usual rules of archive and closing states', async () => {
+  const store = createFilaStore();
+  const a = await store.machina.create({ title: 'Aktywny', state: 'Aktywny' });
+  const b = await store.machina.create({ title: 'Zakończony', state: 'Zakończony' });
+  const c = await store.machina.create({ title: 'W archiwum', state: 'Anulowany' });
+  await act(store, { action: 'createThread', project: 'MACH', type: 'sprawa', title: 'Zwykła sprawa w MACH' });
+  await act(store, { action: 'archiveThread', thread: c.id });
+  const reg = await store.registries();
+  const board = await store.board(reg.projects[0]!.board!);
+  expect(board.views[0]!.sections.map(s => [s.name, s.kind, s.query])).toEqual([['Automaty', 'list', 'projekt = MACH AND typ = automat']]);
+  expect(board.history[0]).toMatchObject({ by: 'panel', kind: 'created' });
+  const view = await store.boardView(board.id, board.views[0]!.id);
+  expect(view.sections[0]!.threads.map(t => [t.id, t.type.key, t.closed])).toEqual([[a.id, 'automat', false], [b.id, 'automat', true]]);
+  const ids = async (q: string) => (await store.query(q)).threads.map(t => t.id);
+  expect(await ids('projekt = MACH')).toEqual(['MACH-1', 'MACH-2', 'MACH-4']);
+  expect(await ids('projekt = MACH AND typ = automat AND otwarte')).toEqual(['MACH-1']);
+  expect(await ids('projekt = MACH AND typ = automat AND zamknięte')).toEqual(['MACH-2']);
+  expect(await ids('projekt = MACH AND typ = automat AND archiwum = tylko')).toEqual(['MACH-3']);
+  expect(await ids('projekt = MACH AND typ = automat AND stan = "Aktywny"')).toEqual(['MACH-1']);
+  // A MACH that was there before Machina keeps the board it had.
+  const own = createFilaStore();
+  await act(own, { action: 'createProject', key: 'MACH', name: 'Machina' }, 'user');
+  await act(own, { action: 'setModules', project: 'MACH', modules: ['Obserwacja', 'Obsługa', 'Przypomnienia', 'Systemowe'] });
+  await own.machina.create({ title: 'x' });
+  const kept = await own.board((await own.registries()).projects[0]!.board!);
+  expect(kept.views[0]!.sections.map(s => s.query)).toEqual(['projekt = MACH']);
+});
+
 describe('the internal door: Stan, kit, archive and delete', () => {
   it('writes the Stan it is given with the right closed flag, a history entry by machina and one write for Stan and kit', async () => {
     const store = createFilaStore();

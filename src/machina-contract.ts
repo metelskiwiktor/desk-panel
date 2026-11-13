@@ -42,6 +42,10 @@ export const machinaBlockSchema = z.discriminatedUnion('kind', [
 ]);
 export type MachinaBlock = z.infer<typeof machinaBlockSchema>;
 export const MACHINA_EFFECTS = ['message', 'resume', 'notify', 'calendarEvent', 'smartAction'] as const;
+export const MACHINA_BLOCK_LABELS: Record<MachinaBlock['kind'], string> = {
+  fetch: 'Odczyt strony', extract: 'Wycinek', message: 'Wiadomość', resume: 'Wznowienie rozmowy', notify: 'Powiadomienie',
+  calendarEvent: 'Wydarzenie w kalendarzu', smartAction: 'Alert z linkiem', finish: 'Zakończenie',
+};
 export const isMachinaEffect = (kind: string): kind is (typeof MACHINA_EFFECTS)[number] => (MACHINA_EFFECTS as readonly string[]).includes(kind);
 
 /** What the card approves beyond the blocks themselves: where a read may go and which other conversations may be resumed. */
