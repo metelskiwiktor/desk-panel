@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { AutomationAct } from '../src/automation-contract';
+import { RUN_REPORT_TIMEOUT_MS, type AutomationAct } from '../src/automation-contract';
 import type { ChatAutomation, ChatAutomationInput } from '../src/chat-contract';
 import {
   MACHINA_LIMITS, TEMPLATE_REF, hostInDomain, isMachinaEffect, machinaActionSchema, machinaCardSchema, machinaConversationsSchema, machinaJournalSchema,
@@ -46,8 +46,10 @@ export interface Machina {
   action(input: MachinaAction): Promise<MachinaAutomat>;
   get(thread: string): Promise<MachinaAutomat>;
   effects(): Promise<MachinaEffect[]>;
-  /** A run is being executed right now (the old automations wait for it). */
+  /** A run is being executed, or a turn a `resume` block started is still going: the panel's one run slot is taken (the old automations wait for it). */
   running(): boolean;
+  /** Hermes's notice about a turn the panel started: the end of one a `resume` block began frees the run slot. */
+  turnChanged(turn: { turnId: string; ended: boolean }): void;
   tick(): Promise<void>;
   start(): void;
   stop(): void;
@@ -68,6 +70,10 @@ export function createMachina(options: MachinaOptions): Machina {
   const read = options.read ?? createMachinaReader();
   const log = options.log ?? (message => console.warn(`[machina] ${message}`));
   const live = new Set<string>();
+  /** Turns started by `resume` blocks that have not ended: turn id → when the slot is given up anyway (the old automations' 15 minutes). */
+  const turns = new Map<string, number>();
+  const turnLive = () => { for (const [id, until] of turns) if (until <= now()) turns.delete(id); return turns.size > 0; };
+  const slotTaken = () => turnLive() || (options.busy?.() ?? false);
   let timer: ReturnType<typeof setInterval> | undefined;
   let chain: Promise<unknown> = Promise.resolve();
   let pumping: Promise<void> | undefined;
@@ -179,10 +185,14 @@ export function createMachina(options: MachinaOptions): Machina {
       if (!version) { await saveRun(uid, runId, r => { r.state = 'error'; r.error = 'Brak wersji programu tego runu.'; r.endedAt = now(); }); return; }
       // What a restart leaves: reads are repeated, a busy conversation is tried again, an effect whose key makes it safe is repeated, the rest stays "not confirmed".
       const results = new Map<string, MachinaBlockResult>();
+      const frozen = new Map<string, MachinaBlockResult>();
       for (const kept of run.blocks) {
+        if (kept.result === 'waiting' && kept.text) frozen.set(kept.id, kept);
         if (kept.kind === 'fetch' || kept.kind === 'extract' || kept.result === 'waiting') continue;
         if (kept.result === 'pending') {
+          // A repeated effect is sent with exactly what was reserved, whatever the page says now.
           if (kept.kind === 'notify') results.set(kept.id, { ...kept, result: 'error', error: 'Wynik niepotwierdzony po przerwaniu; nie ponawiam.' });
+          else frozen.set(kept.id, kept);
           continue;
         }
         results.set(kept.id, kept);
@@ -194,7 +204,8 @@ export function createMachina(options: MachinaOptions): Machina {
         if (done) { if (done.result !== run.blocks.find(b => b.id === block.id)?.result) await record(uid, runId, done); if (block.kind === 'finish' && done.result === 'ok') finished = true; continue; }
         const base = { id: block.id, kind: block.kind, at: now() };
         const put = async (result: MachinaBlockResult) => { results.set(block.id, result); await record(uid, runId, result); };
-        if (aborted) { await put({ ...base, result: 'skipped', error: 'Pominięto: wcześniejszy odczyt się nie udał.' }); continue; }
+        const again = frozen.get(block.id);
+        if (aborted && !again) { await put({ ...base, result: 'skipped', error: 'Pominięto: wcześniejszy odczyt się nie udał.' }); continue; }
         if (block.kind === 'fetch') {
           try {
             const page = await read(block.url, version.scope.domains);
@@ -222,36 +233,38 @@ export function createMachina(options: MachinaOptions): Machina {
         const key = `${runId}:${block.id}`;
         const automation: ChatAutomation = { source: 'machina', reason: fresh.title.slice(0, 120) };
         try {
-          const text = 'text' in block && block.text ? render(block.text, outputs) : undefined;
+          const text = again ? again.text : 'text' in block && block.text ? render(block.text, outputs).slice(0, block.kind === 'message' || block.kind === 'resume' ? MACHINA_LIMITS.text : 1000) : undefined;
           if (block.kind === 'message' || block.kind === 'resume') {
             const chatId = block.kind === 'resume' && block.chat ? block.chat : fresh.program.chatId;
             if (!chatId) throw new MachinaError(409, 'Automat nie ma rozmowy.');
             if (!text) throw new MachinaError(400, 'Pusta treść.');
-            await put({ ...base, result: 'pending' });
+            await put({ ...base, result: 'pending', text });
             if (block.kind === 'message') {
               if (!options.chat?.note) throw new MachinaError(503, 'Czat nie przyjmuje wpisów panelu.');
               await options.chat.note(chatId, { text, automation, key });
             } else {
               if (!options.chat?.sendAutomation) throw new MachinaError(503, 'Czat nie przyjmuje tur automatyki.');
               await options.chat.sendAutomation(chatId, { text, nonce: uuidOf(key), automation });
+              // The turn now runs on its own: the run slot stays taken until Hermes says it ended.
+              turns.set(uuidOf(key), now() + RUN_REPORT_TIMEOUT_MS);
             }
-            await put({ ...base, at: now(), result: 'ok', ref: chatId, text: text.slice(0, MACHINA_LIMITS.extract) });
+            await put({ ...base, at: now(), result: 'ok', ref: chatId, text });
             continue;
           }
-          const title = render(block.title, outputs);
+          const title = again?.title ?? render(block.title, outputs).slice(0, MACHINA_LIMITS.title);
           if (!title) throw new MachinaError(400, 'Pusty tytuł.');
-          const url = linkOf(block, outputs);
-          const when = block.kind === 'calendarEvent' ? render(block.when, outputs) : undefined;
+          const url = again ? again.url : linkOf(block, outputs);
+          const when = again ? again.when : block.kind === 'calendarEvent' ? render(block.when, outputs).slice(0, 60) : undefined;
           if (!options.executeAction) throw new MachinaError(503, 'Akcje automatów są niedostępne.');
-          await put({ ...base, result: 'pending', title: title.slice(0, MACHINA_LIMITS.title) });
+          await put({ ...base, result: 'pending', title, ...(text ? { text } : {}), ...(url ? { url } : {}), ...(when ? { when } : {}) });
           const approved = block.kind === 'calendarEvent' ? { kind: block.kind, domain: block.domain, reminderMinutes: block.reminderMinutes, allDay: block.allDay } : { kind: block.kind, domain: block.domain };
-          const act = { runId: 'run-000000000000', token: '0'.repeat(32), action: block.kind, title: title.slice(0, MACHINA_LIMITS.title), ...(when ? { when } : {}), ...(url ? { url } : {}), ...(text ? { text: text.slice(0, 1000) } : {}) } as AutomationAct;
+          const act = { runId: 'run-000000000000', token: '0'.repeat(32), action: block.kind, title, ...(when ? { when } : {}), ...(url ? { url } : {}), ...(text ? { text } : {}) } as AutomationAct;
           const ref = await options.executeAction(act, approved, key, fresh.title);
-          await put({ ...base, at: now(), result: 'ok', ref: ref ?? key, title: act.title, ...(act.text ? { text: act.text } : {}), ...(url ? { url } : {}) });
+          await put({ ...base, at: now(), result: 'ok', ref: ref ?? key, title, ...(text ? { text } : {}), ...(url ? { url } : {}), ...(when ? { when } : {}) });
         } catch (error) {
           // A busy conversation is not a failure of the program: the same turn (same key) is tried again at the next tick.
           if (block.kind === 'resume' && error instanceof ChatError && (error.status === 409 || error.status >= 500) && now() - run.startedAt < WAITING_MS) {
-            await put({ ...base, result: 'waiting', error: 'Rozmowa jest zajęta; ponowię.' });
+            await put({ ...base, result: 'waiting', error: 'Rozmowa jest zajęta; ponowię.', ...(results.get(block.id)?.text ? { text: results.get(block.id)!.text } : {}) });
             waiting = true;
             break;
           }
@@ -282,8 +295,11 @@ export function createMachina(options: MachinaOptions): Machina {
     if (!manual && a.journal.runs.some(r => !r.manual && r.slot === slot)) return { result: null };
     const id = `mr-${randomBytes(6).toString('hex')}`;
     a.journal.runs.push({ id, slot, manual, version: a.program.current, startedAt: now(), state: 'running', blocks: [] });
-    // A one-shot has only this one time; a cycle moves to its next time after this one (missed times do not pile up).
-    if (!manual) { const trigger = currentOf(a.program).trigger; a.program.nextRunAt = isCyclic(trigger) ? nextRunFor(trigger, Math.max(slot, now())) ?? null : null; }
+    // A cycle moves to its next time after this one (missed times do not pile up).
+    // „Uruchom teraz” does not move a cycle, but it is the one run a one-shot has: its time is spent, so the same work is not done again later.
+    const trigger = currentOf(a.program).trigger;
+    if (!isCyclic(trigger)) a.program.nextRunAt = null;
+    else if (!manual) a.program.nextRunAt = nextRunFor(trigger, Math.max(slot, now())) ?? null;
     return { result: id };
   });
 
@@ -293,7 +309,7 @@ export function createMachina(options: MachinaOptions): Machina {
       if (!enabled || !filaActive()) return;
       for (const a of await all()) {
         for (const run of a.journal.runs.filter(r => r.state === 'running' && !live.has(r.id))) {
-          if (options.busy?.()) return;
+          if (slotTaken()) return;
           await execute(a.uid, run.id);
         }
       }
@@ -305,7 +321,7 @@ export function createMachina(options: MachinaOptions): Machina {
           continue;
         }
         if (a.program.nextRunAt > now()) continue;
-        if (options.busy?.()) return;
+        if (slotTaken()) return;
         const runId = await reserve(a.uid, a.program.nextRunAt, false).catch(error => { log(`${a.thread}: ${error instanceof Error ? error.message : 'błąd'}`); return null; });
         if (runId) await execute(a.uid, runId);
       }
@@ -348,6 +364,7 @@ export function createMachina(options: MachinaOptions): Machina {
       assertEnabled();
       const version = versionFrom(undefined, { trigger: { kind: 'once', at: input.at }, blocks: [{ id: 'b1', kind: input.kind, text: input.text }], scope: { domains: [], resumeChats: [] } }, 'wektor', 'bez karty');
       const made = await create({ title: input.title, description: input.text, module: 'Przypomnienia', chatId: input.chatId, version, reason: 'utworzenie bez karty' });
+      void pump();
       return { thread: made.id };
     },
 
@@ -413,7 +430,8 @@ export function createMachina(options: MachinaOptions): Machina {
       return out;
     },
 
-    running: () => live.size > 0,
+    running: () => live.size > 0 || turnLive(),
+    turnChanged(turn) { if (turn.ended && turns.delete(turn.turnId)) void pump(); },
     tick: () => pump(),
     start() {
       if (timer || !enabled) return;

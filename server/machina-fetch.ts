@@ -8,7 +8,8 @@ import { hostInDomain } from '../src/machina-contract';
  * hop (the first address and each redirect) is checked again: https, default port, no credentials, a host inside the
  * scope, and every address the name resolves to must be public. The connection then goes to exactly the address that
  * was checked, so a name cannot answer differently between the check and the connect. Anything else ends the read with
- * an error and no content. Own values (docs/automaty.md): 5 redirects, 15 s per hop, 2 MB of body, text only.
+ * an error and no content. Own values (docs/automaty.md): 5 redirects, 15 s for a whole hop (not only for silence on
+ * the line), 2 MB of body, text only.
  */
 export const MACHINA_FETCH = { redirects: 5, timeoutMs: 15_000, bytes: 2 * 1024 * 1024 } as const;
 export class MachinaFetchError extends Error {}
@@ -43,6 +44,10 @@ export interface MachinaReaderOptions {
 
 const resolveAll = async (host: string) => (await dnsLookup(host, { all: true, verbatim: true })).map(entry => entry.address);
 const getOnce = (url: URL, address: string) => new Promise<MachinaHop>((resolve, reject) => {
+  // The whole answer has this long: a server that drips a byte now and then is cut off like a silent one.
+  const deadline = setTimeout(() => req.destroy(new MachinaFetchError('Strona nie odpowiedziała na czas.')), MACHINA_FETCH.timeoutMs);
+  const settle = <T>(done: (value: T) => void) => (value: T) => { clearTimeout(deadline); done(value); };
+  resolve = settle(resolve); reject = settle(reject);
   const req = request({
     host: address, servername: url.hostname, port: 443, method: 'GET', path: `${url.pathname}${url.search}`,
     headers: { Host: url.hostname, Accept: 'text/html,text/plain,application/xhtml+xml,application/json;q=0.9,*/*;q=0.1', 'User-Agent': 'desk-panel-machina/1', 'Accept-Encoding': 'identity' },

@@ -138,6 +138,9 @@ describe('program cards and versions', () => {
       reminder({ blocks: [{ id: 'r', kind: 'resume', text: 'Wróć', chat: OTHER }] }),
       reminder({ blocks: [{ id: 'm', kind: 'message', text: 'a' }, { id: 'm', kind: 'message', text: 'b' }] }),
       reminder({ trigger: { kind: 'cezar', taskId: 'x' } as never }),
+      watcher({ blocks: [{ id: 'strona', kind: 'fetch', url: 'nie-adres' }] }),
+      // A link without the domain approved for it could never be used: the card says so instead of the run.
+      reminder({ blocks: [{ id: 'n', kind: 'notify', title: 'Zobacz', url: 'https://example.com/' }] }),
       reminder({ title: undefined }),
     ];
     for (const card of bad) await refused(machina.decideCard(card, { accept: true, chatId: CHAT }), 400);
@@ -227,6 +230,20 @@ describe('the clock, the Stan and the journal', () => {
     expect((await world.fila.thread(id)).history.filter(h => h.changes?.[0]?.field === 'Stan').map(h => [h.by, h.changes![0]!.to])).toEqual([['machina', 'Wstrzymany'], ['machina', 'Aktywny'], ['machina', 'Anulowany']]);
   });
 
+  it('treats „uruchom teraz” as the one run of a one-shot: it ends there and does not do its work again at its time', async () => {
+    const { world, machina } = setup();
+    await machina.decideCard(reminder(), { accept: true, chatId: CHAT });
+    await machina.action({ thread: 'MACH-1', action: 'runNow' });
+    await machina.tick();
+    let k = await kit(world.fila, 'MACH-1');
+    expect([k.state, k.program.nextRunAt, k.journal.runs.map((r: any) => r.manual)]).toEqual(['Zakończony', null, [true]]);
+    world.clock = NOW + 2 * 60 * 60_000;
+    await machina.tick();
+    k = await kit(world.fila, 'MACH-1');
+    expect(k.journal.runs).toHaveLength(1);
+    expect(world.notes).toHaveLength(1);
+  });
+
   it('keeps the Stan a run ended in while the automat is paused, and gives it back on resume', async () => {
     const { world, make } = setup();
     let release!: () => void;
@@ -303,6 +320,27 @@ describe('effects of blocks', () => {
     expect(run.state).toBe('error');
     expect(world.acts.map(a => a.action)).toEqual(['notify', 'calendarEvent', 'smartAction']);
     expect(world.notes).toHaveLength(1);
+  });
+
+  it('repeats a reserved effect after a crash with exactly what was reserved, even when the page has changed since', async () => {
+    const { world, make, machina } = setup();
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: HTML };
+    await machina.decideCard(watcher({ blocks: [...watcher().blocks.slice(0, 2), { id: 'kal', kind: 'calendarEvent', title: 'Zapisy: {{status}}', when: '2026-12-01T10:00', text: '{{status}}', url: '{{status.link}}', domain: 'example.com' }] }), { accept: true, chatId: CHAT });
+    world.clock = at('2026-11-13T19:00:00+01:00');
+    // Google took the event, then the process died before the result was written down.
+    world.hang = new Promise<never>(() => undefined);
+    void machina.tick();
+    await expect.poll(() => world.acts.length).toBe(1);
+    const status = 'Zapisy otwarte [Formularz](https://example.com/formularz)';
+    expect((await kit(world.fila, 'MACH-1')).journal.runs[0].blocks.at(-1)).toMatchObject({ id: 'kal', result: 'pending', title: `Zapisy: ${status}`, text: status, url: 'https://example.com/formularz', when: '2026-12-01T10:00' });
+    world.hang = undefined;
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Status: Zapisy zamknięte <a href="/inne">Inne</a> Regulamin</p>' };
+    world.clock += 120_000;
+    await make().tick();
+    expect(world.acts).toHaveLength(2);
+    expect(world.acts[1]).toEqual(world.acts[0]);
+    const run = (await kit(world.fila, 'MACH-1')).journal.runs[0];
+    expect([run.state, run.blocks.find((b: any) => b.id === 'kal')]).toMatchObject(['ok', { result: 'ok', text: status, url: 'https://example.com/formularz' }]);
   });
 
   it('ends a read that leaves the approved scope, also through a redirect or a private address, with no effect at all', async () => {
@@ -412,6 +450,34 @@ describe('switches and the shared run slot', () => {
     await machina.tick();
     expect(world.notes).toHaveLength(1);
     expect((await kit(world.fila, 'MACH-1')).journal.runs[0]).toMatchObject({ slot: NOW + 60 * 60_000, state: 'ok' });
+  });
+
+  it('holds the run slot while a turn started by a resume block is going: no second turn and no old automation until it ends', async () => {
+    const { world, machina } = setup();
+    await machina.decideCard(reminder({ title: 'Pierwsza', blocks: [{ id: 'r', kind: 'resume', text: 'Pierwsza rozmowa' }] }), { accept: true, chatId: CHAT });
+    await machina.decideCard(reminder({ title: 'Druga', blocks: [{ id: 'r', kind: 'resume', text: 'Druga rozmowa' }] }), { accept: true, chatId: OTHER });
+    await machina.decideCard(reminder({ title: 'Trzecia', blocks: [{ id: 'r', kind: 'resume', text: 'Trzecia rozmowa' }] }), { accept: true, chatId: OTHER });
+    world.clock = NOW + 61 * 60_000;
+    await machina.tick();
+    await machina.tick();
+    // The first turn runs on its own after the block is done; the slot is still taken.
+    expect(world.turns.map(t => t.text)).toEqual(['Pierwsza rozmowa']);
+    expect(machina.running()).toBe(true);
+    expect((await kit(world.fila, 'MACH-1')).state).toBe('Zakończony');
+    expect((await kit(world.fila, 'MACH-2')).journal.runs).toEqual([]);
+    // Another turn's end changes nothing; this turn's end frees the slot and the next run starts.
+    machina.turnChanged({ turnId: '99999999-9999-4999-8999-999999999999', ended: true });
+    machina.turnChanged({ turnId: world.turns[0]!.nonce!, ended: false });
+    expect(machina.running()).toBe(true);
+    machina.turnChanged({ turnId: world.turns[0]!.nonce!, ended: true });
+    await expect.poll(() => world.turns.length).toBe(2);
+    await machina.tick();
+    expect(world.turns.map(t => t.text)).toEqual(['Pierwsza rozmowa', 'Druga rozmowa']);
+    // A turn whose end never arrives gives the slot up after the old automations' 15 minutes.
+    world.clock += 15 * 60_000 + 1;
+    expect(machina.running()).toBe(false);
+    await machina.tick();
+    expect(world.turns.map(t => t.text)).toEqual(['Pierwsza rozmowa', 'Druga rozmowa', 'Trzecia rozmowa']);
   });
 
   it('runs nothing when the store cannot be written: the run is reserved on disk before any effect', async () => {

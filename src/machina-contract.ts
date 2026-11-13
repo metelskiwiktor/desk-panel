@@ -53,6 +53,7 @@ export type MachinaScope = z.infer<typeof scopeSchema>;
 
 /** `host` is `domain` itself or a subdomain of it (whole labels). */
 export const hostInDomain = (host: string, domain: string) => { const h = host.toLowerCase().replace(/\.$/, ''); return h === domain || h.endsWith(`.${domain}`); };
+const hostOf = (address: string) => { try { return new URL(address).hostname; } catch { return ''; } };
 export const TEMPLATE_REF = /\{\{\s*([a-z][a-z0-9-]{0,23})(?:\.(text|link|url))?\s*\}\}/g;
 const templatesOf = (block: MachinaBlock): string[] => Object.entries(block).filter(([key, value]) => typeof value === 'string' && !['id', 'kind', 'from', 'chat', 'domain', 'after', 'before'].includes(key)).map(([, value]) => value as string);
 
@@ -62,7 +63,9 @@ const checkProgram = (program: { blocks: MachinaBlock[]; scope: MachinaScope }, 
   program.blocks.forEach((block, i) => {
     const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['blocks', i], message });
     if (seen.has(block.id)) issue(`Duplicate block id ${block.id}`);
-    if (block.kind === 'fetch' && !program.scope.domains.some(domain => hostInDomain(new URL(block.url).hostname, domain))) issue('The address is outside the approved domains');
+    if (block.kind === 'fetch' && !program.scope.domains.some(domain => hostInDomain(hostOf(block.url), domain))) issue('The address is outside the approved domains');
+    // A link needs the domain the user approves for it; without one the action could never use the link.
+    if ('url' in block && block.url && block.kind !== 'fetch' && !block.domain) issue('An action link needs its approved domain');
     if (block.kind === 'extract' && !['fetch', 'extract'].includes(seen.get(block.from) ?? '')) issue('An extract reads an earlier read or extract');
     if (block.kind === 'resume' && block.chat && !program.scope.resumeChats.includes(block.chat)) issue('The conversation to resume is outside the approved scope');
     if (block.kind !== 'fetch') for (const text of templatesOf(block)) for (const ref of text.matchAll(TEMPLATE_REF)) {
@@ -101,6 +104,8 @@ const blockResultSchema = z.object({
   error: z.string().max(500).optional(),
   text: z.string().max(MACHINA_LIMITS.extract).optional(), links: z.array(z.string().max(2000)).max(MACHINA_LIMITS.links).optional(),
   url: z.string().max(2000).optional(), title: z.string().max(MACHINA_LIMITS.title).optional(), ref: z.string().max(500).optional(),
+  /** The time of a calendar event as it was worked out when the effect was reserved. */
+  when: z.string().max(60).optional(),
 }).strict();
 export type MachinaBlockResult = z.infer<typeof blockResultSchema>;
 export const machinaRunSchema = z.object({

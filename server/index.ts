@@ -61,7 +61,7 @@ const chat = cutoverLocked ? undefined : (() => {
     fila: wektorFila,
     resolveContext: cutoverMode === 'active' && sources.fila ? context => resolveFilaContext(context, sources.fila!) : undefined,
     namer,
-    onAutomationTurn: turn => automations?.turnChanged(turn),
+    onAutomationTurn: turn => { automations?.turnChanged(turn); machina?.turnChanged(turn); },
     client: createHermesClient({ url: hermesUrl(process.env.DESK_HERMES_URL), key: process.env.DESK_HERMES_KEY?.trim() || undefined }),
     turnTimeoutMs: Number(process.env.DESK_HERMES_TURN_TIMEOUT_MS) || undefined,
     silenceMs: Number(process.env.DESK_HERMES_SILENCE_MS) || undefined,
