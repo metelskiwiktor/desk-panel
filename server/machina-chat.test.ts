@@ -7,6 +7,7 @@ import { CARD_SHOWN } from '../src/cockpit-contract';
 import type { MachinaCard } from '../src/machina-contract';
 import { AgentViewError } from './agent-views';
 import { handleChatRoute } from './chat-routes';
+import { stabilizeBankCards } from './hermes-chat';
 import { createCockpit } from './cockpit';
 import { createFilaStore } from './fila';
 import { createMachina } from './machina';
@@ -59,6 +60,21 @@ describe('Wektor\'s Machina tools', () => {
 });
 
 describe('Machina cards in the chat', () => {
+  it('gives a Machina card the same id live, kept and read back from Hermes, so the route can find it', () => {
+    const input = JSON.stringify(card());
+    const message = (id: string, callId: string) => ({ id: 'm1', role: 'agent', at: 1, parts: [{ type: 'tool', id: callId, name: 'mcp__desk_panel__panel_machina_propose', input, output: CARD_SHOWN.machina, state: 'done' }, { type: 'tool', id: 'x', name: 'mcp__desk_panel__panel_machina', input: '{}', state: 'done' }] }) as never as { parts: { id: string }[] };
+    const live = message('m1', 'panel_machina_propose'), history = message('m1', 'call_abc123');
+    stabilizeBankCards(live as never);
+    stabilizeBankCards(history as never);
+    expect(live.parts[0]!.id).toMatch(/^m1:m-[0-9a-f]{16}$/);
+    expect(history.parts[0]!.id).toBe(live.parts[0]!.id);
+    // Only the cards: a read keeps the id Hermes gave it.
+    expect(live.parts[1]!.id).toBe('x');
+    const other = { id: 'm1', role: 'agent', at: 1, parts: [{ type: 'tool', id: 'y', name: 'panel_machina_propose', input: JSON.stringify(card({ title: 'Inny' })), state: 'done' }] } as never as { parts: { id: string }[] };
+    stabilizeBankCards(other as never);
+    expect(other.parts[0]!.id).not.toBe(live.parts[0]!.id);
+  });
+
   it('applies a program card only on the user\'s yes, with the card from the conversation, once; a refused card cannot be accepted; the cockpit shows the automat', async () => {
     const { fila, machina, sources } = world();
     const cockpit = createCockpit({ sources, file: join(dir, 'cockpit.json'), cezarUrl: 'http://127.0.0.1:4321/', gh: async () => '{}' });

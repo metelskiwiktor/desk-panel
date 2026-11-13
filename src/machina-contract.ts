@@ -85,6 +85,8 @@ const checkProgram = (program: { blocks: MachinaBlock[]; scope: MachinaScope; re
   const compares = program.blocks.filter(block => block.kind === 'compare');
   if (compares.length > 1 || (compares.length === 1 && program.blocks.at(-1)!.kind !== 'compare')) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['blocks'], message: 'A program has at most one compare block, and it is the last one' });
   if (reactions.length && !compares.length) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reactions'], message: 'Reactions need a compare block' });
+  // With a comparison every effect belongs to a reaction: nothing may happen before the panel knows the situation.
+  if (compares.length) program.blocks.forEach((block, i) => { if (!['fetch', 'extract', 'compare'].includes(block.kind)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['blocks', i], message: 'A program with a comparison reads only; its actions go into reactions' }); });
   all.forEach(({ block, path, reaction }) => {
     const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
     if (block.id === MACHINA_REPAIR_NOTICE) issue(`The id ${MACHINA_REPAIR_NOTICE} is the panel's own`);
@@ -97,6 +99,8 @@ const checkProgram = (program: { blocks: MachinaBlock[]; scope: MachinaScope; re
     if (block.kind === 'resume' && block.chat && !program.scope.resumeChats.includes(block.chat)) issue('The conversation to resume is outside the approved scope');
     if (block.kind !== 'fetch') for (const text of templatesOf(block)) for (const ref of text.matchAll(TEMPLATE_REF)) {
       if (!['fetch', 'extract'].includes(seen.get(ref[1]!) ?? '')) issue(`{{${ref[1]}}} is not an earlier read or extract`);
+      // A reaction may run later than its reads (after a card): the journal keeps extracts and addresses, not whole pages.
+      else if (reaction && seen.get(ref[1]!) === 'fetch' && ref[2] !== 'url') issue(`A reaction takes only the address of a page: {{${ref[1]}.url}}`);
     }
     if (!reaction) seen.set(block.id, block.kind);
   });
@@ -115,6 +119,8 @@ export const machinaVersionSchema = z.object({
   by: z.enum(['user', 'wektor', 'panel']), reason: z.string().trim().min(1).max(MACHINA_LIMITS.reason),
   trigger: machinaTriggerSchema, blocks, scope: scopeSchema, reactions,
   restoredFrom: z.number().int().min(1).optional(),
+  /** The chat card (`chatId:toolCallId`) this version came from: an answer applied twice makes it once. */
+  card: z.string().max(300).optional(),
 }).strict().superRefine(checkProgram);
 export type MachinaVersion = z.infer<typeof machinaVersionSchema>;
 

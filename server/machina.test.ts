@@ -29,6 +29,8 @@ function setup(over: Partial<MachinaOptions> & { fila?: FilaStore } = {}) {
     gets: [] as string[],
     chatBusy: false,
     hang: undefined as undefined | Promise<never>,
+    /** While set, a page read waits for it (to change the automat in the middle of a run). */
+    gate: undefined as undefined | Promise<void>,
     /** Conversations the panel started for Wektor's assessment or repair: the fake Hermes only records them. */
     wakes: [] as { chatId: string; nonce: string; text: string; title?: string; reason: string }[],
     /** What Hermes reported a conversation's turns really cost (missing: no actual cost). */
@@ -36,7 +38,7 @@ function setup(over: Partial<MachinaOptions> & { fila?: FilaStore } = {}) {
   };
   const read = createMachinaReader({
     resolve: async host => world.hosts[host] ?? ['93.184.216.34'],
-    get: async url => { world.gets.push(url.href); return world.pages[url.href] ?? { status: 404, body: '' }; },
+    get: async url => { world.gets.push(url.href); if (world.gate) await world.gate; return world.pages[url.href] ?? { status: 404, body: '' }; },
   });
   const make = (extra: Partial<MachinaOptions> = {}) => createMachina({
     fila: world.fila, now: () => world.clock, log: () => undefined, read,
@@ -805,5 +807,116 @@ describe('situations, assessment and repair (DESK-86)', () => {
     k = await kit(world.fila, 'MACH-1');
     expect(k.conversations.items.map((c: any) => c.reason)).toEqual(['projektowanie', 'ocena', 'zmiana programu']);
     expect(world.turns).toEqual([]);
+  });
+});
+
+describe('DESK-86 review: continuation, once-only effects, the run slot and stopped automats', () => {
+  it('goes on with a decided reaction stopped by a busy conversation using the program in force, without reading or assessing again', async () => {
+    const { world, machina, runNext, endTurn } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    const run = await runNext();
+    await machina.proposeSituation({ ...verdictOf(world.wakes[0]!), name: 'Lista rezerwowa', reaction: [{ id: 'powrot', kind: 'resume', text: 'Lista: {{status}}' }] });
+    await endTurn();
+    world.chatBusy = true;
+    await machina.decideSituation(run.id, true);
+    let k = await kit(world.fila, 'MACH-1');
+    expect([k.journal.runs[0].state, k.journal.runs[0].blocks.at(-1)]).toMatchObject(['running', { id: 'powrot', result: 'waiting' }]);
+    // The version the run was made with has no reaction for the new situation; the one in force has.
+    expect([k.journal.runs[0].version, k.program.current]).toEqual([1, 2]);
+    world.chatBusy = false;
+    world.pages[PAGE] = statusPage('Zupełnie inna treść');
+    world.clock += 60_000;
+    await machina.tick();
+    await machina.idle();
+    k = await kit(world.fila, 'MACH-1');
+    expect([k.journal.runs.length, k.journal.runs[0].state, world.turns.map(t => t.text), world.gets.length, world.wakes.length]).toEqual([1, 'ok', ['Lista: Lista rezerwowa otwarta'], 1, 1]);
+  });
+
+  it('waits for the one run slot before a decided reaction, whoever holds it', async () => {
+    let busy = false;
+    const { world, machina, runNext, endTurn } = stage({ busy: () => busy });
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = statusPage('Lista rezerwowa otwarta');
+    const run = await runNext();
+    await machina.proposeSituation({ ...verdictOf(world.wakes[0]!), name: 'Lista rezerwowa', reaction: [{ id: 'rez', kind: 'notify', title: 'Lista' }] });
+    await endTurn();
+    busy = true;
+    await machina.decideSituation(run.id, true);
+    expect(world.acts).toEqual([]);
+    busy = false;
+    await machina.tick();
+    expect(world.acts.map(a => a.key)).toEqual([`${run.id}:rez`]);
+  });
+
+  it('ends an assessment whose turn outlives its 15 minutes as an assessment error, and its token dies with it', async () => {
+    const { world, machina, runNext } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = statusPage('Zapisy zamknięte');
+    const run = await runNext();
+    world.clock += 15 * 60_000 + 1;
+    await machina.tick();
+    await machina.idle();
+    const k = await kit(world.fila, 'MACH-1');
+    expect([k.journal.runs[0].state, k.journal.runs[0].error]).toEqual(['error', 'Błąd oceny: tura nie skończyła się w 15 minut.']);
+    await refused(machina.assess({ ...verdictOf(world.wakes[0]!), situation: 's-zamkniete' }), 403);
+    expect([world.notes, run.id]).toEqual([[], k.journal.runs[0].id]);
+  });
+
+  it('sends the repair notice at most once, also when the process dies inside it', async () => {
+    const { world, make, machina, runNext } = stage();
+    await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+    world.pages[PAGE] = { status: 200, type: 'text/html', body: '<p>Strona w przebudowie</p>' };
+    world.hang = new Promise<never>(() => undefined);
+    void runNext();
+    await expect.poll(() => world.acts.length).toBe(1);
+    world.hang = undefined;
+    world.clock += 90_000;
+    const restarted = make();
+    await restarted.tick();
+    await restarted.idle();
+    const k = await kit(world.fila, 'MACH-1');
+    expect([world.acts.length, k.journal.runs.length, k.state]).toEqual([1, 1, 'Czeka na naprawę']);
+    expect(k.journal.runs[0].blocks.find((b: any) => b.id === 'naprawa')).toMatchObject({ result: 'error', error: expect.stringMatching(/niepotwierdzony/) });
+  });
+
+  it('neither notifies nor wakes Wektor for an automat cancelled or paused while its page was read', async () => {
+    for (const action of ['cancel', 'pause'] as const) {
+      const { world, machina, runNext } = stage();
+      await machina.decideCard(comparer(), { accept: true, chatId: CHAT });
+      for (const body of ['<p>Strona w przebudowie</p>', '<p>Status: Coś nowego Regulamin</p>']) {
+        let open!: () => void;
+        world.gate = new Promise<void>(resolve => { open = resolve; });
+        world.pages[PAGE] = { status: 200, type: 'text/html', body };
+        const running = runNext();
+        await expect.poll(() => world.gets.length).toBeGreaterThan(0);
+        await machina.action({ thread: 'MACH-1', action });
+        open();
+        await running;
+        world.gate = undefined;
+        world.gets = [];
+        if (action === 'pause') await machina.action({ thread: 'MACH-1', action: 'resume' });
+        if (action === 'cancel') break;
+      }
+      expect([action, world.acts, world.wakes]).toEqual([action, [], []]);
+    }
+  });
+
+  it('applies a chat card once even when it is answered again after a crash between the two stores', async () => {
+    const { world, machina } = setup();
+    const key = `${CHAT}:m1:m-0123456789abcdef`;
+    expect(await machina.decideCard(reminder(), { accept: true, chatId: CHAT, key })).toEqual({ decision: 'created', thread: 'MACH-1', version: 1 });
+    expect(await machina.decideCard(reminder(), { accept: true, chatId: CHAT, key })).toEqual({ decision: 'created', thread: 'MACH-1', version: 1 });
+    const change = `${CHAT}:m2:m-fedcba9876543210`;
+    expect(await machina.decideCard(reminder({ automat: 'MACH-1', blocks: [{ id: 'm', kind: 'message', text: 'Druga' }] }), { accept: true, key: change })).toEqual({ decision: 'updated', thread: 'MACH-1', version: 2 });
+    expect(await machina.decideCard(reminder({ automat: 'MACH-1', blocks: [{ id: 'm', kind: 'message', text: 'Druga' }] }), { accept: true, key: change })).toEqual({ decision: 'updated', thread: 'MACH-1', version: 2 });
+    expect([(await world.fila.registries()).projects[0]!.counts.open, (await kit(world.fila, 'MACH-1')).program.versions.length]).toEqual([1, 2]);
+  });
+
+  it('refuses a program that acts before its comparison, and a reaction that would need a whole page later', async () => {
+    const { machina } = setup();
+    await refused(machina.checkCard(comparer({ blocks: [SITUATION_BLOCKS[0]!, SITUATION_BLOCKS[1]!, { id: 'n', kind: 'notify', title: 'Za wcześnie' }, SITUATION_BLOCKS[2]!] })), 400, /reads only/);
+    await refused(machina.checkCard(comparer({ reactions: { 's-zamkniete': [{ id: 'w', kind: 'message', text: '{{strona}}' }], 's-otwarte': [] } })), 400, /address of a page/);
+    await machina.checkCard(comparer({ reactions: { 's-zamkniete': [{ id: 'w', kind: 'message', text: 'Zobacz {{strona.url}}: {{status}}' }], 's-otwarte': [] } }));
   });
 });

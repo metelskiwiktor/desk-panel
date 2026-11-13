@@ -323,7 +323,7 @@ export async function handleChatRoute(req: IncomingMessage, res: ServerResponse,
         const work = async (): Promise<MachinaOutcome> => {
           const at = Date.now();
           if (refused) return { decision: 'rejected', at };
-          if (kind === 'machina') return { ...await machina.decideCard(args as never, { accept, chatId: id }), at };
+          if (kind === 'machina') return { ...await machina.decideCard(args as never, { accept, chatId: id, key: `${id}:${input.toolCallId}` }), at };
           if (kind === 'machinaSituation') return { ...await machina.decideSituation(String(args.runId ?? ''), accept), at };
           const made = await machina.correction(args as never, { accept });
           return { decision: made.decision === 'applied' ? 'applied' : 'rejected', thread: made.thread, at };

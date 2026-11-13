@@ -46,7 +46,7 @@ export interface MachinaAutomat { thread: string; uid: string; title: string; st
 type Decision = { decision: 'created' | 'updated' | 'rejected'; thread?: string; version?: number };
 export interface Machina {
   /** The user's decision on a program card: accepted, it makes the automat or its next version; rejected, nothing changes (a rejected repair pauses the automat). */
-  decideCard(card: MachinaCard, decision: { accept: boolean; chatId?: string }): Promise<Decision>;
+  decideCard(card: MachinaCard, decision: { accept: boolean; chatId?: string; key?: string }): Promise<Decision>;
   /** Checks a program card as accepting it would, without writing: what a tool answers before the card is shown. */
   checkCard(card: MachinaCard): Promise<void>;
   /** Wektor's one card-free case: a one-shot automat that only writes to, or resumes, the conversation it was made in. */
@@ -102,8 +102,20 @@ export function createMachina(options: MachinaOptions): Machina {
   /** Turns the panel started for automats that have not ended: turn id → what it is for and when the slot is given up anyway (the old automations' 15 minutes). */
   const turns = new Map<string, { until: number; uid?: string; runId?: string; chatId?: string }>();
   /** Assessments in progress: the token lives in memory only (it is in the turn's text, never in the kit, which the browser can read). */
-  const assessments = new Map<string, { uid: string; token: string; block: string; text: string; links: string[]; answered: boolean }>();
-  const turnLive = () => { for (const [id, turn] of turns) if (turn.until <= now()) turns.delete(id); return turns.size > 0; };
+  const assessments = new Map<string, { uid: string; token: string; block: string; text: string; links: string[]; answered: boolean; dead?: boolean }>();
+  const turnLive = () => {
+    for (const [id, turn] of turns) {
+      if (turn.until > now()) continue;
+      turns.delete(id);
+      // An assessment that got no verdict in that time can no longer get one: an assessment error, without effects.
+      const open = turn.runId ? assessments.get(turn.runId) : undefined;
+      if (open && !open.answered && !open.dead) {
+        open.dead = true;
+        later(async () => { await conclude(turn.uid!, turn.runId!, false, 'Błąd oceny: tura nie skończyła się w 15 minut.'); assessments.delete(turn.runId!); });
+      }
+    }
+    return turns.size > 0;
+  };
   const slotTaken = () => turnLive() || (options.busy?.() ?? false);
   let timer: ReturnType<typeof setInterval> | undefined;
   let chain: Promise<unknown> = Promise.resolve();
@@ -173,8 +185,18 @@ export function createMachina(options: MachinaOptions): Machina {
     return RUNS.has(stateNow) ? settle(a, working(a)) : undefined;
   };
 
-  const versionFrom = (a: MachinaAutomat | undefined, content: Pick<MachinaVersion, 'trigger' | 'blocks' | 'scope' | 'reactions'>, by: MachinaVersion['by'], reason: string, restoredFrom?: number): MachinaVersion =>
-    machinaVersionSchema.parse({ number: (a?.program.versions.at(-1)?.number ?? 0) + 1, at: now(), by, reason: reason.slice(0, MACHINA_LIMITS.reason), ...content, ...(restoredFrom ? { restoredFrom } : {}) });
+  const versionFrom = (a: MachinaAutomat | undefined, content: Pick<MachinaVersion, 'trigger' | 'blocks' | 'scope' | 'reactions'>, by: MachinaVersion['by'], reason: string, extra: { restoredFrom?: number; card?: string } = {}): MachinaVersion => {
+    const made = machinaVersionSchema.safeParse({ number: (a?.program.versions.at(-1)?.number ?? 0) + 1, at: now(), by, reason: reason.slice(0, MACHINA_LIMITS.reason), ...content, ...(extra.restoredFrom ? { restoredFrom: extra.restoredFrom } : {}), ...(extra.card ? { card: extra.card } : {}) });
+    // The program may have changed since what is being added was checked (a waiting card, an old version): a refusal, not a crash.
+    if (!made.success) throw invalid('Ta zmiana nie pasuje już do programu', made.error);
+    return made.data;
+  };
+  /** The version a chat card already made, if it was applied before (a retry after a crash between the two stores). */
+  const madeBy = async (key: string | undefined) => {
+    if (!key) return undefined;
+    for (const a of await all()) { const v = a.program.versions.find(version => version.card === key); if (v) return { thread: a.thread, version: v.number, first: a.program.versions[0] === v }; }
+    return undefined;
+  };
   const firstRun = (trigger: MachinaTrigger) => nextRunFor(trigger, now()) ?? null;
 
   /**
@@ -356,6 +378,16 @@ export function createMachina(options: MachinaOptions): Machina {
         }
         results.set(kept.id, kept);
       }
+      // The situation of this run is already decided (a verdict, a card's yes, or a reaction stopped by a busy conversation):
+      // only its reaction is left, from the program in force (a new situation's reaction joined it by the same yes), with
+      // what the journal kept of the reads. Nothing is read or compared again.
+      const decided = run.blocks.find(b => b.kind === 'compare' && b.result === 'ok' && b.situation);
+      if (decided) {
+        const reaction = await perform(uid, run, currentOf(start.program).reactions[decided.situation!] ?? [], outputsOf(run), results, frozen);
+        if (reaction.waiting) return;
+        await conclude(uid, runId, reaction.finished || run.blocks.some(b => b.kind === 'finish' && b.result === 'ok'));
+        return;
+      }
       const outputs: Outputs = new Map();
       let aborted: string | undefined, missing: { block: string; page: string } | undefined;
       for (const block of version.blocks) {
@@ -425,6 +457,7 @@ export function createMachina(options: MachinaOptions): Machina {
 
   /** An extract no sample matches: Wektor assesses it in a conversation of its own; the run waits for the verdict. */
   const assessStart = async (a: MachinaAutomat, runId: string, block: string, extract: Output) => {
+    if (!RUNS.has(a.state) || !enabled || !filaActive()) { await conclude(a.uid, runId, false, 'Pominięto ocenę: automat nie jest aktywny.'); return; }
     const token = randomBytes(16).toString('hex');
     assessments.set(runId, { uid: a.uid, token, block, text: extract.text, links: extract.links, answered: false });
     await saveRun(a.uid, runId, run => { run.state = 'evaluating'; });
@@ -447,11 +480,21 @@ export function createMachina(options: MachinaOptions): Machina {
     const a = await byUid(uid);
     const title = `Automat wymaga naprawy: ${a.title}`.slice(0, MACHINA_LIMITS.title);
     const notice = { id: MACHINA_REPAIR_NOTICE, kind: 'notify', at: now(), title, text: `Klocek „${missing.block}” nie znalazł swojego fragmentu strony. Pory są pomijane do decyzji na karcie naprawy.` };
-    await record(uid, runId, { ...notice, result: 'pending' });
-    let sent: MachinaBlockResult = { ...notice, result: 'ok', ref: `${runId}:${MACHINA_REPAIR_NOTICE}` };
-    try { await options.executeAction?.({ runId: 'run-000000000000', token: '0'.repeat(32), action: 'notify', title, text: notice.text } as AutomationAct, { kind: 'notify' }, `${runId}:${MACHINA_REPAIR_NOTICE}`, a.title); }
-    catch (error) { sent = { ...notice, result: 'error', error: (error instanceof Error ? error.message : 'Nie udało się.').slice(0, 500) }; }
-    await record(uid, runId, sent);
+    if (!RUNS.has(a.state) || !enabled || !filaActive()) {
+      // Paused, cancelled or switched off while the page was read: no notice, no turn; the next time after a resume asks again.
+      await record(uid, runId, { ...notice, result: 'skipped', error: 'Pominięto: automat nie jest aktywny.' });
+      await saveRun(uid, runId, r => { r.state = 'error'; r.error = 'Brak wycinka: nie znaleziono fragmentu.'; r.endedAt = now(); });
+      return;
+    }
+    // After a crash the same run comes here again: a notice that was reserved is never sent a second time.
+    const kept = a.journal.runs.find(r => r.id === runId)?.blocks.find(b => b.id === MACHINA_REPAIR_NOTICE);
+    if (!kept) {
+      await record(uid, runId, { ...notice, result: 'pending' });
+      let sent: MachinaBlockResult = { ...notice, result: 'ok', ref: `${runId}:${MACHINA_REPAIR_NOTICE}` };
+      try { await options.executeAction?.({ runId: 'run-000000000000', token: '0'.repeat(32), action: 'notify', title, text: notice.text } as AutomationAct, { kind: 'notify' }, `${runId}:${MACHINA_REPAIR_NOTICE}`, a.title); }
+      catch (error) { sent = { ...notice, result: 'error', error: (error instanceof Error ? error.message : 'Nie udało się.').slice(0, 500) }; }
+      await record(uid, runId, sent);
+    } else if (kept.result === 'pending') await record(uid, runId, { ...kept, result: 'error', error: 'Wynik niepotwierdzony po przerwaniu; nie ponawiam.' });
     await saveRun(uid, runId, (r, fresh) => {
       r.state = 'error'; r.error = 'Brak wycinka: nie znaleziono fragmentu.'; r.endedAt = now();
       return settle(fresh, WAITS_REPAIR);
@@ -492,6 +535,8 @@ export function createMachina(options: MachinaOptions): Machina {
   const pump = () => pumping ??= (async () => {
     try {
       if (!enabled || !filaActive()) return;
+      // Every tick looks at the turns it holds the slot for: one past its time ends (and so does an assessment waiting on it).
+      turnLive();
       for (const a of await all()) {
         for (const run of a.journal.runs) {
           // An assessment this process does not know (a restart during Wektor's turn) cannot be answered any more.
@@ -524,23 +569,9 @@ export function createMachina(options: MachinaOptions): Machina {
   const verdictOf = (runId: string, token: string) => {
     const open = assessments.get(runId);
     const same = !!open && open.token.length === token.length && timingSafeEqual(Buffer.from(open.token), Buffer.from(token));
-    if (!open || !same) throw new MachinaError(403, 'Ta ocena nie jest otwarta albo żeton się nie zgadza.');
+    if (!open || !same || open.dead) throw new MachinaError(403, 'Ta ocena nie jest otwarta albo żeton się nie zgadza.');
     if (open.answered) throw new MachinaError(409, 'Ta ocena ma już werdykt.');
     return open;
-  };
-  /** Does a situation's reaction inside a run that already has its extract, then closes the run. */
-  const react = async (uid: string, runId: string, situation: string) => {
-    live.add(runId);
-    try {
-      const a = await byUid(uid);
-      const run = a.journal.runs.find(r => r.id === runId);
-      if (!run) return;
-      const version = a.program.versions.find(v => v.number === a.program.current)!;
-      const results = new Map(run.blocks.filter(b => b.result === 'ok' || b.result === 'error' || b.result === 'skipped').map(b => [b.id, b]));
-      const outcome = await perform(uid, run, version.reactions[situation] ?? [], outputsOf(run), results, new Map());
-      if (outcome.waiting) { await saveRun(uid, runId, r => { r.state = 'running'; }); return; }
-      await conclude(uid, runId, outcome.finished || run.blocks.some(b => b.kind === 'finish' && b.result === 'ok'));
-    } finally { live.delete(runId); }
   };
   const slug = (name: string, taken: readonly string[]) => {
     const base = `s-${name.toLocaleLowerCase('pl').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'sytuacja'}`;
@@ -579,12 +610,14 @@ export function createMachina(options: MachinaOptions): Machina {
         return { decision: 'rejected', ...(target ? { thread: target.thread } : {}) };
       }
       assertEnabled();
+      const done = await madeBy(decision.key);
+      if (done) return { decision: done.first && !parsed.data.automat ? 'created' : 'updated', thread: done.thread, version: done.version };
       const { card } = await checkCard(input);
       const content = { trigger: card.trigger, blocks: card.blocks, scope: card.scope, reactions: card.reactions };
       if (!card.automat) {
         const situations: MachinaSituations = { items: [], pending: [] };
         declare(situations, card.situations);
-        const made = await create({ title: card.title!, description: card.description, module: card.module, tags: card.tags, parent: card.parent, chatId: decision.chatId, version: versionFrom(undefined, content, 'user', 'karta programu'), reason: 'projektowanie', situations });
+        const made = await create({ title: card.title!, description: card.description, module: card.module, tags: card.tags, parent: card.parent, chatId: decision.chatId, version: versionFrom(undefined, content, 'user', 'karta programu', { card: decision.key }), reason: 'projektowanie', situations });
         void pump();
         return { decision: 'created', thread: made.id, version: 1 };
       }
@@ -593,7 +626,8 @@ export function createMachina(options: MachinaOptions): Machina {
         if (a.closed) throw new MachinaError(409, 'Zamkniętego automatu nie zmienia się: zaproponuj nowy.');
         assertCompatible(a.situations, content, card.situations);
         if (a.program.versions.length >= MACHINA_LIMITS.versions) throw new MachinaError(409, `Program może mieć najwyżej ${MACHINA_LIMITS.versions} wersji.`);
-        const next = versionFrom(a, content, 'user', a.state === WAITS_REPAIR || a.program.paused?.from === WAITS_REPAIR ? 'karta naprawy' : 'karta programu');
+        if (decision.key && a.program.versions.some(v => v.card === decision.key)) throw new MachinaError(409, 'Ta karta już zmieniła program.');
+        const next = versionFrom(a, content, 'user', a.state === WAITS_REPAIR || a.program.paused?.from === WAITS_REPAIR ? 'karta naprawy' : 'karta programu', { card: decision.key });
         declare(a.situations, card.situations);
         a.program.versions.push(next);
         a.program.current = next.number;
@@ -658,7 +692,7 @@ export function createMachina(options: MachinaOptions): Machina {
             const content = { blocks: old.blocks, scope: old.scope, reactions: Object.fromEntries(Object.entries(old.reactions).filter(([id]) => !withdrawn.has(id))) };
             assertCompatible(a.situations, content);
             if (a.program.versions.length >= MACHINA_LIMITS.versions) throw new MachinaError(409, `Program może mieć najwyżej ${MACHINA_LIMITS.versions} wersji.`);
-            const next = versionFrom(a, { trigger: currentOf(a.program).trigger, ...content }, 'user', `przywrócenie wersji ${old.number}`, old.number);
+            const next = versionFrom(a, { trigger: currentOf(a.program).trigger, ...content }, 'user', `przywrócenie wersji ${old.number}`, { restoredFrom: old.number });
             a.program.versions.push(next);
             a.program.current = next.number;
             return { result: undefined };
@@ -684,15 +718,13 @@ export function createMachina(options: MachinaOptions): Machina {
         const run = fresh.journal.runs.find(r => r.id === parsed.data.runId);
         if (!run || run.state !== 'evaluating') throw new MachinaError(409, 'Ten run nie czeka na ocenę.');
         addSample(item, { runId: run.id, text: open.text, links: open.links });
-        // Taken before the write says `running`: the clock must not pick this run up and do the reaction a second time.
-        live.add(run.id);
         run.state = 'running';
         run.blocks = [...run.blocks.filter(b => b.id !== open.block), { id: open.block, kind: 'compare', at: now(), result: 'ok', situation: item.id }];
         return { result: fresh };
-      }).catch(error => { live.delete(parsed.data.runId); throw error; });
+      });
       open.answered = true;
-      // The reaction is the panel's work in this same run; the turn only gave the verdict.
-      later(() => react(open.uid, parsed.data.runId, parsed.data.situation));
+      // The reaction is the panel's work in this same run, in the one run slot: it starts once the assessment's turn has ended.
+      later(() => pump());
       return { thread: a.thread, situation: parsed.data.situation };
     },
 
@@ -746,11 +778,11 @@ export function createMachina(options: MachinaOptions): Machina {
         const next = versionFrom(a, { trigger: current.trigger, blocks: current.blocks, scope: current.scope, reactions: { ...current.reactions, [id]: card!.reaction } }, 'user', `nowa sytuacja: ${card!.name}`);
         a.program.versions.push(next);
         a.program.current = next.number;
-        if (run && block) { run.blocks = [...run.blocks.filter(b => b !== block), { ...block, at: now(), result: 'ok', situation: id }]; live.add(run.id); run.state = 'running'; }
+        if (run && block) { run.blocks = [...run.blocks.filter(b => b !== block), { ...block, at: now(), result: 'ok', situation: id }]; run.state = 'running'; }
         return { state: rest(a), result: { decision: 'accepted', thread: a.thread, situation: id } };
-      }).catch(error => { live.delete(runId); throw error; });
-      // The reaction is done in the run the card came from (a pause, a cancel or the switch still stop its effects).
-      if (outcome.decision === 'accepted') await react(owner.uid, runId, outcome.situation!);
+      });
+      // The reaction is done in the run the card came from, when the one run slot is free (a pause, a cancel or the switch still stop its effects).
+      if (outcome.decision === 'accepted') await pump();
       return outcome;
     },
 

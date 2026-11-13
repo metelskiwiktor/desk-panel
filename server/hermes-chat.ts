@@ -250,6 +250,8 @@ export function groupsOf(messages: HistoryMessage[]): { user: string; parts: Cha
  */
 export const isBankCard = (name: string) => name.includes('panel_bank_propose') || name.includes('panel_bank_assign') || name.includes('panel_smart_rule_propose');
 export const isAutomationCard = (name: string) => name.includes('panel_automation_propose');
+/** Machina's cards (program, new situation, correction): what the chat answers with `POST /api/chats/:id/machina`. */
+export const isMachinaCard = (name: string) => /panel_machina_(propose|situation|correct)$/.test(name);
 /**
  * The plan's hash input. A cyclic trigger with one time is hashed in the legacy `time` shape (with the raw clock string,
  * so a leading zero is preserved), because cards approved before several times existed were hashed that way. Keeping the
@@ -273,6 +275,13 @@ export function stableAutomationCardId(messageId: string, input: string): string
   try { raw = JSON.parse(input); plan = automationPlanSchema.parse(raw); } catch { return null; }
   return `${messageId}:x-${createHash('sha256').update(automationCardKey(plan, raw)).digest('hex').slice(0, 16)}`;
 }
+/** A Machina card's identity is what it proposes (its arguments as JSON), so live, kept and restored reads agree. */
+export function stableMachinaCardId(messageId: string, input: string): string | null {
+  let value: unknown;
+  try { value = JSON.parse(input); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return `${messageId}:m-${createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)}`;
+}
 export function stableBankCardId(messageId: string, input: string, name = 'panel_bank_propose'): string | null {
   if (name.includes('panel_smart_rule_propose')) {
     const plan = smartRulePlanOf(input);
@@ -294,6 +303,7 @@ export function stabilizeBankCards(message: ChatMessage): boolean {
   for (const p of message.parts ?? []) {
     if (p.type !== 'tool') continue;
     const id = isAutomationCard(p.name) ? stableAutomationCardId(message.id, p.input)
+      : isMachinaCard(p.name) ? stableMachinaCardId(message.id, p.input)
       : isBankCard(p.name) ? stableBankCardId(message.id, p.input, p.name) : stableAppointmentCardId(message.id, p.name, p.input, p.output);
     if (id && p.id !== id) { p.id = id; changed = true; }
   }
@@ -340,7 +350,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
   const redact = (text: string): string => {
     for (const record of records.values()) for (const turn of record.turns) {
       if (!turn.automation) continue;
-      for (const match of turn.text.matchAll(/token:"([0-9a-f]{32})"/g)) text = text.replaceAll(match[1], '[redacted]');
+      for (const match of turn.text.matchAll(/token:\s*"([0-9a-f]{32})"/g)) text = text.replaceAll(match[1], '[redacted]');
     }
     return text;
   };
