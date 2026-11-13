@@ -173,8 +173,9 @@ export function createScenarioSources(file: string): PanelSources {
   /** Automations of the scenario, copied once so the view's buttons can change them for this session without a service. */
   let automationStore: Automation[] | undefined;
   async function automationRows() {
-    automationStore ??= structuredClone((await serve('automations')).automations);
-    return { automations: automationStore };
+    const source = await serve('automations');
+    automationStore ??= structuredClone(source.automations);
+    return { automations: automationStore, ...(source.machinaAutomats ? { machinaAutomats: source.machinaAutomats } : {}) };
   }
   /** Like the lists: made once, from the scenario's bank reading (raw numbers whole, as the service keeps them) and its marks. */
   let labelStore: BankLabelStore | undefined;

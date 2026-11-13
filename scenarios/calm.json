@@ -553,5 +553,11 @@
         "segments": []
       }
     ]
+  },
+  "automations": {
+    "automations": [],
+    "machinaAutomats": [
+      { "thread": "MACH-2", "title": "Zapisy IRONMAN", "state": "Aktywny", "version": 1, "nextRunAt": null, "pending": 0 }
+    ]
   }
 }

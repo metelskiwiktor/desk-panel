@@ -39,6 +39,11 @@ const request = (method: string, body?: unknown, origin = 'http://panel') => ({ 
 const url = new URL(`http://panel/api/chats/${CHAT}/machina`);
 
 describe('Wektor\'s Machina tools', () => {
+  it('tells Wektor that notify reaches the phone through ntfy and that there is no separate ntfy block, without leaking secrets', () => {
+    const blocks = JSON.stringify(PANEL_TOOLS.panel_machina_propose.schema);
+    expect(blocks).toMatch(/notify \{[^}]*\} \(wpis w dzwonku panelu i, gdy w panelu jest skonfigurowany ntfy, także powiadomienie na telefon; osobnego klocka ntfy nie ma\)/);
+    expect(blocks).not.toMatch(/DESK_NTFY_URL|panel\.env/);
+  });
   it('shows a program card without writing, refuses a bad one with its reason, and makes only a one-shot of the running conversation without a card', async () => {
     const { fila, machina, ctx } = world();
     expect(await PANEL_TOOLS.panel_machina_propose.run(card(), ctx())).toContain(CARD_SHOWN.machina);

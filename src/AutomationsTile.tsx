@@ -25,13 +25,14 @@ export function AutomationsTile() {
     void read(); const timer = setInterval(() => void read(), 15000);
     return () => { controller.abort(); clearInterval(timer); };
   }, [polling]);
-  return <section className="p2-card automations-tile-card" aria-label="Automaty"><div className="p2-card-head static"><span className="p2-card-title"><Bot size={16} /> Automaty</span><ChevronRight size={16} /></div><button className="automations-tile" onClick={() => openPanelPage('automations')} aria-label="Otwórz Automaty">
+  const onlyMachina = !error && !!rows && rows.length === 0 && machina.length > 0;
+  return <section className="p2-card automations-tile-card" aria-label="Automaty"><div className="p2-card-head static"><span className="p2-card-title"><Bot size={16} /> Automaty</span><ChevronRight size={16} /></div>{!onlyMachina && <button className="automations-tile" onClick={() => openPanelPage('automations')} aria-label="Otwórz Automaty">
     {error ? <span>Nie udało się odczytać automatów.</span> : !rows ? <span>Odczytuję…</span> : rows.length === 0 ? <span>Brak aktywnych automatów</span> : rows.map(a => <span className="automations-tile-row" key={a.id}>
       <span><i className="automation-dot ok" /> <strong>{a.name}</strong></span>
       <small>{a.nextRunAt ? `Następny: ${stamp(a.nextRunAt)}` : 'Czeka na wyzwalacz'}</small>
       <span className="automation-dots" aria-label="Ostatnie runy">{Array.from({ length: 5 }, (_, i) => { const r = a.runs.slice(-5)[i]; return <i key={i} className={`automation-dot ${r ? ({ done: 'ok', error: 'bad', 'not-yet': 'idle', skipped: 'skip' } as const)[r.outcome] : 'none'}`} />; })}</span>
     </span>)}
-  </button>
+  </button>}
   {/* Time automations are Machina's (DESK-87): each one opens its thread in Fila. */}
   {machina.length > 0 && <div className="automations-tile-machina" aria-label="Automaty Machiny">{machina.map(a => <button key={a.thread} type="button" className="automations-tile-row" onClick={() => window.dispatchEvent(new CustomEvent(FILA_OPEN, { detail: a.thread }))} aria-label={`Otwórz wątek ${a.thread}`}>
     <span><strong>{a.title}</strong> <small>{a.thread} · {a.state}</small></span>

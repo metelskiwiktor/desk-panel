@@ -166,6 +166,12 @@ it('shows a separate link domain or no-links restriction for every consented act
   expect(screen.getByRole('checkbox', { name: /Alert Smart Actions.*bez linków/ })).toBeTruthy();
 });
 
+it('says there are no automats on the tile only when neither kind exists', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ automations: [], machinaAutomats: [] }))));
+  render(<AutomationsTile />);
+  expect(await screen.findByText('Brak aktywnych automatów')).toBeTruthy();
+});
+
 it('shows Machina\'s open automats on the tile and opens a thread in Fila (DESK-87)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ automations: [], machinaAutomats: [{ thread: 'MACH-1', title: 'Zapisy IRONMAN', state: 'Wstrzymany', version: null, nextRunAt: null, pending: 0 }] }))));
   const opened = vi.fn(); window.addEventListener('fila-open-thread', opened);
@@ -174,6 +180,8 @@ it('shows Machina\'s open automats on the tile and opens a thread in Fila (DESK-
     render(<AutomationsTile />);
     await screen.findByText('Zapisy IRONMAN');
     expect(screen.getByText('Czeka na kartę programu')).toBeTruthy();
+    expect(screen.queryByText('Brak aktywnych automatów')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Otwórz wątek MACH-1' }).className).toBe('automations-tile-row');
     await user.click(screen.getByRole('button', { name: 'Otwórz wątek MACH-1' }));
     expect(opened.mock.calls[0][0].detail).toBe('MACH-1');
   } finally { window.removeEventListener('fila-open-thread', opened); }
