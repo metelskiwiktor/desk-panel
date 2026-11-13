@@ -66,7 +66,7 @@ export type AutomationTrigger = z.infer<typeof triggerSchema>;
  * Zatwierdzone na karcie akcje automatu; parametry są limitem uprawnień runu.
  */
 // PSL includes private suffixes (e.g. github.io): consent must identify an owner, not a hosting service.
-const actionDomainSchema = z.string().trim().toLowerCase()
+export const actionDomainSchema = z.string().trim().toLowerCase()
   .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/)
   .refine(domain => getDomain(domain, { allowPrivateDomains: true }) !== null, 'Domena musi mieć część rejestrowalną, nie sam sufiks publiczny.');
 export const automationActionSchema = z.discriminatedUnion('kind', [
@@ -173,7 +173,14 @@ export const automationSchema = z.object({
 });
 export type Automation = z.infer<typeof automationSchema>;
 
-export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional() });
+/** A settled alert or notification of a Machina run (docs/automaty.md, „Machina”), read by the alerts and the bell next to the old automations' own. */
+export const machinaEffectSchema = z.object({
+  thread: z.string(), name: z.string(), /** The automat was cancelled: its alerts are gone at once. */ cancelled: z.boolean(),
+  runId: z.string(), block: z.string(), kind: z.enum(['smartAction', 'notify']), at: z.number(), result: z.enum(['ok', 'error']),
+  ref: z.string(), title: z.string(), text: z.string().optional(), url: z.string().optional(),
+});
+export type MachinaEffect = z.infer<typeof machinaEffectSchema>;
+export const automationListSchema = z.object({ automations: z.array(automationSchema), error: z.string().optional(), machina: z.array(machinaEffectSchema).optional() });
 export type AutomationList = z.infer<typeof automationListSchema>;
 
 /** The plan a `panel_automation_propose` card carries; `replaces` identifies an automation to update in place. */

@@ -271,7 +271,7 @@ export const chatApprovalSchema = z.object({
 export type ChatApproval = z.infer<typeof chatApprovalSchema>;
 
 /** A turn the panel starts itself: never the user's message, always labelled as such in the conversation. */
-export const automationSources = ['cezar', 'observer', 'automation'] as const;
+export const automationSources = ['cezar', 'observer', 'automation', 'machina'] as const;
 export type AutomationSource = typeof automationSources[number];
 export interface ChatAutomation {
   source: AutomationSource;
@@ -290,7 +290,7 @@ export interface ChatAutomationInput {
   /** A stable id of this message, so a retry after a transient failure is not delivered twice. */
   nonce?: string;
 }
-const AUTOMATION_LABELS: Record<AutomationSource, string> = { cezar: 'Automatyka · Cezar', observer: 'Automatyka · Obserwator', automation: 'Automatyka · Automat' };
+const AUTOMATION_LABELS: Record<AutomationSource, string> = { cezar: 'Automatyka · Cezar', observer: 'Automatyka · Obserwator', automation: 'Automatyka · Automat', machina: 'Automatyka · Machina' };
 export function automationLabel(automation: ChatAutomation): string {
   return AUTOMATION_LABELS[automation.source] ?? `Automatyka · ${automation.source}`;
 }
@@ -324,6 +324,8 @@ export interface ChatMessage {
   files?: ChatFileRef[];
   /** User messages: set only when the panel started this turn, so the window can mark it as automation. */
   automation?: ChatAutomation;
+  /** An entry the panel wrote without starting a turn: no answer follows it. */
+  note?: boolean;
   context?: ContextItem[];
   /** Agent messages: the steps. */
   parts?: ChatPart[];

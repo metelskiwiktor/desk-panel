@@ -184,4 +184,10 @@ it('a new browser collects only settled notifications from the last 24 hours', (
   const log = recordAutomationActivity(emptyActivityLog(), rows, now);
   expect(log.entries.map(x => x.context)).toEqual(['Recent']);
   expect(recordAutomationActivity(log, rows, now)).toEqual(log);
+  // Machina's notify blocks ring the same bell once, by run and block; alerts and old ones do not.
+  const effect = { thread: 'MACH-1', name: 'Zapisy', cancelled: false, runId: 'mr-1', block: 'tel', kind: 'notify' as const, at: now - MINUTE, result: 'ok' as const, ref: 'mr-1:tel', title: 'Otwarte', text: 'Formularz działa', url: 'https://example.com/' };
+  const effects = [effect, { ...effect, block: 'alert', kind: 'smartAction' as const }, { ...effect, runId: 'mr-0', at: now - 24 * 60 * MINUTE - 1 }];
+  const rung = recordAutomationActivity(log, rows, now, effects);
+  expect(rung.entries.map(x => [x.title, x.context, x.signalKey])).toEqual([['Automat: Zapisy', 'Otwarte · Formularz działa', 'machina:mr-1:tel'], ['Automat: Fixture', 'Recent', 'automation:new:notify']]);
+  expect(recordAutomationActivity(rung, rows, now, effects)).toEqual(rung);
 });

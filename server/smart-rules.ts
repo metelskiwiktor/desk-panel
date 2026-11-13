@@ -207,7 +207,10 @@ export async function smartView(sources: PanelSources): Promise<SmartActionsView
   }
   const automations = await sources.automations?.();
   const automated: SmartAlert[] = (automations?.automations ?? []).filter(a => a.status !== 'cancelled').flatMap(a => a.runs.flatMap(r => (r.actions ?? []).filter(x => x.kind === 'smartAction' && x.result === 'ok' && x.at >= Date.now() - 30 * 24 * 60 * 60_000 && x.at <= Date.now()).map(x => ({ id: x.ref!, ruleId: a.id, source: 'automation' as const, badge: `Automat: ${a.name}`, title: x.title, snippet: x.text ?? '', category: 'other' as const, priority: 'high' as const, at: x.at, url: x.url, label: 'Otwórz formularz' }))));
-  return { rules, alerts: [...automated, ...alertsOf(rules, mail, bank)], problems };
+  // Machina's `smartAction` blocks: the same alert, 30 days, gone at once when the automat is cancelled.
+  const machina: SmartAlert[] = (automations?.machina ?? []).filter(x => x.kind === 'smartAction' && x.result === 'ok' && !x.cancelled && x.at >= Date.now() - 30 * 24 * 60 * 60_000 && x.at <= Date.now())
+    .map(x => ({ id: x.ref, ruleId: x.thread, source: 'automation' as const, badge: `Automat: ${x.name}`, title: x.title, snippet: x.text ?? '', category: 'other' as const, priority: 'high' as const, at: x.at, url: x.url, label: 'Otwórz formularz' }));
+  return { rules, alerts: [...automated, ...machina, ...alertsOf(rules, mail, bank)], problems };
 }
 
 export const TEST_LIMIT = 30;

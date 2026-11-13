@@ -39,7 +39,7 @@ function mailError(what: string, error: unknown): SourceError {
   return new SourceError(failure.kind === 'rate' ? 429 : failure.kind === 'auth' ? 401 : 502, failure.detail);
 }
 
-export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; cutoverLocked?: boolean; filaActive?: boolean; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[], complete: boolean) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation> }): PanelSources {
+export function createRealSources(options: { port: number; cezarUrl: string; calendarId: string; mailAccounts: string[]; env: NodeJS.ProcessEnv; cutoverLocked?: boolean; filaActive?: boolean; onActive?: (tasks: CezarSnapshot['tasks']) => void | Promise<void>; onFinished?: (tasks: FinishedTask[], complete: boolean) => void | Promise<void>; observers?: () => Promise<ObserverList>; observerCancel?: (id: string) => Promise<ObserverList>; automations?: () => Promise<AutomationList>; automationAction?: (input: AutomationUpdate) => Promise<Automation>; machinaAction?: PanelSources['machinaAction'] }): PanelSources {
   const { calendarId, env } = options;
   const dir = join(homedir(), '.desk-panel');
   const clientFile = env.DESK_GOOGLE_OAUTH_CLIENT_FILE || join(dir, 'google-oauth-client.json');
@@ -175,6 +175,7 @@ export function createRealSources(options: { port: number; cezarUrl: string; cal
     observerCancel: id => options.observerCancel?.(id) ?? Promise.resolve({ observers: [] }),
     automations: () => options.automations?.() ?? Promise.resolve({ automations: [] }),
     automationAction: input => options.automationAction ? options.automationAction(input) : Promise.reject(new SourceError(503)),
+    machinaAction: input => options.machinaAction ? options.machinaAction(input) : Promise.reject(new SourceError(503)),
     async bankConnect() {
       try { return await bank.begin(); }
       catch { throw new SourceError(409); }

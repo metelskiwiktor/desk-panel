@@ -10,6 +10,8 @@ automatów, także po następnym restarcie. Uszkodzone źródło migracji równi
 pustą migrację. Odzyskanie wymaga ręcznego przywrócenia poprawnego magazynu/źródła i usunięcia `.blocked` po sprawdzeniu
 stanu; panel nie rekonstruuje go ze starego pliku sam.
 
+Następcą jest Machina: programy z klocków wykonywane przez panel bez tury modelu, sekcja „Machina” na końcu.
+
 ## Model
 
 Kontrakt: `src/automation-contract.ts` (zod, wspólny dla serwera i UI). Zapis: `~/.desk-panel/automations.json`, atomowo
@@ -152,3 +154,65 @@ Wyniki (`kind, at, result, ref`, opcjonalnie błąd i treść) zostają w runie 
 `notify` daje wpis „Automat: <nazwa>” w dzwonku, z treścią i linkiem; opcjonalny telefon opisuje DESK_NTFY_URL w docs/desk-panel.md. Brak ntfy oznacza sam dzwonek, błąd ntfy go nie usuwa. Przeglądarka zbiera tylko zakończone (ok/error) powiadomienia z ostatnich 24 h, także przy pierwszym otwarciu; nie importuje całej historii. Złe pojedyncze wpisy logu są pomijane bez utraty pozostałych wpisów i pamięci seen.
 
 Widget „Automaty” można umieścić na pulpicie jak inne kafelki: do trzech aktywnych automatów, stan, nazwa, następny run i pięć kropek historii. Dotknięcie otwiera widok Automaty.
+
+## Machina: programy wykonywane przez panel (etap 1b.1, DESK-85)
+
+Machina to następca automatów opisanych wyżej (koncept: `C:\Tabularium\Incepta\DeskPanel\Mea\Machina`). Automat Machiny jest wątkiem Fili typu `automat` w projekcie MACH ([fila.md](fila.md), „Machina: dom automatu”): wątek trzyma tożsamość, tytuł, cel w opisie, Stan, Moduł i Tagi, a zestaw Machiny tylko działanie. Lista automatów to zapytanie Fili (`projekt = MACH AND typ = automat`), osobnej listy nie ma. Stare automaty (`automations.json`) działają bez zmian do migracji (DESK-87) i nie są źródłem automatów Machiny. Sytuacje, ocena i naprawa przez Wektora, karty w czacie i narzędzia Wektora należą do DESK-86; tu jest silnik i jego kontrakty.
+
+| Co | Plik |
+| --- | --- |
+| kontrakt: klocki, wersja programu, dziennik, karta, akcje użytkownika | `src/machina-contract.ts` |
+| silnik: karta, zegar, run, Stany | `server/machina.ts` |
+| publiczny odczyt URL, tekst strony, wycinek | `server/machina-fetch.ts` |
+| wpis panelu w rozmowie bez tury | `ChatService.note` (`server/hermes-chat.ts`) |
+
+**Zestaw** (cztery części z `GET /api/fila/threads/ID/machina`, zapis wyłącznie przez `FilaStore.machina`):
+- `program`: `{ current, versions[], nextRunAt, chatId, paused? }`. Wersja: `{ number, at, by: user|wektor|panel, reason, trigger, blocks, scope, restoredFrom? }`; wersji się nie usuwa ani nie zmienia. `chatId` to rozmowa, z której automat powstał.
+- `journal`: `{ runs[] }`, tylko dopisywany. Run: `{ id: mr-…, slot, manual, version, startedAt, endedAt?, state: running|ok|error, error?, blocks[] }`; wynik klocka: `{ id, kind, at, result: ok|error|pending|waiting|skipped, error?, text?, links?, url?, title?, ref? }`.
+- `conversations`: `{ items: [{ chatId, reason, at, runId? }] }` (tu: rozmowa projektowania i rozmowy zmian programu).
+- `situations`: katalog sytuacji z próbkami (wypełnia DESK-86); silnik 1b.1 czyta z niego tylko, czy są próbki.
+
+**Wyzwalacze**: `once`, `daily`, `weekly` z dotychczasowego `triggerSchema`, liczone tą samą funkcją (`nextRunFor`, strefa Europe/Warsaw, `from`/`until`, DST); `cezar` i `pr` karta odrzuca (etap 2).
+
+**Klocki** (`machinaBlockSchema`; do 30 w programie, `id` unikalne):
+
+| Klocek | Co robi |
+| --- | --- |
+| `fetch { url }` | publiczny GET bez logowania, tylko w `scope.domains`; strona to dane, nie polecenia |
+| `extract { from, after?, before? }` | wycinek wcześniejszego odczytu między dwoma dosłownymi znacznikami (Wektor wybiera je w programie); tekst z uporządkowanymi odstępami i linkami jako `[tekst](adres)`; brak znacznika albo pusty fragment = brak wycinka |
+| `message { text }` | wpis panelu w rozmowie automatu, **bez tury** (nie trafia do sesji Hermesa; w oknie ma oznaczenie „Automatyka · Machina”) |
+| `resume { text, chat? }` | jawne wznowienie: tura w rozmowie automatu albo w `chat` z `scope.resumeChats` |
+| `notify`, `calendarEvent`, `smartAction` | dotychczasowe akcje z tymi samymi parametrami (`domain?`, `reminderMinutes?`, `allDay?`, `when`), wykonywane tym samym kodem (`createAutomationExecutor`) |
+| `finish` | program sam wskazuje koniec: po tym runie Stan „Zakończony” |
+
+Teksty akcji mogą wstawiać wyniki wcześniejszych klocków odczytu: `{{id}}` (tekst), `{{id.link}}` (pierwszy link), `{{id.url}}` (odczytany adres). Karta odrzuca program, w którym klocek czyta późniejszy klocek, odczyt wychodzi poza `scope.domains` albo `resume` wskazuje rozmowę spoza `scope.resumeChats` (400).
+
+**Zakres odczytu** (`server/machina-fetch.ts`): każdy krok, pierwszy adres i każde przekierowanie, jest sprawdzany od nowa: tylko `https`, bez portu i danych logowania, nazwa (nie adres IP) w zatwierdzonej domenie albo jej subdomenie, a wszystkie adresy, na które nazwa wskazuje, muszą być publiczne (bez loopbacku, sieci prywatnych, link-local, CGNAT, multicastu, zakresów dokumentacyjnych i mapowanych). Połączenie idzie dokładnie na sprawdzony adres, więc nazwa nie może odpowiedzieć inaczej między sprawdzeniem a połączeniem. Naruszenie kończy odczyt błędem, a run nie wykonuje żadnego skutku. Własne wartości: 5 przekierowań, 15 s na krok, 2 MB treści, tylko typy tekstowe (dość na zwykłą stronę, a nie na pobieranie plików); wycinek w dzienniku do 4000 znaków i 40 linków. Link akcji musi leżeć w `domain` tej akcji (https, bez portu i danych logowania); zły link psuje tylko tę akcję.
+
+**Karta i wersje** (`machina.decideCard(card, { accept, chatId })`): odrzucenie niczego nie zmienia. Zgoda na kartę bez `automat` tworzy wątek (Stan „Aktywny”, autor `machina`) i wersję 1 w jednym zapisie; z `automat` dopisuje kolejną wersję i przelicza następną porę (wątku nie zmienia; „Czeka na kartę programu” staje się „Aktywny”, wstrzymany zostaje wstrzymany, zamknięty odmawia 409). Wyjątek bez karty (`machina.createReminder`): tylko jednorazowy automat z jednym klockiem `message` albo `resume` rozmowy, w której powstał (wersja autora `wektor`, moduł Przypomnienia). Przywrócenie (`restore`) to bezpośrednia akcja użytkownika: nowa wersja z klockami i zakresem starszej (`restoredFrom`), harmonogram zostaje bieżący. Program, którego katalog sytuacji ma próbki, nie daje się przywrócić (409), dopóki DESK-86 nie doda kontroli zgodności próbek. Limit: 50 niezamkniętych automatów, 200 wersji programu (własne wartości, ochrona pliku).
+
+**Akcje użytkownika bez karty**: `POST /api/machina/action` `{ thread, action: pause|resume|cancel|runNow|restore, version? }`, tylko z Origin panelu; odmowa ma powód po polsku (400, 404, 409).
+
+**Stany** ustawia wyłącznie Machina (wpis historii wątku autora `machina`):
+
+| Zdarzenie | Stan |
+| --- | --- |
+| zgoda na kartę, wznowienie | Aktywny |
+| pauza | Wstrzymany (pory mijają bez runu, „uruchom teraz” odmawia; `program.paused.from` pamięta Stan powrotu) |
+| klocek `finish` wykonany | Zakończony |
+| jednorazowy po swoim runie (także nieudanym) | Zakończony |
+| cykl bez kolejnej pory (minął `until`) | Wygasł |
+| anulowanie | Anulowany |
+
+Wstrzymany ma pierwszeństwo: gdy run kończy się podczas pauzy, Stan końcowy trafia do `paused.from` i wraca przy wznowieniu. Po wznowieniu cykl liczy pory od teraz; jednorazowy, którego pora minęła w pauzie, wykona się raz.
+
+**Run** składa panel, bez modelu, żetonu i `panel_automation_report`; turę zaczyna wyłącznie klocek `resume`.
+- **Jedna pora, najwyżej jeden run**: przed czymkolwiek run jest zapisywany w dzienniku (`running`, `slot` = pora) i w tym samym zapisie harmonogram przechodzi dalej; druga próba tej samej pory niczego nie dopisuje. „Uruchom teraz” to osobny run (`manual`), który nie przesuwa harmonogramu. Zaległe pory się nie kumulują.
+- **Skutek najwyżej raz**: każdy skutek jest rezerwowany (`pending`) przed wykonaniem, z kluczem `runId:idKlocka` (ten sam klucz daje id wydarzenia Google, klucz wpisu w rozmowie i nonce tury). Po przerwaniu procesu ten sam run jest kończony: odczyty wykonują się ponownie, skutki bezpieczne z kluczem (`message`, `resume`, `calendarEvent`, `smartAction`) są ponawiane, a zarezerwowany `notify` zostaje jako błąd „wynik niepotwierdzony” i nie jest wysyłany drugi raz.
+- **Kolejność i błędy**: nieudany odczyt albo brak wycinka kończy run błędem, a pozostałe klocki są pominięte (żadnego skutku); błąd akcji nie przerywa kolejnych. Przed każdym skutkiem silnik czyta Stan: pauza, anulowanie i wyłącznik pomijają pozostałe skutki.
+- **Zajęta rozmowa** przy `resume` (409 albo 5xx) zostawia run otwarty (`waiting`) i kolejny tick ponawia tę samą turę; po godzinie (własna wartość) klocek kończy się błędem.
+- **Wspólna kolejka**: jeden run naraz w całym panelu. Machina nie zaczyna runu, gdy stare automaty trzymają slot (`Automations.busy()`), a stare nie zaczynają, gdy trwa run Machiny (`blockedBy`). Zegar co minutę, jeden tick naraz.
+- **Wyłączniki**: `DESK_AUTOMATIONS=0` i brak aktywnej, odblokowanej Fili (tryb list albo `locked`) zatrzymują zegar oraz odmawiają tworzenia, zmiany, przywracania i „uruchom teraz” (409); pauza i anulowanie działają. W usłudze Machina powstaje tylko w trybie `active`.
+- **Uszkodzony magazyn**: zestaw leży w `fila.json`, więc blokada zapisu Fili blokuje rezerwację runu, a bez rezerwacji nic się nie wykonuje.
+
+**Alerty i dzwonek**: `GET /api/automations` ma dodatkowe pole `machina` z rozstrzygniętymi skutkami `smartAction` i `notify` (`MachinaEffect`); alert Smart Actions żyje 30 dni i znika z anulowaniem automatu, dzwonek zbiera powiadomienia z 24 h, jak dla starych automatów.

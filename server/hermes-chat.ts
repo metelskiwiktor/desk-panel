@@ -111,7 +111,8 @@ interface Turn {
   error?: string;
   usage?: ChatMessage['usage'];
 }
-interface Stored { keepUnarchived?: boolean; previousSessions?: string[]; archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[] }
+interface Stored { keepUnarchived?: boolean; previousSessions?: string[]; archived?: boolean; archivedAt?: number; temporary?: boolean; schema: 1; id: string; engine: 'hermes'; title: string; userNamed?: boolean; titleAttempted?: boolean; createdAt: number; updatedAt: number; session: string; turns: Turn[]; /** Entries the panel wrote without a turn (Machina's `message`); they are not in the Hermes session. */ notes?: Note[] }
+interface Note { id: string; key: string; at: number; text: string; automation: ChatAutomation }
 
 interface Live {
   record: Stored;
@@ -527,7 +528,11 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     const groups = history?.groups ?? [];
     const out: ChatMessage[] = [];
     let g = 0;
+    // A note stands where it was written: before the first turn that came after it.
+    const notes = [...(record.notes ?? [])].sort((a, b) => a.at - b.at);
+    const notesUntil = (at: number) => { while (notes.length && notes[0]!.at < at) { const note = notes.shift()!; out.push({ id: note.id, role: 'user', at: note.at, text: note.text, automation: note.automation, note: true }); } };
     for (const turn of record.turns) {
+      notesUntil(turn.at);
       out.push({ id: turn.id, role: 'user', at: turn.at, text: turn.text, ...(turn.files?.length ? { files: turn.files } : {}), ...(turn.automation ? { automation: turn.automation } : {}), ...(turn.context?.length ? { context: turn.context } : {}) });
       const group = turn.run ? groups[g++] : undefined;
       const live = lives.get(record.id);
@@ -552,6 +557,7 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
         });
       }
     }
+    notesUntil(Number.POSITIVE_INFINITY);
     // Turns of the same session written outside the panel (e.g. the Hermes CLI) are shown too: the session is the history.
     for (const group of groups.slice(g)) {
       out.push({ id: `${record.id}:h${g}:u`, role: 'user', at: record.updatedAt, text: group.user });
@@ -933,6 +939,18 @@ export function createHermesChat(options: HermesChatOptions): ChatService & { st
     },
     async send(id, input) { await deliver(id, input); },
     async sendAutomation(id, input) { await deliver(id, input, input.automation); },
+    async note(id, input) {
+      await need(id);
+      await mutate(id, async () => {
+        const record = await need(id);
+        if (record.notes?.some(note => note.key === input.key)) return;
+        const at = now();
+        record.notes = [...(record.notes ?? []), { id: randomUUID(), key: input.key, at, text: input.text, automation: input.automation }].slice(-500);
+        record.updatedAt = at;
+        await save(record, true);
+        emit(id, { type: 'state', chat: detail(record) });
+      });
+    },
     async createAutomation(input) {
       await load();
       const at = now();

@@ -51,7 +51,7 @@ export interface FilaSpecView {
 /** The Machina kit of an automat as read by its thread ID: each part says whether it has content (`available: false` with `content: null` before Machina wrote it). */
 export type FilaMachinaKitView = { thread: string; uid: string; builtIn: boolean } & Record<FilaMachinaPart, { available: boolean; content: unknown }>;
 /** An automat as Machina reads it by the permanent uid. */
-export type FilaAutomat = { id: string; uid: string; revision: number; state: string; closed: boolean; archived: boolean; builtIn: boolean } & Record<FilaMachinaPart, unknown>;
+export type FilaAutomat = { id: string; uid: string; title: string; revision: number; state: string; closed: boolean; archived: boolean; builtIn: boolean } & Record<FilaMachinaPart, unknown>;
 /**
  * Machina's internal door: the only way an automat is made, its Stan set and its kit written. It is not an action, so
  * neither HTTP nor MCP reaches it. The first use prepares the project MACH, its modules and the workflow Automat; a
@@ -62,6 +62,8 @@ export interface FilaMachinaDoor {
   /** Sets the Stan it is given (a history entry by `machina`) and/or replaces kit parts (no history, no thread revision), as one write. */
   update(uid: string, change: FilaMachinaChange): Promise<FilaAutomat>;
   read(uid: string): Promise<FilaAutomat | null>;
+  /** Every automat, archived ones too, in the order of their numbers: how Machina's clock finds what is due. */
+  list(): Promise<FilaAutomat[]>;
 }
 export interface FilaRegistries {
   /** `board`: the id of the board the project got at the start, null once it was deleted. */
@@ -660,7 +662,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
   const automatOf = (t: FilaThread): FilaAutomat => {
     const kit = t.machina!;
     return {
-      id: idOf(t), uid: t.uid, revision: t.revision, state: t.state, closed: workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false, archived: t.archived, builtIn: kit.builtIn,
+      id: idOf(t), uid: t.uid, title: t.title, revision: t.revision, state: t.state, closed: workflowOf(t.workflow).states.find(s => s.name === t.state)?.closing ?? false, archived: t.archived, builtIn: kit.builtIn,
       ...structuredClone({ program: kit.program, situations: kit.situations, journal: kit.journal, conversations: kit.conversations }),
     };
   };
@@ -727,6 +729,7 @@ export function createFilaStore(options: FilaStoreOptions = {}): FilaStore {
       return automatOf(t);
     }),
     async read(id) { await tail; await load(); const t = byUid(id); return t?.machina ? automatOf(t) : null; },
+    async list() { await tail; await load(); return data.threads.filter(t => t.machina).sort((a, b) => a.number - b.number).map(automatOf); },
   };
 
   return {

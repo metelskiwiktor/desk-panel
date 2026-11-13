@@ -257,12 +257,16 @@ export interface Automations {
   active(tasks: readonly CezarSnapshot['tasks'][number][]): Promise<void>;
   /** The panel's existing Cezar reads: a watched task done. */
   finished(tasks: readonly FinishedTask[]): Promise<void>;
+  /** A run of these automations holds, or waits for, the panel's one run slot (Machina's runs wait for it). */
+  busy(): boolean;
   tick(): Promise<void>;
   start(): void;
   stop(): void;
 }
 
-export function createAutomations({ file, observersFile, chat, readTask, readPr, enabled = true, now = Date.now, zone = ZONE, log, executeAction }: {
+export function createAutomations({ file, observersFile, chat, readTask, readPr, enabled = true, now = Date.now, zone = ZONE, log, executeAction, blockedBy }: {
+  /** The panel's one run slot is taken by someone else (a Machina run): no new run of these starts until it is free. */
+  blockedBy?: () => boolean;
   executeAction?: (input: AutomationAct, approved: Automation['actions'][number], key: string, name: string) => Promise<string | undefined>;
   file: string;
   /** `~/.desk-panel/observers.json`: read once, when there is no automations file yet. */
@@ -610,6 +614,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
       }
       const pending = store.pending[0];
       if (!pending || pending.sent || !pending.token || !pending.chatId || !pending.turnId) return;
+      if (blockedBy?.()) return;
       pending.deadline ??= now() + RUN_REPORT_TIMEOUT_MS;
       store.execution = { id: pending.id, chatId: pending.chatId, turnId: pending.turnId, hermesRunId: pending.hermesRunId };
       save();
@@ -853,6 +858,7 @@ export function createAutomations({ file, observersFile, chat, readTask, readPr,
     },
 
     error() { return loadError; },
+    busy() { return enabled && !unsafeFile && (!!store.execution || store.pending.length > 0); },
 
     turnChanged(turn) {
       if (unsafeFile) return;

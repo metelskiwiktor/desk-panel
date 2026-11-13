@@ -44,6 +44,25 @@ const plan = (over: Record<string, unknown> = {}) => ({
 const stored = () => JSON.parse(readFileSync(join(dir, 'automations.json'), 'utf8'));
 const pendingId = (at = 0) => stored().pending[at].id as string;
 
+it('shares the one run slot with Machina: it says when it holds the slot and starts no run while Machina has it', async () => {
+  let machinaRuns = true;
+  const automations = make({ blockedBy: () => machinaRuns });
+  expect(automations.busy()).toBe(false);
+  await automations.createObserver({ chatId: 'chat-1', kind: 'time', target: 'za 10 minut', instruction: 'Przypomnij.' });
+  clock = NOW + 11 * 60_000;
+  await automations.tick();
+  // The run is queued and waits: nothing was sent and the slot is not taken.
+  expect(sent).toEqual([]);
+  expect(stored().pending).toHaveLength(1);
+  expect(stored().execution).toBeUndefined();
+  expect(automations.busy()).toBe(true);
+  machinaRuns = false;
+  await automations.tick();
+  expect(sent).toHaveLength(1);
+  expect(stored().execution).toBeTruthy();
+  expect(automations.busy()).toBe(true);
+});
+
 describe('migration from observers.json', () => {
   it('turns old observers into automations without losing their content', async () => {
     const old = { version: 1, observers: [

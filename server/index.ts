@@ -13,6 +13,7 @@ import { createHermesClient, hermesUrl } from './hermes-api';
 import { createHermesChat } from './hermes-chat';
 import { createAutomationExecutor } from './automation-actions';
 import { createAutomations, type Automations } from './automations';
+import { createMachina, type Machina } from './machina';
 import { mcpToken } from './panel-mcp';
 import { filaTokens } from './fila-routes';
 import { createUsageStore } from './usage';
@@ -39,13 +40,15 @@ const cutoverKiosk = cutoverLocked ? readCutoverKiosk(panelDir) : undefined;
 let cockpit: ReturnType<typeof createCockpit> | undefined;
 let automation: ReturnType<typeof createChatAutomation> | undefined;
 let automations: Automations | undefined;
+let machina: Machina | undefined;
 const sources = createRealSources({ port, cezarUrl: cezar.href, calendarId, mailAccounts, env: process.env, cutoverLocked, filaActive: cutoverMode !== 'legacy',
   // The same reads that feed the dashboard also feed the automations: an active task waiting for the user, a finished one.
   onActive: tasks => { if (!cutoverLocked) { automation?.active(tasks); void automations?.active(tasks); } },
   // The PR of a finished task dispatched from a to-do is linked there from the kept dispatch; no chat has to be open.
   onFinished: (tasks, complete) => { if (!cutoverLocked) { void cockpit?.linkPrs(tasks); void cockpit?.blockersFromFinished(tasks, complete); automation?.finished(tasks); void automations?.finished(tasks); } },
   // The Automaty view reads the active automations; its buttons are the only other way one changes.
-  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}) }),
+  automations: async () => ({ automations: await automations?.list() ?? [], ...(automations?.error() ? { error: automations.error() } : {}), ...(machina ? { machina: await machina.effects() } : {}) }),
+  machinaAction: async input => { if (!machina) throw new Error('Machina nie jest dostępna.'); return machina.action(input); },
   automationAction: async input => { if (!automations) throw new Error('Automaty nie są dostępne.'); return automations.update(input); } });
 // Both chat engines: Hermes (default for new chats, its own long-running API on loopback) and agy (one process per chat).
 // The Hermes key stays here: it is never sent to the browser or written to a log.
@@ -81,8 +84,16 @@ if (chat) automations = createAutomations({
   readPr: url => prReader.read(url),
   executeAction: createAutomationExecutor({ writeCalendar: sources.automationCalendarWrite, ntfyUrl: process.env.DESK_NTFY_URL }),
   enabled: automationsEnabled(process.env),
+  blockedBy: () => machina?.running() ?? false,
 });
 automations?.start();
+// Machina (docs/automaty.md): programs the panel runs itself, kept in the automat threads of Fila. It needs the active,
+// unlocked Fila and shares the one run slot and the action executor with the automations above.
+if (chat && sources.fila && cutoverMode === 'active') machina = createMachina({
+  fila: sources.fila, chat, enabled: automationsEnabled(process.env), busy: () => automations?.busy() ?? false,
+  executeAction: createAutomationExecutor({ writeCalendar: sources.automationCalendarWrite, ntfyUrl: process.env.DESK_NTFY_URL }),
+});
+machina?.start();
 // Usage measurement (docs/uzycie.md): only the service writes this history; scenarios and previews never get a store.
 const usage = cutoverLocked ? undefined : createUsageStore(join(panelDir, 'usage'));
 if (usage) {
